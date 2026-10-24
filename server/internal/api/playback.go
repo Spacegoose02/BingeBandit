@@ -168,7 +168,7 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"session":  sess,
-		"playlist": fmt.Sprintf("/api/transcode/%s/index.m3u8", sess.ID),
+		"playlist": fmt.Sprintf("/api/transcode/%s/%s", sess.ID, sess.Playlist()),
 	})
 }
 
@@ -419,7 +419,15 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 			if t.VideoCopy {
 				np.Target = "Video copy · " + audio
 			} else {
-				np.Target = fmt.Sprintf("%s H264 (%s) · %s", resolutionLabel(t.Height), t.Encoder, audio)
+				res := resolutionLabel(t.Height)
+				if len(t.Variants) > 1 {
+					labels := make([]string, len(t.Variants))
+					for i, h := range t.Variants {
+						labels[i] = resolutionLabel(h)
+					}
+					res = "Adaptive " + strings.Join(labels, "/")
+				}
+				np.Target = fmt.Sprintf("%s H264 (%s) · %s", res, t.Encoder, audio)
 				if t.Tonemap {
 					np.Target += " · tone mapped"
 				}

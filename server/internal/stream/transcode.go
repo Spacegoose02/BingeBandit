@@ -38,6 +38,10 @@ type Options struct {
 	// video (-1 = none). Text subtitles are rendered by the player instead.
 	BurnSubtitle int    `json:"burnSubtitle"`
 	Replace      string `json:"replace"` // session to stop first (the player is seeking)
+	// Adaptive asks for several qualities at once (a master playlist the
+	// player switches between). Used only when the admin allows it and the
+	// video has to be converted anyway.
+	Adaptive bool `json:"adaptive"`
 	// AudioCodecs are the codecs the client can play inside HLS (e.g. "aac",
 	// "ac3", "eac3"); a matching source track is copied instead of converted.
 	// MaxAudioChannels is how many channels it can output (0 = stereo).
@@ -59,6 +63,9 @@ type Session struct {
 	BurnSubtitle int   `json:"burnSubtitle"`
 	Throttled    bool  `json:"throttled"`
 	Created      int64 `json:"created"`
+	// Variants are the heights of an adaptive session, best first; empty
+	// for a single-quality one.
+	Variants []int `json:"variants,omitempty"`
 	// AudioCodec and AudioChannels describe the audio sent to the client;
 	// AudioCopy is set when it's the source track untouched.
 	AudioCodec    string `json:"audioCodec"`
@@ -203,21 +210,40 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	}
 	args = append(args, "-i", f.Path)
 
+	audio := pickAudio(f.Streams, o.AudioStream)
+	audioMap := "0:a:0?"
+	if audio != nil {
+		audioMap = fmt.Sprintf("0:%d", audio.Index)
+	}
+	hasAudio := audio != nil || len(f.Streams) == 0 // probed files with no audio track have none to map
+
+	// The quality ladder: the target, then up to two lower rungs. Only when
+	// converting anyway (a copied stream can't be lined up with encoded
+	// ones) and the file has been probed.
+	heights := []int{targetH}
+	if o.Adaptive && !s.VideoCopy && targetH > 0 && len(f.Streams) > 0 && m.st.Setting(store.SettingAdaptiveStreaming) == "true" {
+		for _, h := range adaptiveLadder {
+			if h < targetH && len(heights) < 3 {
+				heights = append(heights, h)
+			}
+		}
+	}
+	if len(heights) > 1 {
+		s.Variants = heights
+	}
+
 	var videoArgs []string
-	videoMap := "0:v:0"
+	videoMaps := []string{"0:v:0"}
 	if s.VideoCopy {
 		s.Encoder = "copy"
 		videoArgs = []string{"-c:v", "copy"}
 	} else {
 		// pre runs on the source frames (before subtitles are overlaid),
-		// post prepares the result for the encoder.
+		// post prepares each output for the encoder.
 		var pre, post []string
 		if s.Tonemap {
 			pre = append(pre, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
 				"tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv")
-		}
-		if targetH > 0 && targetH < f.Height {
-			post = append(post, fmt.Sprintf("scale=-2:%d", targetH))
 		}
 		var codec []string
 		switch encoder {
@@ -242,41 +268,100 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			codec = []string{"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-crf", "21"}
 		}
 		s.Encoder = encoder
-		if burn >= 0 {
-			graph := fmt.Sprintf("[0:v:0]%s[base];[base][0:%d]overlay=eof_action=pass[ov];[ov]%s[vout]",
-				chain(pre), burn, chain(post))
+		// outputFilters scales one output to h, then readies it for the encoder.
+		outputFilters := func(h int) []string {
+			if h > 0 && h < f.Height {
+				return append([]string{fmt.Sprintf("scale=-2:%d", h)}, post...)
+			}
+			return post
+		}
+		switch {
+		case len(heights) > 1:
+			graph := fmt.Sprintf("[0:v:0]%s[base]", chain(pre))
+			src := "base"
+			if burn >= 0 {
+				graph += fmt.Sprintf(";[base][0:%d]overlay=eof_action=pass[ov]", burn)
+				src = "ov"
+			}
+			graph += fmt.Sprintf(";[%s]split=%d", src, len(heights))
+			for i := range heights {
+				graph += fmt.Sprintf("[s%d]", i)
+			}
+			videoMaps = nil
+			for i, h := range heights {
+				graph += fmt.Sprintf(";[s%d]%s[v%d]", i, chain(outputFilters(h)), i)
+				videoMaps = append(videoMaps, fmt.Sprintf("[v%d]", i))
+			}
 			videoArgs = append(videoArgs, "-filter_complex", graph)
-			videoMap = "[vout]"
-		} else {
-			videoArgs = append(videoArgs, "-vf", strings.Join(append(pre, post...), ","))
+		case burn >= 0:
+			graph := fmt.Sprintf("[0:v:0]%s[base];[base][0:%d]overlay=eof_action=pass[ov];[ov]%s[vout]",
+				chain(pre), burn, chain(outputFilters(targetH)))
+			videoArgs = append(videoArgs, "-filter_complex", graph)
+			videoMaps = []string{"[vout]"}
+		default:
+			videoArgs = append(videoArgs, "-vf", strings.Join(append(pre, outputFilters(targetH)...), ","))
 		}
 		videoArgs = append(videoArgs, codec...)
-		kbps := o.BitrateKbps
-		if kbps == 0 {
-			kbps = defaultBitrate(targetH)
-		}
-		videoArgs = append(videoArgs, "-maxrate", fmt.Sprintf("%dk", kbps), "-bufsize", fmt.Sprintf("%dk", kbps*2))
-		if encoder != "libx264" {
-			videoArgs = append(videoArgs, "-b:v", fmt.Sprintf("%dk", kbps*3/4))
+		for i, h := range heights {
+			kbps := defaultBitrate(h)
+			if i == 0 && o.BitrateKbps > 0 {
+				kbps = o.BitrateKbps
+			}
+			spec := ""
+			if len(heights) > 1 {
+				spec = fmt.Sprintf(":v:%d", i)
+			}
+			videoArgs = append(videoArgs, "-maxrate"+spec, fmt.Sprintf("%dk", kbps), "-bufsize"+spec, fmt.Sprintf("%dk", kbps*2))
+			if encoder != "libx264" {
+				videoArgs = append(videoArgs, "-b"+spec, fmt.Sprintf("%dk", kbps*3/4))
+			}
 		}
 		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
 	}
 
-	args = append(args, "-map", videoMap)
-	audio := pickAudio(f.Streams, o.AudioStream)
-	if audio != nil {
-		args = append(args, "-map", fmt.Sprintf("0:%d", audio.Index))
-	} else {
-		args = append(args, "-map", "0:a:0?")
+	// Each variant carries its own copy of the audio, so every playlist
+	// plays on its own.
+	for _, vm := range videoMaps {
+		args = append(args, "-map", vm)
+		if hasAudio {
+			args = append(args, "-map", audioMap)
+		}
 	}
 	args = append(args, "-sn", "-map_metadata", "-1", "-map_chapters", "-1")
 	args = append(args, videoArgs...)
-	args = append(args, audioArgs(s, audio, o)...)
+	if hasAudio {
+		args = append(args, audioArgs(s, audio, o)...)
+	}
 	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
-		"-hls_playlist_type", "event", "-hls_flags", "independent_segments",
-		"-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"),
-		"-start_number", "0", filepath.Join(s.dir, "index.m3u8"))
+		"-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
+	if len(heights) > 1 {
+		var streamMap []string
+		for i := range heights {
+			v := fmt.Sprintf("v:%d", i)
+			if hasAudio {
+				v += fmt.Sprintf(",a:%d", i)
+			}
+			streamMap = append(streamMap, v)
+		}
+		args = append(args, "-var_stream_map", strings.Join(streamMap, " "), "-master_pl_name", "master.m3u8",
+			"-hls_segment_filename", filepath.Join(s.dir, "v%v_seg%05d.ts"), filepath.Join(s.dir, "v%v_index.m3u8"))
+	} else {
+		args = append(args, "-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"), filepath.Join(s.dir, "index.m3u8"))
+	}
 	return args
+}
+
+// adaptiveLadder are the lower qualities an adaptive session adds below its
+// target height.
+var adaptiveLadder = []int{1080, 720, 480}
+
+// Playlist is the playlist a player opens: the master playlist of an
+// adaptive session, else the single one.
+func (s *Session) Playlist() string {
+	if len(s.Variants) > 1 {
+		return "master.m3u8"
+	}
+	return "index.m3u8"
 }
 
 // pickAudio returns the audio stream to send: the requested index, else the
@@ -436,7 +521,7 @@ func (s *Session) kill() {
 	}()
 }
 
-var reSegment = regexp.MustCompile(`^(index\.m3u8|seg\d{5}\.ts)$`)
+var reSegment = regexp.MustCompile(`^(index\.m3u8|seg\d{5}\.ts|master\.m3u8|v\d_index\.m3u8|v\d_seg\d{5}\.ts)$`)
 
 var ErrNotReady = errors.New("transcode output not ready")
 
@@ -447,7 +532,14 @@ func (s *Session) WaitFile(ctx context.Context, name string) (string, error) {
 		return "", os.ErrNotExist
 	}
 	s.lastAccess.Store(time.Now().Unix())
+	// The playlist that lists name: v1_seg00003.ts is in v1_index.m3u8. The
+	// master playlist is ready once the first variant has a segment.
 	playlist := filepath.Join(s.dir, "index.m3u8")
+	if v, _, ok := strings.Cut(name, "_"); ok {
+		playlist = filepath.Join(s.dir, v+"_index.m3u8")
+	} else if name == "master.m3u8" {
+		playlist = filepath.Join(s.dir, "v0_index.m3u8")
+	}
 	path := filepath.Join(s.dir, name)
 	deadline := time.After(waitTimeout)
 	for {
@@ -458,9 +550,11 @@ func (s *Session) WaitFile(ctx context.Context, name string) (string, error) {
 			finished = true
 		default:
 		}
-		if name == "index.m3u8" {
+		if strings.HasSuffix(name, ".m3u8") {
 			if bytes.Contains(pl, []byte("#EXTINF")) {
-				return path, nil
+				if _, err := os.Stat(path); err == nil {
+					return path, nil
+				}
 			}
 		} else if bytes.Contains(pl, []byte(name)) {
 			return path, nil

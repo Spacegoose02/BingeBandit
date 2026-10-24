@@ -9,6 +9,7 @@ const (
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
 	SettingTranscodeThrottle = "transcode_throttle"
+	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
@@ -48,6 +49,7 @@ var SettingDefaults = map[string]string{
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",
 	SettingTranscodeThrottle: "true",
+	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
 	SettingWatchFolders:      "true",
 	SettingMaintenanceStart:  "2",
