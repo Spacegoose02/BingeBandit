@@ -8,6 +8,9 @@ const (
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
+	SettingTonemapAlgorithm  = "tonemap_algorithm" // hable | mobius | reinhard | clip | linear
+	SettingHWDecode          = "hw_decode"         // also decode on the GPU when converting video
+	SettingHWDevice          = "hw_device"         // VAAPI/QSV render node (/dev/dri/renderD129) or NVIDIA GPU number; empty = default
 	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
@@ -41,6 +44,9 @@ var SettingDefaults = map[string]string{
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",
+	SettingTonemapAlgorithm:  "hable",
+	SettingHWDecode:          "false",
+	SettingHWDevice:          "",
 	SettingTranscodeThrottle: "true",
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",

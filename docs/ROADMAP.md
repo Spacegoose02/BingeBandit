@@ -48,12 +48,12 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
 | ✅ | Smart collections by genre, studio, year range or label |
+| ✅ | Tone mapping algorithm choice (Hable, Möbius, Reinhard, clip, linear), GPU decoding, and which GPU to use (render node or NVIDIA GPU number) |
 
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
 - Remote backup targets beyond a folder path (S3/Backblaze).
-- Tone mapping algorithm choice and hardware decoding device selection.
 
 ## M3: User features 🟡 (in progress)
 

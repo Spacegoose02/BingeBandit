@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/media"
 	"bingebandit/internal/store"
+	"bingebandit/internal/stream"
 )
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +62,9 @@ func (s *Server) killActivity(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// hwDevice is a Linux render node or a GPU number.
+var hwDevice = regexp.MustCompile(`^(/dev/dri/[A-Za-z0-9_]+|[0-9]{1,2})$`)
+
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := s.Store.Settings()
 	if err != nil {
@@ -86,6 +91,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if enc, ok := in[store.SettingHWEncoder]; ok && !validEncoders[enc] {
 		writeErr(w, http.StatusBadRequest, "unknown hardware encoder")
+		return
+	}
+	if v, ok := in[store.SettingTonemapAlgorithm]; ok && !stream.TonemapAlgorithms[v] {
+		writeErr(w, http.StatusBadRequest, "unknown tone mapping algorithm")
+		return
+	}
+	if v, ok := in[store.SettingHWDevice]; ok && v != "" && !hwDevice.MatchString(v) {
+		writeErr(w, http.StatusBadRequest, "hardware device must be a render node like /dev/dri/renderD129 or a GPU number like 1")
 		return
 	}
 	if v, ok := in[store.SettingDVRNaming]; ok && v != "library" && v != "folder" {

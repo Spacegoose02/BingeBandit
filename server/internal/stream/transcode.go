@@ -62,6 +62,7 @@ type Session struct {
 	// BurnSubtitle is the burned-in subtitle stream, or -1.
 	BurnSubtitle int   `json:"burnSubtitle"`
 	Throttled    bool  `json:"throttled"`
+	HWDecode     bool  `json:"hwDecode"` // decoding on the GPU was asked for
 	Created      int64 `json:"created"`
 	// Variants are the heights of an adaptive session, best first; empty
 	// for a single-quality one.
@@ -194,9 +195,42 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	s.Tonemap = tonemap && !s.VideoCopy
 	s.BurnSubtitle = burn
 
+	device := m.st.Setting(store.SettingHWDevice)
+	gpuIndex := device != "" && !strings.HasPrefix(device, "/")
+	renderNode := "/dev/dri/renderD128"
+	if device != "" && !gpuIndex {
+		renderNode = device
+	}
+
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
-	if encoder == "vaapi" && !s.VideoCopy {
-		args = append(args, "-vaapi_device", "/dev/dri/renderD128")
+	if !s.VideoCopy {
+		switch encoder {
+		case "vaapi":
+			args = append(args, "-vaapi_device", renderNode)
+		case "qsv":
+			if device != "" && !gpuIndex {
+				args = append(args, "-qsv_device", renderNode)
+			}
+		}
+		// Decoding on the GPU too. Frames come back to system memory, so the
+		// filters below work unchanged, and ffmpeg decodes in software when
+		// the GPU can't handle the codec.
+		if m.st.Setting(store.SettingHWDecode) == "true" {
+			switch encoder {
+			case "nvenc":
+				args = append(args, "-hwaccel", "cuda")
+				if gpuIndex {
+					args = append(args, "-hwaccel_device", device)
+				}
+			case "vaapi":
+				args = append(args, "-hwaccel", "vaapi", "-hwaccel_device", renderNode)
+			case "videotoolbox":
+				args = append(args, "-hwaccel", "videotoolbox")
+			case "qsv", "amf":
+				args = append(args, "-hwaccel", "auto")
+			}
+			s.HWDecode = encoder != "none" && encoder != ""
+		}
 	}
 	if m.st.Setting(store.SettingTranscodeThrottle) == "true" && m.caps.readrateBurst {
 		// Encode the first minute flat out so playback starts fast, then
@@ -243,13 +277,16 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		var pre, post []string
 		if s.Tonemap {
 			pre = append(pre, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
-				"tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv")
+				"tonemap=tonemap="+tonemapAlgorithm(m.st.Setting(store.SettingTonemapAlgorithm))+":desat=0", "zscale=t=bt709:m=bt709:r=tv")
 		}
 		var codec []string
 		switch encoder {
 		case "nvenc":
 			post = append(post, "format=yuv420p")
 			codec = []string{"-c:v", "h264_nvenc", "-preset", "p4", "-profile:v", "high"}
+			if gpuIndex {
+				codec = append(codec, "-gpu", device)
+			}
 		case "qsv":
 			post = append(post, "format=nv12")
 			codec = []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-profile:v", "high"}
@@ -403,6 +440,16 @@ func audioArgs(s *Session, a *store.Stream, o Options) []string {
 	}
 	s.AudioCodec, s.AudioChannels = "aac", 2
 	return []string{"-c:a", "aac", "-ac", "2", "-b:a", "192k"}
+}
+
+// TonemapAlgorithms are the HDR → SDR curves an admin can pick.
+var TonemapAlgorithms = map[string]bool{"hable": true, "mobius": true, "reinhard": true, "clip": true, "linear": true}
+
+func tonemapAlgorithm(v string) string {
+	if TonemapAlgorithms[v] {
+		return v
+	}
+	return "hable"
 }
 
 // chain joins filters, using the pass-through "null" filter when empty.
