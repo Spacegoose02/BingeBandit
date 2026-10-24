@@ -389,7 +389,7 @@ Needs real hardware or real media (can't be checked with generated test files):
 
 Code gaps:
 
-6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for clients that can play it.
+6. ~~Audio is always transcoded to AAC stereo.~~ Clients now say which audio they can play: the web player copies AC-3 (and E-AC-3 in Safari) or keeps 5.1 as AAC when the computer has surround output; the TV app gets AAC 5.1. Still to do: AC-3/E-AC-3 passthrough in the TV app, after testing on the onn box with a receiver.
 7. Transcode sessions don't re-check library access after they start (they're bound to the user who started them).
 8. True adaptive bitrate (a multi-rendition HLS ladder).
 9. Backups only go to a folder. Restore works from Admin → Tasks, but there's no upload of a backup file (for example, when moving to a new server) and no remote targets such as S3.

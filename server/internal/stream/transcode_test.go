@@ -47,3 +47,32 @@ func TestBuildArgsBurnIn(t *testing.T) {
 		t.Errorf("text subtitle should not be burned: copy=%v burn=%d\n%s", s.VideoCopy, s.BurnSubtitle, args)
 	}
 }
+
+func TestAudioArgs(t *testing.T) {
+	eac3 := &store.Stream{Index: 1, Type: "audio", Codec: "eac3", Channels: 6}
+	dts := &store.Stream{Index: 2, Type: "audio", Codec: "dts", Channels: 8}
+	stereo := &store.Stream{Index: 3, Type: "audio", Codec: "aac", Channels: 2}
+	surround := Options{AudioCodecs: []string{"aac", "ac3", "eac3"}, MaxAudioChannels: 6}
+	for _, c := range []struct {
+		name  string
+		a     *store.Stream
+		o     Options
+		want  string
+		codec string
+		ch    int
+	}{
+		{"old client gets stereo", eac3, Options{}, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
+		{"surround client gets the source", eac3, surround, "-c:a copy", "eac3", 6},
+		{"codec it can't play becomes AAC 5.1", dts, surround, "-c:a aac -ac 6 -b:a 384k", "aac", 6},
+		{"stereo output can't take 5.1", eac3, Options{AudioCodecs: []string{"eac3"}, MaxAudioChannels: 2}, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
+		{"stereo AAC is copied", stereo, Options{AudioCodecs: []string{"aac"}}, "-c:a copy", "aac", 2},
+		{"unknown channels are converted", &store.Stream{Index: 4, Type: "audio", Codec: "ac3"}, surround, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
+		{"no audio", nil, surround, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
+	} {
+		s := &Session{}
+		got := strings.Join(audioArgs(s, c.a, c.o), " ")
+		if got != c.want || s.AudioCodec != c.codec || s.AudioChannels != c.ch || s.AudioCopy != (c.want == "-c:a copy") {
+			t.Errorf("%s: got %q (%s %d copy=%v), want %q", c.name, got, s.AudioCodec, s.AudioChannels, s.AudioCopy, c.want)
+		}
+	}
+}
