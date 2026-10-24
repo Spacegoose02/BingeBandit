@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/plugins"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
@@ -87,6 +89,10 @@ func main() {
 		FFprobe:    cfg.FFprobe,
 		UpdateRepo: cfg.UpdateRepo,
 	}
+	srv.Plugins = plugins.NewHost(st, []string{cfg.PluginsDir, filepath.Join(cfg.DataDir, "plugins")},
+		filepath.Join(cfg.DataDir, "plugin-data"), loopbackURL(cfg.Addr))
+	srv.Plugins.ServerName = func() string { return st.Setting(store.SettingServerName) }
+	go srv.Plugins.Start(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
 
@@ -102,4 +108,17 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	httpSrv.Shutdown(shutdownCtx)
+	srv.Plugins.Wait(5 * time.Second)
+}
+
+// loopbackURL is how plugins this server starts reach it: the listen port on 127.0.0.1.
+func loopbackURL(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://127.0.0.1:8484"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }

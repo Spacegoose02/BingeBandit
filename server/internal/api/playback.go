@@ -278,7 +278,7 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 // playbackEvent is the webhook payload for playback events.
 func (s *Server) playbackEvent(np stream.NowPlaying, it *store.Item) map[string]any {
 	ev := map[string]any{
-		"user": np.Username, "itemId": it.ID, "kind": it.Kind, "title": np.Title, "subtitle": np.Subtitle,
+		"user": np.Username, "userId": np.UserID, "itemId": it.ID, "kind": it.Kind, "title": np.Title, "subtitle": np.Subtitle,
 		"year": it.Year, "client": np.Client, "ip": np.IP, "local": np.Local, "mode": np.Mode,
 		"position": np.Position, "duration": np.Duration, "watchedSeconds": int(np.Watched),
 		"tmdbId": it.TMDBID,

@@ -13,6 +13,12 @@ Push-Location "$PSScriptRoot\server"
 try {
     $env:CGO_ENABLED = "0"
     go build -trimpath -ldflags "-s -w -X main.version=$Version" -o "$PSScriptRoot\dist\bingebandit.exe" ./cmd/bingebandit
+    # Bundled plugins go in dist\plugins, which the server reads by default.
+    foreach ($p in @("watchlist-rss")) {
+        New-Item -ItemType Directory -Force "$PSScriptRoot\dist\plugins\$p" | Out-Null
+        go build -trimpath -ldflags "-s -w" -o "$PSScriptRoot\dist\plugins\$p\$p.exe" "./plugins/$p"
+        Copy-Item "plugins\$p\plugin.json" "$PSScriptRoot\dist\plugins\$p\"
+    }
 } finally { Pop-Location }
 
 Write-Host "Built dist\bingebandit.exe ($Version)"

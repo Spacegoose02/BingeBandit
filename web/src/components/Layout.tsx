@@ -83,6 +83,10 @@ export default function Layout() {
                 <Icon name="download" />
                 <span>Import</span>
               </NavLink>
+              <NavLink to="/admin/plugins" className="nav-item">
+                <Icon name="plug" />
+                <span>Plugins</span>
+              </NavLink>
               <NavLink to="/admin/tasks" className="nav-item">
                 <Icon name="clock" />
                 <span>Tasks</span>

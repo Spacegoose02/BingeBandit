@@ -472,4 +472,19 @@ ALTER TABLE users ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE CAS
 ALTER TABLE users ADD COLUMN profile_name TEXT NOT NULL DEFAULT '';
 CREATE INDEX users_owner ON users(owner_id);
 `,
+	// 17: plugins (M9). Each one is a separate process or service that speaks
+	// HTTP; see docs/PLUGINS.md. The key authenticates both directions.
+	`
+CREATE TABLE plugins (
+	id         TEXT PRIMARY KEY,           -- the manifest id, e.g. "watchlist-rss"
+	kind       TEXT NOT NULL,              -- 'managed' (BingeBandit runs it) or 'remote' (its own service)
+	url        TEXT NOT NULL DEFAULT '',   -- remote: the plugin's base URL
+	server_url TEXT NOT NULL DEFAULT '',   -- remote: BingeBandit's address as the plugin reaches it
+	enabled    INTEGER NOT NULL DEFAULT 0,
+	plugin_key TEXT NOT NULL UNIQUE,
+	settings   TEXT NOT NULL DEFAULT '{}', -- JSON object of the admin's values
+	manifest   TEXT NOT NULL DEFAULT '{}', -- last manifest the plugin served
+	added_at   INTEGER NOT NULL
+);
+`,
 }
