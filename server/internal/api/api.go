@@ -61,7 +61,7 @@ type Server struct {
 	oidc        *oidcFlows
 	netp        netHolder
 	unlocks     unlocks
-	restoreMu   sync.Mutex // one restore at a time
+	restoreMu   sync.Mutex      // one restore at a time
 	ctx         context.Context // server lifetime, for work that outlives a request
 }
 
