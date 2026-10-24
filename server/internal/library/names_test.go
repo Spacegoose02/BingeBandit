@@ -38,6 +38,8 @@ func TestParseEpisode(t *testing.T) {
 		{"show.name.s02e10.720p.hdtv", 2, 10, true, ""},
 		{"Show 3x07 Title Here", 3, 7, true, "Title Here"},
 		{"S01E01E02 Pilot", 1, 1, true, "Pilot"},
+		{"The Daily Show - 2026-10-23", 2026, 10230000, true, ""},
+		{"Bandit News - 2026-10-23 19.30", 2026, 10231930, true, ""},
 		{"Random file", 0, 0, false, ""},
 	}
 	for _, c := range cases {

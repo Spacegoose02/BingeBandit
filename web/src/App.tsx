@@ -13,6 +13,7 @@ import ProfilePage from './pages/Profile'
 import AdminStatistics from './pages/admin/Statistics'
 import AdminLiveTV from './pages/admin/LiveTV'
 import LiveGuide from './pages/LiveGuide'
+import RecordingsPage from './pages/Recordings'
 import Search from './pages/Search'
 import Account from './pages/Account'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -66,6 +67,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="/live" element={<LiveGuide />} />
+          <Route path="/recordings" element={<RecordingsPage />} />
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />

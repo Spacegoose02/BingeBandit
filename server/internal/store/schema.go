@@ -304,4 +304,39 @@ CREATE TABLE channel_favorites (
 	PRIMARY KEY (user_id, channel_id)
 );
 `,
+	// 8: DVR — series rules and individual recordings.
+	`
+CREATE TABLE recording_rules (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	channel_id INTEGER REFERENCES channels(id) ON DELETE CASCADE, -- NULL = any channel
+	title      TEXT NOT NULL,
+	status     TEXT NOT NULL CHECK (status IN ('pending','active')),
+	created_at INTEGER NOT NULL
+);
+
+CREATE TABLE recordings (
+	id            INTEGER PRIMARY KEY,
+	user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	rule_id       INTEGER REFERENCES recording_rules(id) ON DELETE SET NULL,
+	channel_id    INTEGER REFERENCES channels(id) ON DELETE SET NULL,
+	channel_name  TEXT NOT NULL,
+	epg_id        TEXT NOT NULL DEFAULT '',
+	title         TEXT NOT NULL,
+	subtitle      TEXT NOT NULL DEFAULT '',
+	description   TEXT NOT NULL DEFAULT '',
+	episode       TEXT NOT NULL DEFAULT '',
+	program_start INTEGER NOT NULL,
+	program_stop  INTEGER NOT NULL,
+	start_at      INTEGER NOT NULL, -- program times plus padding
+	stop_at       INTEGER NOT NULL,
+	status        TEXT NOT NULL CHECK (status IN ('pending','scheduled','recording','completed','failed','cancelled')),
+	path          TEXT NOT NULL DEFAULT '',
+	size          INTEGER NOT NULL DEFAULT 0,
+	error         TEXT NOT NULL DEFAULT '',
+	created_at    INTEGER NOT NULL,
+	UNIQUE (channel_id, program_start)
+);
+CREATE INDEX recordings_due ON recordings(status, start_at);
+`,
 }

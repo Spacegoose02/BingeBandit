@@ -115,6 +115,39 @@ export default function AdminSettings() {
           </label>
         </section>
 
+        <section className="panel form">
+          <h3>Live TV recording (DVR)</h3>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_allow_users === 'true'} onChange={set('dvr_allow_users')} />
+            Let users (not just admins) record
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_require_approval === 'true'} onChange={set('dvr_require_approval')} />
+            Ask an admin to approve users' recordings first
+          </label>
+          <label>
+            Recordings folder
+            <input className="mono" value={s.dvr_folder ?? ''} onChange={set('dvr_folder')} placeholder="Default: recordings inside the data folder" />
+          </label>
+          <label>
+            Save recordings
+            <select value={s.dvr_naming ?? 'library'} onChange={set('dvr_naming')}>
+              <option value="library">Named like a TV library (Show/Season 01/Show - S01E02.ts)</option>
+              <option value="folder">All in one folder (Show - date.ts)</option>
+            </select>
+          </label>
+          <div className="field-grid">
+            <label>
+              Start early (minutes)
+              <input type="number" min={0} max={60} value={s.dvr_padding_before ?? '1'} onChange={set('dvr_padding_before')} />
+            </label>
+            <label>
+              Keep going after (minutes)
+              <input type="number" min={0} max={120} value={s.dvr_padding_after ?? '3'} onChange={set('dvr_padding_after')} />
+            </label>
+          </div>
+        </section>
+
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
         <div className="actions">
           <button className="btn btn-primary">Save settings</button>

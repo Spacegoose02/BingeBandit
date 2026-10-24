@@ -334,7 +334,7 @@ func (r *Relay) run() {
 func (r *Relay) pull(s store.ChannelStream) error {
 	ctx, cancel := context.WithCancel(r.ctx)
 	defer cancel()
-	body, err := openStream(ctx, s.URL, s.UserAgent)
+	body, err := r.m.openStream(ctx, s.URL, s.UserAgent)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,10 @@ func (r *Relay) pull(s store.ChannelStream) error {
 	}
 }
 
-func openStream(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
+// openStream connects to an upstream and returns MPEG-TS. Plain TS streams
+// are read directly; HLS upstreams (.m3u8, common with IPTV providers) are
+// pulled and remuxed to TS by ffmpeg without re-encoding.
+func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return nil, fmt.Errorf("only http(s) streams are supported")
 	}
@@ -398,7 +401,57 @@ func openStream(ctx context.Context, url, userAgent string) (io.ReadCloser, erro
 		resp.Body.Close()
 		return nil, fmt.Errorf("upstream answered %s", resp.Status)
 	}
+	ct := strings.ToLower(resp.Header.Get("Content-Type"))
+	final := resp.Request.URL // after redirects, which providers love
+	if strings.Contains(ct, "mpegurl") || strings.HasSuffix(strings.ToLower(final.Path), ".m3u8") {
+		resp.Body.Close()
+		return m.remuxHLS(ctx, final.String(), userAgent)
+	}
 	return resp.Body, nil
+}
+
+// remuxHLS runs ffmpeg to follow a live HLS playlist and emit MPEG-TS.
+func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
+	cmd := exec.CommandContext(ctx, m.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+		"-user_agent", userAgent, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+		"-i", url, "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-f", "mpegts", "pipe:1")
+	media.HideWindow(cmd)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start ffmpeg for HLS upstream: %w", err)
+	}
+	return &procReader{ReadCloser: out, cmd: cmd, stderr: &stderr}, nil
+}
+
+// procReader is ffmpeg's stdout; closing it stops the process.
+type procReader struct {
+	io.ReadCloser
+	cmd    *exec.Cmd
+	stderr *bytes.Buffer
+}
+
+func (p *procReader) Read(b []byte) (int, error) {
+	n, err := p.ReadCloser.Read(b)
+	if err == io.EOF {
+		if msg := strings.TrimSpace(p.stderr.String()); msg != "" {
+			return n, fmt.Errorf("HLS upstream ended: %s", msg)
+		}
+	}
+	return n, err
+}
+
+func (p *procReader) Close() error {
+	if p.cmd.Process != nil {
+		p.cmd.Process.Kill()
+	}
+	p.ReadCloser.Close()
+	p.cmd.Wait()
+	return nil
 }
 
 func (r *Relay) broadcast(chunk []byte) {

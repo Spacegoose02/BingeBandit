@@ -58,7 +58,7 @@ func (s *Server) withNowNext(chans []*store.Channel) []liveChannel {
 	}
 	out := make([]liveChannel, 0, len(chans))
 	for _, c := range chans {
-		lc := liveChannel{ID: c.ID, Number: c.Number, Name: c.Name, Logo: c.Logo, Group: c.Group, EPGID: c.EPGID, Favorite: c.Favorite}
+		lc := liveChannel{ID: c.ID, Number: c.Number, Name: c.Name, Logo: logoURL(c.ID, c.Logo), Group: c.Group, EPGID: c.EPGID, Favorite: c.Favorite}
 		list := byID[c.EPGID]
 		for i := range list {
 			if list[i].Start <= now && list[i].Stop > now {
@@ -75,6 +75,39 @@ func (s *Server) withNowNext(chans []*store.Channel) []liveChannel {
 		out = append(out, lc)
 	}
 	return out
+}
+
+// logoURL points clients at the server's logo cache instead of the provider.
+func logoURL(channelID int64, logo string) string {
+	if logo == "" {
+		return ""
+	}
+	return fmt.Sprintf("/api/live/channels/%d/logo", channelID)
+}
+
+// channelLogo serves a channel's logo from the cache. Only URLs already on a
+// channel are fetched, so this can't be used to make arbitrary requests.
+func (s *Server) channelLogo(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	ch, err := s.Store.Channel(currentUser(r).ID, id)
+	if err != nil || ch.Logo == "" {
+		http.NotFound(w, r)
+		return
+	}
+	path, ctype, err := s.Logos.Get(r.Context(), ch.Logo)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	// SVGs from providers are served as images only; block scripts if opened directly.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+	http.ServeFile(w, r, path)
 }
 
 // liveGuide returns channels and their programs for [from, to) (unix seconds).
@@ -108,7 +141,11 @@ func (s *Server) liveGuide(w http.ResponseWriter, r *http.Request) {
 	for _, p := range progs {
 		byID[p.EPGID] = append(byID[p.EPGID], p)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"from": from, "to": to, "channels": s.withNowNext(chans), "programs": byID})
+	recs, _ := s.Store.RecordingStatuses(from, to)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"from": from, "to": to, "channels": s.withNowNext(chans), "programs": byID,
+		"recordings": recs, "canRecord": s.canRecord(currentUser(r)),
+	})
 }
 
 func (s *Server) setChannelFavorite(fav bool) http.HandlerFunc {
@@ -550,6 +587,7 @@ func (s *Server) liveActivity(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	out := make([]withNow, 0, len(stats))
 	for _, st := range stats {
+		st.Logo = logoURL(st.ChannelID, st.Logo)
 		wn := withNow{RelayStat: st}
 		if st.EPGID != "" {
 			if progs, err := s.Store.Programs([]string{st.EPGID}, now, now+1); err == nil && len(progs) > 0 {

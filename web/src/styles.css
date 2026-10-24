@@ -688,6 +688,14 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .mini-ch .progress.inline { max-width: none; }
 
 .channel-row.disabled { opacity: 0.5; }
+.rec-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #e11d48; margin-right: 6px; vertical-align: 1px; flex: none; }
+.rec-dot.pending { background: var(--warn); }
+.rec-dot.live { animation: pulse 1.2s ease-in-out infinite; }
+.nav-rec { width: 20px; height: 20px; display: grid; place-items: center; }
+.nav-rec::before { content: ''; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; box-shadow: inset 0 0 0 2px var(--bg); background: currentColor; }
+.pill.danger { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.rec-row { flex-wrap: nowrap; }
+.rec-when { width: 120px; flex: none; font-variant-numeric: tabular-nums; }
 .stream-pick { max-height: 46vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
 .stream-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px !important; padding: 7px 10px; border-radius: 8px; color: var(--text) !important; font-size: 14px !important; cursor: pointer; }
 .stream-row:hover { background: var(--surface-2); }

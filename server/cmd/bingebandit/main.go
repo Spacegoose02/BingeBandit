@@ -59,6 +59,9 @@ func main() {
 	})...)
 	go scheduler.Start(ctx)
 	go scanner.Watch(ctx)
+	live := livetv.NewManager(st, cfg.FFmpeg, cfg.FFprobe, cfg.DataDir)
+	recorder := livetv.NewRecorder(st, live, cfg.DataDir)
+	go recorder.Run(ctx)
 
 	srv := &api.Server{
 		Store:      st,
@@ -70,7 +73,9 @@ func main() {
 		Activity:   stream.NewActivity(),
 		Tasks:      scheduler,
 		Markers:    detector,
-		Live:       livetv.NewManager(st, cfg.FFmpeg, cfg.FFprobe, cfg.DataDir),
+		Live:       live,
+		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
+		DVR:        recorder,
 		Logs:       logBuf,
 		Version:    version,
 		DataDir:    cfg.DataDir,

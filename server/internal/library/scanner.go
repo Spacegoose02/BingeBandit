@@ -398,6 +398,13 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 	epTitle := episodeTitle(rest)
 	if epTitle == "" {
 		epTitle = fmt.Sprintf("Episode %d", episode)
+		if season >= 1900 { // date-based: season is the year, episode MMDDhhmm
+			t := time.Date(season, time.Month(episode/1000000), episode/10000%100, episode/100%100, episode%100, 0, 0, time.Local)
+			epTitle = t.Format("Jan 2, 2006")
+			if episode%10000 != 0 {
+				epTitle = t.Format("Jan 2, 2006 3:04 PM")
+			}
+		}
 	}
 	return s.st.UpsertItem(&store.Item{
 		LibraryID: lib.ID, Kind: "episode", ParentID: seasonID, ShowID: showID, Title: epTitle,

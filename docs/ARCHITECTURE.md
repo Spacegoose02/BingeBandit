@@ -50,6 +50,12 @@
   - **Raw TS viewers** (`/api/live/channels/{id}/stream.ts`, used by external apps) get chunks through a buffered channel. A viewer that falls 512 chunks behind is dropped.
   - **Web viewers** share one ffmpeg per channel that turns the relayed TS into a rolling HLS playlist (`hls_list_size 8`, `delete_segments`). The first ~3 MB of the stream are probed: H.264 is copied, anything else is converted with yadif deinterlacing.
   - **Viewer lifetime:** web viewers stay counted while their player polls the playlist with `?viewer=`, and expire after 30s without a poll. A relay with no viewers for 15s stops.
+- **HLS upstreams:** if the upstream answers with an HLS playlist (by Content-Type, or a `.m3u8` path after redirects), `openStream` hands the URL to ffmpeg (`-c copy -f mpegts`). The relay then reads ffmpeg's stdout exactly like a TS stream.
+- **Logos:** `/api/live/channels/{id}/logo` serves the channel's logo from `<data>/cache/logos`. It only fetches URLs already stored on a channel.
+- **DVR** (`livetv.Recorder`, tables `recordings` and `recording_rules`): every 10s the recorder starts due recordings and fails ones whose window passed while the server was down. Every 5 minutes it expands active series rules over the next 72h, matching by title.
+  - A recording is a `ts` viewer of the shared relay writing to disk, so it rides fail-over and shares the provider connection. If the stream drops it rejoins until `stop_at`.
+  - Files go to `dvr_folder`, in either "library" naming (`Show/Season NN/Show - SxxEyy - Subtitle.ts`, or `Show/Show - YYYY-MM-DD HH.MM.ts` without episode numbers) or a flat folder.
+  - The TV scanner understands date names (season = year, episode = MMDDhhmm, titled with the air date).
 - **Testing without a provider:** `go run ./cmd/fakeiptv` serves six ffmpeg test channels (one MPEG-2, one "flaky" that dies after 20s and has a backup feed), an M3U playlist and an XMLTV guide on `:8585`.
 
 ## Scanning

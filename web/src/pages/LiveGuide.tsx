@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
@@ -16,6 +16,8 @@ interface Guide {
   to: number
   channels: LiveChannel[]
   programs: Record<string, GuideProgram[]>
+  recordings: Record<string, string> // "epgId:start" → status
+  canRecord: boolean
 }
 
 export function ChannelLogo({ channel, size = 40 }: { channel: Pick<LiveChannel, 'logo' | 'name'>; size?: number }) {
@@ -60,6 +62,23 @@ export default function LiveGuide() {
     await api[c.favorite ? 'del' : 'post'](`/api/live/channels/${c.id}/favorite`)
     reload()
   }
+  const [note, setNote] = useState('')
+  const record = async (channel: LiveChannel, program: GuideProgram, series: boolean) => {
+    try {
+      const rec = await api.post<{ status: string }>('/api/dvr/recordings', { channelId: channel.id, programId: program.id, series })
+      setNote(
+        rec.status === 'pending'
+          ? 'Sent to an admin for approval.'
+          : series
+            ? `Recording every “${program.title}”.`
+            : `“${program.title}” will be recorded.`,
+      )
+      reload()
+    } catch (e) {
+      setNote((e as Error).message)
+    }
+  }
+  const recStatus = (p?: GuideProgram) => (p ? data?.recordings?.[`${p.epgId}:${p.start}`] : undefined)
 
   if (data && data.channels.length === 0) {
     return (
@@ -89,6 +108,24 @@ export default function LiveGuide() {
               <button className="btn btn-primary" onClick={() => nav(`/live/${hero.channel.id}`)}>
                 <Icon name="play" fill size={18} /> Watch {hero.channel.name}
               </button>
+              {data?.canRecord && hero.program && hero.program.stop > now && !recStatus(hero.program) && (
+                <>
+                  <button className="btn btn-glass" onClick={() => record(hero.channel, hero.program!, false)}>
+                    <span className="rec-dot" /> Record
+                  </button>
+                  <button className="btn btn-glass" onClick={() => record(hero.channel, hero.program!, true)}>
+                    <span className="rec-dot" /> Record series
+                  </button>
+                </>
+              )}
+              {recStatus(hero.program) && (
+                <Link to="/recordings" className="btn btn-glass">
+                  <span className="rec-dot" />{' '}
+                  {({ pending: 'Waiting for approval', recording: 'Recording now', completed: 'Recorded' } as Record<string, string>)[recStatus(hero.program)!] ??
+                    'Set to record'}
+                </Link>
+              )}
+              {note && <span className="muted small">{note}</span>}
             </div>
           </div>
           <ChannelLogo channel={hero.channel} size={72} />
@@ -158,7 +195,10 @@ export default function LiveGuide() {
                       title={`${p.title} · ${clock(p.start)}–${clock(p.stop)}`}
                     >
                       {p.start < from && <Icon name="back" size={12} className="gp-cont" />}
-                      <span className="gp-title">{p.title}</span>
+                      <span className="gp-title">
+                        {recStatus(p) && <span className={`rec-dot ${recStatus(p) === 'pending' ? 'pending' : ''}`} title="Set to record" />}
+                        {p.title}
+                      </span>
                       {w > 120 && <span className="gp-time">{clock(p.start)}–{clock(p.stop)}</span>}
                     </button>
                   )

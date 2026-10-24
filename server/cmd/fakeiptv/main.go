@@ -13,7 +13,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -27,15 +29,17 @@ type channel struct {
 	codec  string // h264 | mpeg2 (to exercise transcoding)
 	tone   int    // Hz, so channels sound different
 	flaky  bool   // stops after 20s, to exercise fallback
+	hls    bool   // served as a live HLS playlist instead of raw TS
 }
 
 var channels = []channel{
-	{1, "Bandit News", "News", "testsrc2=size=1280x720:rate=30", "h264", 440, false},
-	{2, "Bandit Sports", "Sports", "smptehdbars=size=1280x720:rate=30", "h264", 523, false},
-	{3, "Flaky Sports", "Sports", "testsrc=size=1280x720:rate=30", "h264", 587, true},
-	{4, "Retro Broadcast", "Entertainment", "smptebars=size=720x480:rate=30000/1001", "mpeg2", 659, false},
-	{5, "Kids Zone", "Kids", "mandelbrot=size=960x540:rate=25", "h264", 698, false},
-	{6, "Nature HD", "Entertainment", "life=size=1280x720:rate=30:mold=10:ratio=0.1", "h264", 784, false},
+	{1, "Bandit News", "News", "testsrc2=size=1280x720:rate=30", "h264", 440, false, false},
+	{2, "Bandit Sports", "Sports", "smptehdbars=size=1280x720:rate=30", "h264", 523, false, false},
+	{3, "Flaky Sports", "Sports", "testsrc=size=1280x720:rate=30", "h264", 587, true, false},
+	{4, "Retro Broadcast", "Entertainment", "smptebars=size=720x480:rate=30000/1001", "mpeg2", 659, false, false},
+	{5, "Kids Zone", "Kids", "mandelbrot=size=960x540:rate=25", "h264", 698, false, false},
+	{6, "Nature HD", "Entertainment", "life=size=1280x720:rate=30:mold=10:ratio=0.1", "h264", 784, false, false},
+	{7, "Stream Seven (HLS)", "News", "rgbtestsrc=size=1280x720:rate=30", "h264", 880, false, true},
 }
 
 var shows = []string{"Morning Report", "The Big Game", "Cartoon Hour", "Nature Walk", "Late Night Talk", "Cooking Live", "Sports Center", "Movie Classics"}
@@ -53,8 +57,12 @@ func main() {
 		var b strings.Builder
 		b.WriteString("#EXTM3U\n")
 		for _, c := range channels {
-			fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"fake.%d\" tvg-chno=\"%d\" tvg-logo=\"%s/logo/%d.svg\" group-title=\"%s\",%s\n%s/live/%d.ts\n",
-				c.n, c.n, host, c.n, c.group, c.name, host, c.n)
+			url := fmt.Sprintf("%s/live/%d.ts", host, c.n)
+			if c.hls {
+				url = fmt.Sprintf("%s/hls/%d/index.m3u8", host, c.n)
+			}
+			fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"fake.%d\" tvg-chno=\"%d\" tvg-logo=\"%s/logo/%d.svg\" group-title=\"%s\",%s\n%s\n",
+				c.n, c.n, host, c.n, c.group, c.name, url)
 		}
 		// A backup feed for the flaky channel, as a second provider would offer.
 		fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"fake.3\" tvg-logo=\"%s/logo/3.svg\" group-title=\"Backup\",Flaky Sports (backup)\n%s/live/3b.ts\n", host, host)
@@ -125,6 +133,28 @@ func main() {
 		cmd.Run()
 		log.Printf("client %s ✕ channel %s", r.RemoteAddr, id)
 	})
+
+	// HLS channels run continuously into a temp folder, like a provider's CDN.
+	hlsDir, _ := os.MkdirTemp("", "fakeiptv-hls")
+	for _, c := range channels {
+		if !c.hls {
+			continue
+		}
+		dir := filepath.Join(hlsDir, strconv.Itoa(c.n))
+		os.MkdirAll(dir, 0o755)
+		go func(c channel, dir string) {
+			for {
+				cmd := exec.Command(*ffmpeg, "-hide_banner", "-loglevel", "error", "-re",
+					"-f", "lavfi", "-i", c.source, "-f", "lavfi", "-i", fmt.Sprintf("sine=frequency=%d:sample_rate=48000", c.tone),
+					"-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-pix_fmt", "yuv420p", "-c:a", "aac",
+					"-f", "hls", "-hls_time", "2", "-hls_list_size", "6", "-hls_flags", "delete_segments",
+					filepath.Join(dir, "index.m3u8"))
+				cmd.Run()
+				time.Sleep(time.Second)
+			}
+		}(c, dir)
+	}
+	http.Handle("/hls/", http.StripPrefix("/hls/", http.FileServer(http.Dir(hlsDir))))
 
 	log.Printf("fake IPTV provider on %s: %s/playlist.m3u and %s/epg.xml", *addr, host, host)
 	log.Fatal(http.ListenAndServe(*addr, nil))

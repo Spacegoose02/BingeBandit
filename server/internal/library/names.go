@@ -89,8 +89,14 @@ func cleanTitle(s string) string {
 	return strings.TrimSpace(reSpaces.ReplaceAllString(s, " "))
 }
 
+// reAirDate matches date-named episodes ("Show - 2026-10-23" or, from the
+// DVR, "Show - 2026-10-23 19.30").
+var reAirDate = regexp.MustCompile(`(?:^|[\s._\-])((?:19|20)\d{2})[-.](\d{2})[-.](\d{2})(?:[ ._T](\d{2})[.:](\d{2}))?`)
+
 // parseEpisode finds S01E02 / 1x02 markers. prefix is the text before the
 // marker (often the show name), rest is what follows (often the episode title).
+// Date-named episodes (daily shows, DVR recordings) use the year as the season
+// and MMDDhhmm as the episode number, so they sort by air date.
 func parseEpisode(name string) (season, episode int, prefix, rest string, ok bool) {
 	for _, re := range []*regexp.Regexp{reEpisode, reEpisodeX} {
 		if loc := re.FindStringSubmatchIndex(name); loc != nil {
@@ -98,6 +104,18 @@ func parseEpisode(name string) (season, episode int, prefix, rest string, ok boo
 			episode, _ = strconv.Atoi(name[loc[4]:loc[5]])
 			return season, episode, name[:loc[0]], name[loc[1]:], true
 		}
+	}
+	if m := reAirDate.FindStringSubmatchIndex(name); m != nil {
+		num := func(i int) int {
+			if m[2*i] < 0 {
+				return 0
+			}
+			n, _ := strconv.Atoi(name[m[2*i]:m[2*i+1]])
+			return n
+		}
+		season = num(1)
+		episode = num(2)*1000000 + num(3)*10000 + num(4)*100 + num(5)
+		return season, episode, name[:m[0]], name[m[1]:], true
 	}
 	return 0, 0, "", "", false
 }

@@ -248,6 +248,41 @@ export interface RelayStat {
   viewers: { id: string; username: string; ip: string; kind: string; connected: number }[]
 }
 
+export type RecordingStatus = 'pending' | 'scheduled' | 'recording' | 'completed' | 'failed' | 'cancelled'
+
+export interface Recording {
+  id: number
+  userId: number
+  username?: string
+  ruleId?: number
+  channelId?: number
+  channelName: string
+  title: string
+  subtitle?: string
+  description?: string
+  episode?: string
+  programStart: number
+  programStop: number
+  startAt: number
+  stopAt: number
+  status: RecordingStatus
+  path?: string
+  size: number
+  error?: string
+  itemId?: number
+}
+
+export interface RecordingRule {
+  id: number
+  userId: number
+  username?: string
+  channelId?: number
+  channelName?: string
+  title: string
+  status: 'pending' | 'active'
+  upcoming: number
+}
+
 export interface Marker {
   kind: 'intro' | 'credits'
   start: number

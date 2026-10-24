@@ -36,6 +36,8 @@ type Server struct {
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
 	Live       *livetv.Manager
+	Logos      *livetv.LogoCache
+	DVR        *livetv.Recorder
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -84,7 +86,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/live/channels/{id}/watch", s.watchChannel)
 			r.Get("/live/channels/{id}/hls/{name}", s.liveHLS)
 			r.Get("/live/channels/{id}/stream.ts", s.liveTS)
+			r.Get("/live/channels/{id}/logo", s.channelLogo)
 			r.Delete("/live/viewers/{viewer}", s.leaveChannel)
+			r.Get("/dvr", s.recordings)
+			r.Post("/dvr/recordings", s.scheduleRecording)
+			r.Delete("/dvr/recordings/{id}", s.deleteRecording)
+			r.Delete("/dvr/rules/{id}", s.deleteRule)
 			r.Get("/live/playlist.m3u", s.livePlaylist)
 			r.Get("/live/epg.xml", s.liveEPG)
 
@@ -166,6 +173,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/live/activity", s.liveActivity)
 				r.Delete("/live/activity/{id}", s.stopRelay)
 				r.Delete("/live/viewers/{viewer}", s.kickViewer)
+
+				r.Post("/dvr/recordings/{id}/approve", s.approveRecording)
+				r.Post("/dvr/rules/{id}/approve", s.approveRule)
 
 				r.Get("/history", s.adminHistory)
 				r.Get("/statistics", s.adminStatistics)

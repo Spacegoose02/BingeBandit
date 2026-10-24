@@ -4,7 +4,22 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: Live TV phase 1 (M4)
+## Latest: Live TV phase 2 — DVR, HLS upstreams, logos (M4)
+
+- **HLS upstreams:** `.m3u8` provider streams now relay. Tested with fakeiptv channel 7: video passed through at ~260 kbps.
+- **DVR:**
+  - The guide has **Record** and **Record series** buttons, and red dots mark programs set to record.
+  - The Recordings page lists Upcoming, Series and Recorded, with admin Approve buttons.
+  - Settings → Live TV recording has allow users, require approval, folder, naming and padding.
+- **Tested against fakeiptv:**
+  - recording, stopping early (23s valid H.264/AAC kept) and de-duplication
+  - a series rule scheduled 3 upcoming airings
+  - the approval flow (user → pending → admin approves → scheduled)
+  - the recordings folder added as a TV library: shows up as show / Season 2026 / dated episode, and the Watch link works
+- **Not tested:** recordings that span hours, recordings while a provider is at its connection limit (they fail with "connection limit" and retry every 5s), and real providers.
+- Migration 8.
+
+## Live TV phase 1 (M4)
 
 - **Admin → Live TV:** Sources (M3U and XMLTV), Channels (add from streams, edit, fallback order, guide match), and Activity (per-channel stats and viewers).
 - **Viewer pages:** Live TV guide at `/live`, and the player at `/live/:id` (↑/↓ change channel, G toggles the mini guide).

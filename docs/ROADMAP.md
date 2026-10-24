@@ -84,10 +84,13 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | TV guide like the Rogers screenshot, favourites, category filter |
 | ✅ | Live player with channel up/down, now/next, and a mini guide (picture on top, guide at the bottom) |
 | ✅ | M3U + XMLTV output so other IPTV apps (TiviMate, VLC, Plex) can use BingeBandit's channels |
-| | Logo manager (upload and cache logos), favourite channels → custom categories |
+| ✅ | HLS (`.m3u8`) upstreams, remuxed by ffmpeg without re-encoding |
+| ✅ | Channel logos cached by the server |
+| ✅ | **DVR**: record a program or a whole series from the guide, padding, recordings named for a TV library (or one folder), admin approval switch, let-users-record switch, Recordings page; date-named recordings show up as episodes |
+| | Logo manager (upload your own logos), favourite channels → custom categories |
+| | DVR: conflict handling when providers are at their connection limit, keep-last-N episodes per series |
 | | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
 - Guides from local providers by ZIP (DirecTV, Comcast…) via Schedules Direct / similar.
-- DVR: schedule recordings, admin-approval switch, DVR settings, admin chooses whether recordings go into the show's library or a temporary folder.
 - Sports tracker with scores and alerts (ESPN API: college football/basketball, NBA, MLB, MLS, NHL, NFL); notifications when a game or show is about to start.
 - YouTube live channels plugin: an admin-managed list of channels that turn on and off automatically.
 

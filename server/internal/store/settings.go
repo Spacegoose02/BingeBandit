@@ -15,6 +15,12 @@ const (
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
 	SettingBackupDir         = "backup_dir"
 	SettingBackupKeep        = "backup_keep"
+	SettingDVRFolder         = "dvr_folder"
+	SettingDVRNaming         = "dvr_naming" // library (Show/Season 01/…) | folder (one flat folder)
+	SettingDVRApproval       = "dvr_require_approval"
+	SettingDVRAllowUsers     = "dvr_allow_users"
+	SettingDVRPadBefore      = "dvr_padding_before" // minutes
+	SettingDVRPadAfter       = "dvr_padding_after"  // minutes
 )
 
 var SettingDefaults = map[string]string{
@@ -31,6 +37,12 @@ var SettingDefaults = map[string]string{
 	SettingMaintenanceEnd:    "5",
 	SettingBackupDir:         "",
 	SettingBackupKeep:        "7",
+	SettingDVRFolder:         "",
+	SettingDVRNaming:         "library",
+	SettingDVRApproval:       "false",
+	SettingDVRAllowUsers:     "true",
+	SettingDVRPadBefore:      "1",
+	SettingDVRPadAfter:       "3",
 }
 
 func (s *Store) Setting(key string) string {

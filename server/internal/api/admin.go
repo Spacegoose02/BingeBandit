@@ -86,7 +86,11 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "unknown hardware encoder")
 		return
 	}
-	for key, label := range map[string]string{store.SettingTranscodeDir: "transcode", store.SettingBackupDir: "backup"} {
+	if v, ok := in[store.SettingDVRNaming]; ok && v != "library" && v != "folder" {
+		writeErr(w, http.StatusBadRequest, "recording naming must be library or folder")
+		return
+	}
+	for key, label := range map[string]string{store.SettingTranscodeDir: "transcode", store.SettingBackupDir: "backup", store.SettingDVRFolder: "recordings"} {
 		if dir := in[key]; dir != "" {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				writeErr(w, http.StatusBadRequest, label+" folder is not writable: "+err.Error())
@@ -98,6 +102,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingMaintenanceStart: {0, 23},
 		store.SettingMaintenanceEnd:   {0, 23},
 		store.SettingBackupKeep:       {1, 365},
+		store.SettingDVRPadBefore:     {0, 60},
+		store.SettingDVRPadAfter:      {0, 120},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {

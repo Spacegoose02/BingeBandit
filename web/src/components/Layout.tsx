@@ -34,6 +34,10 @@ export default function Layout() {
             <Icon name="broadcast" />
             <span>Live TV</span>
           </NavLink>
+          <NavLink to="/recordings" className="nav-item">
+            <span className="nav-rec" />
+            <span>Recordings</span>
+          </NavLink>
           <NavLink to="/watchlist" className="nav-item">
             <Icon name="bookmark" />
             <span>Watchlist</span>
