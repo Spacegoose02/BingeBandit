@@ -20,7 +20,16 @@ const cookieName = "bb_session"
 
 type ctxKey int
 
-const userKey ctxKey = 1
+const (
+	userKey ctxKey = iota + 1
+	sessionKey
+)
+
+// sessionToken is the session the request signed in with, or "" for an API key.
+func sessionToken(r *http.Request) string {
+	t, _ := r.Context().Value(sessionKey).(string)
+	return t
+}
 
 func currentUser(r *http.Request) *store.User {
 	u, _ := r.Context().Value(userKey).(*store.User)
@@ -41,9 +50,11 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			token = r.URL.Query().Get("token")
 		}
 		u, err := s.Store.UserBySession(token)
+		session := token
 		if err != nil {
 			// API keys work wherever a session token does (apps, scripts, playlist links).
 			u, err = s.Store.UserByAPIKey(token)
+			session = ""
 		}
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "not signed in")
@@ -53,7 +64,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			writeErr(w, http.StatusForbidden, "missing X-Requested-With header")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
+		ctx := context.WithValue(r.Context(), userKey, u)
+		ctx = context.WithValue(ctx, sessionKey, session)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -373,6 +386,7 @@ func (s *Server) startSessionFor(w http.ResponseWriter, r *http.Request, u *stor
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	s.unlocks.lock(sessionToken(r))
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		s.Store.DeleteSession(strings.TrimPrefix(h, "Bearer "))
 	} else if c, err := r.Cookie(cookieName); err == nil {

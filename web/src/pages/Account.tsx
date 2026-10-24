@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
+import { PasscodeSettings } from '../components/Passcode'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
 import type { APIKey, DeviceSession, Identity, Prefs } from '../types'
@@ -622,6 +623,7 @@ export default function Account() {
       <LinkedAccounts />
       {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}
       {hasPassword && <TwoFactor />}
+      <PasscodeSettings />
       <Devices />
       <APIKeys />
       <form className="panel form" onSubmit={submit}>
