@@ -38,8 +38,16 @@ var languages = func() map[string]string {
 	return m
 }()
 
-// sidecars finds subtitle files next to a video whose names start with the
-// video's name: Movie.srt, Movie.en.srt, Movie.eng.forced.srt, Movie.English.SDH.srt.
+// subsDirs are the folder names release downloads keep subtitles in.
+var subsDirs = map[string]bool{"subs": true, "sub": true, "subtitles": true}
+
+func isSubsDir(name string) bool { return subsDirs[strings.ToLower(name)] }
+
+// sidecars finds subtitle files for a video:
+//   - next to it, named after it: Movie.srt, Movie.en.srt, Movie.eng.forced.srt, Movie.English.SDH.srt
+//   - in a Subs/ folder beside it, named after it the same way
+//   - in Subs/, any name (2_English.srt), when the video is the only one in its folder
+//   - in Subs/<video name>/, any name (TV packs: Subs/Show.S01E01/2_English.srt)
 func sidecars(videoPath string) []store.Stream {
 	dir := filepath.Dir(videoPath)
 	base := strings.ToLower(strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath)))
@@ -48,23 +56,9 @@ func sidecars(videoPath string) []store.Stream {
 		return nil
 	}
 	var out []store.Stream
-	for _, e := range entries {
-		name := e.Name()
-		codec, ok := subtitleExts[strings.ToLower(filepath.Ext(name))]
-		if e.IsDir() || !ok {
-			continue
-		}
-		stem := strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name)))
-		if !strings.HasPrefix(stem, base) {
-			continue
-		}
-		rest := stem[len(base):]
-		// Like Plex/Jellyfin, only "Movie.<tags>.srt" counts, so the
-		// sequel's "Movie 2.srt" never attaches to "Movie.mkv".
-		if rest != "" && rest[0] != '.' {
-			continue
-		}
-		st := store.Stream{Index: store.ExternalIndexBase + len(out), Type: "subtitle", Codec: codec, External: name}
+	add := func(rel, rest string) {
+		codec := subtitleExts[strings.ToLower(filepath.Ext(rel))]
+		st := store.Stream{Index: store.ExternalIndexBase + len(out), Type: "subtitle", Codec: codec, External: rel}
 		var title []string
 		for _, tok := range strings.FieldsFunc(rest, func(r rune) bool { return strings.ContainsRune("._- ", r) }) {
 			switch {
@@ -76,6 +70,8 @@ func sidecars(videoPath string) []store.Stream {
 				st.Default = true
 			case languages[tok] != "" && st.Language == "":
 				st.Language = languages[tok]
+			case isNumber(tok):
+				// track numbers like "2_English.srt"
 			default:
 				title = append(title, tok)
 			}
@@ -83,7 +79,81 @@ func sidecars(videoPath string) []store.Stream {
 		st.Title = strings.Join(title, " ")
 		out = append(out, st)
 	}
+	// named reports the tags after the video's name in a subtitle file name,
+	// and whether the file is named after the video at all. Like Plex/Jellyfin,
+	// only "Movie.<tags>.srt" counts, so the sequel's "Movie 2.srt" never
+	// attaches to "Movie.mkv".
+	named := func(name string) (string, bool) {
+		stem := strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name)))
+		if !strings.HasPrefix(stem, base) {
+			return "", false
+		}
+		rest := stem[len(base):]
+		return rest, rest == "" || rest[0] == '.'
+	}
+
+	var subs []string
+	videos := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() {
+			if isSubsDir(name) {
+				subs = append(subs, name)
+			}
+			continue
+		}
+		if isVideo(name) && !isSample(name) {
+			videos++
+		}
+		if !isSubtitleFile(name) {
+			continue
+		}
+		if rest, ok := named(name); ok {
+			add(name, rest)
+		}
+	}
+	for _, sd := range subs {
+		files, err := os.ReadDir(filepath.Join(dir, sd))
+		if err != nil {
+			continue
+		}
+		for _, e := range files {
+			name := e.Name()
+			if e.IsDir() {
+				if strings.ToLower(name) == base {
+					inner, _ := os.ReadDir(filepath.Join(dir, sd, name))
+					for _, f := range inner {
+						if !f.IsDir() && isSubtitleFile(f.Name()) {
+							rest, ok := named(f.Name())
+							if !ok {
+								rest = strings.ToLower(strings.TrimSuffix(f.Name(), filepath.Ext(f.Name())))
+							}
+							add(sd+"/"+name+"/"+f.Name(), rest)
+						}
+					}
+				}
+				continue
+			}
+			if !isSubtitleFile(name) {
+				continue
+			}
+			if rest, ok := named(name); ok {
+				add(sd+"/"+name, rest)
+			} else if videos == 1 {
+				add(sd+"/"+name, strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name))))
+			}
+		}
+	}
 	return out
+}
+
+func isNumber(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
 }
 
 // withSidecars replaces the external streams in streams with side.

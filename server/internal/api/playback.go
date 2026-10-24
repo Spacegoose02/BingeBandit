@@ -412,8 +412,12 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 	}
 	if req.Mode == "transcode" {
 		if t := s.Transcoder.Get(req.TranscodeID); t != nil {
+			audio := fmt.Sprintf("%s %s", strings.ToUpper(t.AudioCodec), channelLabel(t.AudioChannels))
+			if t.AudioCopy {
+				audio += " (copy)"
+			}
 			if t.VideoCopy {
-				np.Target = "Video copy · AAC stereo"
+				np.Target = "Video copy · " + audio
 			} else {
 				res := resolutionLabel(t.Height)
 				if len(t.Variants) > 1 {
@@ -423,7 +427,7 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 					}
 					res = "Adaptive " + strings.Join(labels, "/")
 				}
-				np.Target = fmt.Sprintf("%s H264 (%s) · AAC stereo", res, t.Encoder)
+				np.Target = fmt.Sprintf("%s H264 (%s) · %s", res, t.Encoder, audio)
 				if t.Tonemap {
 					np.Target += " · tone mapped"
 				}

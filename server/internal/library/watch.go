@@ -175,6 +175,7 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 	if isDir {
 		dir = ev.Name
 	}
+	dir = videoDir(dir)
 
 	libs, err := w.s.st.Libraries()
 	if err != nil {
@@ -238,4 +239,16 @@ func collapse(dirs []string) []string {
 		out = append(out, d)
 	}
 	return out
+}
+
+// videoDir maps a Subs/ folder (or Subs/<episode>/) to the folder holding the
+// videos its subtitles belong to, so a new subtitle there rescans them.
+func videoDir(dir string) string {
+	if isSubsDir(filepath.Base(dir)) {
+		return filepath.Dir(dir)
+	}
+	if parent := filepath.Dir(dir); isSubsDir(filepath.Base(parent)) {
+		return filepath.Dir(parent)
+	}
+	return dir
 }

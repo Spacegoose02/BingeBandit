@@ -334,7 +334,7 @@ _Last updated: 2026-10-24, Hue Sync (M9 phase 2)._
 
 ## Playback polish (M2)
 
-- **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex.
+- **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex. A `Subs/` (or `Sub/`, `Subtitles/`) folder beside the video is searched too: files named after the video, any file when the video is alone in its folder (`Subs/2_English.srt`), and everything in `Subs/<video name>/` (TV packs). Leading track numbers are ignored; the external name is stored relative to the video's folder (`Subs/2_English.srt`).
 - **Image subtitles** (PGS/VobSub/DVB) are burned in by the transcoder when picked. ffmpeg can't create bitmap subtitles, so this is only unit-tested against the generated command line; **check it with a real Blu-ray rip.**
 - **Account → Playback:** audio language, subtitle mode/language/size/box, auto quality, auto-play next. The player applies them; English audio is the default.
 - Playback retries twice on failure; direct play falls back to transcoding; repeated buffering steps quality down with a notice.
@@ -400,7 +400,7 @@ Needs real hardware or real media (can't be checked with generated test files):
 
 Code gaps:
 
-6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for clients that can play it.
+6. ~~Audio is always transcoded to AAC stereo.~~ Clients now say which audio they can play: the web player copies AC-3 (and E-AC-3 in Safari) or keeps 5.1 as AAC when the computer has surround output; the TV app gets AAC 5.1. Still to do: AC-3/E-AC-3 passthrough in the TV app, after testing on the onn box with a receiver.
 7. ~~Transcode sessions don't re-check library access after they start.~~ Done: running transcodes stop as soon as an admin takes the library away or deletes the user, profile or library, and re-check every 30 s otherwise.
 8. ~~True adaptive bitrate.~~ Done as an opt-in admin setting (Settings → Transcoding → Adaptive streaming). It only applies when the video is converted anyway; a copied stream stays single quality. Not yet tried with hardware encoders on real GPUs, where three encodes per viewer may hit NVENC session limits.
 9. Backups only go to a folder (no remote targets such as S3). Backups can be downloaded and restored from an uploaded file, including on a new server's setup screen.

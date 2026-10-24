@@ -162,6 +162,11 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           burnSubtitle: burnRef.current,
           replace: transcodeId.current,
           adaptive: true, // ExoPlayer switches qualities itself when the server offers several
+          // Android's AAC decoder handles 5.1 everywhere (and mixes down for
+          // stereo TVs), so surround tracks stay surround. AC-3/E-AC-3 copy
+          // waits until passthrough is tested on real boxes.
+          audioCodecs: ['aac'],
+          maxAudioChannels: 6,
         })
         transcodeId.current = res.session.id
         offset.current = at
