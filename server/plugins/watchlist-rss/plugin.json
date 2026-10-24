@@ -1,0 +1,6 @@
+{
+  "id": "watchlist-rss",
+  "name": "Watchlist RSS",
+  "description": "Each person's watchlist as an RSS feed, and RSS feeds of movies and shows that add to the watchlist when they're in the library.",
+  "command": ["watchlist-rss"]
+}

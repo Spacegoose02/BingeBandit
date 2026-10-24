@@ -78,6 +78,17 @@
 
 `internal/trakt` wraps Trakt's API (device-code OAuth, history read/write) and a `Syncer` that keeps per-user tokens, imports a user's Trakt history through `importer.RunOnce`, and pushes finished plays (`plays.trakt_at` marks what Trakt already has). The progress handler calls `Syncer.PushNew` when a play finishes.
 
+## Plugins
+
+`internal/plugins.Host` runs out-of-process plugins (protocol in `docs/PLUGINS.md`). Rows live in `plugins` (id, kind, URL, key, settings, last manifest).
+
+- **Managed** plugins are folders with a `plugin.json` in the bundled plugins folder or `<data>/plugins`. `discover` (every minute) adds new ones disabled. `supervise` runs each enabled one on a free loopback port with its key in the environment, logs its output, and restarts it with backoff.
+- **Remote** plugins are added by URL: `AddRemote` reads the manifest, sends a new key to `/bingebandit/pair` (with the old key when re-adding), and stores it.
+- `Sync` makes running instances match the table; the manifest fetch is the health check. `Server.Emit` fans events out to webhooks and to plugins subscribed to them.
+- `Proxy` serves `/api/plugins/{id}/*` from the plugin, swapping the user's credentials for the plugin key and user headers, refusing `/bingebandit/*` paths and dropping `Set-Cookie`.
+- The plugin API (`api/plugins.go`, `/api/plugin/v1`) authenticates by key (`PluginByKey`) and reuses the user API's handlers: as the server (uid 0, sees everything) by default, or as a user under `/users/{uid}/…` (`asUser`).
+- `pkg/bbplugin` is the Go kit plugins use; `plugins/watchlist-rss` is the bundled reference plugin.
+
 ## Auth
 
 - The first run (no users) exposes `POST /api/setup` to create the admin; after that it returns 409.

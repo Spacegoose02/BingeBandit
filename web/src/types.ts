@@ -485,3 +485,52 @@ export interface SystemInfo {
   ffprobe: string
   metadataActive: boolean
 }
+
+export interface PluginSetting {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'number' | 'bool' | 'select'
+  default?: string
+  help?: string
+  options?: string[]
+}
+
+export interface PluginPage {
+  title: string
+  path: string
+  admin?: boolean
+}
+
+export interface PluginManifest {
+  id: string
+  name: string
+  version?: string
+  description?: string
+  author?: string
+  homepage?: string
+  events?: string[]
+  settings?: PluginSetting[]
+  pages?: PluginPage[]
+}
+
+/** A plugin in Admin → Plugins (mirrors plugins.Status). */
+export interface Plugin {
+  id: string
+  kind: 'managed' | 'remote'
+  url?: string
+  serverUrl?: string
+  enabled: boolean
+  addedAt: number
+  manifest: PluginManifest
+  state: 'stopped' | 'starting' | 'running' | 'error' | 'missing'
+  error?: string
+  secretsSet: string[]
+  values: Record<string, string>
+}
+
+/** Pages of running plugins a user can open (GET /api/plugins). */
+export interface PluginLinks {
+  id: string
+  name: string
+  pages: PluginPage[]
+}

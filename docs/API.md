@@ -115,6 +115,15 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 
 Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editing and matching, users and library access, settings, Live TV sources and channels, tasks, logs, statistics, webhooks and single sign-on. They change often, so read the web app's source (`web/src/pages/admin`) to see how they're used.
 
+## Plugins
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/plugins` | Pages of running plugins you can open: `[{id, name, pages: [{title, path}]}]`. |
+| any | `/plugins/{id}/{path}` | Proxied to the plugin, with you as the user. |
+
+Admins manage plugins under `/api/admin/plugins`. Plugins themselves call `/api/plugin/v1` with their key; see [PLUGINS.md](PLUGINS.md).
+
 ## Webhooks
 
 *Settings → Webhooks* sends a POST to your URL when something happens:
@@ -136,7 +145,7 @@ Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editi
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `test` | The *Send test* button. |
 
-Playback events also carry `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.
+Playback events also carry `userId`, `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.
 
 A webhook whose format is **Plex-style** instead sends what Plex sends: `multipart/form-data` with a `payload` field holding `{event: "media.play" | "media.stop" | "media.scrobble", Account: {title: <username>}, Player, Server, Metadata}`. Only playback events are sent in this format. Use it for apps that accept Plex webhooks, such as Yamtrack.
 

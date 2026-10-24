@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchlist feeds</title>
+<style>
+  :root { --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #646a76; --line: #dde1e7; --accent: #0f9d8f; --danger: #c43d3d; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0f13; --panel: #171a21; --text: #e9ecf1; --muted: #9098a6; --line: #2a2f39; --accent: #2cc3b2; --danger: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .url { display: flex; gap: 8px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .url code { flex: 1; }
+  form { display: grid; gap: 8px; grid-template-columns: 1fr 180px auto; }
+  @media (max-width: 600px) { form { grid-template-columns: 1fr; } }
+  input { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); min-width: 0; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .6; cursor: default; }
+  .sub { border-top: 1px solid var(--line); padding: 14px 0; display: flex; gap: 12px; align-items: flex-start; }
+  .sub:first-of-type { border-top: 0; }
+  .grow { flex: 1; min-width: 0; }
+  .error { color: var(--danger); }
+  details summary { cursor: pointer; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Watchlist feeds</h1>
+  <p class="muted">Share your watchlist as an RSS feed, or subscribe to feeds of movies and shows to fill it.</p>
+
+  <section>
+    <h2>Your watchlist as a feed</h2>
+    <p class="muted small">Feed readers and other apps can't sign in, so the address needs one of your API keys. Make one under
+      <a href="/account" target="_top">Account → API keys</a> and put it in place of <code>YOUR_API_KEY</code>.</p>
+    <div class="url"><code id="feed"></code><button id="copy" type="button">Copy</button></div>
+  </section>
+
+  <section>
+    <h2>Subscribed feeds</h2>
+    <p class="muted small">Each feed is checked regularly. Anything in it that's in the library goes on your watchlist; the rest
+      is tried again on each check, so it's added once it arrives. Items with TMDB ids (Letterboxd-style feeds) match best;
+      otherwise titles like "Title (2019)" are matched by name and year.</p>
+    <form id="add">
+      <input id="url" type="url" placeholder="https://example.com/list/rss" required aria-label="Feed address">
+      <input id="name" placeholder="Name (optional)" aria-label="Name">
+      <button class="primary" type="submit">Subscribe</button>
+    </form>
+    <p id="msg" class="small" role="status"></p>
+    <div id="subs"></div>
+  </section>
+</main>
+<script>
+  // The page is served under /api/plugins/watchlist-rss/, so relative URLs reach the plugin.
+  const base = location.pathname.replace(/\/?$/, '/')
+  const call = async (method, path, body) => {
+    const res = await fetch(base + path, {
+      method, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'BingeBandit', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    if (res.status === 204) return null
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new Error((data && data.error) || res.statusText)
+    return data
+  }
+  const el = (tag, props = {}, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props)
+    n.append(...kids.filter((k) => k != null))
+    return n
+  }
+  const when = (t) => (t ? new Date(t * 1000).toLocaleString() : 'not yet')
+  const msg = document.getElementById('msg')
+  const say = (text, bad) => { msg.textContent = text; msg.className = 'small' + (bad ? ' error' : '') }
+
+  const feed = location.origin + base + 'feed.xml?token=YOUR_API_KEY'
+  document.getElementById('feed').textContent = feed
+  document.getElementById('copy').onclick = () => navigator.clipboard.writeText(feed).then(() => say('Copied.'))
+
+  async function load() {
+    const list = document.getElementById('subs')
+    const subs = await call('GET', 'subscriptions')
+    list.replaceChildren(...(subs.length ? subs.map(row) : [el('p', { className: 'muted small', textContent: 'No feeds yet.' })]))
+  }
+
+  function row(s) {
+    const check = el('button', { type: 'button', textContent: 'Check now' })
+    check.onclick = async () => {
+      check.disabled = true
+      try { await call('POST', `subscriptions/${s.id}/check`); await load() } catch (e) { say(e.message, true) }
+      check.disabled = false
+    }
+    const remove = el('button', { type: 'button', className: 'danger', textContent: 'Remove' })
+    remove.onclick = async () => {
+      if (!confirm(`Stop following "${s.name}"? Items already added stay on your watchlist.`)) return
+      try { await call('DELETE', `subscriptions/${s.id}`); await load() } catch (e) { say(e.message, true) }
+    }
+    const missing = s.missing && s.missing.length
+      ? el('details', {}, el('summary', { className: 'small muted', textContent: `${s.missing.length} not in the library yet` }),
+          el('div', { className: 'small muted', textContent: s.missing.join(' · ') }))
+      : null
+    return el('div', { className: 'sub' },
+      el('div', { className: 'grow' },
+        el('div', { textContent: s.name }),
+        el('div', { className: 'mono muted', textContent: s.url }),
+        el('div', { className: 'small muted', textContent: `Added ${s.added} so far · last checked ${when(s.lastCheck)}` }),
+        s.lastError ? el('div', { className: 'small error', textContent: s.lastError }) : null,
+        missing),
+      check, remove)
+  }
+
+  document.getElementById('add').onsubmit = async (e) => {
+    e.preventDefault()
+    const button = e.target.querySelector('button')
+    button.disabled = true
+    say('Reading the feed…')
+    try {
+      const s = await call('POST', 'subscriptions', { url: document.getElementById('url').value, name: document.getElementById('name').value })
+      say(`Subscribed. ${s.added} added to your watchlist.`)
+      e.target.reset()
+      await load()
+    } catch (err) { say(err.message, true) }
+    button.disabled = false
+  }
+
+  load().catch((e) => say(e.message, true))
+</script>
+</body>
+</html>

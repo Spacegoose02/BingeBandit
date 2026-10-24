@@ -5,7 +5,7 @@ import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
-import type { APIKey, DeviceSession, Identity, Prefs } from '../types'
+import type { APIKey, DeviceSession, Identity, PluginLinks, Prefs } from '../types'
 
 function when(ts: number) {
   return ts ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'
@@ -18,6 +18,30 @@ function deviceName(d: string) {
   const browser = /Edg\//.test(d) ? 'Edge' : /Firefox\//.test(d) ? 'Firefox' : /Chrome\//.test(d) ? 'Chrome' : /Safari\//.test(d) ? 'Safari' : 'A browser'
   const os = /Windows/.test(d) ? 'Windows' : /Android/.test(d) ? 'Android' : /iPhone|iPad/.test(d) ? 'iOS' : /Mac OS X/.test(d) ? 'macOS' : /Linux/.test(d) ? 'Linux' : ''
   return os ? `${browser} on ${os}` : browser
+}
+
+/** Pages that running plugins offer, such as the Watchlist RSS feeds page. */
+function PluginPages() {
+  const { data } = useApi<PluginLinks[]>('/api/plugins')
+  if (!data?.length) return null
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Plugins</h3>
+      <div className="list">
+        {data.flatMap((p) =>
+          p.pages.map((pg) => (
+            <a key={p.id + pg.path} className="list-row" href={`/api/plugins/${p.id}${pg.path.startsWith('/') ? '' : '/'}${pg.path}`} target="_blank" rel="noreferrer">
+              <div className="grow">
+                <div>{pg.title}</div>
+                <div className="muted small">{p.name}</div>
+              </div>
+              <Icon name="next" size={16} />
+            </a>
+          )),
+        )}
+      </div>
+    </div>
+  )
 }
 
 function Sharing() {
@@ -618,6 +642,7 @@ export default function Account() {
       <PlaybackPrefs />
       <Sharing />
       <Trakt />
+      <PluginPages />
       <Downloads />
       <LinkedAccounts />
       {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}

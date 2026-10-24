@@ -2,7 +2,18 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, live TV playback reliability._
+_Last updated: 2026-10-24, plugins (M9 phase 1)._
+
+## Plugins (M9 phase 1)
+
+- **Out-of-process plugins** (`internal/plugins`, protocol in `docs/PLUGINS.md`). A plugin is an HTTP service. Managed plugins sit in a plugins folder (bundled: `BB_PLUGINS_DIR`, `/usr/local/lib/bingebandit/plugins` in Docker; user: `<data>/plugins`) and BingeBandit runs them on loopback with their key in the environment. Remote plugins (own container) are added by address and paired over `POST /bingebandit/pair`.
+- **Admin → Plugins** (`web/src/pages/admin/Plugins.tsx`): on/off, state and errors, a settings form from the manifest (password values never come back), Restart/Check, Add by address. Running plugins' pages show under **Account → Plugins**.
+- **Plugin API** `/api/plugin/v1` (`api/plugins.go`): reuses the user API handlers as the server, or as a user under `/users/{uid}/…`. Events from `Server.Emit` go to webhooks and subscribed plugins; playback events now carry `userId`.
+- **Proxy** `/api/plugins/{id}/*`: strips the user's cookie/Authorization/`?token=`, adds `X-BingeBandit-User-*`, blocks `/bingebandit/*`, drops `Set-Cookie`.
+- **Watchlist RSS** (`server/plugins/watchlist-rss`, bundled, off by default): `feed.xml?token=<API key>` per person, subscribed feeds fill the watchlist (TMDB id from Letterboxd-style tags, else "Title (Year)"), optional removal of finished movies. Non-admins can't subscribe to loopback/private addresses. Built by `build.sh`/`build.ps1`, the Dockerfile and release zips.
+- **Go kit** `server/pkg/bbplugin` for writing plugins.
+- **Tested:** `go test` covers pairing, re-pairing and unpairing, the proxy (credential stripping, `/bingebandit` blocking), events, settings, the plugin API as a user, disabling, and a managed plugin's lifecycle. By hand: the real server with the bundled plugin, subscribing to a local feed (2 of 3 matched), the feed with an API key, the non-admin private-address block, and the admin page, settings modal and plugin page in Chromium. **Not tested:** the Docker image build and release zips (no Docker here), Windows.
+- **Trust model:** plugin pages are served on BingeBandit's origin, so a plugin's JavaScript runs with the viewer's session. Fine for trusted plugins; a sandboxed origin for plugin pages would be the fix if third-party plugins appear.
 
 ## Live TV playback reliability (after v0.6.0)
 

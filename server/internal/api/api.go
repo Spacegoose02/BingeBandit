@@ -20,6 +20,7 @@ import (
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/plugins"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
@@ -42,6 +43,7 @@ type Server struct {
 	DVR        *livetv.Recorder
 	Importer   *importer.Runner
 	Trakt      *trakt.Syncer
+	Plugins    *plugins.Host
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -86,6 +88,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Get("/auth/oidc", s.oidcOptions)
 		r.Get("/auth/oidc/callback", s.oidcCallback)
 		r.Get("/auth/oidc/{id}/login", s.oidcLogin)
+		r.Route("/plugin/v1", s.pluginAPI)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -122,6 +125,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/me/profile", s.setProfileVisibility)
 			r.Get("/profiles", s.publicProfiles)
 			r.Get("/profiles/{username}", s.profile)
+
+			r.Get("/plugins", s.pluginPages)
+			r.HandleFunc("/plugins/{id}/*", s.pluginProxy)
 
 			r.Get("/watchlist", s.watchlist)
 			r.Post("/watchlist/{id}", s.setWatchlist(true))
@@ -251,6 +257,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/webhooks/{id}", s.saveWebhook)
 				r.Delete("/webhooks/{id}", s.deleteWebhook)
 				r.Post("/webhooks/{id}/test", s.testWebhook)
+				r.Get("/plugins", s.adminPlugins)
+				r.Post("/plugins", s.addPlugin)
+				r.Put("/plugins/{id}", s.updatePlugin)
+				r.Put("/plugins/{id}/settings", s.savePluginSettings)
+				r.Post("/plugins/{id}/restart", s.restartPlugin)
+				r.Delete("/plugins/{id}", s.deletePlugin)
 				r.Post("/import/connect", s.importConnect)
 				r.Post("/import/start", s.importStart)
 				r.Get("/import/status", s.importStatus)

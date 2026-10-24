@@ -156,10 +156,16 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Casting to devices (Chromecast, DLNA) |
 | | Push notifications |
 
-## M9: Plugins
+## M9: Plugins 🟡 (phase 1: plugin system)
 
-- Plugin system (out-of-process, API-based).
-- Yamtrack plugin, Cinemask plugin (search Cinemask for upgrades), Watchlist RSS feeds, Philips Hue sync to movie colours.
+| | Feature |
+|---|---|
+| ✅ | **Plugin system** (out-of-process, API-based): plugins are HTTP services, started by BingeBandit from a plugins folder or added by address (own container). Manifest, settings form, events, user pages through a proxy, versioned plugin API (`/api/plugin/v1`), Go kit (`pkg/bbplugin`). See [PLUGINS.md](PLUGINS.md) |
+| ✅ | **Watchlist RSS** (bundled): each person's watchlist as an RSS feed; subscribed RSS feeds add matching library items to the watchlist; optionally remove finished movies |
+| | Yamtrack plugin (Yamtrack already works today through a Plex-style webhook or Trakt; a plugin could add history import and per-user setup) |
+| | Cinemask plugin: search Cinemask for upgrades of library files |
+| | Philips Hue sync to movie colours |
+| | Plugin catalogue: install plugins from a list instead of copying folders |
 
 ## Docs
 
