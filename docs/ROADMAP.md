@@ -118,6 +118,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Single sign-on with any OpenID Connect provider (Google, TinyAuth, Authelia, Authentik, Keycloak), linking accounts, optional account creation |
 | ✅ | A documented public API ([API.md](API.md)) |
 | ✅ | Network settings: public URL, extra LAN networks, trusted reverse proxies, remote access on/off |
+| ✅ | **Profiles** under one account (Netflix / Plex Home style): "Who's watching?" after sign-in on the web and the TV app, separate history, Continue Watching, watchlist and preferences, a PIN per profile, and library limits for kids |
 | | Passkeys |
 | | Plex/Tautulli account linking (with M7 import) |
 

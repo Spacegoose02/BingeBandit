@@ -65,6 +65,20 @@ Rules:
 | POST | `/me/trakt/import`, `/me/trakt/push` | Import your Trakt history; send plays to Trakt (`{all: true}` includes plays from before connecting). |
 | PUT / DELETE | `/me/trakt` | `{autoSync}`; disconnect. |
 | GET | `/activity/friends` | What people who share are watching now. |
+| GET / PUT / DELETE | `/me/passcode` | Settings passcode: `{set, unlocked, unlockedUntil}`; PUT `{passcode}` (4–8 digits); DELETE removes it. |
+| POST | `/me/passcode/unlock`, `/me/passcode/lock` | `{passcode}` or `{password}` unlocks this session's settings for 15 minutes of use. While locked, `/admin/*`, account changes under `/me` and profile management answer **423**. |
+
+### Profiles
+
+A profile is its own user under an account (`ownerId` and `profileName` on the user), with separate history, watchlist and preferences. Profiles have no password; a device reaches one by switching.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/household` | The account and its profiles: `[{id, name, isOwner, hasPin, current, allLibraries, libraryIds}]`. |
+| POST | `/household` | Account only. `{name}` adds a profile (up to 10). |
+| PUT / DELETE | `/household/{id}` | Account only. `{name, allLibraries, libraryIds}` (never more than the account sees); delete removes the profile and its history. |
+| PUT | `/household/{id}/pin` | Account only. `{pin}` sets a profile's PIN; `""` removes it. The account's own PIN is its settings passcode. |
+| POST | `/household/{id}/switch` | `{pin}` when the member has one. Ends this session and returns `{token, user}` for the member (and sets the cookie for the web UI). A wrong PIN answers 403 `{needsPin: true}`. |
 
 ## Browsing
 

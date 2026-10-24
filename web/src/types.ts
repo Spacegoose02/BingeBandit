@@ -12,6 +12,19 @@ export interface User {
   shareActivity: boolean
   hasPassword: boolean
   hasPasscode: boolean
+  ownerId?: number // set for a profile: the account it belongs to
+  profileName?: string
+}
+
+/** A person in the signed-in account's household: the account or one of its profiles. */
+export interface Member {
+  id: number
+  name: string
+  isOwner: boolean
+  hasPin: boolean
+  current: boolean
+  allLibraries: boolean
+  libraryIds?: number[]
 }
 
 export interface OIDCProvider {

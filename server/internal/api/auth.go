@@ -184,6 +184,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) setup2FA(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
+	if u.OwnerID != 0 {
+		writeErr(w, http.StatusForbidden, "profiles sign in through their account")
+		return
+	}
 	if u.TOTPEnabled {
 		writeErr(w, http.StatusConflict, "two-factor sign-in is already on")
 		return
@@ -366,23 +370,32 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u *store.U
 // startSessionFor creates a session and returns its token; setCookie also
 // signs in the requesting browser.
 func (s *Server) startSessionFor(w http.ResponseWriter, r *http.Request, u *store.User, device string, setCookie bool) {
+	token, err := s.newSession(r, u, device)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if setCookie {
+		s.setSessionCookie(w, r, token)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
+}
+
+func (s *Server) newSession(r *http.Request, u *store.User, device string) (string, error) {
 	b := make([]byte, 32)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 	if device == "" {
 		device = r.UserAgent()
 	}
-	if err := s.Store.CreateSession(token, u.ID, device, clientIP(r)); err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	if setCookie {
-		http.SetCookie(w, &http.Cookie{
-			Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-			Secure: isHTTPS(r), MaxAge: 365 * 24 * 3600,
-		})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
+	return token, s.Store.CreateSession(token, u.ID, device, clientIP(r))
+}
+
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: isHTTPS(r), MaxAge: 365 * 24 * 3600,
+	})
 }
 
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
@@ -427,6 +440,10 @@ func (s *Server) putPrefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
+	if currentUser(r).OwnerID != 0 {
+		writeErr(w, http.StatusForbidden, "profiles sign in through their account and have no password")
+		return
+	}
 	var req struct {
 		Current string `json:"current"`
 		New     string `json:"new"`

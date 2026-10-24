@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { IPTVLinks } from '../components/IPTVLinks'
 import { Icon } from '../components/Icon'
 import { PasscodeSettings } from '../components/Passcode'
+import { Profiles } from '../components/Profiles'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
 import type { APIKey, DeviceSession, Identity, PluginLinks, Prefs } from '../types'
@@ -646,9 +647,10 @@ export default function Account() {
     <div className="page narrow">
       <h1>Account</h1>
       <p className="muted">
-        Signed in as <strong>{user?.username}</strong>
+        Signed in as <strong>{user?.profileName ?? user?.username}</strong>
         {user?.isAdmin && ' (admin)'}
       </p>
+      <Profiles />
       <PlaybackPrefs />
       <Sharing />
       <Trakt />

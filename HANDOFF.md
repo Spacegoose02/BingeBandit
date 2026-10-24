@@ -2,7 +2,7 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, plugins (M9 phase 1)._
+_Last updated: 2026-10-24, plugins (M9 phase 1) and profiles._
 
 ## Plugins (M9 phase 1)
 
@@ -14,6 +14,18 @@ _Last updated: 2026-10-24, plugins (M9 phase 1)._
 - **Go kit** `server/pkg/bbplugin` for writing plugins.
 - **Tested:** `go test` covers pairing, re-pairing and unpairing, the proxy (credential stripping, `/bingebandit` blocking), events, settings, the plugin API as a user, disabling, and a managed plugin's lifecycle. By hand: the real server with the bundled plugin, subscribing to a local feed (2 of 3 matched), the feed with an API key, the non-admin private-address block, and the admin page, settings modal and plugin page in Chromium. **Not tested:** the Docker image build and release zips (no Docker here), Windows.
 - **Trust model:** plugin pages are served on BingeBandit's origin, so a plugin's JavaScript runs with the viewer's session. Fine for trusted plugins; a sandboxed origin for plugin pages would be the fix if third-party plugins appear.
+
+## Profiles (after v0.6.0)
+
+- **Model:** a profile is a `users` row with `owner_id` (and `profile_name`), migration 16. All per-user data (watch state, plays, watchlist, playlists, prefs, Trakt) already keys on the user id, so it stays apart with no other changes.
+  - The stored username is `Name (owner)` (`store.ProfileUsername`), which stays unique and reads well in admin stats.
+  - Profiles have no password, so they can't sign in directly. Password change and 2FA refuse them, and admins can't set one for them.
+- **API:** `api/household.go`. `GET/POST /api/household`, and `PUT/DELETE /api/household/{id}`, `PUT …/pin` and `POST …/switch`. Only the account manages profiles, and it's behind the settings passcode.
+  - Switching ends the current session and starts one for the member on the same device name. A member with a PIN needs it, rate limited, and a wrong PIN answers 403.
+  - A profile's PIN is its `passcode_hash`. The account's PIN is its settings passcode.
+  - Library limits for a profile are capped at what the account sees.
+- **Web:** `pages/WhoIsWatching.tsx` at `/who` appears after a password sign-in (a `sessionStorage` flag in `profilePick.ts`) and from the user menu → Switch profile. Account → Profiles adds, edits (name, libraries, PIN) and deletes profiles. Admin → Users marks profiles and hides Reset password for them.
+- **TV app:** `screens/Profiles.tsx` with a remote-friendly PIN pad. It shows after sign-in when the account has profiles, and from Settings → Switch profile. **Not yet tried on a device**: the onn box and the S24+ still need a run-through. It type-checks and lints.
 
 ## Live TV settings, logs and playlist links
 
@@ -355,7 +367,7 @@ _Refreshed 2026-10-24. The full backlog is in `docs/ROADMAP.md`._
 
 Needs real hardware or real media (can't be checked with generated test files):
 
-1. **Retest the TV app on v0.6.0.** The onn box wasn't retested after the phone work (M8 phase 3), and the last step of the in-app update (installing the APK) has never been run.
+1. **Retest the TV app on v0.6.0, including the new profile picker.** The onn box wasn't retested after the phone work (M8 phase 3), and the last step of the in-app update (installing the APK) has never been run.
 2. **Metadata matching on a real library.** Add a TMDB key, run "Refresh metadata", and tune `library/names.go` with new test cases.
 3. **Live TV with a real IPTV provider or HDHomeRun.** Watch for provider-specific user agents and HTTPS redirects.
 4. **Intro and credits detection on real episodes.** `maxBitErrors`, `maxGapFrames` and `edgeFrames` may need tuning against a real season.

@@ -105,6 +105,15 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .passcode-input { letter-spacing: 0.4em; font-variant-numeric: tabular-nums; }
 .passcode-panel { padding: 28px; display: grid; gap: 8px; justify-items: start; }
 .passcode-panel h2 { margin: 4px 0 0; }
+.who { width: min(760px, 100%); text-align: center; display: grid; gap: 28px; justify-items: center; }
+.who h1 { margin: 0; font-size: clamp(26px, 5vw, 40px); }
+.who-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px; }
+.who-card { display: grid; justify-items: center; align-content: start; gap: 10px; width: 128px; padding: 14px 8px; border-radius: 16px; border: 1px solid transparent; background: none; color: var(--text); cursor: pointer; }
+.who-card:hover, .who-card:focus-visible { border-color: var(--border); background: rgba(255, 255, 255, 0.04); }
+.who-card.current .who-avatar { outline: 3px solid var(--accent); outline-offset: 3px; }
+.avatar.who-avatar { width: 96px; height: 96px; font-size: 40px; border-radius: 22px; }
+.who-name { font-weight: 600; }
+.who-pin { width: min(320px, 100%); }
 
 .btn {
   display: inline-flex;

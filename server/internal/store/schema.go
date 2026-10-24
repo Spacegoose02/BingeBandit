@@ -464,7 +464,15 @@ INSERT INTO live_source_groups (source_id, name, enabled, streams)
 	`
 ALTER TABLE users ADD COLUMN passcode_hash TEXT NOT NULL DEFAULT '';
 `,
-	// 16: plugins (M9). Each one is a separate process or service that speaks
+	// 16: profiles. A profile is a user under an account (owner_id): one
+	// sign-in, separate history, watchlist and preferences. Profiles have no
+	// password; they're reached by switching from another member.
+	`
+ALTER TABLE users ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE users ADD COLUMN profile_name TEXT NOT NULL DEFAULT '';
+CREATE INDEX users_owner ON users(owner_id);
+`,
+	// 17: plugins (M9). Each one is a separate process or service that speaks
 	// HTTP; see docs/PLUGINS.md. The key authenticates both directions.
 	`
 CREATE TABLE plugins (
