@@ -1,0 +1,307 @@
+package api
+
+import (
+	"errors"
+	"net/http"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+
+	"bingebandit/internal/store"
+)
+
+type homeRow struct {
+	ID    string        `json:"id"`
+	Title string        `json:"title"`
+	Items []*store.Item `json:"items"`
+}
+
+func (s *Server) home(w http.ResponseWriter, r *http.Request) {
+	uid := currentUser(r).ID
+	cw, err := s.continueWatching(uid, 20)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	rows := []homeRow{}
+	add := func(id, title string, items []*store.Item, err error) {
+		if err == nil && len(items) > 0 {
+			rows = append(rows, homeRow{ID: id, Title: title, Items: items})
+		}
+	}
+	movies, err := s.Store.RecentlyAdded(uid, "movie", 24)
+	add("recent-movies", "Recently Added Movies", movies, err)
+	shows, err := s.Store.RecentlyAdded(uid, "show", 24)
+	add("recent-shows", "Recently Added TV", shows, err)
+	released, err := s.Store.RecentlyReleased(uid, "movie", 24)
+	add("released-movies", "Recently Released Movies", released, err)
+
+	// Hero carousel: recent items that have artwork to show off.
+	hero := []*store.Item{}
+	for _, it := range append(append([]*store.Item{}, movies...), shows...) {
+		if it.Backdrop != "" && len(hero) < 6 {
+			hero = append(hero, it)
+		}
+	}
+	sort.SliceStable(hero, func(i, j int) bool { return hero[i].AddedAt > hero[j].AddedAt })
+
+	writeJSON(w, http.StatusOK, map[string]any{"hero": hero, "continueWatching": cw, "rows": rows})
+}
+
+// continueWatching merges in-progress items with the next episode of shows
+// the user recently finished an episode of (Plex's "On Deck").
+func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
+	inProgress, err := s.Store.InProgress(uid, limit)
+	if err != nil {
+		return nil, err
+	}
+	activeShows := map[int64]bool{}
+	for _, it := range inProgress {
+		if it.ShowID != 0 {
+			activeShows[it.ShowID] = true
+		}
+	}
+	finished, err := s.Store.RecentlyFinishedShows(uid, limit)
+	if err != nil {
+		return nil, err
+	}
+	type entry struct {
+		item *store.Item
+		at   int64
+	}
+	var all []entry
+	for _, it := range inProgress {
+		all = append(all, entry{it, it.Watch.UpdatedAt})
+	}
+	for _, p := range finished {
+		if activeShows[p.ShowID] {
+			continue
+		}
+		next, err := s.Store.NextEpisode(uid, p.ShowID, p.Season, p.Episode)
+		if errors.Is(err, store.ErrNotFound) || (err == nil && next.Watch.Watched) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, entry{next, p.UpdatedAt})
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].at > all[j].at })
+	out := []*store.Item{}
+	for _, e := range all {
+		if len(out) == limit {
+			break
+		}
+		out = append(out, e.item)
+	}
+	return out, nil
+}
+
+func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {
+	libs, err := s.Store.Libraries()
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if !currentUser(r).IsAdmin {
+		for _, l := range libs {
+			l.Paths = nil
+		}
+	}
+	writeJSON(w, http.StatusOK, libs)
+}
+
+func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	lib, err := s.Store.Library(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	q := r.URL.Query()
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	items, total, err := s.Store.LibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	lib.Paths = nil
+	writeJSON(w, http.StatusOK, map[string]any{"library": lib, "items": items, "total": total})
+}
+
+func (s *Server) item(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	u := currentUser(r)
+	it, err := s.Store.Item(u.ID, id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	resp := map[string]any{"item": it}
+
+	switch it.Kind {
+	case "movie", "episode":
+		files, err := s.Store.FilesForItem(it.ID)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		if !u.IsAdmin {
+			for _, f := range files {
+				f.Path = filepath.Base(f.Path)
+			}
+		}
+		resp["files"] = files
+	case "show", "season":
+		children, err := s.Store.Children(u.ID, it.ID)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		resp["children"] = children
+	}
+
+	if it.Kind == "show" {
+		if next, err := s.upNext(u.ID, it.ID); err == nil && next != nil {
+			resp["upNext"] = next
+		}
+	}
+	if it.Kind == "season" || it.Kind == "episode" {
+		if show, err := s.Store.Item(u.ID, it.ShowID); err == nil {
+			resp["show"] = show
+		}
+	}
+	if it.Kind == "episode" {
+		if season, err := s.Store.Item(u.ID, it.ParentID); err == nil {
+			resp["season"] = season
+		}
+	}
+	if it.CollectionID != 0 {
+		if coll, err := s.Store.CollectionItems(u.ID, it.CollectionID); err == nil && len(coll) > 1 {
+			resp["collection"] = coll
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// upNext picks the episode the Play button on a show should start: one in
+// progress, else the one after the last watched, else the first.
+func (s *Server) upNext(uid, showID int64) (*store.Item, error) {
+	eps, err := s.Store.ShowEpisodes(uid, showID)
+	if err != nil || len(eps) == 0 {
+		return nil, err
+	}
+	var latest *store.Item
+	for _, e := range eps {
+		if e.Watch.Position > 15 && !e.Watch.Watched {
+			return e, nil
+		}
+		if e.Watch.Watched && (latest == nil || e.Watch.UpdatedAt > latest.Watch.UpdatedAt) {
+			latest = e
+		}
+	}
+	if latest != nil {
+		for i, e := range eps {
+			if e.ID == latest.ID {
+				for _, n := range eps[i+1:] {
+					if !n.Watch.Watched {
+						return n, nil
+					}
+				}
+			}
+		}
+	}
+	for _, e := range eps {
+		if !e.Watch.Watched && e.SeasonNumber != nil && *e.SeasonNumber > 0 {
+			return e, nil
+		}
+	}
+	return eps[0], nil
+}
+
+func (s *Server) nextEpisode(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	uid := currentUser(r).ID
+	it, err := s.Store.Item(uid, id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if it.Kind != "episode" || it.SeasonNumber == nil || it.EpisodeNumber == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	next, err := s.Store.NextEpisode(uid, it.ShowID, *it.SeasonNumber, *it.EpisodeNumber)
+	if errors.Is(err, store.ErrNotFound) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, next)
+}
+
+func (s *Server) setWatched(watched bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(r, "id")
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		ids, err := s.Store.LeafIDs(id)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		if err := s.Store.SetWatched(currentUser(r).ID, ids, watched); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	items, err := s.Store.Search(currentUser(r).ID, q, 60)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *Server) tmdbImage(w http.ResponseWriter, r *http.Request) {
+	path, err := s.Images.TMDB(r.Context(), r.URL.Query().Get("w"), chi.URLParam(r, "file"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, max-age=2592000")
+	http.ServeFile(w, r, path)
+}

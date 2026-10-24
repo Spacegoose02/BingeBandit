@@ -1,0 +1,24 @@
+# Example deployment. Point the media volumes at your folders, then add them
+# as libraries in the web UI using the container paths (/media/movies, ...).
+services:
+  bingebandit:
+    image: ghcr.io/OWNER/bingebandit:latest # replace OWNER with your GitHub user/org
+    container_name: bingebandit
+    restart: unless-stopped
+    ports:
+      - "8484:8484"
+    volumes:
+      - ./config:/config
+      - /path/to/movies:/media/movies:ro
+      - /path/to/tv:/media/tv:ro
+    # Intel/AMD hardware transcoding (set "VAAPI" in Settings → Transcoding):
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # NVIDIA (set "NVIDIA NVENC"); needs the NVIDIA container toolkit:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu, video]

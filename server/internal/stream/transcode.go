@@ -1,0 +1,386 @@
+// Package stream runs ffmpeg HLS transcodes and tracks who is watching what.
+package stream
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"bingebandit/internal/media"
+	"bingebandit/internal/store"
+)
+
+const (
+	segmentSeconds = 4
+	idleTimeout    = 90 * time.Second
+	waitTimeout    = 45 * time.Second
+)
+
+type Options struct {
+	Start       float64 `json:"start"`       // seconds into the file
+	MaxHeight   int     `json:"maxHeight"`   // 0 = source
+	BitrateKbps int     `json:"bitrateKbps"` // 0 = quality-based
+	AudioStream int     `json:"audioStream"` // ffprobe stream index, -1 = default
+	Replace     string  `json:"replace"`     // session to stop first (the player is seeking)
+}
+
+type Session struct {
+	ID        string  `json:"id"`
+	FileID    int64   `json:"fileId"`
+	UserID    int64   `json:"userId"`
+	Start     float64 `json:"start"`
+	VideoCopy bool    `json:"videoCopy"`
+	Encoder   string  `json:"encoder"`
+	Height    int     `json:"height"`
+	Tonemap   bool    `json:"tonemap"`
+	Created   int64   `json:"created"`
+
+	dir        string
+	cmd        *exec.Cmd
+	done       chan struct{}
+	lastAccess atomic.Int64
+	stopped    atomic.Bool
+	stderr     *tailBuffer
+}
+
+type Manager struct {
+	st      *store.Store
+	ffmpeg  string
+	dataDir string
+
+	mu       sync.Mutex
+	sessions map[string]*Session
+	stop     chan struct{}
+}
+
+func NewManager(st *store.Store, ffmpeg, dataDir string) *Manager {
+	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{})}
+	m.cleanStale()
+	go m.janitor()
+	return m
+}
+
+func (m *Manager) baseDir() string {
+	if d := strings.TrimSpace(m.st.Setting(store.SettingTranscodeDir)); d != "" {
+		return d
+	}
+	return filepath.Join(m.dataDir, "transcode")
+}
+
+// cleanStale removes session folders left behind by a crash.
+func (m *Manager) cleanStale() {
+	entries, _ := os.ReadDir(m.baseDir())
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "bb-") {
+			os.RemoveAll(filepath.Join(m.baseDir(), e.Name()))
+		}
+	}
+}
+
+func newID() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, error) {
+	if o.Replace != "" {
+		m.Stop(o.Replace)
+	}
+	s := &Session{
+		ID: newID(), FileID: f.ID, UserID: userID, Start: o.Start, Created: time.Now().Unix(),
+		done: make(chan struct{}), stderr: &tailBuffer{max: 4096},
+	}
+	s.dir = filepath.Join(m.baseDir(), "bb-"+s.ID)
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return nil, fmt.Errorf("transcode dir: %w", err)
+	}
+	args := m.buildArgs(f, s, o)
+	s.cmd = exec.Command(m.ffmpeg, args...)
+	s.cmd.Stderr = s.stderr
+	media.HideWindow(s.cmd)
+	if err := s.cmd.Start(); err != nil {
+		os.RemoveAll(s.dir)
+		return nil, fmt.Errorf("start ffmpeg: %w", err)
+	}
+	s.lastAccess.Store(time.Now().Unix())
+	m.mu.Lock()
+	m.sessions[s.ID] = s
+	m.mu.Unlock()
+	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d", s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height)
+
+	go func() {
+		err := s.cmd.Wait()
+		close(s.done)
+		if s.stopped.Load() {
+			return
+		}
+		if msg := strings.TrimSpace(s.stderr.String()); err != nil || msg != "" {
+			log.Printf("transcode %s exited (%v): %s", s.ID, err, msg)
+		}
+	}()
+	return s, nil
+}
+
+func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string {
+	encoder := m.st.Setting(store.SettingHWEncoder)
+	tonemap := m.st.Setting(store.SettingTonemap) == "true" && f.HDR
+
+	targetH := f.Height
+	if o.MaxHeight > 0 && (targetH == 0 || targetH > o.MaxHeight) {
+		targetH = o.MaxHeight
+	}
+	s.Height = targetH
+	s.VideoCopy = f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0
+	s.Tonemap = tonemap && !s.VideoCopy
+
+	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
+	if encoder == "vaapi" && !s.VideoCopy {
+		args = append(args, "-vaapi_device", "/dev/dri/renderD128")
+	}
+	if o.Start > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", o.Start))
+	}
+	args = append(args, "-i", f.Path, "-map", "0:v:0")
+	if o.AudioStream >= 0 {
+		args = append(args, "-map", fmt.Sprintf("0:%d", o.AudioStream))
+	} else if a := media.DefaultAudio(f.Streams); a != nil {
+		args = append(args, "-map", fmt.Sprintf("0:%d", a.Index))
+	} else {
+		args = append(args, "-map", "0:a:0?")
+	}
+	args = append(args, "-sn", "-map_metadata", "-1", "-map_chapters", "-1")
+
+	if s.VideoCopy {
+		s.Encoder = "copy"
+		args = append(args, "-c:v", "copy")
+	} else {
+		var filters []string
+		if s.Tonemap {
+			filters = append(filters, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
+				"tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv")
+		}
+		if targetH > 0 && targetH < f.Height {
+			filters = append(filters, fmt.Sprintf("scale=-2:%d", targetH))
+		}
+		var codec []string
+		switch encoder {
+		case "nvenc":
+			filters = append(filters, "format=yuv420p")
+			codec = []string{"-c:v", "h264_nvenc", "-preset", "p4", "-profile:v", "high"}
+		case "qsv":
+			filters = append(filters, "format=nv12")
+			codec = []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-profile:v", "high"}
+		case "amf":
+			filters = append(filters, "format=yuv420p")
+			codec = []string{"-c:v", "h264_amf", "-quality", "speed"}
+		case "vaapi":
+			filters = append(filters, "format=nv12", "hwupload")
+			codec = []string{"-c:v", "h264_vaapi"}
+		case "videotoolbox":
+			filters = append(filters, "format=yuv420p")
+			codec = []string{"-c:v", "h264_videotoolbox", "-realtime", "1"}
+		default:
+			encoder = "libx264"
+			filters = append(filters, "format=yuv420p")
+			codec = []string{"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-crf", "21"}
+		}
+		s.Encoder = encoder
+		args = append(args, "-vf", strings.Join(filters, ","))
+		args = append(args, codec...)
+		kbps := o.BitrateKbps
+		if kbps == 0 {
+			kbps = defaultBitrate(targetH)
+		}
+		args = append(args, "-maxrate", fmt.Sprintf("%dk", kbps), "-bufsize", fmt.Sprintf("%dk", kbps*2))
+		if encoder != "libx264" {
+			args = append(args, "-b:v", fmt.Sprintf("%dk", kbps*3/4))
+		}
+		args = append(args, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
+	}
+
+	args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "192k",
+		"-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
+		"-hls_playlist_type", "event", "-hls_flags", "independent_segments",
+		"-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"),
+		"-start_number", "0", filepath.Join(s.dir, "index.m3u8"))
+	return args
+}
+
+func defaultBitrate(height int) int {
+	switch {
+	case height >= 2160:
+		return 40000
+	case height >= 1440:
+		return 20000
+	case height >= 1080:
+		return 10000
+	case height >= 720:
+		return 5000
+	default:
+		return 2500
+	}
+}
+
+func (m *Manager) Get(id string) *Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sessions[id]
+}
+
+func (m *Manager) Stop(id string) {
+	m.mu.Lock()
+	s := m.sessions[id]
+	delete(m.sessions, id)
+	m.mu.Unlock()
+	if s != nil {
+		s.kill()
+	}
+}
+
+func (m *Manager) List() []*Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]*Session, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		out = append(out, s)
+	}
+	return out
+}
+
+func (m *Manager) Shutdown() {
+	close(m.stop)
+	for _, s := range m.List() {
+		m.Stop(s.ID)
+	}
+}
+
+func (m *Manager) janitor() {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-m.stop:
+			return
+		case <-t.C:
+		}
+		cutoff := time.Now().Add(-idleTimeout).Unix()
+		for _, s := range m.List() {
+			if s.lastAccess.Load() < cutoff {
+				log.Printf("transcode %s: idle, stopping", s.ID)
+				m.Stop(s.ID)
+			}
+		}
+	}
+}
+
+func (s *Session) kill() {
+	s.stopped.Store(true)
+	if s.cmd.Process != nil {
+		s.cmd.Process.Kill()
+	}
+	go func() {
+		select {
+		case <-s.done:
+		case <-time.After(10 * time.Second):
+		}
+		// Windows may hold the last segment open briefly after the kill.
+		for i := 0; i < 10; i++ {
+			if err := os.RemoveAll(s.dir); err == nil {
+				return
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
+}
+
+var reSegment = regexp.MustCompile(`^(index\.m3u8|seg\d{5}\.ts)$`)
+
+var ErrNotReady = errors.New("transcode output not ready")
+
+// WaitFile blocks until the playlist has a first segment, or until the
+// requested segment is complete (listed in the playlist or ffmpeg finished).
+func (s *Session) WaitFile(ctx context.Context, name string) (string, error) {
+	if !reSegment.MatchString(name) {
+		return "", os.ErrNotExist
+	}
+	s.lastAccess.Store(time.Now().Unix())
+	playlist := filepath.Join(s.dir, "index.m3u8")
+	path := filepath.Join(s.dir, name)
+	deadline := time.After(waitTimeout)
+	for {
+		pl, _ := readShared(playlist)
+		finished := false
+		select {
+		case <-s.done:
+			finished = true
+		default:
+		}
+		if name == "index.m3u8" {
+			if bytes.Contains(pl, []byte("#EXTINF")) {
+				return path, nil
+			}
+		} else if bytes.Contains(pl, []byte(name)) {
+			return path, nil
+		} else if finished {
+			if _, err := os.Stat(path); err == nil {
+				return path, nil
+			}
+		}
+		if finished {
+			return "", fmt.Errorf("%w: ffmpeg exited: %s", ErrNotReady, strings.TrimSpace(s.stderr.String()))
+		}
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-deadline:
+			return "", ErrNotReady
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+}
+
+func readShared(path string) ([]byte, error) {
+	f, err := OpenShared(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+// tailBuffer keeps the last max bytes written to it (ffmpeg stderr).
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+	max int
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > t.max {
+		t.buf = t.buf[len(t.buf)-t.max:]
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return string(t.buf)
+}

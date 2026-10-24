@@ -1,0 +1,6 @@
+dist
+web/node_modules
+Brand
+.git
+.claude
+*.db
