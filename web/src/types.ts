@@ -8,6 +8,47 @@ export interface User {
   allLibraries: boolean
   libraryIds?: number[]
   profilePublic: boolean
+  totpEnabled: boolean
+  shareActivity: boolean
+}
+
+export interface DeviceSession {
+  id: string
+  device: string
+  ip: string
+  createdAt: number
+  lastSeen: number
+  current: boolean
+}
+
+export interface APIKey {
+  id: number
+  name: string
+  prefix: string
+  createdAt: number
+  lastUsed: number
+}
+
+export interface Webhook {
+  id: number
+  name: string
+  url: string
+  events: string[]
+  secret: string
+  enabled: boolean
+  lastStatus: string
+  lastAt: number
+}
+
+export interface FriendActivity {
+  username: string
+  itemId: number
+  title: string
+  subtitle?: string
+  poster?: string
+  position: number
+  duration: number
+  paused: boolean
 }
 
 export interface WatchState {

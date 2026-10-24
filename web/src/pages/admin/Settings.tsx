@@ -2,7 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import { useAuth } from '../../auth'
+import { Icon } from '../../components/Icon'
+import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
+import type { Webhook } from '../../types'
 
 type Settings = Record<string, string>
 
@@ -153,6 +156,144 @@ export default function AdminSettings() {
           <button className="btn btn-primary">Save settings</button>
         </div>
       </form>
+      <Webhooks />
     </div>
+  )
+}
+
+const eventLabels: Record<string, string> = {
+  'playback.start': 'Playback started',
+  'playback.stop': 'Playback stopped',
+  'playback.finished': 'Finished watching',
+  'recording.started': 'Recording started',
+  'recording.completed': 'Recording completed',
+  'recording.failed': 'Recording failed',
+}
+
+/** Webhooks POST signed JSON to other services (Home Assistant, Discord bots, n8n…) when things happen. */
+function Webhooks() {
+  const { data, reload } = useApi<{ webhooks: Webhook[]; events: string[] }>('/api/admin/webhooks')
+  const [editing, setEditing] = useState<Partial<Webhook> | null>(null)
+  const [results, setResults] = useState<Record<number, string>>({})
+
+  const test = async (h: Webhook) => {
+    setResults((r) => ({ ...r, [h.id]: 'Sending…' }))
+    try {
+      const res = await api.post<{ status: string }>(`/api/admin/webhooks/${h.id}/test`)
+      setResults((r) => ({ ...r, [h.id]: res.status }))
+    } catch (err) {
+      setResults((r) => ({ ...r, [h.id]: (err as Error).message }))
+    }
+    reload()
+  }
+  const remove = async (h: Webhook) => {
+    if (!confirm(`Delete the webhook "${h.name}"?`)) return
+    await api.del(`/api/admin/webhooks/${h.id}`).catch((e) => alert(e.message))
+    reload()
+  }
+  const toggle = async (h: Webhook, enabled: boolean) => {
+    await api.put(`/api/admin/webhooks/${h.id}`, { ...h, enabled }).catch((e) => alert(e.message))
+    reload()
+  }
+
+  return (
+    <section className="panel" style={{ marginTop: 20 }}>
+      <header className="panel-head">
+        <h3>Webhooks</h3>
+        <button className="btn btn-glass btn-sm" onClick={() => setEditing({ enabled: true, events: [] })}>
+          <Icon name="plus" size={16} /> Add webhook
+        </button>
+      </header>
+      <p className="muted small">
+        BingeBandit sends a JSON POST to each URL when a chosen event happens. With a secret set, the body is signed in the{' '}
+        <code>X-BingeBandit-Signature</code> header (HMAC-SHA256).
+      </p>
+      <div className="list">
+        {data?.webhooks.map((h) => (
+          <div key={h.id} className="list-row">
+            <label className="switch" title={h.enabled ? 'On' : 'Off'}>
+              <input type="checkbox" checked={h.enabled} onChange={(e) => toggle(h, e.target.checked)} aria-label={`${h.name} enabled`} />
+              <span />
+            </label>
+            <div className="grow">
+              <div>{h.name}</div>
+              <div className="muted small mono" style={{ wordBreak: 'break-all' }}>{h.url}</div>
+              <div className="muted small">
+                {h.events.length ? h.events.map((e) => eventLabels[e] ?? e).join(', ') : 'No events chosen'}
+                {(results[h.id] || h.lastStatus) && <> · last response: {results[h.id] || h.lastStatus}</>}
+              </div>
+            </div>
+            <button className="btn btn-glass btn-sm" onClick={() => test(h)}>Send test</button>
+            <button className="btn btn-glass btn-sm" onClick={() => setEditing(h)}>Edit</button>
+            <button className="btn btn-glass btn-sm danger" onClick={() => remove(h)} aria-label={`Delete ${h.name}`}>
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {editing && data && (
+        <WebhookEditor
+          hook={editing}
+          events={data.events}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            reload()
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function WebhookEditor({ hook, events, onClose, onSaved }: { hook: Partial<Webhook>; events: string[]; onClose: () => void; onSaved: () => void }) {
+  const [h, setH] = useState<Partial<Webhook>>(hook)
+  const [error, setError] = useState('')
+  const toggle = (e: string) => {
+    const cur = new Set(h.events ?? [])
+    if (cur.has(e)) cur.delete(e)
+    else cur.add(e)
+    setH({ ...h, events: events.filter((x) => cur.has(x)) })
+  }
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      if (h.id) await api.put(`/api/admin/webhooks/${h.id}`, h)
+      else await api.post('/api/admin/webhooks', h)
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={h.id ? 'Edit webhook' : 'Add webhook'} onClose={onClose}>
+      <form className="form" onSubmit={save}>
+        <label>
+          Name
+          <input value={h.name ?? ''} onChange={(e) => setH({ ...h, name: e.target.value })} required autoFocus placeholder="Home Assistant" />
+        </label>
+        <label>
+          URL
+          <input className="mono" type="url" value={h.url ?? ''} onChange={(e) => setH({ ...h, url: e.target.value })} required placeholder="https://…" />
+        </label>
+        <label>
+          Secret (optional, for signing)
+          <input className="mono" value={h.secret ?? ''} onChange={(e) => setH({ ...h, secret: e.target.value })} autoComplete="off" />
+        </label>
+        <fieldset className="webhook-events">
+          {events.map((ev) => (
+            <label key={ev} className="check">
+              <input type="checkbox" checked={h.events?.includes(ev) ?? false} onChange={() => toggle(ev)} />
+              {eventLabels[ev] ?? ev}
+            </label>
+          ))}
+        </fieldset>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </Modal>
   )
 }

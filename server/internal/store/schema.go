@@ -369,4 +369,33 @@ CREATE TABLE playout_items (
 );
 CREATE INDEX playout_channel ON playout_items(channel_id, start_at);
 `,
+	// 10: security — TOTP 2FA, API keys, webhooks, opt-in activity sharing.
+	`
+ALTER TABLE users ADD COLUMN totp_secret TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN recovery_codes TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE users ADD COLUMN share_activity INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE api_keys (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name       TEXT NOT NULL,
+	key_hash   TEXT NOT NULL UNIQUE,
+	prefix     TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	last_used  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE webhooks (
+	id          INTEGER PRIMARY KEY,
+	name        TEXT NOT NULL,
+	url         TEXT NOT NULL,
+	events      TEXT NOT NULL DEFAULT '[]',
+	secret      TEXT NOT NULL DEFAULT '',
+	enabled     INTEGER NOT NULL DEFAULT 1,
+	last_status TEXT NOT NULL DEFAULT '',
+	last_at     INTEGER NOT NULL DEFAULT 0,
+	created_at  INTEGER NOT NULL
+);
+`,
 }

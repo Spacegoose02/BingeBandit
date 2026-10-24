@@ -25,6 +25,19 @@ type Recorder struct {
 
 	mu     sync.Mutex
 	active map[int64]context.CancelFunc
+
+	// OnEvent, if set, is told about recording.started / completed / failed.
+	OnEvent func(event string, r *store.Recording)
+}
+
+func (rec *Recorder) event(name string, id int64) {
+	if rec.OnEvent == nil {
+		return
+	}
+	if r, err := rec.st.Recording(id); err == nil {
+		r.Path = "" // don't leak server paths to third parties
+		rec.OnEvent(name, r)
+	}
 }
 
 func NewRecorder(st *store.Store, live *Manager, dataDir string) *Recorder {
@@ -175,6 +188,7 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 		return
 	}
 	rec.st.SetRecordingState(r.ID, "recording", path, 0, "")
+	rec.event("recording.started", r.ID)
 	log.Printf("dvr: recording %q on %s → %s", r.Title, r.ChannelName, path)
 
 	var written int64
@@ -227,6 +241,7 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 		status, msg = "completed", "stopped early" // cancelled by a user or the server
 	}
 	rec.st.SetRecordingState(r.ID, status, path, written, msg)
+	rec.event("recording."+status, r.ID)
 	log.Printf("dvr: %q finished (%s, %.1f MB)", r.Title, status, float64(written)/(1<<20))
 }
 

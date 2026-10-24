@@ -104,15 +104,20 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Channels from RSS / API lists (e.g. Yamtrack pending list), named after the source |
 | | Filler, commercials/bumpers, watermarks, flex time, hard block boundaries |
 
-## M6: Users and security
+## M6: Users and security 🟡 (phase 1 done)
 
-- 2FA (TOTP), strong sign-in methods, passkeys.
-- OIDC with TinyAuth, Google and similar.
-- Account linking: built-in account, Google, Plex/Tautulli (to import data until Plex shutdown).
-- Link a TV with a code (`/link`), and admins can link TVs for users.
-- Show others what you're watching (opt-in).
-- API keys, a public API, webhooks for playback events.
-- Network access settings, LAN networks, remote access settings.
+| | Item |
+|---|---|
+| ✅ | 2FA (TOTP) with one-time recovery codes; admins can turn it off for a user who lost their phone |
+| ✅ | Link a TV with a code (`/link`); admins can link a TV as another user; the login page can sign in by code |
+| ✅ | Signed-in devices list with remote sign-out |
+| ✅ | Show others what you're watching (opt-in), as a "Friends are watching" row on Home |
+| ✅ | API keys (`bb_…`, hashed, last-used time), also for IPTV app playlist/guide URLs |
+| ✅ | Webhooks for playback start/stop/finished and recording started/completed/failed, HMAC-signed |
+| | Passkeys |
+| | OIDC with TinyAuth, Google and similar; account linking (built-in, Google, Plex/Tautulli) |
+| | A documented public API |
+| | Network access settings, LAN networks, remote access settings |
 
 ## M7: Import
 

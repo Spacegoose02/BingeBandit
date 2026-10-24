@@ -252,11 +252,28 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	if req.PlaySessionID != "" {
 		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
 		s.recordPlay(np, it, watched)
+		event := playbackEvent(np, it)
+		if watched && !it.Watch.Watched {
+			s.Emit("playback.finished", event)
+		}
 		if req.Stopped {
 			s.Activity.Stop(req.PlaySessionID)
+			// Only plays that got a playback.start (see minRecordedPlay) get a stop.
+			if np.PlayID != 0 || np.Watched >= minRecordedPlay {
+				s.Emit("playback.stop", event)
+			}
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+}
+
+// playbackEvent is the webhook payload for playback events.
+func playbackEvent(np stream.NowPlaying, it *store.Item) map[string]any {
+	return map[string]any{
+		"user": np.Username, "itemId": it.ID, "kind": it.Kind, "title": np.Title, "subtitle": np.Subtitle,
+		"year": it.Year, "client": np.Client, "ip": np.IP, "local": np.Local, "mode": np.Mode,
+		"position": np.Position, "duration": np.Duration, "watchedSeconds": int(np.Watched),
+	}
 }
 
 // minRecordedPlay keeps accidental clicks out of the history.
@@ -279,6 +296,7 @@ func (s *Server) recordPlay(np stream.NowPlaying, it *store.Item, completed bool
 			return
 		}
 		s.Activity.SetPlayID(np.ID, id)
+		s.Emit("playback.start", playbackEvent(np, it))
 		return
 	}
 	if err := s.Store.UpdatePlay(np.PlayID, np.UpdatedAt, int64(np.Watched), completed, np.Mode); err != nil {

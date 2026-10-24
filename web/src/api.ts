@@ -2,6 +2,7 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public data?: Record<string, unknown>,
   ) {
     super(message)
   }
@@ -21,7 +22,7 @@ async function request<T>(method: string, path: string, body?: unknown, init?: R
   const data = await res.json().catch(() => null)
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/api/auth')) window.dispatchEvent(new Event('bb:unauthorized'))
-    throw new ApiError(res.status, data?.error ?? res.statusText)
+    throw new ApiError(res.status, data?.error ?? res.statusText, data ?? undefined)
   }
   return data as T
 }

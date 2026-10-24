@@ -82,6 +82,7 @@ func main() {
 		FFmpeg:     cfg.FFmpeg,
 		FFprobe:    cfg.FFprobe,
 	}
+	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
 
 	go func() {

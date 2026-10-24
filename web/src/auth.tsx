@@ -8,7 +8,9 @@ interface AuthState {
   needsSetup: boolean
   serverName: string
   refresh: () => Promise<void>
-  login: (username: string, password: string) => Promise<void>
+  login: (username: string, password: string, code?: string) => Promise<void>
+  /** Signs in with a session the server already set as a cookie (linking with a code). */
+  signedIn: (user: User) => void
   setup: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -39,8 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('bb:unauthorized', onUnauthorized)
   }, [refresh])
 
-  const login = async (username: string, password: string) => {
-    const res = await api.post<{ user: User }>('/api/auth/login', { username, password, device: 'Web' })
+  const login = async (username: string, password: string, code?: string) => {
+    const res = await api.post<{ user: User }>('/api/auth/login', { username, password, code, device: 'Web' })
     setUser(res.user)
   }
 
@@ -56,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ loading, user, needsSetup, serverName, refresh, login, setup, logout }}>
+    <AuthContext.Provider value={{ loading, user, needsSetup, serverName, refresh, login, signedIn: setUser, setup, logout }}>
       {children}
     </AuthContext.Provider>
   )

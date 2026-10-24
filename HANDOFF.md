@@ -2,9 +2,20 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-23, first half of Milestone 2._
+_Last updated: 2026-10-23, M6 phase 1 (security)._
 
-## Latest: custom channels (M5)
+## Latest: users and security, phase 1 (M6)
+
+- **Two-step sign-in (TOTP):** Account → Two-step sign-in shows a key and an `otpauth://` link, confirms a code, then shows 8 one-time recovery codes (stored hashed). The login page asks for a code when needed; recovery codes work there too. Turning it off needs the password; Admin → Users has "Turn off 2-step" for locked-out users.
+- **Link a TV with a code:** `POST /api/link/start` (no auth, rate-limited) returns a 6-character code and a poll token. Someone signed in enters it at `/link` (admins can pick which user). `GET /api/link/poll` returns 202 until approved, then the session once (`web=1` also sets the cookie). Codes live in memory for 10 minutes. The web login page has "Sign in with a code instead".
+- **Devices and API keys:** Account lists signed-in devices (sign out any but this one) and API keys (`bb_…`, shown once, stored hashed). Keys work anywhere a session token does. Admin → Live TV → Sources can make a key for an IPTV app and fills in the playlist and guide URLs, so they no longer embed a browser session.
+- **Sharing:** an opt-in toggle in Account; Home shows "Friends are watching" from users who opted in, filtered to items the viewer can access, with no IPs or devices.
+- **Webhooks:** Settings → Webhooks. Events: playback.start (once 30s have played, same as history), playback.stop (only for plays that started), playback.finished, recording.started/completed/failed. With a secret, the body is signed: `X-BingeBandit-Signature: sha256=<hex HMAC>`. Recording payloads drop the file path.
+- **Tested in the browser:** the whole 2FA cycle including wrong codes and single-use recovery codes, code linking (browser and app style, admin-for-user, expired/used codes), API key use, `last_used` and revocation, session revoke, friends activity, and every webhook event against a local receiver that checked signatures.
+- **Not done yet:** passkeys, OIDC/Google, a documented public API, network/remote access settings. A TOTP code can be reused within its 30-second window (no replay tracking). There is no QR code on the setup or link screens yet.
+- Migration 10.
+
+## Custom channels (M5)
 
 - Admin → Live TV → Channels → **New custom channel**: number, name, an all-day block, optional time blocks, shuffle or order, and sources from libraries, shows, collections, playlists and labels. The editor shows the next 12 airings.
 - **Tested:** a channel with Movies (shuffle, all day) plus Test Show (in order, now to +30 min) built 2,644 entries over 48h.
@@ -42,7 +53,7 @@ _Last updated: 2026-10-23, first half of Milestone 2._
   - M3U, XMLTV and raw TS output
   - channel flipping cleans up viewers
 - **Not yet tested with a real IPTV provider or HDHomeRun.** Things to watch: provider-specific user agents, HTTPS redirects, and `.m3u8` (HLS) upstreams. Only MPEG-TS over HTTP is relayed today; HLS upstream support is the most likely next need.
-- The exported playlist embeds the requesting session's token. Per-user API keys (M6) should replace that.
+- The exported playlist embeds the token it was fetched with. Use an API key (M6) for apps.
 
 ## Intro and credits detection (M3)
 

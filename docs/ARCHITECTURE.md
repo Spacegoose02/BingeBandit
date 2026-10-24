@@ -74,6 +74,10 @@
 - Login returns a random 256-bit token. Only its SHA-256 is stored. The web UI uses an HttpOnly cookie; apps send `Authorization: Bearer <token>`. Players that can't set headers can use `?token=` on GET.
 - Cookie-authenticated writes must send `X-Requested-With: BingeBandit` (CSRF guard).
 - Failed logins are rate-limited per IP (10 per 15 minutes).
+- API keys (`bb_` + random, `api_keys` table) are stored as SHA-256 like sessions. `requireAuth` tries a session first, then an API key, so a key works anywhere a token does.
+- Two-step sign-in: RFC 6238 TOTP (`api/totp.go`, SHA-1, 30s, 6 digits, ±1 step). Recovery codes are stored hashed and deleted on use. Login answers 401 with `needsCode: true` until a valid code is sent.
+- TV linking (`api/link.go`): an in-memory map of short codes → poll tokens (10-minute TTL, start rate-limited per IP). Approving sets the user; the next poll creates the session.
+- Webhooks (`api/webhooks.go`): `Server.Emit(event, data)` posts to each enabled, subscribed hook in a goroutine (10s timeout), signing with HMAC-SHA256 when a secret is set. The DVR reports through `Recorder.OnEvent`, wired in `main.go`.
 
 ## Playback
 

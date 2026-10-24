@@ -44,12 +44,16 @@ type Server struct {
 	FFmpeg     string
 	FFprobe    string
 
-	limiter *loginLimiter
-	ctx     context.Context // server lifetime, for work that outlives a request
+	limiter     *loginLimiter
+	linkLimiter *loginLimiter
+	links       *linkManager
+	ctx         context.Context // server lifetime, for work that outlives a request
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
 	s.limiter = newLoginLimiter()
+	s.linkLimiter = newLoginLimiter()
+	s.links = newLinkManager()
 	s.ctx = ctx
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -62,6 +66,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Get("/setup", s.setupStatus)
 		r.Post("/setup", s.setup)
 		r.Post("/auth/login", s.login)
+		r.Post("/link/start", s.linkStart)
+		r.Get("/link/poll", s.linkPoll)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -71,6 +77,17 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/me/prefs", s.getPrefs)
 			r.Put("/me/prefs", s.putPrefs)
 			r.Get("/me/history", s.myHistory)
+			r.Post("/link/approve", s.linkApprove)
+			r.Post("/me/2fa/setup", s.setup2FA)
+			r.Post("/me/2fa/enable", s.enable2FA)
+			r.Post("/me/2fa/disable", s.disable2FA)
+			r.Get("/me/sessions", s.sessions)
+			r.Delete("/me/sessions/{id}", s.revokeSession)
+			r.Get("/me/keys", s.apiKeys)
+			r.Post("/me/keys", s.createAPIKey)
+			r.Delete("/me/keys/{id}", s.deleteAPIKey)
+			r.Put("/me/share-activity", s.setShareActivity)
+			r.Get("/activity/friends", s.friendsActivity)
 			r.Put("/me/profile", s.setProfileVisibility)
 			r.Get("/profiles", s.publicProfiles)
 			r.Get("/profiles/{username}", s.profile)
@@ -191,6 +208,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/logs/download", s.downloadLog)
 
 				r.Put("/users/{id}/libraries", s.setUserLibraries)
+				r.Delete("/users/{id}/2fa", s.adminReset2FA)
+				r.Get("/webhooks", s.webhooks)
+				r.Post("/webhooks", s.saveWebhook)
+				r.Put("/webhooks/{id}", s.saveWebhook)
+				r.Delete("/webhooks/{id}", s.deleteWebhook)
+				r.Post("/webhooks/{id}/test", s.testWebhook)
 				r.Get("/users", s.users)
 				r.Post("/users", s.createUser)
 				r.Delete("/users/{id}", s.deleteUser)

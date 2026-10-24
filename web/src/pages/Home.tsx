@@ -5,7 +5,39 @@ import { Hero } from '../components/Hero'
 import { Icon } from '../components/Icon'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
-import type { HomeData } from '../types'
+import { img } from '../api'
+import type { FriendActivity, HomeData } from '../types'
+
+/** What people who chose to share are watching right now. */
+function FriendsRow() {
+  const { data } = useApi<FriendActivity[]>('/api/activity/friends', 30000)
+  if (!data?.length) return null
+  return (
+    <Row title="Friends are watching">
+      {data.map((f) => {
+        const poster = img(f.poster, 'w342')
+        return (
+          <Link key={f.username} to={`/item/${f.itemId}`} className="poster-card friend-card">
+            <div className="poster-frame">
+              {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{f.title}</div>}
+              <span className="friend-badge">
+                <span className="avatar">{f.username.slice(0, 1).toUpperCase()}</span>
+                {f.username}
+              </span>
+              {f.duration > 0 && (
+                <div className="progress">
+                  <div style={{ width: `${Math.min(100, (f.position / f.duration) * 100)}%` }} />
+                </div>
+              )}
+            </div>
+            <div className="card-title" title={f.title}>{f.title}</div>
+            <div className="card-sub">{f.paused ? 'Paused' : f.subtitle || 'Watching now'}</div>
+          </Link>
+        )
+      })}
+    </Row>
+  )
+}
 
 export default function Home() {
   useDocumentTitle('Home')
@@ -49,6 +81,7 @@ export default function Home() {
             ))}
           </Row>
         )}
+        <FriendsRow />
         {data.rows.map((row) => (
           <Row key={row.id} title={row.title}>
             {row.items.map((it) => (

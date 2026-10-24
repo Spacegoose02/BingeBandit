@@ -15,8 +15,11 @@ type User struct {
 	AllLibraries bool   `json:"allLibraries"`
 	// ProfilePublic lets other users of this server see the profile and stats.
 	ProfilePublic bool    `json:"profilePublic"`
+	TOTPEnabled   bool    `json:"totpEnabled"`
+	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
 	PasswordHash  string  `json:"-"`
+	TOTPSecret    string  `json:"-"`
 }
 
 func (s *Store) CountUsers() (int, error) {
@@ -36,11 +39,12 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, password_hash`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.PasswordHash); err != nil {
+	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
+		&u.PasswordHash, &u.TOTPSecret); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -165,11 +169,8 @@ func (s *Store) UserBySession(token string) (*User, error) {
 		return nil, ErrNotFound
 	}
 	h := hashToken(token)
-	var lastSeen int64
-	var u User
-	err := s.db.QueryRow(`SELECT u.id, u.username, u.is_admin, u.created_at, u.all_libraries, u.profile_public, u.password_hash, s.last_seen
-		FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`, h).
-		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.PasswordHash, &lastSeen)
+	var uid, lastSeen int64
+	err := s.db.QueryRow(`SELECT user_id, last_seen FROM sessions WHERE token_hash = ?`, h).Scan(&uid, &lastSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -180,7 +181,53 @@ func (s *Store) UserBySession(token string) (*User, error) {
 	if t := now(); t-lastSeen > 300 {
 		s.db.Exec(`UPDATE sessions SET last_seen = ? WHERE token_hash = ?`, t, h)
 	}
-	return &u, nil
+	return s.UserByID(uid)
+}
+
+// Session is a signed-in device. ID is a short prefix of the token hash,
+// enough to identify it without revealing anything usable.
+type Session struct {
+	ID        string `json:"id"`
+	Device    string `json:"device"`
+	IP        string `json:"ip"`
+	CreatedAt int64  `json:"createdAt"`
+	LastSeen  int64  `json:"lastSeen"`
+	Current   bool   `json:"current"`
+}
+
+func (s *Store) Sessions(userID int64, currentToken string) ([]Session, error) {
+	cur := hashToken(currentToken)
+	rows, err := s.db.Query(`SELECT token_hash, device, ip, created_at, last_seen FROM sessions WHERE user_id = ? ORDER BY last_seen DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Session{}
+	for rows.Next() {
+		var h string
+		var se Session
+		if err := rows.Scan(&h, &se.Device, &se.IP, &se.CreatedAt, &se.LastSeen); err != nil {
+			return nil, err
+		}
+		se.ID, se.Current = h[:16], h == cur
+		out = append(out, se)
+	}
+	return out, rows.Err()
+}
+
+// RevokeSession signs out one of a user's devices by its Session.ID.
+func (s *Store) RevokeSession(userID int64, id string) error {
+	if len(id) != 16 {
+		return ErrNotFound
+	}
+	res, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ? AND substr(token_hash, 1, 16) = ?`, userID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) DeleteSession(token string) error {

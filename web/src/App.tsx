@@ -16,6 +16,7 @@ import LiveGuide from './pages/LiveGuide'
 import RecordingsPage from './pages/Recordings'
 import Search from './pages/Search'
 import Account from './pages/Account'
+import LinkDevice from './pages/LinkDevice'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminLibraries from './pages/admin/Libraries'
 import AdminUsers from './pages/admin/Users'
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="/profile/:username" element={<ProfilePage />} />
           <Route path="/search" element={<Search />} />
           <Route path="/account" element={<Account />} />
+          <Route path="/link" element={<LinkDevice />} />
           <Route path="/admin" element={<RequireAdmin />}>
             <Route index element={<AdminDashboard />} />
             <Route path="libraries" element={<AdminLibraries />} />

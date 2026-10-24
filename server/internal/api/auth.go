@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"bingebandit/internal/store"
@@ -40,6 +41,10 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			token = r.URL.Query().Get("token")
 		}
 		u, err := s.Store.UserBySession(token)
+		if err != nil {
+			// API keys work wherever a session token does (apps, scripts, playlist links).
+			u, err = s.Store.UserByAPIKey(token)
+		}
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "not signed in")
 			return
@@ -79,6 +84,7 @@ type credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Device   string `json:"device"`
+	Code     string `json:"code"` // authenticator or recovery code, when 2FA is on
 }
 
 func validCredentials(c credentials) error {
@@ -146,10 +152,207 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "wrong username or password")
 		return
 	}
+	if u.TOTPEnabled {
+		code := strings.TrimSpace(c.Code)
+		if code == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "Enter the 6-digit code from your authenticator app", "needsCode": true})
+			return
+		}
+		if !validTOTP(u.TOTPSecret, code, time.Now()) && !s.Store.UseRecoveryCode(u.ID, code) {
+			s.limiter.fail(ip)
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "That code didn't work. Try the newest one from your app", "needsCode": true})
+			return
+		}
+	}
 	s.startSession(w, r, u, c.Device)
 }
 
+// ---- two-factor setup ----
+
+func (s *Server) setup2FA(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	if u.TOTPEnabled {
+		writeErr(w, http.StatusConflict, "two-factor sign-in is already on")
+		return
+	}
+	secret := newTOTPSecret()
+	if err := s.Store.SetTOTPSecret(u.ID, secret); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	issuer := s.Store.Setting(store.SettingServerName)
+	writeJSON(w, http.StatusOK, map[string]string{"secret": secret, "uri": totpURI(secret, u.Username, issuer)})
+}
+
+func (s *Server) enable2FA(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u := currentUser(r)
+	if u.TOTPSecret == "" || !validTOTP(u.TOTPSecret, req.Code, time.Now()) {
+		writeErr(w, http.StatusBadRequest, "that code didn't match; check your phone's clock and try the newest code")
+		return
+	}
+	codes := newRecoveryCodes(8)
+	if err := s.Store.EnableTOTP(u.ID, codes); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"recoveryCodes": codes})
+}
+
+func (s *Server) disable2FA(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u := currentUser(r)
+	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)) != nil {
+		writeErr(w, http.StatusUnauthorized, "wrong password")
+		return
+	}
+	if err := s.Store.DisableTOTP(u.ID); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// adminReset2FA turns off 2FA for a user who lost their phone and codes.
+func (s *Server) adminReset2FA(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if err := s.Store.DisableTOTP(id); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ---- devices and API keys ----
+
+func (s *Server) sessions(w http.ResponseWriter, r *http.Request) {
+	list, err := s.Store.Sessions(currentUser(r).ID, requestToken(r))
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *Server) revokeSession(w http.ResponseWriter, r *http.Request) {
+	if err := s.Store.RevokeSession(currentUser(r).ID, chi.URLParam(r, "id")); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) apiKeys(w http.ResponseWriter, r *http.Request) {
+	keys, err := s.Store.APIKeys(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, keys)
+}
+
+func (s *Server) createAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(r, &req); err != nil || store.NormalizeName(req.Name) == "" {
+		writeErr(w, http.StatusBadRequest, "name the key so you know where it's used")
+		return
+	}
+	key, k, err := s.Store.CreateAPIKey(currentUser(r).ID, store.NormalizeName(req.Name))
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"key": key, "info": k})
+}
+
+func (s *Server) deleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if err := s.Store.DeleteAPIKey(currentUser(r).ID, id); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) setShareActivity(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Share bool `json:"share"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.Store.SetShareActivity(currentUser(r).ID, req.Share); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// friendsActivity shows what people who opted in are watching right now
+// (never IPs or devices), skipping items the viewer can't access.
+func (s *Server) friendsActivity(w http.ResponseWriter, r *http.Request) {
+	me := currentUser(r)
+	sharing := map[int64]bool{}
+	if users, err := s.Store.ListUsers(); err == nil {
+		for _, u := range users {
+			sharing[u.ID] = u.ShareActivity && u.ID != me.ID
+		}
+	}
+	type friend struct {
+		Username string  `json:"username"`
+		ItemID   int64   `json:"itemId"`
+		Title    string  `json:"title"`
+		Subtitle string  `json:"subtitle,omitempty"`
+		Poster   string  `json:"poster,omitempty"`
+		Position float64 `json:"position"`
+		Duration float64 `json:"duration"`
+		Paused   bool    `json:"paused"`
+	}
+	out := []friend{}
+	seen := map[int64]bool{}
+	for _, np := range s.Activity.List() {
+		if !sharing[np.UserID] || seen[np.UserID] {
+			continue
+		}
+		if _, err := s.Store.Item(me.ID, np.ItemID); err != nil {
+			continue
+		}
+		seen[np.UserID] = true
+		out = append(out, friend{np.Username, np.ItemID, np.Title, np.Subtitle, np.Poster, np.Position, np.Duration, np.Paused})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u *store.User, device string) {
+	s.startSessionFor(w, r, u, device, true)
+}
+
+// startSessionFor creates a session and returns its token; setCookie also
+// signs in the requesting browser.
+func (s *Server) startSessionFor(w http.ResponseWriter, r *http.Request, u *store.User, device string, setCookie bool) {
 	b := make([]byte, 32)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
@@ -160,10 +363,12 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, u *store.U
 		writeStoreErr(w, err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-		Secure: r.TLS != nil, MaxAge: 365 * 24 * 3600,
-	})
+	if setCookie {
+		http.SetCookie(w, &http.Cookie{
+			Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			Secure: r.TLS != nil, MaxAge: 365 * 24 * 3600,
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
 }
 

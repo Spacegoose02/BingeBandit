@@ -43,6 +43,14 @@ function Sources() {
   const { data, reload } = useApi<LiveSource[]>('/api/admin/live/sources', 5000)
   const [editing, setEditing] = useState<Partial<LiveSource> | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
+  const [appKey, setAppKey] = useState<string | null>(null)
+  const createAppKey = async () => {
+    try {
+      setAppKey((await api.post<{ key: string }>('/api/me/keys', { name: 'IPTV app' })).key)
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
   const refresh = async (s: LiveSource) => {
     setBusy(s.id)
     await api.post(`/api/admin/live/sources/${s.id}/refresh`).catch((e) => alert(e.message))
@@ -98,12 +106,21 @@ function Sources() {
       <h2 className="section-title">Use these channels in other apps</h2>
       <div className="panel facts">
         <dt>M3U playlist</dt>
-        <dd className="mono">{origin}/api/live/playlist.m3u?token=…</dd>
+        <dd className="mono" style={{ wordBreak: 'break-all' }}>{origin}/api/live/playlist.m3u?token={appKey ?? '…'}</dd>
         <dt>XMLTV guide</dt>
-        <dd className="mono">{origin}/api/live/epg.xml?token=…</dd>
+        <dd className="mono" style={{ wordBreak: 'break-all' }}>{origin}/api/live/epg.xml?token={appKey ?? '…'}</dd>
         <dd className="muted small" style={{ gridColumn: '1 / -1' }}>
-          Open the playlist while signed in to download it with your token filled in. Apps like TiviMate or VLC then get the shared, fail-over streams.
+          {appKey
+            ? "Copy these into TiviMate, VLC or another IPTV app now; the key won't be shown again. Delete it under Account → API keys to cut the app off."
+            : 'Apps like TiviMate or VLC get the shared, fail-over streams. Create an API key for the app so it never needs your password.'}
         </dd>
+        {!appKey && (
+          <dd style={{ gridColumn: '1 / -1' }}>
+            <button className="btn btn-glass btn-sm" onClick={createAppKey}>
+              <Icon name="key" size={16} /> Create a key for an IPTV app
+            </button>
+          </dd>
+        )}
       </div>
       {editing && <SourceEditor source={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
     </>
