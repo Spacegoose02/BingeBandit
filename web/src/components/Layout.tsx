@@ -52,6 +52,14 @@ export default function Layout() {
                 <Icon name="users" />
                 <span>Users</span>
               </NavLink>
+              <NavLink to="/admin/tasks" className="nav-item">
+                <Icon name="clock" />
+                <span>Tasks</span>
+              </NavLink>
+              <NavLink to="/admin/logs" className="nav-item">
+                <Icon name="terminal" />
+                <span>Logs</span>
+              </NavLink>
               <NavLink to="/admin/settings" className="nav-item">
                 <Icon name="settings" />
                 <span>Settings</span>

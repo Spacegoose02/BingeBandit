@@ -43,6 +43,8 @@ const paths: Record<string, string> = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   stack: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  terminal: 'M3 5h18v14H3zM7 9l3 3-3 3M12 15h5',
 }
 
 export type IconName = keyof typeof paths

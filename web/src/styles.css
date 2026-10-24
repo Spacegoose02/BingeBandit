@@ -560,6 +560,39 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .collection-head { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 .collection-head .muted svg { display: inline; vertical-align: -2px; }
 
+/* ---------- tasks & logs ---------- */
+.task-row { display: flex; align-items: center; gap: 16px; padding: 14px 12px; flex-wrap: wrap; }
+.task-row + .task-row { border-top: 1px solid var(--border); }
+.task-row select { width: auto; padding: 7px 10px; font-size: 14px; }
+.task-name { font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-meta { margin-top: 4px; }
+.task-meta svg { display: inline; vertical-align: -2px; }
+.task-error { color: var(--danger); }
+.switch { position: relative; width: 40px; height: 24px; flex: none; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 99px; background: var(--surface-3); transition: background 0.2s; pointer-events: none; }
+.switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(16px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.logs-page { display: flex; flex-direction: column; height: 100vh; padding-bottom: 24px; }
+.log-filter { width: 200px !important; padding: 7px 12px !important; font-size: 14px !important; }
+.log-box {
+  flex: 1;
+  min-height: 300px;
+  overflow: auto;
+  background: #07080a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.log-line { white-space: pre-wrap; word-break: break-word; color: #b8c0ca; }
+.log-line.warn { color: var(--warn); }
+.log-line.error { color: var(--danger); }
+
 /* ---------- player ---------- */
 .player { position: fixed; inset: 0; background: #000; overflow: hidden; cursor: none; user-select: none; }
 .player.show-controls { cursor: default; }

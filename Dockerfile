@@ -18,9 +18,12 @@ COPY --from=web /src/server/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bingebandit ./cmd/bingebandit
 
 FROM debian:bookworm-slim
-# ffmpeg for probing/transcoding; VA-API drivers for Intel/AMD hardware transcoding.
+ARG TARGETARCH
+# ffmpeg for probing/transcoding; VA-API drivers for AMD (mesa) and, on x86
+# only since the package doesn't exist for arm64, Intel hardware transcoding.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates tzdata mesa-va-drivers intel-media-va-driver \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates tzdata mesa-va-drivers \
+ && if [ "$TARGETARCH" = "amd64" ]; then apt-get install -y --no-install-recommends intel-media-va-driver; fi \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /bingebandit /usr/local/bin/bingebandit
 ENV BB_DATA_DIR=/config BB_ADDR=:8484

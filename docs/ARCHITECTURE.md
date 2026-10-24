@@ -22,6 +22,8 @@
 | `server/internal/library` | Folder walking, filename parsing (`names.go`, with tests), scan status, scheduled rescans |
 | `server/internal/media` | ffprobe wrapper, Windows "no console window" helper |
 | `server/internal/metadata` | TMDB client, metadata refresh for movies/shows/seasons/episodes, image cache |
+| `server/internal/tasks` | Scheduler (1-minute tick, maintenance window, Run now) and the built-in tasks: scan, metadata refresh, backup, optimize, cache cleanup, media analysis |
+| `server/internal/logs` | `log` output tee: console, rotating `<data>/logs/bingebandit.log` (10 MB × 3) and a 3000-line ring buffer for the Logs page |
 | `server/internal/stream` | Transcode sessions (ffmpeg → HLS segments), Now Playing tracker |
 | `server/internal/api` | HTTP handlers. `auth.go`, `browse.go` (home/items/search), `playback.go`, `admin.go` |
 | `server/internal/web` | `go:embed` of `dist/`, which `npm run build` in `web/` fills |
@@ -37,6 +39,12 @@
 - **Locked fields:** `items.locked` is a JSON array of field names (`title`, `poster`, `collections`…; see `store.LockableFields`). `UpdateMetadata` wraps every lockable column in `CASE WHEN <locked> THEN <current> ELSE ? END`, so provider refreshes skip locked fields without a read-modify-write. Admin edits replace the lock list; choosing artwork adds its lock.
 - **Collections** (`collections`, `collection_items`) belong to one library. Members are explicit links (TMDB `belongs_to_collection`, or the admin's Edit → Tags) **plus**, for smart collections, every item whose `labels` contains `label_rule` (case-insensitive). The membership test is one SQL fragment, `store.memberOf`.
 - **Library access:** `users.all_libraries` (default on), or the `user_libraries` rows. Every user-facing item query includes `store.visible`, which binds `@uid`. `uid 0` means the server itself and sees everything. Handlers that start from a library or file id check `CanSeeLibrary`, or load the item as the user, and answer 404 so hidden content isn't revealed.
+
+## Scanning
+
+- **Full scan** (`Scanner.Scan`, `ScanWait`): walks every library folder, then processes files with 4 workers (`probeWorkers`). Each file becomes an item upsert, plus an ffprobe run if its size or mtime changed. Then it prunes, then fetches metadata for new items.
+- **Folder watching** (`library/watch.go`, fsnotify): watches every folder under each library root and re-reads the library list every 2 minutes. An event queues its folder for that library. After 30 quiet seconds (copies in progress keep resetting the timer), `ScanFolders` walks just those folders and `PruneUnder` prunes only below them. Network shares may not emit events, so the scheduled full scan is the backstop.
+- Only one scan job runs per library at a time (`ErrRunning`). The watcher re-queues if it hits a running scan.
 
 ## Auth
 

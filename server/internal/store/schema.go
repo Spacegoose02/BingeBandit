@@ -148,4 +148,20 @@ INSERT OR IGNORE INTO collection_items (collection_id, item_id)
 	SELECT c.id, i.id FROM items i JOIN collections c ON c.library_id = i.library_id AND c.tmdb_id = i.collection_id
 	WHERE i.collection_id > 0;
 `,
+	// 3: scheduled tasks. The old scan_interval_hours setting seeds the scan task.
+	`
+CREATE TABLE tasks (
+	id               TEXT PRIMARY KEY,
+	enabled          INTEGER NOT NULL,
+	interval_hours   INTEGER NOT NULL,
+	last_run         INTEGER NOT NULL DEFAULT 0,
+	last_duration_ms INTEGER NOT NULL DEFAULT 0,
+	last_result      TEXT NOT NULL DEFAULT '',
+	last_error       TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO tasks (id, enabled, interval_hours)
+	SELECT 'scan_libraries', CAST(value AS INTEGER) > 0, MAX(CAST(value AS INTEGER), 1)
+	FROM settings WHERE key = 'scan_interval_hours';
+DELETE FROM settings WHERE key = 'scan_interval_hours';
+`,
 }

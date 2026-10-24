@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"unicode/utf8"
 )
 
 type Stream struct {
@@ -123,14 +124,46 @@ func (s *Store) PruneLibrary(libraryID, gen int64) (int64, error) {
 		return 0, err
 	}
 	removed, _ := res.RowsAffected()
+	if err := deleteOrphans(tx, libraryID); err != nil {
+		return 0, err
+	}
+	return removed, tx.Commit()
+}
+
+// PruneUnder is PruneLibrary limited to files below the given folders
+// (each ending in a path separator), for partial scans.
+func (s *Store) PruneUnder(libraryID, gen int64, prefixes []string) (int64, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	var removed int64
+	for _, p := range prefixes {
+		res, err := tx.Exec(`DELETE FROM media_files WHERE scan_gen != ? AND substr(path, 1, ?) = ?
+			AND item_id IN (SELECT id FROM items WHERE library_id = ?)`, gen, utf8.RuneCountInString(p), p, libraryID) // substr counts characters
+		if err != nil {
+			return 0, err
+		}
+		n, _ := res.RowsAffected()
+		removed += n
+	}
+	if err := deleteOrphans(tx, libraryID); err != nil {
+		return 0, err
+	}
+	return removed, tx.Commit()
+}
+
+// deleteOrphans removes movies/episodes without files, then empty seasons and shows.
+func deleteOrphans(tx *sql.Tx, libraryID int64) error {
 	for _, q := range []string{
 		`DELETE FROM items WHERE library_id = ? AND kind IN ('movie','episode') AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f.item_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'season' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'show' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 	} {
 		if _, err := tx.Exec(q, libraryID); err != nil {
-			return 0, err
+			return err
 		}
 	}
-	return removed, tx.Commit()
+	return nil
 }

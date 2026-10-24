@@ -32,6 +32,10 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Collections: TMDB collections automatically, hand-picked collections, and **smart collections** that include everything with a label ("Original Disney films") |
 | ✅ | Fix match (search TMDB and pick) |
 | ✅ | Admin picks which libraries each user can see |
+| ✅ | Scan settings: watch folders for changes (partial scan of just the changed folders), scheduled full scans, empty trash for removed files |
+| ✅ | Scheduled tasks with a maintenance window: database backup (to any folder, e.g. a NAS, with retention), optimize database, clean up cache, refresh metadata, media analysis |
+| ✅ | Logging and detailed info: Logs page with live tail, filters and download; rotating log file |
+| ✅ | Parallel probing for faster first scans |
 | | ThePosterDB built-in search (no public API; needs a scraper) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
 | | Smart collections by genre, studio or year (today they work by label) |
@@ -39,9 +43,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
-- Scan settings: watch folders for changes (partial scan), scan on a schedule, empty trash toggle.
-- Scheduled tasks (with run window): DB backup (+ remote backup), optimize DB, clear old cache, refresh metadata periodically, media analysis, extensive analysis during maintenance.
-- Logging and detailed info page.
+- Remote backup targets beyond a folder path (S3/Backblaze), and restoring a backup from the UI.
 - Tone mapping algorithm choice and hardware decoding device selection.
 - Image-based subtitles (PGS/VobSub) burned in, external `.srt` sidecar files, subtitle settings (size/style), auto-pick English audio track.
 - Retry failed playback automatically. Auto quality when bandwidth drops (adaptive bitrate ladder).

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import { useAuth } from '../../auth'
 import { useApi, useDocumentTitle } from '../../hooks'
@@ -96,10 +97,14 @@ export default function AdminSettings() {
 
         <section className="panel form">
           <h3>Library</h3>
-          <label>
-            Rescan libraries every (hours, 0 = off)
-            <input type="number" min={0} max={168} value={s.scan_interval_hours ?? '6'} onChange={set('scan_interval_hours')} />
+          <label className="check">
+            <input type="checkbox" checked={s.watch_folders === 'true'} onChange={set('watch_folders')} />
+            Watch library folders and add new files automatically
           </label>
+          <p className="muted small">
+            Full rescans, backups and cleanup are under <Link to="/admin/tasks">Scheduled Tasks</Link>. Some network shares don't report changes;
+            the scheduled scan still finds those.
+          </p>
           <label className="check">
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
             Let users download original files

@@ -14,6 +14,8 @@ import AdminDashboard from './pages/admin/Dashboard'
 import AdminLibraries from './pages/admin/Libraries'
 import AdminUsers from './pages/admin/Users'
 import AdminSettings from './pages/admin/Settings'
+import AdminTasks from './pages/admin/Tasks'
+import AdminLogs from './pages/admin/Logs'
 
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
@@ -59,6 +61,8 @@ export default function App() {
             <Route path="libraries" element={<AdminLibraries />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="tasks" element={<AdminTasks />} />
+            <Route path="logs" element={<AdminLogs />} />
           </Route>
         </Route>
       </Route>

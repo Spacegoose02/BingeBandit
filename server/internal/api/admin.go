@@ -2,7 +2,9 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -84,10 +86,24 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "unknown hardware encoder")
 		return
 	}
-	if dir := in[store.SettingTranscodeDir]; dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			writeErr(w, http.StatusBadRequest, "transcode folder is not writable: "+err.Error())
-			return
+	for key, label := range map[string]string{store.SettingTranscodeDir: "transcode", store.SettingBackupDir: "backup"} {
+		if dir := in[key]; dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				writeErr(w, http.StatusBadRequest, label+" folder is not writable: "+err.Error())
+				return
+			}
+		}
+	}
+	for key, rng := range map[string][2]int{
+		store.SettingMaintenanceStart: {0, 23},
+		store.SettingMaintenanceEnd:   {0, 23},
+		store.SettingBackupKeep:       {1, 365},
+	} {
+		if v, ok := in[key]; ok {
+			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {
+				writeErr(w, http.StatusBadRequest, fmt.Sprintf("%s must be a number from %d to %d", key, rng[0], rng[1]))
+				return
+			}
 		}
 	}
 	if err := s.Store.SetSettings(in); err != nil {

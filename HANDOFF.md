@@ -4,7 +4,16 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: library admin tools (M2)
+## Latest: server maintenance (M2)
+
+- **Folder watching:** new or deleted files show up about 30s after the copy finishes, and only that folder is rescanned. Toggle it in Settings → Library.
+- **Scheduled Tasks page** (`/admin/tasks`): scan, metadata refresh, DB backup (folder and retention configurable), optimize, cache cleanup, media analysis. Each task has an enable switch, an interval and Run now. Maintenance tasks wait for the window (default 2–5 AM).
+- **Logs page** (`/admin/logs`): live tail with filter and level views; the log file is in `<data>/logs/`.
+- Scans probe 4 files in parallel.
+- Migration 3 moves the old `scan_interval_hours` setting into the scan task.
+- **Docker fix:** the arm64 image build failed on `intel-media-va-driver`, which is x86-only; it's now installed on amd64 only. The v0.1.0 and v0.2.0 Docker images did not publish; the next tag will.
+
+## Library admin tools (M2)
 
 - **Edit dialog** (pencil on any item page, admins only): Details, Tags (genres, labels, collections), Artwork (TMDB picks, URL, upload) and Advanced (episode order, shows only). Editing a field locks it; the lock icon toggles it.
 - **Fix match** (magnifier on movies and shows): searches TMDB, re-points the item and refreshes it.
@@ -43,9 +52,9 @@ _Last updated: 2026-10-23, first half of Milestone 2._
 ## Known gaps and next steps
 
 1. Add a TMDB key and run "Refresh metadata". Check movie/show matching on a real library and tune `library/names.go` with new test cases.
-2. Rest of M2: scan on file changes, scheduled tasks (DB backup, cache cleanup), TheTVDB, OMDb ratings (see ROADMAP).
+2. Rest of M2: TheTVDB, OMDb ratings, image subtitles, transcode throttling (see ROADMAP).
 3. Transcoding: throttle ffmpeg so it doesn't run far ahead; add an adaptive bitrate ladder; burn in image subtitles; add external `.srt` sidecars.
-4. Scanning probes files one at a time. Add a small worker pool for large first scans.
+4. No UI to restore a database backup yet: stop the server and copy the backup over `bingebandit.db`.
 5. Transcode sessions don't re-check library access after they start (they're bound to the user who started them).
 6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for capable clients.
 7. Then start M4 Live TV, the biggest differentiator.

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -14,9 +15,11 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"bingebandit/internal/library"
+	"bingebandit/internal/logs"
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
+	"bingebandit/internal/tasks"
 	"bingebandit/internal/web"
 )
 
@@ -28,16 +31,20 @@ type Server struct {
 	Artwork    *metadata.Artwork
 	Transcoder *stream.Manager
 	Activity   *stream.Activity
+	Tasks      *tasks.Scheduler
+	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
 	FFmpeg     string
 	FFprobe    string
 
 	limiter *loginLimiter
+	ctx     context.Context // server lifetime, for work that outlives a request
 }
 
-func (s *Server) Router() http.Handler {
+func (s *Server) Router(ctx context.Context) http.Handler {
 	s.limiter = newLoginLimiter()
+	s.ctx = ctx
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(requestLog)
@@ -106,6 +113,12 @@ func (s *Server) Router() http.Handler {
 				r.Post("/libraries/{id}/collections", s.createCollection)
 				r.Put("/collections/{id}", s.updateCollection)
 				r.Delete("/collections/{id}", s.deleteCollection)
+
+				r.Get("/tasks", s.listTasks)
+				r.Put("/tasks/{id}", s.configureTask)
+				r.Post("/tasks/{id}/run", s.runTask)
+				r.Get("/logs", s.logLines)
+				r.Get("/logs/download", s.downloadLog)
 
 				r.Put("/users/{id}/libraries", s.setUserLibraries)
 				r.Get("/users", s.users)

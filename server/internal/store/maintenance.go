@@ -1,0 +1,143 @@
+package store
+
+import (
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"strings"
+	"time"
+)
+
+type TaskState struct {
+	ID             string `json:"id"`
+	Enabled        bool   `json:"enabled"`
+	IntervalHours  int    `json:"intervalHours"`
+	LastRun        int64  `json:"lastRun"`
+	LastDurationMs int64  `json:"lastDurationMs"`
+	LastResult     string `json:"lastResult,omitempty"`
+	LastError      string `json:"lastError,omitempty"`
+}
+
+// TaskState returns the saved state, or ok=false if the task was never configured.
+func (s *Store) TaskState(id string) (TaskState, bool, error) {
+	t := TaskState{ID: id}
+	err := s.db.QueryRow(`SELECT enabled, interval_hours, last_run, last_duration_ms, last_result, last_error FROM tasks WHERE id = ?`, id).
+		Scan(&t.Enabled, &t.IntervalHours, &t.LastRun, &t.LastDurationMs, &t.LastResult, &t.LastError)
+	if errors.Is(err, sql.ErrNoRows) {
+		return t, false, nil
+	}
+	return t, err == nil, err
+}
+
+func (s *Store) SetTaskConfig(id string, enabled bool, intervalHours int) error {
+	_, err := s.db.Exec(`INSERT INTO tasks (id, enabled, interval_hours) VALUES (?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled, interval_hours = excluded.interval_hours`,
+		id, boolInt(enabled), intervalHours)
+	return err
+}
+
+// RecordTaskRun stores the outcome of a run. The row must exist (SetTaskConfig).
+func (s *Store) RecordTaskRun(id string, started time.Time, result string, runErr error) error {
+	msg := ""
+	if runErr != nil {
+		msg = runErr.Error()
+	}
+	_, err := s.db.Exec(`UPDATE tasks SET last_run = ?, last_duration_ms = ?, last_result = ?, last_error = ? WHERE id = ?`,
+		started.Unix(), time.Since(started).Milliseconds(), result, msg, id)
+	return err
+}
+
+// Backup writes a consistent copy of the live database to path.
+func (s *Store) Backup(path string) error {
+	_, err := s.db.Exec(`VACUUM INTO ?`, path)
+	return err
+}
+
+// Optimize refreshes query planner statistics and compacts the file.
+func (s *Store) Optimize() error {
+	for _, q := range []string{`PRAGMA optimize`, `ANALYZE`, `VACUUM`, `PRAGMA wal_checkpoint(TRUNCATE)`} {
+		if _, err := s.db.Exec(q); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ReferencedImages lists every image reference in use (items, credits,
+// collections), so cache cleanup knows what to keep.
+func (s *Store) ReferencedImages() (map[string]bool, error) {
+	refs := map[string]bool{}
+	rows, err := s.db.Query(`SELECT poster, backdrop, logo, credits FROM items
+		UNION ALL SELECT poster, backdrop, '', '[]' FROM collections`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var poster, backdrop, logo, credits string
+		if err := rows.Scan(&poster, &backdrop, &logo, &credits); err != nil {
+			return nil, err
+		}
+		for _, r := range []string{poster, backdrop, logo} {
+			if r != "" {
+				refs[r] = true
+			}
+		}
+		if strings.Contains(credits, "tmdb:") {
+			var cs []Credit
+			json.Unmarshal([]byte(credits), &cs)
+			for _, c := range cs {
+				if c.Photo != "" {
+					refs[c.Photo] = true
+				}
+			}
+		}
+	}
+	return refs, rows.Err()
+}
+
+// FileSizes maps media file id → size, for validating cached subtitles.
+func (s *Store) FileSizes() (map[int64]int64, error) {
+	rows, err := s.db.Query(`SELECT id, size FROM media_files`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int64{}
+	for rows.Next() {
+		var id, size int64
+		if err := rows.Scan(&id, &size); err != nil {
+			return nil, err
+		}
+		out[id] = size
+	}
+	return out, rows.Err()
+}
+
+// UnprobedFiles lists files whose ffprobe analysis failed or never ran.
+func (s *Store) UnprobedFiles(limit int) ([]*MediaFile, error) {
+	rows, err := s.db.Query(`SELECT `+fileCols+` FROM media_files WHERE probed_at = 0 LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*MediaFile{}
+	for rows.Next() {
+		f, err := scanFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// UpdateProbe saves fresh ffprobe results without touching scan bookkeeping.
+func (s *Store) UpdateProbe(f *MediaFile) error {
+	streams, _ := json.Marshal(f.Streams)
+	_, err := s.db.Exec(`UPDATE media_files SET container = ?, duration = ?, bitrate = ?, video_codec = ?, width = ?, height = ?,
+		bit_depth = ?, hdr = ?, audio_codec = ?, audio_channels = ?, streams = ?, probed_at = ? WHERE id = ?`,
+		f.Container, f.Duration, f.Bitrate, f.VideoCodec, f.Width, f.Height, f.BitDepth, boolInt(f.HDR),
+		f.AudioCodec, f.AudioChannels, string(streams), f.ProbedAt, f.ID)
+	return err
+}

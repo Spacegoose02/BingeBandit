@@ -97,6 +97,54 @@ func TestLibraryVisibility(t *testing.T) {
 	}
 }
 
+func TestPruneUnderAndMaintenance(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "TV", Kind: "shows", Paths: []string{}}
+	s.CreateLibrary(lib)
+	sep := string(filepath.Separator)
+	a := addMovie(t, s, lib.ID, "a")
+	b := addMovie(t, s, lib.ID, "b")
+	s.UpsertFile(&MediaFile{ItemID: a, Path: sep + "media" + sep + "Show" + sep + "e1.mkv"}, 1)
+	s.UpsertFile(&MediaFile{ItemID: b, Path: sep + "media" + sep + "Show 2" + sep + "e1.mkv"}, 1)
+
+	// Rescanning "Show" at generation 2 found nothing: only its file goes,
+	// not the one in "Show 2" which merely shares the name prefix.
+	removed, err := s.PruneUnder(lib.ID, 2, []string{sep + "media" + sep + "Show" + sep})
+	if err != nil || removed != 1 {
+		t.Fatalf("PruneUnder removed %d, err %v; want 1", removed, err)
+	}
+	if _, err := s.Item(0, a); !errors.Is(err, ErrNotFound) {
+		t.Error("item without files should be deleted")
+	}
+	if _, err := s.Item(0, b); err != nil {
+		t.Error("item outside the pruned folder was deleted")
+	}
+
+	backup := filepath.Join(t.TempDir(), "backup.db")
+	if err := s.Backup(backup); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	copyDB, err := Open(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyDB.Item(0, b); err != nil {
+		t.Errorf("backup is missing data: %v", err)
+	}
+	copyDB.Close()
+	if err := s.Optimize(); err != nil {
+		t.Errorf("optimize: %v", err)
+	}
+
+	if err := s.SetTaskConfig("x", true, 12); err != nil {
+		t.Fatal(err)
+	}
+	st, ok, _ := s.TaskState("x")
+	if !ok || !st.Enabled || st.IntervalHours != 12 {
+		t.Errorf("task state = %+v, %v", st, ok)
+	}
+}
+
 func TestCollections(t *testing.T) {
 	s := openTest(t)
 	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}

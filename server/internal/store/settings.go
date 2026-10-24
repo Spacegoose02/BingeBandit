@@ -9,18 +9,26 @@ const (
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
 	SettingAllowDownloads    = "allow_downloads"
-	SettingScanIntervalHours = "scan_interval_hours"
+	SettingWatchFolders      = "watch_folders"
+	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
+	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
+	SettingBackupDir         = "backup_dir"
+	SettingBackupKeep        = "backup_keep"
 )
 
 var SettingDefaults = map[string]string{
-	SettingServerName:        "BingeBandit",
-	SettingTMDBKey:           "",
-	SettingMetadataLanguage:  "en-US",
-	SettingHWEncoder:         "none",
-	SettingTranscodeDir:      "",
-	SettingTonemap:           "true",
-	SettingAllowDownloads:    "false",
-	SettingScanIntervalHours: "6",
+	SettingServerName:       "BingeBandit",
+	SettingTMDBKey:          "",
+	SettingMetadataLanguage: "en-US",
+	SettingHWEncoder:        "none",
+	SettingTranscodeDir:     "",
+	SettingTonemap:          "true",
+	SettingAllowDownloads:   "false",
+	SettingWatchFolders:     "true",
+	SettingMaintenanceStart: "2",
+	SettingMaintenanceEnd:   "5",
+	SettingBackupDir:        "",
+	SettingBackupKeep:       "7",
 }
 
 func (s *Store) Setting(key string) string {
@@ -46,7 +54,10 @@ func (s *Store) Settings() (map[string]string, error) {
 		if err := rows.Scan(&k, &v); err != nil {
 			return nil, err
 		}
-		out[k] = v
+		// Retired keys may linger in old databases; never hand them out.
+		if _, known := SettingDefaults[k]; known {
+			out[k] = v
+		}
 	}
 	return out, rows.Err()
 }

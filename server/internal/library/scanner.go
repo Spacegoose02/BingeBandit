@@ -10,9 +10,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"bingebandit/internal/media"
@@ -46,24 +46,49 @@ func NewScanner(st *store.Store, meta *metadata.Service, ffprobe string) *Scanne
 
 var ErrRunning = errors.New("a scan is already running for this library")
 
+// probeWorkers is how many files are probed at once. ffprobe mostly waits on
+// disk/network, so a few in parallel speeds up big first scans a lot.
+const probeWorkers = 4
+
+type job func(context.Context, *store.Library, *Status) error
+
 // Scan starts a background scan; metadata for new items is fetched afterwards.
-func (s *Scanner) Scan(libraryID int64) error {
-	return s.start(libraryID, func(ctx context.Context, lib *store.Library, st *Status) error {
-		if err := s.scanFiles(ctx, lib, st); err != nil {
+func (s *Scanner) Scan(libraryID int64) error { return s.start(libraryID, false, s.fullScan) }
+
+// ScanWait is Scan but blocks until it finishes (scheduled tasks).
+func (s *Scanner) ScanWait(libraryID int64) error { return s.start(libraryID, true, s.fullScan) }
+
+// RefreshMetadata re-fetches metadata for every item in a library, in the background.
+func (s *Scanner) RefreshMetadata(libraryID int64) error { return s.start(libraryID, false, s.refreshAll) }
+
+// RefreshMetadataWait is RefreshMetadata but blocks until it finishes.
+func (s *Scanner) RefreshMetadataWait(libraryID int64) error {
+	return s.start(libraryID, true, s.refreshAll)
+}
+
+// ScanFolders rescans only the given folders of a library and blocks until
+// done. Folder watching uses it so a new episode doesn't trigger a full scan.
+func (s *Scanner) ScanFolders(libraryID int64, dirs []string) error {
+	return s.start(libraryID, true, func(ctx context.Context, lib *store.Library, st *Status) error {
+		if err := s.scanFolders(ctx, lib, st, dirs); err != nil {
 			return err
 		}
 		return s.fetchMetadata(ctx, lib, st, false)
 	})
 }
 
-// RefreshMetadata re-fetches metadata for every item in a library.
-func (s *Scanner) RefreshMetadata(libraryID int64) error {
-	return s.start(libraryID, func(ctx context.Context, lib *store.Library, st *Status) error {
-		return s.fetchMetadata(ctx, lib, st, true)
-	})
+func (s *Scanner) fullScan(ctx context.Context, lib *store.Library, st *Status) error {
+	if err := s.scanFiles(ctx, lib, st); err != nil {
+		return err
+	}
+	return s.fetchMetadata(ctx, lib, st, false)
 }
 
-func (s *Scanner) start(libraryID int64, fn func(context.Context, *store.Library, *Status) error) error {
+func (s *Scanner) refreshAll(ctx context.Context, lib *store.Library, st *Status) error {
+	return s.fetchMetadata(ctx, lib, st, true)
+}
+
+func (s *Scanner) start(libraryID int64, wait bool, fn job) error {
 	lib, err := s.st.Library(libraryID)
 	if err != nil {
 		return err
@@ -77,7 +102,7 @@ func (s *Scanner) start(libraryID int64, fn func(context.Context, *store.Library
 	s.status[libraryID] = st
 	s.mu.Unlock()
 
-	go func() {
+	run := func() error {
 		err := fn(context.Background(), lib, st)
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -86,7 +111,12 @@ func (s *Scanner) start(libraryID int64, fn func(context.Context, *store.Library
 			st.Error = err.Error()
 			log.Printf("scan %q: %v", lib.Name, err)
 		}
-	}()
+		return err
+	}
+	if wait {
+		return run()
+	}
+	go run()
 	return nil
 }
 
@@ -119,33 +149,39 @@ func (s *Scanner) ScanAll() {
 	}
 }
 
-// RunSchedule rescans libraries whose last scan is older than the configured interval.
-func (s *Scanner) RunSchedule(ctx context.Context) {
-	t := time.NewTicker(10 * time.Minute)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-		hours, _ := strconv.Atoi(s.st.Setting(store.SettingScanIntervalHours))
-		if hours <= 0 {
-			continue
-		}
-		libs, err := s.st.Libraries()
+type found struct{ root, path string }
+
+// walk lists video files under start (root or a folder inside it).
+// complete is false if any folder could not be read.
+func walk(lib *store.Library, root, start string) (files []found, complete bool) {
+	complete = true
+	filepath.WalkDir(start, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			continue
-		}
-		for _, l := range libs {
-			if time.Since(time.Unix(l.LastScan, 0)) >= time.Duration(hours)*time.Hour {
-				s.Scan(l.ID)
+			log.Printf("scan %q: %v", lib.Name, err)
+			if d != nil && d.IsDir() {
+				complete = false
+				return fs.SkipDir
 			}
+			return nil
 		}
-	}
+		if d.IsDir() {
+			if p != root && skipDir(d.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if isVideo(d.Name()) && !isSample(d.Name()) {
+			files = append(files, found{root, p})
+		}
+		return nil
+	})
+	return files, complete
 }
 
-type found struct{ root, path string }
+func reachable(dir string) bool {
+	info, err := os.Stat(dir)
+	return err == nil && info.IsDir()
+}
 
 func (s *Scanner) scanFiles(ctx context.Context, lib *store.Library, st *Status) error {
 	gen := time.Now().UnixNano()
@@ -153,45 +189,18 @@ func (s *Scanner) scanFiles(ctx context.Context, lib *store.Library, st *Status)
 	var files []found
 	for _, root := range lib.Paths {
 		root = filepath.Clean(root)
-		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		if !reachable(root) {
 			// An offline drive must not wipe the library, so skip pruning.
-			log.Printf("scan %q: root %s unavailable: %v", lib.Name, root, err)
+			log.Printf("scan %q: folder %s is unavailable; keeping its items", lib.Name, root)
 			complete = false
 			continue
 		}
-		filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				log.Printf("scan %q: %v", lib.Name, err)
-				if d != nil && d.IsDir() {
-					complete = false
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if d.IsDir() {
-				if p != root && skipDir(d.Name()) {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			if isVideo(d.Name()) && !isSample(d.Name()) {
-				files = append(files, found{root, p})
-			}
-			return nil
-		})
+		f, ok := walk(lib, root, root)
+		files, complete = append(files, f...), complete && ok
 	}
-	s.update(st, func(st *Status) { st.Found = len(files) })
-
-	for i, f := range files {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if err := s.processFile(ctx, lib, f, gen); err != nil {
-			log.Printf("scan %q: %v", lib.Name, err)
-		}
-		s.update(st, func(st *Status) { st.Processed = i + 1 })
+	if err := s.processAll(ctx, lib, st, files, gen); err != nil {
+		return err
 	}
-
 	if complete {
 		removed, err := s.st.PruneLibrary(lib.ID, gen)
 		if err != nil {
@@ -202,6 +211,74 @@ func (s *Scanner) scanFiles(ctx context.Context, lib *store.Library, st *Status)
 		}
 	}
 	return s.st.SetLibraryScanned(lib.ID)
+}
+
+// scanFolders processes files under dirs and prunes only within them.
+func (s *Scanner) scanFolders(ctx context.Context, lib *store.Library, st *Status, dirs []string) error {
+	gen := time.Now().UnixNano()
+	var files []found
+	var prefixes []string
+	for _, d := range dirs {
+		d = filepath.Clean(d)
+		root := rootFor(lib, d)
+		if root == "" || !reachable(root) {
+			continue
+		}
+		complete := true
+		if reachable(d) {
+			var f []found
+			f, complete = walk(lib, root, d)
+			files = append(files, f...)
+		}
+		if complete {
+			prefixes = append(prefixes, strings.TrimSuffix(d, string(filepath.Separator))+string(filepath.Separator))
+		}
+	}
+	if err := s.processAll(ctx, lib, st, files, gen); err != nil {
+		return err
+	}
+	removed, err := s.st.PruneUnder(lib.ID, gen, prefixes)
+	if err != nil {
+		return fmt.Errorf("prune: %w", err)
+	}
+	log.Printf("scan %q: rescanned %d changed folder(s): %d files, %d removed", lib.Name, len(dirs), len(files), removed)
+	return nil
+}
+
+// rootFor returns the library folder containing path, or "".
+func rootFor(lib *store.Library, path string) string {
+	best := ""
+	for _, r := range lib.Paths {
+		r = filepath.Clean(r)
+		if (path == r || strings.HasPrefix(path, r+string(filepath.Separator))) && len(r) > len(best) {
+			best = r
+		}
+	}
+	return best
+}
+
+func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status, files []found, gen int64) error {
+	s.update(st, func(st *Status) { st.Found, st.Processed = len(files), 0 })
+	var done atomic.Int64
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, probeWorkers)
+	for _, f := range files {
+		if ctx.Err() != nil {
+			break
+		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(f found) {
+			defer func() { <-sem; wg.Done() }()
+			if err := s.processFile(ctx, lib, f, gen); err != nil {
+				log.Printf("scan %q: %v", lib.Name, err)
+			}
+			n := int(done.Add(1))
+			s.update(st, func(st *Status) { st.Processed = max(st.Processed, n) })
+		}(f)
+	}
+	wg.Wait()
+	return ctx.Err()
 }
 
 func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64) error {
