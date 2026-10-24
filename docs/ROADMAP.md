@@ -157,14 +157,14 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Casting to devices (Chromecast, DLNA) |
 | | Push notifications |
 
-## M9: Plugins 🟡 (phases 1–2: plugin system, Hue Sync)
+## M9: Plugins 🟡 (phases 1–3: plugin system, Hue Sync, Cinemask Upgrades)
 
 | | Feature |
 |---|---|
 | ✅ | **Plugin system** (out-of-process, API-based): plugins are HTTP services, started by BingeBandit from a plugins folder or added by address (own container). Manifest, settings form, events, user pages through a proxy, versioned plugin API (`/api/plugin/v1`), Go kit (`pkg/bbplugin`). See [PLUGINS.md](PLUGINS.md) |
 | ✅ | **Watchlist RSS** (bundled): each person's watchlist as an RSS feed; subscribed RSS feeds add matching library items to the watchlist; optionally remove finished movies |
 | | Yamtrack plugin (Yamtrack already works today through a Plex-style webhook or Trakt; a plugin could add history import and per-user setup) |
-| | Cinemask plugin: search Cinemask for upgrades of library files |
+| ✅ | **Cinemask Upgrades** (bundled): lists movies and episodes below the quality you want (resolution, old codecs, low bitrate, 4K without HDR, judged from the files) and has [Cinemask](https://github.com/Spacegoose02/cinemask) search for better copies: search and grab, pick a release, move the title to a higher profile, add it to Cinemask, or search all |
 | ✅ | **Hue Sync** (bundled): Hue lights follow the colours on screen, per zone (left, right, centre…), in step with the player; pause and stop behaviour, filters for people and devices |
 | | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box) |
 | | Plugin catalogue: install plugins from a list instead of copying folders |

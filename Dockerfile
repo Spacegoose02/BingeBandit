@@ -17,7 +17,7 @@ COPY server/ ./
 COPY --from=web /src/server/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bingebandit ./cmd/bingebandit
 # Bundled plugins: each gets its own folder with its plugin.json. They're off until an admin turns them on.
-RUN for p in watchlist-rss hue-sync; do \
+RUN for p in watchlist-rss hue-sync cinemask-upgrades; do \
       mkdir -p /plugins/$p \
       && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/$p/$p ./plugins/$p \
       && cp plugins/$p/plugin.json /plugins/$p/ || exit 1; \

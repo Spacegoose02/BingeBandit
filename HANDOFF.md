@@ -2,7 +2,7 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, Hue Sync (M9 phase 2)._
+_Last updated: 2026-10-24, Cinemask Upgrades (M9 phase 3)._
 
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 
@@ -17,6 +17,16 @@ _Last updated: 2026-10-24, Hue Sync (M9 phase 2)._
 - **ThePosterDB** (Edit → Artwork → Poster): **Search** reads ThePosterDB's search page and the top three title pages (`metadata/tpdb.go`), shows thumbnails (downscaled and cached in `<data>/cache/tpdb/`), and a click downloads `https://theposterdb.com/api/assets/<id>`. You can also paste a title/set/poster link into the search box, and "Use URL" accepts poster page links. **Open site** opens their search in a new tab.
   - Michael chose scraping knowing ThePosterDB's terms forbid it and that it can break or be blocked by Cloudflare. Their markup was never seen raw from here (the build machine can't reach them): the parser looks for any `/posters/<id>` link and any poster id (`data-poster-id`, `/api/assets/<id>`, `/poster/<id>`), and was tested only against a stand-in (`-tpdb-url` / `BB_TPDB_URL`). If real searches come back empty, the fix is in `parseSearch`/`parsePosters`.
   - Anonymous downloads of `/api/assets/<id>` are assumed to work (Kometa uses them); if ThePosterDB starts requiring a login, downloads will fail with the HTTP status.
+
+## Cinemask Upgrades (M9 phase 3)
+
+- **Plugin** `server/plugins/cinemask-upgrades`, bundled, off by default. [Cinemask](https://github.com/Spacegoose02/cinemask) is Michael's Sonarr/Radarr-style manager; "search Cinemask for upgrades" was read as: BingeBandit decides what's low quality from the probed files, and Cinemask does the searching and downloading.
+  - `quality.go`: per movie/episode, the best file (resolution from width *or* height, so 1920×800 is 1080p; then bitrate) is listed when below the target resolution (setting, default 1080p), or optionally an old codec (MPEG-2/4, VC-1, WMV…), below a bitrate, or 4K without HDR. Unprobed files are skipped. Shows are grouped with their episodes.
+  - `cinemask.go`: Cinemask's API with `X-Api-Key` (no CSRF needed for keys): `/api/auth/me`, `/api/monitored/lookup/{kind}/{tmdb}`, `/api/profiles`, `/api/monitored/{id}/search|releases|grab`, `PATCH /api/monitored/{id}` (profile), `POST /api/monitored` (with `search:false`). The key's owner must be a Cinemask manager/admin and the key full-access.
+  - Cinemask only grabs what beats *its* view of the file and stays within the title's profile cutoff, so the page offers moving the title to a higher profile before searching. Manual search lists Cinemask's verdicts (accepted / rejections) with Grab.
+  - `bulk.go`: **Search all** searches every listed title Cinemask monitors, one at a time, 5 s apart; titles not in Cinemask are skipped and counted. It can be stopped.
+- **Server:** plugin API `GET /files?offset=&limit=` (`Store.FileSummaries`): every movie/episode file with item, show and quality fields.
+- **Tested:** unit tests for the rules (4K copy next to a 720p one, widescreen 1080p, Xvid, unprobed) and the routes against a fake Cinemask (admin-only, at-cutoff message, profile change then grab, releases, grab, adding without searching, bad input, search all, bad key); the round-trip test covers `/files`. **Not tested:** a real Cinemask with real indexers.
 
 ## Hue Sync (M9 phase 2)
 
