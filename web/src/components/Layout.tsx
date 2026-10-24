@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { useApi } from '../hooks'
 import type { Library } from '../types'
 import { Icon } from './Icon'
+import { PasscodePrompt } from './Passcode'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -118,6 +119,7 @@ export default function Layout() {
       <main className="main">
         <Outlet />
       </main>
+      <PasscodePrompt />
     </div>
   )
 }
