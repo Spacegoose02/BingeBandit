@@ -37,6 +37,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Logging and detailed info: Logs page with live tail, filters and download; rotating log file |
 | ✅ | Parallel probing for faster first scans |
 | ✅ | Subtitles: external `.srt/.ass/.vtt` sidecars (language, forced, SDH from the file name), image subtitles (PGS/VobSub) burned in, per-user size and background |
+| ✅ | Subtitles in a `Subs/` folder (release downloads): `Subs/2_English.srt` for a movie, `Subs/<episode>/…` and `Subs/<episode>.en.srt` for TV |
 | ✅ | Per-user playback preferences: auto-pick audio language (English by default) and subtitles (off / auto for foreign audio / forced only / always), auto-play next episode |
 | ✅ | Retry failed playback automatically; fall back from direct play to transcoding |
 | ✅ | Lower quality automatically when playback keeps buffering (user setting) |
@@ -53,7 +54,6 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
 - Remote backup targets beyond a folder path (S3/Backblaze).
 - Tone mapping algorithm choice and hardware decoding device selection.
-- Subtitles in a `Subs/` folder (common in release downloads).
 
 ## M3: User features 🟡 (in progress)
 

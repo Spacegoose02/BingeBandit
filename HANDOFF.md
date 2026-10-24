@@ -334,7 +334,7 @@ _Last updated: 2026-10-24, Hue Sync (M9 phase 2)._
 
 ## Playback polish (M2)
 
-- **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex.
+- **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex. A `Subs/` (or `Sub/`, `Subtitles/`) folder beside the video is searched too: files named after the video, any file when the video is alone in its folder (`Subs/2_English.srt`), and everything in `Subs/<video name>/` (TV packs). Leading track numbers are ignored; the external name is stored relative to the video's folder (`Subs/2_English.srt`).
 - **Image subtitles** (PGS/VobSub/DVB) are burned in by the transcoder when picked. ffmpeg can't create bitmap subtitles, so this is only unit-tested against the generated command line; **check it with a real Blu-ray rip.**
 - **Account → Playback:** audio language, subtitle mode/language/size/box, auto quality, auto-play next. The player applies them; English audio is the default.
 - Playback retries twice on failure; direct play falls back to transcoding; repeated buffering steps quality down with a notice.
