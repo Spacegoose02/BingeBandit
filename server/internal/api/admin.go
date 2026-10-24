@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -112,10 +113,40 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	for _, key := range []string{store.SettingTrustedProxies, store.SettingLANNetworks} {
+		if _, err := parseNets(in[key]); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if u, ok := in[store.SettingPublicURL]; ok {
+		in[store.SettingPublicURL] = strings.TrimRight(u, "/")
+		if err := validPublicURL(in[store.SettingPublicURL]); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if v, ok := in[store.SettingRemoteAccess]; ok && v != "true" && v != "false" {
+		writeErr(w, http.StatusBadRequest, "remote_access must be true or false")
+		return
+	}
+	// Don't let an admin lock themselves out from where they're sitting.
+	if in[store.SettingRemoteAccess] == "false" {
+		lan, _ := parseNets(in[store.SettingLANNetworks])
+		if _, given := in[store.SettingLANNetworks]; !given {
+			lan = s.policy().lan
+		}
+		ip := net.ParseIP(clientIP(r))
+		if ip == nil || !(ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || inNets(ip, lan)) {
+			writeErr(w, http.StatusBadRequest, "you're connected from outside the home network; turning off remote access would lock you out")
+			return
+		}
+	}
 	if err := s.Store.SetSettings(in); err != nil {
 		writeStoreErr(w, err)
 		return
 	}
+	s.reloadNetwork()
 	s.getSettings(w, r)
 }
 

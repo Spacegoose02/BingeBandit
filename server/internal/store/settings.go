@@ -21,6 +21,10 @@ const (
 	SettingDVRAllowUsers     = "dvr_allow_users"
 	SettingDVRPadBefore      = "dvr_padding_before" // minutes
 	SettingDVRPadAfter       = "dvr_padding_after"  // minutes
+	SettingPublicURL         = "public_url"         // how people reach the server from outside, e.g. https://tv.example.com
+	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
+	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
+	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
 )
 
 var SettingDefaults = map[string]string{
@@ -43,6 +47,10 @@ var SettingDefaults = map[string]string{
 	SettingDVRAllowUsers:     "true",
 	SettingDVRPadBefore:      "1",
 	SettingDVRPadAfter:       "3",
+	SettingPublicURL:         "",
+	SettingTrustedProxies:    "",
+	SettingLANNetworks:       "",
+	SettingRemoteAccess:      "true",
 }
 
 func (s *Store) Setting(key string) string {

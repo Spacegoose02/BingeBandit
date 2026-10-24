@@ -10,6 +10,28 @@ export interface User {
   profilePublic: boolean
   totpEnabled: boolean
   shareActivity: boolean
+  hasPassword: boolean
+}
+
+export interface OIDCProvider {
+  id: number
+  name: string
+  issuer: string
+  clientId: string
+  clientSecret?: string
+  hasSecret: boolean
+  scopes: string
+  autoCreate: boolean
+  enabled: boolean
+}
+
+export interface Identity {
+  id: number
+  providerId: number
+  providerName: string
+  email: string
+  createdAt: number
+  lastUsed: number
 }
 
 export interface DeviceSession {

@@ -77,6 +77,8 @@
 - API keys (`bb_` + random, `api_keys` table) are stored as SHA-256 like sessions. `requireAuth` tries a session first, then an API key, so a key works anywhere a token does.
 - Two-step sign-in: RFC 6238 TOTP (`api/totp.go`, SHA-1, 30s, 6 digits, ±1 step). Recovery codes are stored hashed and deleted on use. Login answers 401 with `needsCode: true` until a valid code is sent.
 - TV linking (`api/link.go`): an in-memory map of short codes → poll tokens (10-minute TTL, start rate-limited per IP). Approving sets the user; the next poll creates the session.
+- Single sign-on (`api/oidc.go`, `go-oidc` + `x/oauth2`): providers in `oidc_providers`, links in `user_identities` (provider + subject). Auth code + PKCE + nonce; the pending state is in memory. The callback creates an ordinary session cookie.
+- Network (`api/network.go`): the outermost middleware rewrites `RemoteAddr`, the scheme and the host from trusted proxies' forwarded headers, then blocks non-local clients when remote access is off. Use `clientIP`, `isHTTPS`, `baseURL` and `externalURL` rather than reading the request directly.
 - Webhooks (`api/webhooks.go`): `Server.Emit(event, data)` posts to each enabled, subscribed hook in a goroutine (10s timeout), signing with HMAC-SHA256 when a secret is set. The DVR reports through `Recorder.OnEvent`, wired in `main.go`.
 
 ## Playback

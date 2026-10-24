@@ -47,6 +47,8 @@ type Server struct {
 	limiter     *loginLimiter
 	linkLimiter *loginLimiter
 	links       *linkManager
+	oidc        *oidcFlows
+	netp        netHolder
 	ctx         context.Context // server lifetime, for work that outlives a request
 }
 
@@ -54,9 +56,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 	s.limiter = newLoginLimiter()
 	s.linkLimiter = newLoginLimiter()
 	s.links = newLinkManager()
+	s.oidc = newOIDCFlows()
 	s.ctx = ctx
+	s.reloadNetwork()
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
+	r.Use(s.network)
 	r.Use(requestLog)
 
 	r.Route("/api", func(r chi.Router) {
@@ -68,6 +73,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Post("/auth/login", s.login)
 		r.Post("/link/start", s.linkStart)
 		r.Get("/link/poll", s.linkPoll)
+		r.Get("/auth/oidc", s.oidcOptions)
+		r.Get("/auth/oidc/callback", s.oidcCallback)
+		r.Get("/auth/oidc/{id}/login", s.oidcLogin)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -87,6 +95,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/me/keys", s.createAPIKey)
 			r.Delete("/me/keys/{id}", s.deleteAPIKey)
 			r.Put("/me/share-activity", s.setShareActivity)
+			r.Get("/me/identities", s.identities)
+			r.Post("/me/identities/{id}/link", s.linkIdentity)
+			r.Delete("/me/identities/{id}", s.unlinkIdentity)
 			r.Get("/activity/friends", s.friendsActivity)
 			r.Put("/me/profile", s.setProfileVisibility)
 			r.Get("/profiles", s.publicProfiles)
@@ -214,6 +225,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/webhooks/{id}", s.saveWebhook)
 				r.Delete("/webhooks/{id}", s.deleteWebhook)
 				r.Post("/webhooks/{id}/test", s.testWebhook)
+				r.Get("/oidc", s.adminOIDC)
+				r.Post("/oidc", s.saveOIDC)
+				r.Put("/oidc/{id}", s.saveOIDC)
+				r.Delete("/oidc/{id}", s.deleteOIDC)
 				r.Get("/users", s.users)
 				r.Post("/users", s.createUser)
 				r.Delete("/users/{id}", s.deleteUser)

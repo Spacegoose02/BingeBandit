@@ -5,7 +5,7 @@ import { useAuth } from '../../auth'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
-import type { Webhook } from '../../types'
+import type { OIDCProvider, Webhook } from '../../types'
 
 type Settings = Record<string, string>
 
@@ -151,13 +151,169 @@ export default function AdminSettings() {
           </div>
         </section>
 
+        <section className="panel form">
+          <h3>Network</h3>
+          <label>
+            Public URL
+            <input className="mono" value={s.public_url ?? ''} onChange={set('public_url')} placeholder="https://tv.example.com (optional)" spellCheck={false} />
+            <span className="muted small">How people reach this server from outside. Used for single sign-on redirects. Leave empty to use whatever address the browser used.</span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.remote_access !== 'false'} onChange={set('remote_access')} />
+            Allow connections from outside the home network
+          </label>
+          <label>
+            Extra local networks
+            <input className="mono" value={s.lan_networks ?? ''} onChange={set('lan_networks')} placeholder="e.g. 100.64.0.0/10 for Tailscale" spellCheck={false} />
+            <span className="muted small">Private ranges (192.168.x, 10.x, 172.16–31.x) always count as local. Add others, comma-separated.</span>
+          </label>
+          <label>
+            Trusted reverse proxies
+            <input className="mono" value={s.trusted_proxies ?? ''} onChange={set('trusted_proxies')} placeholder="e.g. 172.17.0.1 or 10.0.0.0/8" spellCheck={false} />
+            <span className="muted small">
+              If you use Nginx, Caddy, Traefik or a Cloudflare tunnel, list its address here so BingeBandit sees the real client address and https.
+              Only list proxies you run: their X-Forwarded-For headers are believed.
+            </span>
+          </label>
+        </section>
+
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
         <div className="actions">
           <button className="btn btn-primary">Save settings</button>
         </div>
       </form>
+      <SingleSignOn />
       <Webhooks />
     </div>
+  )
+}
+
+/** OpenID Connect providers people can sign in with. */
+function SingleSignOn() {
+  const { data, reload } = useApi<{ providers: OIDCProvider[]; redirectUrl: string }>('/api/admin/oidc')
+  const [editing, setEditing] = useState<Partial<OIDCProvider> | null>(null)
+  const remove = async (p: OIDCProvider) => {
+    if (!confirm(`Remove ${p.name}? Accounts linked to it are unlinked, and people whose account was made by ${p.name} can only sign in again with a password an admin sets.`)) return
+    await api.del(`/api/admin/oidc/${p.id}`).catch((e) => alert(e.message))
+    reload()
+  }
+  return (
+    <section className="panel" style={{ marginTop: 20 }}>
+      <header className="panel-head">
+        <h3>Single sign-on</h3>
+        <button className="btn btn-glass btn-sm" onClick={() => setEditing({ enabled: true, autoCreate: false, scopes: '' })}>
+          <Icon name="plus" size={16} /> Add provider
+        </button>
+      </header>
+      <p className="muted small">
+        Let people sign in with Google, TinyAuth, Authelia, Authentik, Keycloak or any OpenID Connect provider. Register BingeBandit with the
+        provider using this redirect URL:
+      </p>
+      {data && <code className="totp-secret">{data.redirectUrl}</code>}
+      <div className="list">
+        {data?.providers.map((p) => (
+          <div key={p.id} className="list-row">
+            <div className="grow">
+              <div>
+                {p.name} {!p.enabled && <span className="pill">Off</span>}
+              </div>
+              <div className="muted small mono" style={{ wordBreak: 'break-all' }}>{p.issuer}</div>
+              <div className="muted small">{p.autoCreate ? 'Creates accounts for new people' : 'Only for people who linked it under Account'}</div>
+            </div>
+            <button className="btn btn-glass btn-sm" onClick={() => setEditing(p)}>Edit</button>
+            <button className="btn btn-glass btn-sm danger" onClick={() => remove(p)} aria-label={`Remove ${p.name}`}>
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {editing && (
+        <ProviderEditor
+          provider={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            reload()
+          }}
+        />
+      )}
+    </section>
+  )
+}
+
+function ProviderEditor({ provider, onClose, onSaved }: { provider: Partial<OIDCProvider>; onClose: () => void; onSaved: () => void }) {
+  const [p, setP] = useState<Partial<OIDCProvider>>({ ...provider, clientSecret: '' })
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      if (p.id) await api.put(`/api/admin/oidc/${p.id}`, p)
+      else await api.post('/api/admin/oidc', p)
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const presetGoogle = () => setP({ ...p, name: p.name || 'Google', issuer: 'https://accounts.google.com' })
+  return (
+    <Modal title={p.id ? `Edit ${provider.name}` : 'Add sign-in provider'} onClose={onClose}>
+      <form className="form" onSubmit={save}>
+        <label>
+          Name on the sign-in button
+          <input value={p.name ?? ''} onChange={(e) => setP({ ...p, name: e.target.value })} required autoFocus placeholder="Google" />
+        </label>
+        <label>
+          <span className="field-head">
+            Issuer URL
+            {!p.id && (
+              <button type="button" className="link-btn small" onClick={presetGoogle}>Use Google</button>
+            )}
+          </span>
+          <input className="mono" value={p.issuer ?? ''} onChange={(e) => setP({ ...p, issuer: e.target.value })} required placeholder="https://auth.example.com" spellCheck={false} />
+        </label>
+        <label>
+          Client ID
+          <input className="mono" value={p.clientId ?? ''} onChange={(e) => setP({ ...p, clientId: e.target.value })} required spellCheck={false} autoComplete="off" />
+        </label>
+        <label>
+          Client secret
+          <input
+            className="mono"
+            type="password"
+            value={p.clientSecret ?? ''}
+            onChange={(e) => setP({ ...p, clientSecret: e.target.value })}
+            placeholder={p.hasSecret ? 'Saved; leave empty to keep it' : ''}
+            autoComplete="new-password"
+          />
+        </label>
+        <label>
+          Extra scopes (optional)
+          <input className="mono" value={p.scopes ?? ''} onChange={(e) => setP({ ...p, scopes: e.target.value })} placeholder="openid, profile and email are always asked for" spellCheck={false} />
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={p.autoCreate ?? false} onChange={(e) => setP({ ...p, autoCreate: e.target.checked })} />
+          Create an account for anyone who signs in with it
+        </label>
+        <p className="muted small" style={{ marginTop: -6 }}>
+          Only turn this on for a provider that just lets in people you trust (your own TinyAuth or Authelia). With Google it would let anyone with a Google account in.
+          New accounts can see all libraries; adjust them under Users.
+        </p>
+        <label className="check">
+          <input type="checkbox" checked={p.enabled ?? true} onChange={(e) => setP({ ...p, enabled: e.target.checked })} />
+          Show on the sign-in page
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy}>{busy ? 'Checking…' : 'Save'}</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

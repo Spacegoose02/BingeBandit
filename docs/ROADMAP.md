@@ -104,7 +104,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Channels from RSS / API lists (e.g. Yamtrack pending list), named after the source |
 | | Filler, commercials/bumpers, watermarks, flex time, hard block boundaries |
 
-## M6: Users and security 🟡 (phase 1 done)
+## M6: Users and security 🟡 (phase 2 done)
 
 | | Item |
 |---|---|
@@ -114,10 +114,11 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Show others what you're watching (opt-in), as a "Friends are watching" row on Home |
 | ✅ | API keys (`bb_…`, hashed, last-used time), also for IPTV app playlist/guide URLs |
 | ✅ | Webhooks for playback start/stop/finished and recording started/completed/failed, HMAC-signed |
+| ✅ | Single sign-on with any OpenID Connect provider (Google, TinyAuth, Authelia, Authentik, Keycloak), linking accounts, optional account creation |
+| ✅ | A documented public API ([API.md](API.md)) |
+| ✅ | Network settings: public URL, extra LAN networks, trusted reverse proxies, remote access on/off |
 | | Passkeys |
-| | OIDC with TinyAuth, Google and similar; account linking (built-in, Google, Plex/Tautulli) |
-| | A documented public API |
-| | Network access settings, LAN networks, remote access settings |
+| | Plex/Tautulli account linking (with M7 import) |
 
 ## M7: Import
 

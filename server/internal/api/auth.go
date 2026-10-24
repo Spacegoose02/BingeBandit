@@ -366,7 +366,7 @@ func (s *Server) startSessionFor(w http.ResponseWriter, r *http.Request, u *stor
 	if setCookie {
 		http.SetCookie(w, &http.Cookie{
 			Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-			Secure: r.TLS != nil, MaxAge: 365 * 24 * 3600,
+			Secure: isHTTPS(r), MaxAge: 365 * 24 * 3600,
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
@@ -422,7 +422,8 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
-	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Current)) != nil {
+	// Accounts made by single sign-on have no password yet; they can set one.
+	if u.HasPassword && bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Current)) != nil {
 		writeErr(w, http.StatusUnauthorized, "current password is wrong")
 		return
 	}

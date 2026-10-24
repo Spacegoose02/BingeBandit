@@ -18,6 +18,7 @@ type User struct {
 	TOTPEnabled   bool    `json:"totpEnabled"`
 	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
+	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
 	PasswordHash  string  `json:"-"`
 	TOTPSecret    string  `json:"-"`
 }
@@ -29,7 +30,7 @@ func (s *Store) CountUsers() (int, error) {
 }
 
 func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, error) {
-	u := &User{Username: username, PasswordHash: passwordHash, IsAdmin: admin, CreatedAt: now(), AllLibraries: true}
+	u := &User{Username: username, PasswordHash: passwordHash, IsAdmin: admin, CreatedAt: now(), AllLibraries: true, HasPassword: passwordHash != ""}
 	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?)`,
 		username, passwordHash, boolInt(admin), u.CreatedAt)
 	if err != nil {
@@ -50,6 +51,7 @@ func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 		}
 		return nil, err
 	}
+	u.HasPassword = u.PasswordHash != ""
 	return &u, nil
 }
 

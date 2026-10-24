@@ -770,6 +770,9 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .link-code { text-align: center; }
 .link-code-value { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: clamp(40px, 9vw, 64px); font-weight: 800; letter-spacing: 0.08em; color: var(--accent); margin: 4px 0 8px; }
 .link-code-input { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 24px !important; letter-spacing: 0.15em; text-transform: uppercase; }
+.link-btn { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.or-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .webhook-events { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .friend-card { position: relative; }
 .friend-badge { position: absolute; top: 6px; left: 6px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; background: rgba(11, 13, 16, 0.82); backdrop-filter: blur(6px); border-radius: 99px; padding: 3px 10px 3px 3px; font-size: 12px; font-weight: 650; }

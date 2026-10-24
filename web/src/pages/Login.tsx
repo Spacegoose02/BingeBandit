@@ -14,8 +14,13 @@ export default function Login() {
   const [code, setCode] = useState('')
   const [needsCode, setNeedsCode] = useState(false)
   const [withCode, setWithCode] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => new URLSearchParams(loc.search).get('sso_error') ?? '')
   const [busy, setBusy] = useState(false)
+  const [sso, setSSO] = useState<{ id: number; name: string }[]>([])
+  useEffect(() => {
+    api.get<{ id: number; name: string }[]>('/api/auth/oidc').then(setSSO, () => undefined)
+  }, [])
+  const next = (loc.state as { from?: string } | null)?.from ?? '/'
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -23,7 +28,7 @@ export default function Login() {
     setError('')
     try {
       await login(username, password, needsCode ? code : undefined)
-      nav((loc.state as { from?: string } | null)?.from ?? '/', { replace: true })
+      nav(next, { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.data?.needsCode) {
         // Only show the message once they've actually tried a code.
@@ -84,9 +89,17 @@ export default function Login() {
             Back
           </button>
         ) : (
-          <button type="button" className="btn btn-glass btn-block" onClick={() => setWithCode(true)}>
-            Sign in with a code instead
-          </button>
+          <>
+            <button type="button" className="btn btn-glass btn-block" onClick={() => setWithCode(true)}>
+              Sign in with a code instead
+            </button>
+            {sso.length > 0 && <div className="or-divider">or</div>}
+            {sso.map((p) => (
+              <a key={p.id} className="btn btn-glass btn-block" href={`/api/auth/oidc/${p.id}/login?next=${encodeURIComponent(next)}`}>
+                Continue with {p.name}
+              </a>
+            ))}
+          </>
         )}
       </form>
     </AuthFrame>

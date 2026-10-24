@@ -39,7 +39,8 @@ export default function AdminUsers() {
             <span className="avatar">{u.username.slice(0, 1).toUpperCase()}</span>
             <div className="grow">
               <div>
-                {u.username} {u.id === me?.id && <span className="muted small">(you)</span>}
+                {u.username} {u.id === me?.id && <span className="muted small">(you)</span>}{' '}
+                {!u.hasPassword && <span className="pill" title="Made by single sign-on; no password yet">SSO only</span>}
               </div>
               <div className="muted small">Joined {new Date(u.createdAt * 1000).toLocaleDateString()}</div>
             </div>

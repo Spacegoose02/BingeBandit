@@ -70,7 +70,15 @@ To try Live TV without an IPTV subscription, run the bundled fake provider and a
 
 ```powershell
 cd server; go run ./cmd/fakeiptv
-``` Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand.
+```
+
+To try single sign-on, run the fake OpenID Connect provider and add it under Server → Settings → Single sign-on with issuer `http://localhost:8686`, client ID `bingebandit` and secret `dev-secret`:
+
+```powershell
+cd server; go run ./cmd/fakeoidc
+```
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand. The HTTP API for scripts and apps is described in [docs/API.md](docs/API.md).
 
 ## Releasing
 

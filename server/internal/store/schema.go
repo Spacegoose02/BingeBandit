@@ -398,4 +398,30 @@ CREATE TABLE webhooks (
 	created_at  INTEGER NOT NULL
 );
 `,
+	// 11: single sign-on through OpenID Connect providers, and the accounts linked to them.
+	`
+CREATE TABLE oidc_providers (
+	id            INTEGER PRIMARY KEY,
+	name          TEXT NOT NULL,
+	issuer        TEXT NOT NULL,
+	client_id     TEXT NOT NULL,
+	client_secret TEXT NOT NULL DEFAULT '',
+	scopes        TEXT NOT NULL DEFAULT '',
+	auto_create   INTEGER NOT NULL DEFAULT 0,
+	enabled       INTEGER NOT NULL DEFAULT 1,
+	created_at    INTEGER NOT NULL
+);
+
+CREATE TABLE user_identities (
+	id          INTEGER PRIMARY KEY,
+	user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	provider_id INTEGER NOT NULL REFERENCES oidc_providers(id) ON DELETE CASCADE,
+	subject     TEXT NOT NULL,
+	email       TEXT NOT NULL DEFAULT '',
+	created_at  INTEGER NOT NULL,
+	last_used   INTEGER NOT NULL DEFAULT 0,
+	UNIQUE (provider_id, subject)
+);
+CREATE INDEX user_identities_user ON user_identities(user_id);
+`,
 }

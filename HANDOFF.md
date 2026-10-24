@@ -2,9 +2,30 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-23, M6 phase 1 (security)._
+_Last updated: 2026-10-23, M6 phase 2 (single sign-on, network)._
 
-## Latest: users and security, phase 1 (M6)
+## Latest: single sign-on, network settings, API docs (M6 phase 2)
+
+- **Single sign-on (OIDC):** Settings → Single sign-on adds providers (name, issuer, client ID/secret, extra scopes). Saving checks the issuer's discovery document. The panel shows the redirect URL to register (`<public URL>/api/auth/oidc/callback`). The login page gets a "Continue with …" button per provider. Account → Linked accounts links and unlinks.
+  - Auth code flow with PKCE and nonce. Pending sign-ins are kept in memory for 10 minutes and each state works once. Discovery is cached for an hour.
+  - An unknown provider account is refused with "link it under Account", unless the provider has **Create an account for anyone** turned on. That makes a passwordless, non-admin user named from `preferred_username` or the email (all libraries). Such users can **Set a password** under Account, and can't unlink their only sign-in method until they do.
+  - Signing in through a provider skips BingeBandit's own 2FA (the provider authenticates). The 2FA panel is hidden for passwordless accounts.
+  - Removing a provider deletes its links. Users who only had that provider need an admin to set a password.
+- **Network settings** (Settings → Network): public URL, remote access on/off (outside clients get a 403 page), extra LAN networks, and trusted reverse proxies.
+  - Trusted proxies' `X-Forwarded-For` (rightmost untrusted hop), `X-Real-IP`, `-Proto` and `-Host` are honoured. This feeds the client IP (rate limits, sessions, "local" on Now Playing), https cookies and generated URLs.
+  - Turning remote access off is refused when the admin is themselves outside.
+  - The policy is cached and reloaded when settings are saved.
+- **`docs/API.md`:** authentication, the TV code flow, the user-facing endpoints, playback reporting, Live TV, and the webhook format and signature.
+- **`cmd/fakeoidc`:** a click-to-sign-in OIDC provider for development (`dist\fakeoidc.exe -addr :8686`, client `bingebandit` / `dev-secret`, people alice, bob, carol).
+- **Tested in the browser against fakeoidc:**
+  - linking, signing in through the provider, and an unlinked account refused
+  - account creation, the cancelled-at-provider error, a bogus or replayed state, the unlink guard, and setting a password then signing in with it
+  - network settings validation, forwarded headers from a trusted proxy, the remote-access block, and the public URL in the redirect
+  - Unit tests cover forwarded headers, the remote-access block, CIDR parsing and the `next` redirect guard.
+- **Not tested:** real Google / TinyAuth / Authelia. Things to check: Google needs an https redirect URL unless it's localhost, and some providers send `email_verified` as a string. **Passkeys are still to do.** The browser pane here has no authenticator to test WebAuthn with.
+- Migration 11.
+
+## Users and security, phase 1 (M6)
 
 - **Two-step sign-in (TOTP):** Account → Two-step sign-in shows a key and an `otpauth://` link, confirms a code, then shows 8 one-time recovery codes (stored hashed). The login page asks for a code when needed; recovery codes work there too. Turning it off needs the password; Admin → Users has "Turn off 2-step" for locked-out users.
 - **Link a TV with a code:** `POST /api/link/start` (no auth, rate-limited) returns a 6-character code and a poll token. Someone signed in enters it at `/link` (admins can pick which user). `GET /api/link/poll` returns 202 until approved, then the session once (`web=1` also sets the cookie). Codes live in memory for 10 minutes. The web login page has "Sign in with a code instead".

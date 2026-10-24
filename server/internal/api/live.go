@@ -291,7 +291,7 @@ func requestToken(r *http.Request) string {
 
 func baseURL(r *http.Request) string {
 	scheme := "http"
-	if r.TLS != nil {
+	if isHTTPS(r) {
 		scheme = "https"
 	}
 	return scheme + "://" + r.Host

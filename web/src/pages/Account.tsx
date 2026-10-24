@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
-import type { APIKey, DeviceSession, Prefs } from '../types'
+import type { APIKey, DeviceSession, Identity, Prefs } from '../types'
 
 function when(ts: number) {
   return ts ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'
@@ -140,6 +140,74 @@ function TwoFactor() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+function LinkedAccounts() {
+  const { data: providers } = useApi<{ id: number; name: string }[]>('/api/auth/oidc')
+  const { data: linked, reload } = useApi<Identity[]>('/api/me/identities')
+  const [params, setParams] = useSearchParams()
+  const [error, setError] = useState(params.get('sso_error') ?? '')
+  const justLinked = params.get('linked')
+  if (!providers?.length && !linked?.length) return null
+
+  const link = async (id: number) => {
+    setError('')
+    try {
+      const { url } = await api.post<{ url: string }>(`/api/me/identities/${id}/link`)
+      window.location.href = url
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  const unlink = async (i: Identity) => {
+    if (!confirm(`Unlink your ${i.providerName} account? You won't be able to sign in with it until you link it again.`)) return
+    setError('')
+    try {
+      await api.del(`/api/me/identities/${i.id}`)
+      reload()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  const unlinked = (providers ?? []).filter((p) => !linked?.some((i) => i.providerId === p.id))
+
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Linked accounts</h3>
+      <p className="muted small">Sign in with these instead of your password.</p>
+      {justLinked && (
+        <div className="form-ok">
+          Your {justLinked} account is linked.{' '}
+          <button type="button" className="link-btn" onClick={() => setParams({}, { replace: true })}>Dismiss</button>
+        </div>
+      )}
+      {linked && linked.length > 0 && (
+        <div className="list">
+          {linked.map((i) => (
+            <div key={i.id} className="list-row">
+              <div className="grow">
+                <div>{i.providerName}</div>
+                <div className="muted small">
+                  {i.email || 'No email shared'} · linked {when(i.createdAt)} · last used {when(i.lastUsed)}
+                </div>
+              </div>
+              <button className="btn btn-glass btn-sm" onClick={() => unlink(i)}>Unlink</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {unlinked.length > 0 && (
+        <div className="actions">
+          {unlinked.map((p) => (
+            <button key={p.id} type="button" className="btn btn-glass" onClick={() => link(p.id)}>
+              Link {p.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <div className="form-error">{error}</div>}
     </div>
   )
 }
@@ -342,18 +410,20 @@ function PlaybackPrefs() {
 
 export default function Account() {
   useDocumentTitle('Account')
-  const { user } = useAuth()
+  const { user, refresh } = useAuth()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const hasPassword = user?.hasPassword ?? true
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     try {
       await api.put('/api/me/password', { current, new: next })
-      setMsg({ ok: true, text: 'Password changed.' })
+      setMsg({ ok: true, text: hasPassword ? 'Password changed.' : 'Password set. You can now sign in with it too.' })
       setCurrent('')
       setNext('')
+      if (!hasPassword) refresh()
     } catch (err) {
       setMsg({ ok: false, text: (err as Error).message })
     }
@@ -368,21 +438,27 @@ export default function Account() {
       </p>
       <PlaybackPrefs />
       <Sharing />
-      <TwoFactor />
+      <LinkedAccounts />
+      {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}
+      {hasPassword && <TwoFactor />}
       <Devices />
       <APIKeys />
       <form className="panel form" onSubmit={submit}>
-        <h3>Change password</h3>
-        <label>
-          Current password
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
-        </label>
+        <h3>{hasPassword ? 'Change password' : 'Set a password'}</h3>
+        {hasPassword ? (
+          <label>
+            Current password
+            <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required autoComplete="current-password" />
+          </label>
+        ) : (
+          <p className="muted small">Your account was made by single sign-on. Set a password to also sign in with your username, for example on a TV.</p>
+        )}
         <label>
           New password
           <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={8} autoComplete="new-password" />
         </label>
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
-        <button className="btn btn-primary">Update password</button>
+        <button className="btn btn-primary">{hasPassword ? 'Update password' : 'Set password'}</button>
       </form>
     </div>
   )
