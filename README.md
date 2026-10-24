@@ -67,3 +67,9 @@ Then open http://localhost:5173. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 ## Releasing
 
 Push a tag such as `v0.1.0`. GitHub Actions then builds binaries for Windows, Linux and macOS, attaches them to a GitHub Release, and publishes a multi-arch Docker image to `ghcr.io/<owner>/bingebandit`.
+
+## License
+
+BingeBandit is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can use, modify and share it. If you distribute a modified version, or run one as a service for others, you must publish your changes under the same license.
+
+The BingeBandit name, raccoon logo and the artwork in [`Brand/`](Brand) and `web/public/brand/` are not covered by the AGPL. Please don't use them for your own forks or products without permission.
