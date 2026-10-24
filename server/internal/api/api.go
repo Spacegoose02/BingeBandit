@@ -69,8 +69,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 	r.Use(requestLog)
 
 	r.Route("/api", func(r chi.Router) {
+		// Apps scan the local network for this to find servers, so it names itself.
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": s.Version})
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			writeJSON(w, http.StatusOK, map[string]string{
+				"status": "ok", "version": s.Version, "product": "BingeBandit", "name": s.Store.Setting(store.SettingServerName),
+			})
 		})
 		r.Get("/setup", s.setupStatus)
 		r.Post("/setup", s.setup)

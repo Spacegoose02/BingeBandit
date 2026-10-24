@@ -28,3 +28,16 @@ jobs:
       - name: Vet and test server
         working-directory: server
         run: go vet ./... && go test ./...
+
+  tv-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/tv/package-lock.json
+      - name: Type-check and lint the TV app
+        working-directory: apps/tv
+        run: npm ci && npx tsc --noEmit && npx eslint App.tsx src

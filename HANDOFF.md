@@ -2,9 +2,56 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, M7 phase 2 (Trakt, exports, Plex-style webhooks)._
+_Last updated: 2026-10-24, M8 phase 1 (Android TV app)._
 
-## Latest: Trakt sync, history downloads, Plex-style webhooks (M7 phase 2)
+## Latest: the Android TV / Fire TV app (M8 phase 1)
+
+- **`apps/tv`:** react-native-tvos 0.83 (RN 0.83, New Architecture, Hermes), React 19, TypeScript. The libraries are react-native-video 6 (ExoPlayer), AsyncStorage 3, NetInfo, react-native-svg and react-native-qrcode-svg. `.npmrc` sets `legacy-peer-deps`, because the tvos fork's pre-release version doesn't satisfy plain `react-native` peer ranges.
+- **Screens:**
+  - **Connect:** scans the device's /24 on port 8484 for `/api/health` with `product: BingeBandit` (the server now names itself there), or takes a typed address.
+  - **SignIn:** the link code plus a QR code of `linkUrl`, polling `/api/link/poll`. A password option handles 2FA codes.
+  - **Home:** a top menu (Home / Live TV / Settings), a hero that follows focus, Continue Watching and the home rows.
+  - **Details:** movie, show, season or episode. Play, resume and mark watched; seasons and episodes.
+  - **Player:** direct play first, falling back to `/transcode` HLS on error. Seeking in transcode mode restarts the transcode at the target. ◀ 10 s, ▶ 30 s. Reports `/api/progress` every 10 s and on exit, with `played` counted like the web player. Plays the next episode at the end.
+  - **LivePlayer:** joins `/live/channels/{id}/watch`; ▲/▼ changes channel; leaves the viewer on exit.
+- **Navigation:** a tiny stack in `App.tsx`; the remote's Back pops it. The session (server, token, user) is kept in AsyncStorage and checked against `/api/me` at start.
+- **Android:**
+  - Package `com.bingebandit.tv`. Cleartext http is allowed, since home servers are usually plain http.
+  - Icons and the TV banner are generated from `Brand/`.
+  - Version from `-PbbVersion` (versionCode = major·10000 + minor·100 + patch).
+  - Release signing via `BB_KEYSTORE*` env vars, falling back to the debug key.
+- **CI:** type-check and lint on every push; the release workflow builds a signed APK (when the `ANDROID_KEYSTORE*` secrets exist) and attaches `BingeBandit-TV-<tag>.apk`.
+- **Toolchain on this PC:**
+  - JDK 17 at `%LOCALAPPDATA%\Programs\jdk-17`. Android SDK at `C:\Users\spacegoose\Android\Sdk`: cmdline-tools 19, because the newest `android.exe` needs a missing VC++ DLL; platform 36, build-tools 35/36, NDK 27.1, CMake 3.22.
+  - The SDK is outside AppData on purpose. The Claude desktop app is a packaged (MSIX) app, so new folders it creates under `AppData\Local` are redirected into its private storage and invisible to the user's own terminal.
+  - `JAVA_HOME`, `ANDROID_HOME` and `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Users\spacegoose\.jdk-uds` are set for the user. Without the last one, Gradle fails with "Unable to establish loopback connection", because AppData paths are redirected for the packaged app this runs in.
+- **Tested on a real TV** (onn. 4K Streaming Box, Google TV 14, Amlogic, 32-bit ARM only) over network adb (`adb connect <ip>:5555`):
+  - **What works:**
+    - sign-in by code (approved via `/api/link/approve`)
+    - Home rows with artwork
+    - details, season and episode lists, remote navigation and Back
+    - direct play of H.264 and of HEVC Main 4:2:0 MKV, with AC3 5.1 passed through to the TV's Dolby decoder
+    - converted HLS playback
+    - pause, seek and the overlay
+    - Live TV list and channel up/down
+    - Trakt auto-sync triggered from TV playback
+  - **Fixed during device testing:**
+    - Release builds blocked cleartext. RN's Gradle plugin forces the `usesCleartextTraffic` placeholder to false for release, so the manifest now says `true` literally.
+    - The layout was designed in px but RN uses dp (1080p TV = 960×540 dp). `theme.ts` now has `px()`/`scaled()`, and style sheets are authored on a 1920×1080 canvas.
+    - The TV event handler only ever gets key-*up* events on Android (key-down drives native focus), so players act on `eventKeyAction !== 0`.
+    - Players need a focused view, or keys never reach JS: there's a full-screen `hasTVPreferredFocus` Pressable.
+    - Amlogic rejects 4:4:4 HEVC frame by frame without an error, so direct play now falls back to transcoding after 8 s without progress.
+    - ExoPlayer's LIVE badge on event-type HLS is hidden via `controlsStyles.hideLiveBadge`.
+  - **Gotchas:**
+    - `adb screencap` doesn't capture HEVC video, which the Amlogic chip draws on a hardware layer. A blank screenshot there isn't a bug; look at the TV.
+    - The test server PC (192.168.86.x) and the TV (192.168.80.x) are on different subnets, so auto-discovery can't find it. Typing the address works, and the app says so.
+    - Unconfirmed: the converted output of the odd 4:4:4 test file showed nothing in screenshots, probably the same capture limit.
+  - **Development loop:**
+    - Debug APK (`assembleDebug -PreactNativeArchitectures=armeabi-v7a`), `npx react-native start`, then `adb reverse tcp:8081 tcp:8081`. Changes reload on the TV in seconds; JS logs show in `adb logcat` under `ReactNativeJS`.
+    - Fast Refresh while the player is open can raise "Rendered more hooks…". Restart the app; it's not a real bug.
+- **Not done yet:** subtitles and audio track choice in the player, a guide grid, search, watchlist, phone layouts, in-app updates.
+
+## Trakt sync, history downloads, Plex-style webhooks (M7 phase 2)
 
 - **Trakt** (`internal/trakt`):
   - An admin adds the server's Trakt app keys under Settings → Trakt (redirect URI `urn:ietf:wg:oauth:2.0:oob`).

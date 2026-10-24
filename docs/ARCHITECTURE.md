@@ -68,6 +68,10 @@
 - **Folder watching** (`library/watch.go`, fsnotify): watches every folder under each library root and re-reads the library list every 2 minutes. An event queues its folder for that library. After 30 quiet seconds (copies in progress keep resetting the timer), `ScanFolders` walks just those folders and `PruneUnder` prunes only below them. Network shares may not emit events, so the scheduled full scan is the backstop.
 - Only one scan job runs per library at a time (`ErrRunning`). The watcher re-queues if it hits a running scan.
 
+## Apps
+
+`apps/tv` is the Android TV / Fire TV app (react-native-tvos). It uses the same `/api` as the web UI, with a Bearer token from the TV code flow (`/api/link/*`). It finds servers by probing `/api/health` (which returns `product: "BingeBandit"` and the server name) across the local /24. Playback is direct when the device can decode the file, else through the transcoder's HLS, and progress goes to `/api/progress` like the web player. See `apps/tv/README.md` for building and signing.
+
 ## Import
 
 `internal/importer` turns a source (Plex API, Tautulli API, Tautulli DB file) into `Record`s. `Matcher` maps each one to a library item (file name → TMDB id → title + year; episodes via their show), and `Runner` writes plays (`plays.import_key`), watched marks, resume points and collections through the store's `Import*` methods. These never remove or un-watch anything and skip duplicates, so any import can be re-run. The API (`api/importing.go`) creates mapped users and starts the runner in the background; the admin page polls `/api/admin/import/status`.

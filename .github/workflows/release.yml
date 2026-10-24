@@ -43,6 +43,48 @@ jobs:
           files: release/*
           generate_release_notes: true
 
+  # The Android TV / Fire TV app. Signed with the release key when the
+  # ANDROID_KEYSTORE* secrets are set (see apps/tv/README.md), else the debug key.
+  android-tv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/tv/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install JS dependencies
+        working-directory: apps/tv
+        run: npm ci
+      - name: Decode signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "BB_KEYSTORE=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Build APK
+        working-directory: apps/tv/android
+        env:
+          BB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          BB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease -PbbVersion=${GITHUB_REF_NAME} -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+      - name: Name the APK
+        run: |
+          mkdir -p release
+          cp apps/tv/android/app/build/outputs/apk/release/app-release.apk "release/BingeBandit-TV-${GITHUB_REF_NAME}.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.apk
+
   docker:
     runs-on: ubuntu-latest
     steps:
