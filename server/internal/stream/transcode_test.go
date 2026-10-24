@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bingebandit/internal/store"
 )
@@ -45,5 +46,20 @@ func TestBuildArgsBurnIn(t *testing.T) {
 	args = strings.Join(m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: 3}), " ")
 	if !s.VideoCopy || s.BurnSubtitle != -1 || strings.Contains(args, "filter_complex") {
 		t.Errorf("text subtitle should not be burned: copy=%v burn=%d\n%s", s.VideoCopy, s.BurnSubtitle, args)
+	}
+}
+
+func TestAccessCheckDue(t *testing.T) {
+	s := &Session{}
+	s.accessChecked.Store(time.Now().UnixNano())
+	if s.AccessCheckDue(time.Minute) {
+		t.Fatal("due right after a check")
+	}
+	s.accessChecked.Store(time.Now().Add(-2 * time.Minute).UnixNano())
+	if !s.AccessCheckDue(time.Minute) {
+		t.Fatal("not due after the interval")
+	}
+	if s.AccessCheckDue(time.Minute) {
+		t.Fatal("due twice in a row")
 	}
 }

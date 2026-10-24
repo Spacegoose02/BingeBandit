@@ -58,8 +58,11 @@ type Session struct {
 	cmd        *exec.Cmd
 	done       chan struct{}
 	lastAccess atomic.Int64
-	stopped    atomic.Bool
-	stderr     *tailBuffer
+	// accessChecked is when the user's library access was last confirmed
+	// (unix nanoseconds).
+	accessChecked atomic.Int64
+	stopped       atomic.Bool
+	stderr        *tailBuffer
 }
 
 type Manager struct {
@@ -112,6 +115,8 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 		ID: newID(), FileID: f.ID, UserID: userID, Start: o.Start, Created: time.Now().Unix(),
 		done: make(chan struct{}), stderr: &tailBuffer{max: 4096},
 	}
+	// The caller checked access just before starting.
+	s.accessChecked.Store(time.Now().UnixNano())
 	s.dir = filepath.Join(m.baseDir(), "bb-"+s.ID)
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("transcode dir: %w", err)
@@ -350,6 +355,14 @@ func (m *Manager) janitor() {
 			}
 		}
 	}
+}
+
+// AccessCheckDue reports whether the user's library access should be checked
+// again (at most once per every), and marks it checked when it is.
+func (s *Session) AccessCheckDue(every time.Duration) bool {
+	now := time.Now().UnixNano()
+	last := s.accessChecked.Load()
+	return now-last >= int64(every) && s.accessChecked.CompareAndSwap(last, now)
 }
 
 func (s *Session) kill() {
