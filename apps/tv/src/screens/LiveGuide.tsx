@@ -8,6 +8,7 @@ import { joinChannel, leaveChannel } from '../live'
 import { useNav } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { GuideProgram, LiveChannel } from '../types'
+import { lastChannel } from './LivePlayer'
 import { NO_LIVE_BADGE } from './Player'
 
 const FETCH = 6 * 3600
@@ -68,7 +69,7 @@ function segments(c: LiveChannel, progs: GuideProgram[] | undefined, from: numbe
   return out.length ? out : [{ key: 'none', start: from, stop: to }]
 }
 
-/** Joins a channel's stream for the preview once focus settles on it; leaves on change. */
+/** Joins a channel's stream for the preview; leaves on change. */
 function usePreview(channelId?: number): string | null {
   const [src, setSrc] = useState<string | null>(null)
   useEffect(() => {
@@ -76,19 +77,16 @@ function usePreview(channelId?: number): string | null {
     if (!channelId) return
     let cancelled = false
     let viewer = ''
-    const t = setTimeout(() => {
-      joinChannel(channelId).then(
-        (r) => {
-          viewer = r.viewerId
-          if (cancelled) leaveChannel(viewer)
-          else setSrc(r.playlist)
-        },
-        () => undefined,
-      )
-    }, 1200)
+    joinChannel(channelId).then(
+      (r) => {
+        viewer = r.viewerId
+        if (cancelled) leaveChannel(viewer)
+        else setSrc(r.playlist)
+      },
+      () => undefined,
+    )
     return () => {
       cancelled = true
-      clearTimeout(t)
       leaveChannel(viewer)
     }
   }, [channelId])
@@ -103,6 +101,8 @@ export default function LiveGuide() {
   const [now, setNow] = useState(() => Date.now() / 1000)
   const [viewStart, setViewStart] = useState(() => floorHalf(Date.now() / 1000))
   const [sel, setSel] = useState<{ channel: LiveChannel; seg: Seg } | null>(null)
+  // The preview stays on the channel you were watching while you browse; only choosing one changes it.
+  const [tuned, setTuned] = useState<LiveChannel | null>(null)
 
   // Two hours across on a TV or a sideways phone, one hour on a phone held upright.
   const { width, height } = useWindowDimensions()
@@ -119,7 +119,9 @@ export default function LiveGuide() {
       (g) => {
         setGuide(g)
         setError('')
-        setSel((s) => s ?? (g.channels[0] ? { channel: g.channels[0], seg: segments(g.channels[0], g.programs[g.channels[0].epgId ?? ''], g.from, g.to)[0] } : null))
+        const start = g.channels.find((c) => c.id === lastChannel.id) ?? g.channels[0]
+        setTuned((t) => t ?? start ?? null)
+        setSel((s) => s ?? (start ? { channel: start, seg: segments(start, g.programs[start.epgId ?? ''], g.from, g.to)[0] } : null))
       },
       (e) => setError(e.message),
     )
@@ -180,7 +182,7 @@ export default function LiveGuide() {
     [clampStart, geo.perSec],
   )
 
-  const preview = usePreview(sel?.channel.id)
+  const preview = usePreview(tuned?.id)
   // Built once per load so the memoized rows only redraw when something they show changes.
   const segsByChannel = useMemo(
     () => new Map((guide?.channels ?? []).map((c) => [c.id, segments(c, guide!.programs[c.epgId ?? ''], guide!.from, guide!.to)])),
@@ -211,7 +213,7 @@ export default function LiveGuide() {
           {!!p?.subtitle && <Text style={st.subtitle} numberOfLines={1}>{p.subtitle}</Text>}
           <Text style={st.desc} numberOfLines={wide ? 1 : isPhone ? 2 : 3}>{p ? p.description ?? '' : 'No guide information for this time.'}</Text>
         </View>
-        <Pressable style={[st.preview, wide && st.previewWide]} focusable={false} onPress={sel ? () => watch(sel.channel) : undefined}>
+        <Pressable style={[st.preview, wide && st.previewWide]} focusable={false} onPress={tuned ? () => watch(tuned) : undefined}>
           {preview ? (
             // The video surface would swallow taps meant for the preview (tap to watch).
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -229,6 +231,7 @@ export default function LiveGuide() {
             <ActivityIndicator color={colors.accent} />
           )}
           <Text style={st.liveTag}>{isPhone ? 'LIVE · TAP TO WATCH' : 'LIVE'}</Text>
+          {tuned && <Text style={st.tunedTag} numberOfLines={1}>{tuned.number}  {tuned.name}</Text>}
         </Pressable>
       </View>
 
@@ -417,6 +420,7 @@ const st = StyleSheet.create(scaled({
   subtitle: { color: colors.text, fontSize: font.body, marginTop: 10, fontWeight: '600' },
   desc: { color: colors.text, fontSize: font.small, marginTop: 10, lineHeight: 32, opacity: 0.85 },
   preview: { width: isPhone ? 300 : 480, height: isPhone ? 169 : 270, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  tunedTag: { position: 'absolute', left: 0, right: 0, bottom: 0, color: colors.text, backgroundColor: 'rgba(0,0,0,0.6)', fontSize: font.small, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 4 },
   liveTag: { position: 'absolute', top: 12, left: 12, color: colors.accentText, backgroundColor: colors.accent, fontSize: 16, fontWeight: '900', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
   ruler: { flexDirection: 'row', alignItems: 'flex-end', paddingLeft: gutter, height: 56, marginBottom: 10 },
   rulerDay: { width: CH_W, color: colors.muted, fontSize: font.small, paddingBottom: 14, paddingLeft: isPhone ? 12 : 24 },

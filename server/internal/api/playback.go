@@ -45,13 +45,19 @@ func (s *Server) playableFile(w http.ResponseWriter, r *http.Request) *store.Med
 	return mf
 }
 
+// canDownload reports whether u may save original files: admins always can,
+// everyone else only when the server allows downloads.
+func (s *Server) canDownload(u *store.User) bool {
+	return u.IsAdmin || s.Store.Setting(store.SettingAllowDownloads) == "true"
+}
+
 func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 	mf := s.playableFile(w, r)
 	if mf == nil {
 		return
 	}
 	download := r.URL.Query().Get("download") == "1"
-	if download && s.Store.Setting(store.SettingAllowDownloads) != "true" && !currentUser(r).IsAdmin {
+	if download && !s.canDownload(currentUser(r)) {
 		writeErr(w, http.StatusForbidden, "downloads are disabled on this server")
 		return
 	}

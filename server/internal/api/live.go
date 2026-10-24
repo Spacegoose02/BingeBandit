@@ -513,6 +513,63 @@ func (s *Server) refreshLiveSource(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, src)
 }
 
+type sourceGroups struct {
+	NewGroupsEnabled bool                `json:"newGroupsEnabled"`
+	Groups           []store.SourceGroup `json:"groups"`
+}
+
+func (s *Server) liveSourceGroups(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	src, err := s.Store.LiveSource(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	groups, err := s.Store.SourceGroups(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, sourceGroups{NewGroupsEnabled: src.NewGroupsEnabled, Groups: groups})
+}
+
+// saveLiveSourceGroups stores the group filter; the caller refreshes the
+// source to apply it.
+func (s *Server) saveLiveSourceGroups(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req sourceGroups
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	src, err := s.Store.LiveSource(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if src.Kind != "m3u" {
+		writeErr(w, http.StatusBadRequest, "only playlists have groups")
+		return
+	}
+	enabled := map[string]bool{}
+	for _, g := range req.Groups {
+		enabled[g.Name] = g.Enabled
+	}
+	if err := s.Store.SaveSourceGroups(id, req.NewGroupsEnabled, enabled); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) liveStreams(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, offset := pageParams(r)

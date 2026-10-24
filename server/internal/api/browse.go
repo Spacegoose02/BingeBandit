@@ -185,6 +185,7 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp["files"] = files
+		resp["canDownload"] = s.canDownload(u)
 		if ms, err := s.Store.Markers(it.ID); err == nil {
 			resp["markers"] = ms
 		}

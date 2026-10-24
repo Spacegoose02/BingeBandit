@@ -15,6 +15,9 @@ import { NO_LIVE_BADGE } from './Player'
 /** How long channel up/down waits for more presses before tuning. */
 const TUNE_DELAY = 700
 
+/** The channel last watched full screen, so the guide's preview can stay on it. */
+export const lastChannel = { id: 0 }
+
 /**
  * Watches a live channel. Up/Down changes channel; OK pauses; Left/Right
  * rewind 10 s and skip 30 s within the server's pause window; the info bar
@@ -65,6 +68,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   // Failures rejoin on their own (quickly at first, then every 15 s) so an
   // error never just sits on screen.
   useEffect(() => {
+    lastChannel.id = tuned
     let cancelled = false
     let retry: ReturnType<typeof setTimeout> | undefined
     let ping: ReturnType<typeof setInterval> | undefined

@@ -295,6 +295,7 @@ export interface LiveSource {
   lastRefresh: number
   lastError?: string
   entryCount: number
+  newGroupsEnabled: boolean
 }
 
 export interface LiveStream {
@@ -403,6 +404,7 @@ export interface Library {
 export interface ItemDetail {
   item: Item
   files?: MediaFile[]
+  canDownload?: boolean // movies and episodes: the viewer may save the original file
   children?: Item[]
   show?: Item
   season?: Item

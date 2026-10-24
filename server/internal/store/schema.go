@@ -445,4 +445,19 @@ CREATE TABLE trakt_accounts (
 ALTER TABLE plays ADD COLUMN trakt_at INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE webhooks ADD COLUMN format TEXT NOT NULL DEFAULT ''; -- '' (BingeBandit JSON) or 'plex'
 `,
+	// 14: per-playlist group filter. Streams in a disabled group aren't imported
+	// (unless a channel already uses them); new_groups_enabled decides groups a
+	// later refresh discovers. Existing groups start enabled.
+	`
+ALTER TABLE live_sources ADD COLUMN new_groups_enabled INTEGER NOT NULL DEFAULT 1;
+CREATE TABLE live_source_groups (
+	source_id INTEGER NOT NULL REFERENCES live_sources(id) ON DELETE CASCADE,
+	name      TEXT NOT NULL,
+	enabled   INTEGER NOT NULL DEFAULT 1,
+	streams   INTEGER NOT NULL DEFAULT 0, -- in the playlist, imported or not
+	PRIMARY KEY (source_id, name)
+);
+INSERT INTO live_source_groups (source_id, name, enabled, streams)
+	SELECT source_id, grp, 1, COUNT(*) FROM live_streams GROUP BY source_id, grp;
+`,
 }
