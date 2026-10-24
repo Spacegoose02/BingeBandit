@@ -175,6 +175,7 @@ function PlayerView({
   const transcodeRef = useRef<string | null>(null)
   const startedRef = useRef(false)
   const forceTranscode = useRef(false) // direct play failed once; don't try again
+  const adaptiveRef = useRef(false) // the stream has several qualities; the player picks
   const stereoOnly = useRef(false) // surround audio failed once; ask for stereo
   const settlingRef = useRef(true) // a load or seek is in progress, so waiting isn't a stall
   const stalls = useRef<number[]>([])
@@ -272,19 +273,24 @@ function PlayerView({
         stopTranscode()
         offsetRef.current = 0
         setMode('direct')
+        adaptiveRef.current = false
         video.src = `/api/files/${file.id}/direct`
         video.addEventListener('loadedmetadata', () => (video.currentTime = at), { once: true })
       } else {
         try {
-          const res = await api.post<{ session: { id: string }; playlist: string }>(`/api/files/${file.id}/transcode`, {
+          const res = await api.post<{ session: { id: string; variants?: number[] }; playlist: string }>(`/api/files/${file.id}/transcode`, {
             start: at,
             maxHeight: c.quality,
             audioStream: c.audio,
             burnSubtitle: c.burn,
             replace: transcodeRef.current ?? '',
+            // At "original" quality, let the player switch between qualities
+            // itself when the server offers it. A picked quality stays fixed.
+            adaptive: c.quality === 0,
             ...audioCaps(video, stereoOnly.current),
           })
           transcodeRef.current = res.session.id
+          adaptiveRef.current = (res.session.variants?.length ?? 0) > 1
           offsetRef.current = at
           setMode('transcode')
           if (Hls.isSupported()) {
@@ -389,7 +395,7 @@ function PlayerView({
   // connection can't keep up: drop one quality step.
   const onStall = () => {
     setBuffering(true)
-    if (!prefs.autoQuality || settlingRef.current || !startedRef.current || !file) return
+    if (!prefs.autoQuality || adaptiveRef.current || settlingRef.current || !startedRef.current || !file) return
     const now = Date.now()
     stalls.current = [...stalls.current.filter((t) => now - t < 60000), now]
     if (stalls.current.length < 3) return

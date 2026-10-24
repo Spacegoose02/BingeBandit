@@ -92,3 +92,48 @@ func TestAccessCheckDue(t *testing.T) {
 		t.Fatal("due twice in a row")
 	}
 }
+
+func TestBuildArgsAdaptiveBurnIn(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.SetSettings(map[string]string{store.SettingAdaptiveStreaming: "true", store.SettingHWEncoder: "nvenc"})
+	m := &Manager{st: st, ffmpeg: "ffmpeg", dataDir: t.TempDir()}
+	f := &store.MediaFile{
+		Path: "movie.mkv", VideoCodec: "hevc", BitDepth: 10, Height: 2160,
+		Streams: []store.Stream{
+			{Index: 0, Type: "video", Codec: "hevc"},
+			{Index: 1, Type: "audio", Codec: "eac3", Default: true},
+			{Index: 2, Type: "subtitle", Codec: "hdmv_pgs_subtitle"},
+		},
+	}
+	s := &Session{dir: "out"}
+	args := strings.Join(m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: 2, Adaptive: true}), " ")
+	if len(s.Variants) != 3 || s.Variants[0] != 2160 || s.Variants[2] != 720 {
+		t.Fatalf("variants: %v", s.Variants)
+	}
+	for _, want := range []string{
+		"[0:v:0]null[base];[base][0:2]overlay=eof_action=pass[ov];[ov]split=3[s0][s1][s2];[s0]format=yuv420p[v0];[s1]scale=-2:1080,format=yuv420p[v1];[s2]scale=-2:720,format=yuv420p[v2]",
+		"-map [v0] -map 0:1 -map [v1] -map 0:1 -map [v2] -map 0:1",
+		"-maxrate:v:1 10000k -bufsize:v:1 20000k -b:v:1 7500k",
+		"-var_stream_map v:0,a:0 v:1,a:1 v:2,a:2 -master_pl_name master.m3u8",
+	} {
+		if !strings.Contains(args, want) {
+			t.Errorf("args missing %q:\n%s", want, args)
+		}
+	}
+
+	// A client that doesn't ask, or a file that can be copied, stays single.
+	for _, o := range []Options{{AudioStream: -1, BurnSubtitle: -1}, {AudioStream: -1, BurnSubtitle: -1, Adaptive: true}} {
+		s = &Session{dir: "out"}
+		g := *f
+		if o.Adaptive {
+			g.VideoCodec, g.BitDepth, g.Height = "h264", 8, 1080
+		}
+		if args := strings.Join(m.buildArgs(&g, s, o), " "); len(s.Variants) != 0 || strings.Contains(args, "var_stream_map") {
+			t.Errorf("should be single quality: %+v\n%s", o, args)
+		}
+	}
+}

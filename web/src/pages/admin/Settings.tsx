@@ -120,6 +120,11 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.transcode_throttle === 'true'} onChange={set('transcode_throttle')} />
             Throttle transcodes (stay about 2× ahead of playback instead of converting the whole file at full speed)
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.adaptive_streaming === 'true'} onChange={set('adaptive_streaming')} />
+            Adaptive streaming: when a video has to be converted, make up to three qualities at once so the player can switch on slow
+            connections (uses more CPU or GPU per viewer)
+          </label>
         </section>
 
         <section className="panel form">
