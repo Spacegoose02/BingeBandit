@@ -323,6 +323,8 @@ export interface RelayStat {
   avgBps: number
   currentBps: number
   video?: string
+  encoder?: string
+  hwError?: string
   failovers: number
   lastError?: string
   now?: GuideProgram

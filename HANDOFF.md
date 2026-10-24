@@ -2,7 +2,24 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, M8 phase 3 (Android phones, kid lock, Unraid guide)._
+_Last updated: 2026-10-24, live TV playback reliability._
+
+## Live TV playback reliability (after v0.6.0)
+
+- **Flipping channels on a provider with a connection limit:** a relay with no viewers left (someone flipped away, or a guide preview moved on) used to hold its upstream for 15 s, so the next channel on that provider failed with "all providers busy". `reclaimIdle` now stops such a relay when another channel needs the slot, and an all-busy channel waits two passes (~6 s) before giving up.
+- **`POST /watch` waits for the first segments** (`HLSFile` on `live.m3u8`, up to 25 s) before answering. ExoPlayer used to time out on a playlist request that hung while the upstream connected, which showed up on the TV as timeouts when switching fast. Clients give the join 40 s (`apps/tv/src/live.ts`).
+- **Codec probing** tries at 256 KB, then 1 MB, so low-bitrate channels start in under a second instead of waiting 8 s.
+- **Pause and rewind:** Settings → Live TV playback → "Pause and rewind window" (`live_timeshift_minutes`, default 15) sets `-hls_list_size`. A paused player stops polling, so clients ping `POST /live/viewers/{id}/ping` every 10 s.
+  - Web: Space/K pause, ←/→ −10 s/+30 s, L or the badge jumps to live. `maxLiveSyncPlaybackRate` was removed so a rewound player doesn't speed back to live.
+  - TV: OK/play-pause pauses, ◀/▶ −10 s/+30 s, the info bar shows "−m:ss" behind live. Phones get −10s / Pause / +30s / Live buttons.
+- **TV buffer:** ExoPlayer plays ~10 s behind live, waits for 5 s after a stall, at 1× speed (`LIVE_BUFFER`). Channel up/down updates the info bar at once and tunes 700 ms after the last press.
+- **Errors retry on their own** (web and TV): 1.5 s, 3 s, 4.5 s, then every 15 s with the message shown; the message clears when playback resumes. The web box also has Dismiss.
+- **Hardware encoding for live TV** (`livetv/encoder.go`, shared by relays and custom channels):
+  - Quick Sync on Linux now sets up the device explicitly (`-init_hw_device vaapi=va:/dev/dri/renderD128 -init_hw_device qsv=qs@va`, `hwupload`). VAAPI and VideoToolbox are now supported for live TV (they fell through to libx264 before).
+  - An encoder that fails within 20 s is skipped for 30 minutes (CPU instead) and Live TV → Activity shows why. Settings → Transcoding → **Test encoder** runs a 2 s 1080i encode the way live TV does and shows ffmpeg's error.
+  - H.264 channels are passed through without converting, so they never use the GPU; Activity says so.
+- **Tested** against fakeiptv with a 1-connection source: flip to another channel reclaimed the idle connection (0.4 s join), 28 segments kept with a 1-minute window, Quick Sync failure here (no GPU) fell back to the CPU, web pause/go-live in Chromium. **Not tested:** the TV app on a device, and Quick Sync on real Intel hardware.
+- **Not changed:** the on-demand transcoder (`stream/transcode.go`) still starts `h264_qsv` without explicit device setup.
 
 ## Latest: phones, kid lock, Unraid (M8 phase 3)
 

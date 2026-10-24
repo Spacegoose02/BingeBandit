@@ -4,6 +4,7 @@ import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Center } from '../components'
+import { joinChannel, leaveChannel } from '../live'
 import { useNav } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { GuideProgram, LiveChannel } from '../types'
@@ -76,17 +77,17 @@ function usePreview(channelId?: number): string | null {
     if (!channelId) return
     let cancelled = false
     let viewer = ''
-    api.post<{ viewerId: string; playlist: string }>(`/api/live/channels/${channelId}/watch`).then(
+    joinChannel(channelId).then(
       (r) => {
         viewer = r.viewerId
-        if (cancelled) api.del(`/api/live/viewers/${viewer}`).catch(() => undefined)
-        else setSrc(absolute(r.playlist))
+        if (cancelled) leaveChannel(viewer)
+        else setSrc(r.playlist)
       },
       () => undefined,
     )
     return () => {
       cancelled = true
-      if (viewer) api.del(`/api/live/viewers/${viewer}`).catch(() => undefined)
+      leaveChannel(viewer)
     }
   }, [channelId])
   return src

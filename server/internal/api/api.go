@@ -136,6 +136,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/live/channels/{id}/stream.ts", s.liveTS)
 			r.Get("/live/channels/{id}/logo", s.channelLogo)
 			r.Delete("/live/viewers/{viewer}", s.leaveChannel)
+			r.Post("/live/viewers/{viewer}/ping", s.pingViewer)
 			r.Get("/dvr", s.recordings)
 			r.Post("/dvr/recordings", s.scheduleRecording)
 			r.Delete("/dvr/recordings/{id}", s.deleteRecording)
@@ -226,6 +227,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/live/custom/{id}", s.saveCustomChannel)
 				r.Get("/live/custom/{id}/schedule", s.customSchedule)
 				r.Get("/live/activity", s.liveActivity)
+				r.Post("/live/test-encoder", s.testEncoder)
 				r.Delete("/live/activity/{id}", s.stopRelay)
 				r.Delete("/live/viewers/{viewer}", s.kickViewer)
 

@@ -676,7 +676,9 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .live-controls .spacer, .live-player .player-top .spacer { flex: 1; }
 .live-info { display: flex; gap: 14px; align-items: center; min-width: 0; }
 .live-progress { width: min(360px, 50vw); margin-top: 6px; }
-.live-badge { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 10px; border-radius: 6px; background: #e11d48; color: #fff; }
+.live-badge { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 10px; border-radius: 6px; background: #e11d48; color: #fff; border: 0; cursor: pointer; }
+.live-badge.behind { background: rgba(255, 255, 255, 0.16); }
+.player-error { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .btn.active { border-color: var(--accent); color: var(--accent); }
 .mini-guide { flex: 1; display: flex; gap: 12px; overflow-x: auto; padding: 14px clamp(16px, 3vw, 32px); background: #0b0d10; border-top: 1px solid var(--border); }
 .mini-ch { flex: 0 0 240px; display: flex; flex-direction: column; gap: 6px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow: hidden; }
@@ -949,3 +951,6 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   .up-next img { width: 110px; }
   h1 { font-size: 26px; }
 }
+.hw-test { white-space: pre-wrap; font-size: 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); margin: 0; }
+.hw-test.ok { border-color: #16a34a; }
+.hw-test.bad { border-color: #e11d48; }

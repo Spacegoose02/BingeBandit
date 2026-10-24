@@ -580,7 +580,8 @@ function Activity() {
           <dl className="np-facts">
             <dt>Stream</dt>
             <dd>{r.stream} <span className="muted small">({r.source})</span>{r.failovers > 0 && <span className="pill warn">{r.failovers} fail-over{r.failovers > 1 ? 's' : ''}</span>}</dd>
-            {r.video && (<><dt>Web video</dt><dd><span className={`pill ${r.video === 'copy' ? 'ok' : 'warn'}`}>{r.video === 'copy' ? 'Passed through' : 'Converted'}</span></dd></>)}
+            {r.video && (<><dt>Web video</dt><dd><span className={`pill ${r.video === 'copy' ? 'ok' : 'warn'}`}>{r.video === 'copy' ? 'Passed through' : `Converted · ${encoderName(r.encoder)}`}</span>{r.video === 'copy' && <span className="muted small"> (already H.264, so no hardware encoder is needed)</span>}</dd></>)}
+            {r.hwError && (<><dt>Hardware encoder</dt><dd className="muted small">Failed, so this channel is converted on the CPU: {r.hwError}</dd></>)}
             {r.lastError && (<><dt>Last error</dt><dd className="muted small">{r.lastError}</dd></>)}
           </dl>
           <div className="relay-stats">
@@ -609,4 +610,9 @@ function Activity() {
       ))}
     </div>
   )
+}
+
+function encoderName(enc?: string): string {
+  const names: Record<string, string> = { none: 'CPU', nvenc: 'NVIDIA NVENC', qsv: 'Intel Quick Sync', vaapi: 'VAAPI', amf: 'AMD AMF', videotoolbox: 'VideoToolbox' }
+  return names[enc ?? ''] ?? 'CPU'
 }

@@ -105,6 +105,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingBackupKeep:       {1, 365},
 		store.SettingDVRPadBefore:     {0, 60},
 		store.SettingDVRPadAfter:      {0, 120},
+		store.SettingLiveTimeshift:    {0, 240},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {

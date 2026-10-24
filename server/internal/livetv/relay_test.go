@@ -71,21 +71,37 @@ func TestRelayFallbackAndSharing(t *testing.T) {
 		t.Errorf("stats = %+v", stats)
 	}
 
-	// A second channel on the same provider is refused when the provider
-	// allows one connection, so it falls through to nothing and stops.
+	// A second channel on the same provider is refused while someone is
+	// watching the first, when the provider allows one connection; after a
+	// short wait it gives up and stops.
 	limited := &store.Channel{ID: 2, Number: 6, Name: "Other", Streams: []store.ChannelStream{
 		{StreamID: 3, Name: "same provider", SourceID: 2, URL: good.URL, MaxStreams: 1},
 	}}
 	v3, _ := m.Join(limited, user, "127.0.0.3", "ts")
 	select {
 	case <-v3.Done():
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Error("channel over the provider's connection limit should stop")
 	}
 
-	m.Stop(1)
+	// Once everyone has flipped away from the first channel, its idle
+	// connection is handed to the channel being tuned instead of failing.
+	first := m.relay(1)
+	m.Leave(v1.ID)
+	m.Leave(v2.ID)
+	v4, _ := m.Join(limited, user, "127.0.0.4", "ts")
 	select {
-	case <-v1.Done():
+	case <-v4.Chunks():
+	case <-time.After(5 * time.Second):
+		t.Fatal("an idle relay's connection wasn't reclaimed for the new channel")
+	}
+	if !first.stopped.Load() {
+		t.Error("the idle relay should have been stopped")
+	}
+
+	m.Stop(2)
+	select {
+	case <-v4.Done():
 	case <-time.After(2 * time.Second):
 		t.Error("stopping the relay should disconnect viewers")
 	}
