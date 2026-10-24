@@ -24,7 +24,7 @@ export default function ItemPage() {
 }
 
 function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }) {
-  const { item, files = [], children = [], show, season, upNext, collections = [] } = detail
+  const { item, files = [], children = [], show, season, upNext, collections = [], canDownload } = detail
   const { user } = useAuth()
   const nav = useNavigate()
   const [fileIdx, setFileIdx] = useState(0)
@@ -137,6 +137,11 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               </button>
               {(item.kind === 'movie' || item.kind === 'show') && <WatchlistButton item={item} onChange={reload} />}
               <AddToPlaylist item={item} />
+              {canDownload && file && (
+                <a className="btn btn-glass icon-only" href={`/api/files/${file.id}/direct?download=1`} download title="Download original file">
+                  <Icon name="download" size={18} />
+                </a>
+              )}
               {user?.isAdmin && (
                 <button className="btn btn-glass icon-only" onClick={() => setDialog('edit')} title="Edit details and artwork">
                   <Icon name="edit" size={18} />

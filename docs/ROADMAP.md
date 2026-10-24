@@ -21,7 +21,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Show file quality (resolution, codec, HDR, audio, size) |
 | ✅ | Mobile-friendly web UI |
 | ✅ | Users and admins, password login, rate-limited sign-in |
-| 🟡 | Ability to download files — admin toggle and endpoint exist; no download button yet |
+| ✅ | Download original files: a button on movie and episode pages, shown to admins and, when the admin allows downloads, to everyone |
 
 ## M2: Library polish and admin tools 🟡 (in progress)
 
