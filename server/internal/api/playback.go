@@ -172,13 +172,45 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// transcodeAccessEvery is how often a running transcode re-checks that its
+// user can still see the file, so taking a library away (or deleting the
+// user or library) also ends playback that already started.
+const transcodeAccessEvery = 30 * time.Second
+
 func (s *Server) transcodeSession(w http.ResponseWriter, r *http.Request) *stream.Session {
 	sess := s.Transcoder.Get(chi.URLParam(r, "sid"))
-	if sess == nil || (sess.UserID != currentUser(r).ID && !currentUser(r).IsAdmin) {
+	if sess == nil || (sess.UserID != currentUser(r).ID && !currentUser(r).IsAdmin) ||
+		(sess.AccessCheckDue(transcodeAccessEvery) && !s.transcodeAllowed(sess)) {
 		writeErr(w, http.StatusNotFound, "transcode session not found")
 		return nil
 	}
 	return sess
+}
+
+// transcodeAllowed reports whether the user who started sess can still see
+// its file, and stops the session when they can't.
+func (s *Server) transcodeAllowed(sess *stream.Session) bool {
+	mf, err := s.Store.File(sess.FileID)
+	if err == nil {
+		_, err = s.Store.Item(sess.UserID, mf.ItemID)
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return true // allowed, or a passing database error that shouldn't end playback
+	}
+	log.Printf("transcode %s: user %d can no longer see file %d; stopping", sess.ID, sess.UserID, sess.FileID)
+	s.Transcoder.Stop(sess.ID)
+	return false
+}
+
+// recheckTranscodes ends running transcodes whose users lost access. It runs
+// right after library access changes.
+func (s *Server) recheckTranscodes() {
+	if s.Transcoder == nil {
+		return
+	}
+	for _, sess := range s.Transcoder.List() {
+		s.transcodeAllowed(sess)
+	}
 }
 
 func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
