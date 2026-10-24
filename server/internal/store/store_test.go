@@ -192,3 +192,32 @@ func TestCollections(t *testing.T) {
 		t.Errorf("locked collections were re-linked: %v", names)
 	}
 }
+
+func TestProfilesBelongToTheirAccount(t *testing.T) {
+	s := openTest(t)
+	owner, err := s.CreateUser("dana", "hash", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kids, err := s.CreateProfile(owner, "Kids")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kids.Username != "Kids (dana)" || kids.HouseholdID() != owner.ID {
+		t.Fatalf("profile = %+v", kids)
+	}
+	if _, err := s.CreateProfile(owner, "Kids"); !errors.Is(err, ErrExists) {
+		t.Fatalf("duplicate profile: %v", err)
+	}
+	members, err := s.Household(owner.ID)
+	if err != nil || len(members) != 2 || members[0].ID != owner.ID || members[1].ProfileName != "Kids" {
+		t.Fatalf("household = %+v, %v", members, err)
+	}
+	// Deleting the account removes its profiles.
+	if err := s.DeleteUser(owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.UserByID(kids.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("profile after deleting its account: %v", err)
+	}
+}

@@ -16,7 +16,7 @@ const tabNames: Record<Tab, string> = { home: 'Home', search: 'Search', live: 'L
 let lastTab: Tab = 'home'
 
 /** The main screen: a menu across the top and the chosen section below. */
-export default function Home({ onSignedOut }: { onSignedOut: () => void }) {
+export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: () => void; onSwitchProfile: () => void }) {
   const [tab, setTabState] = useState<Tab>(lastTab)
   const setTab = (t: Tab) => {
     lastTab = t
@@ -59,6 +59,7 @@ export default function Home({ onSignedOut }: { onSignedOut: () => void }) {
       {tab === 'settings' && (
         <Settings
           update={update}
+          onSwitchProfile={onSwitchProfile}
           onSignOut={async () => {
             await api.post('/api/auth/logout').catch(() => undefined)
             await saveSession(null)

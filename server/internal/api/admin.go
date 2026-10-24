@@ -418,6 +418,10 @@ func (s *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "password must be at least 8 characters")
 		return
 	}
+	if target, err := s.Store.UserByID(id); err == nil && target.OwnerID != 0 {
+		writeErr(w, http.StatusBadRequest, "profiles have no password; they're reached from their account")
+		return
+	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err := s.Store.SetPassword(id, string(hash)); err != nil {
 		writeStoreErr(w, err)

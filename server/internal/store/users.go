@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
 )
 
 type User struct {
@@ -20,6 +21,8 @@ type User struct {
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
 	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
 	HasPasscode   bool    `json:"hasPasscode"`          // settings are locked until the passcode is entered
+	OwnerID       int64   `json:"ownerId,omitempty"`    // set for a profile: the account it belongs to
+	ProfileName   string  `json:"profileName,omitempty"`
 	PasswordHash  string  `json:"-"`
 	PasscodeHash  string  `json:"-"`
 	TOTPSecret    string  `json:"-"`
@@ -35,6 +38,73 @@ func (s *Store) SetPasscode(userID int64, hash string) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// HouseholdID is the account a user belongs to: its owner for a profile,
+// otherwise itself.
+func (u *User) HouseholdID() int64 {
+	if u.OwnerID != 0 {
+		return u.OwnerID
+	}
+	return u.ID
+}
+
+// ProfileUsername is the unique username stored for a profile: its name and
+// the account's, so two accounts can both have a "Kids" profile.
+func ProfileUsername(name, owner string) string { return name + " (" + owner + ")" }
+
+// CreateProfile adds a profile under owner. It starts with no password and
+// sees the same libraries as the owner.
+func (s *Store) CreateProfile(owner *User, name string) (*User, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	u := &User{Username: ProfileUsername(name, owner.Username), CreatedAt: now(), AllLibraries: owner.IsAdmin || owner.AllLibraries,
+		OwnerID: owner.ID, ProfileName: name}
+	res, err := tx.Exec(`INSERT INTO users (username, password_hash, is_admin, created_at, all_libraries, owner_id, profile_name) VALUES (?, '', 0, ?, ?, ?, ?)`,
+		u.Username, u.CreatedAt, boolInt(u.AllLibraries), owner.ID, name)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil, ErrExists
+		}
+		return nil, err
+	}
+	u.ID, _ = res.LastInsertId()
+	if !u.AllLibraries {
+		if _, err := tx.Exec(`INSERT INTO user_libraries (user_id, library_id) SELECT ?, library_id FROM user_libraries WHERE user_id = ?`, u.ID, owner.ID); err != nil {
+			return nil, err
+		}
+	}
+	return u, tx.Commit()
+}
+
+// RenameProfile changes a profile's name (and so its stored username).
+func (s *Store) RenameProfile(id int64, name, owner string) error {
+	_, err := s.db.Exec(`UPDATE users SET profile_name = ?, username = ? WHERE id = ? AND owner_id IS NOT NULL`, name, ProfileUsername(name, owner), id)
+	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
+		return ErrExists
+	}
+	return err
+}
+
+// Household lists an account and its profiles, the account first.
+func (s *Store) Household(ownerID int64) ([]*User, error) {
+	rows, err := s.db.Query(`SELECT `+userCols+` FROM users WHERE id = ? OR owner_id = ? ORDER BY owner_id IS NOT NULL, created_at, id`, ownerID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) CountUsers() (int, error) {
@@ -54,12 +124,12 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
