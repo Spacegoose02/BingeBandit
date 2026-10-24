@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
 import type { User } from './types'
+import { askForProfile } from './profilePick'
 
 interface AuthState {
   loading: boolean
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (username: string, password: string, code?: string) => {
     const res = await api.post<{ user: User }>('/api/auth/login', { username, password, code, device: 'Web' })
+    askForProfile()
     setUser(res.user)
   }
 

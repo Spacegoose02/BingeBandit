@@ -8,11 +8,17 @@ import Details from './src/screens/Details'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import Player from './src/screens/Player'
+import Profiles, { fetchHousehold } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, isPhone } from './src/theme'
 import type { ServerInfo, User } from './src/types'
 
-type Phase = { name: 'loading' } | { name: 'connect' } | { name: 'signin'; server: ServerInfo } | { name: 'app' }
+type Phase =
+  | { name: 'loading' }
+  | { name: 'connect' }
+  | { name: 'signin'; server: ServerInfo }
+  | { name: 'profiles'; cancelable: boolean } // "Who's watching?", after sign-in or from Settings
+  | { name: 'app' }
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'loading' })
@@ -54,6 +60,10 @@ export default function App() {
         setPhase({ name: 'connect' })
         return true
       }
+      if (phase.name === 'profiles' && phase.cancelable) {
+        setPhase({ name: 'app' })
+        return true
+      }
       if (phase.name === 'app' && stack.length > 1) {
         nav.back()
         return true
@@ -65,6 +75,13 @@ export default function App() {
 
   const signedIn = useCallback(async (s: Session) => {
     await saveSession(s)
+    setStack([{ name: 'home' }])
+    // An account with profiles asks who's watching first.
+    const members = await fetchHousehold().catch(() => [])
+    setPhase(members.length > 1 ? { name: 'profiles', cancelable: false } : { name: 'app' })
+  }, [])
+
+  const profileChosen = useCallback(() => {
     setStack([{ name: 'home' }])
     setPhase({ name: 'app' })
   }, [])
@@ -85,11 +102,14 @@ export default function App() {
     case 'signin':
       screen = <SignIn server={phase.server} onSignedIn={signedIn} onBack={() => setPhase({ name: 'connect' })} />
       break
+    case 'profiles':
+      screen = <Profiles onDone={profileChosen} onCancel={phase.cancelable ? () => setPhase({ name: 'app' }) : undefined} />
+      break
     case 'app':
       // Keyed so pushing the same screen type with new params starts fresh.
       switch (top.name) {
         case 'home':
-          screen = <Home onSignedOut={() => setPhase({ name: 'connect' })} />
+          screen = <Home onSignedOut={() => setPhase({ name: 'connect' })} onSwitchProfile={() => setPhase({ name: 'profiles', cancelable: true })} />
           break
         case 'details':
           screen = <Details key={`d${top.id}`} id={top.id} />

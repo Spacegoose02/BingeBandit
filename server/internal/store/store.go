@@ -13,6 +13,9 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrExists is returned when a name that must be unique is taken.
+var ErrExists = errors.New("already exists")
+
 type Store struct {
 	db *sql.DB
 }

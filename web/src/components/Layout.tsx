@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useApi } from '../hooks'
-import type { Library } from '../types'
+import type { Library, Member } from '../types'
 import { Icon } from './Icon'
 import { PasscodePrompt } from './Passcode'
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const { data: household } = useApi<Member[]>(user ? '/api/household' : null)
+  const displayName = user?.profileName ?? user?.username ?? ''
   const { data: libraries } = useApi<Library[]>('/api/libraries')
   const [menuOpen, setMenuOpen] = useState(false)
   const loc = useLocation()
@@ -98,14 +100,19 @@ export default function Layout() {
         </nav>
         <div className="sidebar-user">
           <button className="user-chip" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
-            <span className="avatar">{user?.username.slice(0, 1).toUpperCase()}</span>
-            <span className="user-name">{user?.username}</span>
+            <span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span>
+            <span className="user-name">{displayName}</span>
           </button>
           {menuOpen && (
             <div className="menu user-menu" role="menu">
               <button role="menuitem" onClick={() => nav('/profile')}>
                 <Icon name="user" size={18} /> My profile
               </button>
+              {household && household.length > 1 && (
+                <button role="menuitem" onClick={() => nav('/who')}>
+                  <Icon name="users" size={18} /> Switch profile
+                </button>
+              )}
               <button role="menuitem" onClick={() => nav('/account')}>
                 <Icon name="key" size={18} /> Account
               </button>
