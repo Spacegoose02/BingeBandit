@@ -256,7 +256,9 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		s.Store.RemoveFromWatchlist(u.ID, it.ID) // finished: no longer "to watch"
 	}
 	if req.PlaySessionID != "" {
+		prev, had := s.Activity.Get(req.PlaySessionID)
 		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
+		s.emitPlayer(prev, had, np, it, req.Stopped)
 		s.recordPlay(np, it, watched)
 		if watched && !it.Watch.Watched {
 			s.Emit("playback.finished", s.playbackEvent(np, it))
@@ -273,6 +275,45 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+}
+
+// emitPlayer sends the live player events, which follow the player itself
+// (unlike playback.*, which wait for 30 s of play): player.play on a
+// session's first ping, player.pause and player.resume, player.stop, and
+// player.progress on every ping (for plugins that follow the position).
+func (s *Server) emitPlayer(prev stream.NowPlaying, had bool, np stream.NowPlaying, it *store.Item, stopped bool) {
+	ev := s.playerEvent(np, it)
+	switch {
+	case !had || prev.ItemID != np.ItemID:
+		s.Emit("player.play", ev)
+	case prev.Paused != np.Paused && np.Paused:
+		s.Emit("player.pause", ev)
+	case prev.Paused != np.Paused:
+		s.Emit("player.resume", ev)
+	}
+	if stopped {
+		ev["reason"] = "stopped"
+		s.Emit("player.stop", ev)
+		return
+	}
+	s.Emit("player.progress", ev)
+}
+
+// playerExpired reports a player that stopped pinging (closed tab, lost network).
+func (s *Server) playerExpired(np stream.NowPlaying) {
+	it, err := s.Store.Item(0, np.ItemID)
+	if err != nil {
+		return
+	}
+	ev := s.playerEvent(np, it)
+	ev["reason"] = "timeout"
+	s.Emit("player.stop", ev)
+}
+
+func (s *Server) playerEvent(np stream.NowPlaying, it *store.Item) map[string]any {
+	ev := s.playbackEvent(np, it)
+	ev["sessionId"], ev["fileId"], ev["paused"] = np.ID, np.FileID, np.Paused
+	return ev
 }
 
 // playbackEvent is the webhook payload for playback events.

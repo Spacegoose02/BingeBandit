@@ -17,9 +17,11 @@ COPY server/ ./
 COPY --from=web /src/server/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bingebandit ./cmd/bingebandit
 # Bundled plugins: each gets its own folder with its plugin.json. They're off until an admin turns them on.
-RUN mkdir -p /plugins/watchlist-rss \
- && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/watchlist-rss/watchlist-rss ./plugins/watchlist-rss \
- && cp plugins/watchlist-rss/plugin.json /plugins/watchlist-rss/
+RUN for p in watchlist-rss hue-sync; do \
+      mkdir -p /plugins/$p \
+      && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/$p/$p ./plugins/$p \
+      && cp plugins/$p/plugin.json /plugins/$p/ || exit 1; \
+    done
 
 FROM debian:bookworm-slim
 ARG TARGETARCH

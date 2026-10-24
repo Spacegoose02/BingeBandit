@@ -69,6 +69,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 	s.links = newLinkManager()
 	s.oidc = newOIDCFlows()
 	s.ctx = ctx
+	if s.Activity != nil {
+		s.Activity.OnExpire = s.playerExpired
+		go s.sweepPlayers(ctx)
+	}
 	s.reloadNetwork()
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -363,4 +367,18 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// sweepPlayers drops players that stopped pinging, so player.stop is sent for them too.
+func (s *Server) sweepPlayers(ctx context.Context) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.Activity.List()
+		}
+	}
 }

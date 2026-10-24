@@ -157,7 +157,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Casting to devices (Chromecast, DLNA) |
 | | Push notifications |
 
-## M9: Plugins 🟡 (phase 1: plugin system)
+## M9: Plugins 🟡 (phases 1–2: plugin system, Hue Sync)
 
 | | Feature |
 |---|---|
@@ -165,7 +165,8 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **Watchlist RSS** (bundled): each person's watchlist as an RSS feed; subscribed RSS feeds add matching library items to the watchlist; optionally remove finished movies |
 | | Yamtrack plugin (Yamtrack already works today through a Plex-style webhook or Trakt; a plugin could add history import and per-user setup) |
 | | Cinemask plugin: search Cinemask for upgrades of library files |
-| | Philips Hue sync to movie colours |
+| ✅ | **Hue Sync** (bundled): Hue lights follow the colours on screen, per zone (left, right, centre…), in step with the player; pause and stop behaviour, filters for people and devices |
+| | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box) |
 | | Plugin catalogue: install plugins from a list instead of copying folders |
 
 ## Docs

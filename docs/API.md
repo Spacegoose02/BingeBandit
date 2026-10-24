@@ -156,6 +156,7 @@ Admins manage plugins under `/api/admin/plugins`. Plugins themselves call `/api/
 | `playback.start` | A play has lasted 30 s (the same rule as watch history, so accidental clicks don't count). |
 | `playback.stop` | A play that started stops. |
 | `playback.finished` | Something is marked watched by playing it. |
+| `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`. |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `test` | The *Send test* button. |
 

@@ -17,7 +17,10 @@ import (
 )
 
 // WebhookEvents are the events a webhook can subscribe to.
-var WebhookEvents = []string{"playback.start", "playback.stop", "playback.finished", "recording.started", "recording.completed", "recording.failed"}
+// player.progress (every ping) is left out: it's for plugins.
+var WebhookEvents = []string{"playback.start", "playback.stop", "playback.finished",
+	"player.play", "player.pause", "player.resume", "player.stop",
+	"recording.started", "recording.completed", "recording.failed"}
 
 var webhookClient = &http.Client{Timeout: 10 * time.Second}
 
