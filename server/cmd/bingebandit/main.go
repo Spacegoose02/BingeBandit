@@ -93,6 +93,7 @@ func main() {
 	}
 	srv.Plugins = plugins.NewHost(st, []string{cfg.PluginsDir, filepath.Join(cfg.DataDir, "plugins")},
 		filepath.Join(cfg.DataDir, "plugin-data"), loopbackURL(cfg.Addr))
+	srv.Plugins.Env = []string{"BINGEBANDIT_FFMPEG=" + cfg.FFmpeg, "BINGEBANDIT_FFPROBE=" + cfg.FFprobe}
 	srv.Plugins.ServerName = func() string { return st.Setting(store.SettingServerName) }
 	go srv.Plugins.Start(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }

@@ -306,6 +306,15 @@ func (p *Plugin) Call(ctx context.Context, method, path string, body, out any) e
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+// Connection returns BingeBandit's address and the plugin's key, for tools
+// that make their own requests (such as ffmpeg reading /files/{id}/direct).
+// ok is false until the plugin is paired.
+func (p *Plugin) Connection() (serverURL, key string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.pairing.ServerURL, p.pairing.Key, p.pairing.Key != ""
+}
+
 // Settings fetches the admin's settings for this plugin, with defaults filled in.
 func (p *Plugin) Settings(ctx context.Context) (map[string]string, error) {
 	var s map[string]string

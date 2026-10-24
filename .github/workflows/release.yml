@@ -38,7 +38,7 @@ jobs:
             out="bingebandit-${GITHUB_REF_NAME}-${os}-${arch}${ext}"
             GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "../release/$out" ./cmd/bingebandit
             # Bundled plugins: unzip into a "plugins" folder next to the server.
-            for p in watchlist-rss; do
+            for p in watchlist-rss hue-sync; do
               rm -rf "/tmp/pl/$p" && mkdir -p "/tmp/pl/$p"
               GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "/tmp/pl/$p/$p${ext}" "./plugins/$p"
               cp "plugins/$p/plugin.json" "/tmp/pl/$p/"

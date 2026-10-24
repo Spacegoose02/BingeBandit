@@ -43,6 +43,8 @@ type Host struct {
 	DataDir string
 	// ServerURL is how managed plugins reach BingeBandit (loopback).
 	ServerURL string
+	// Env is added to managed plugins' environment (BINGEBANDIT_FFMPEG…).
+	Env []string
 	// ServerName and Version go into event payloads.
 	ServerName func() string
 
@@ -301,6 +303,7 @@ func (h *Host) run(ctx context.Context, in *instance, b *bundle) error {
 		"BINGEBANDIT_PLUGIN_ADDR="+addr,
 		"BINGEBANDIT_PLUGIN_DATA="+dataDir,
 	)
+	cmd.Env = append(cmd.Env, h.Env...)
 	// Ask nicely first; Windows has no SIGTERM, so it's killed there.
 	cmd.Cancel = func() error {
 		if runtime.GOOS == "windows" {

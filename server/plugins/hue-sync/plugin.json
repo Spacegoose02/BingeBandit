@@ -1,0 +1,6 @@
+{
+  "id": "hue-sync",
+  "name": "Hue Sync",
+  "description": "Philips Hue lights follow the colours on screen while movies and shows play.",
+  "command": ["hue-sync"]
+}

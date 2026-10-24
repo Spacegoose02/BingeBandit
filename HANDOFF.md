@@ -2,7 +2,7 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, logo library, your own channel categories, ThePosterDB search; plugins (M9 phase 1) and profiles._
+_Last updated: 2026-10-24, Hue Sync (M9 phase 2)._
 
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 
@@ -17,6 +17,17 @@ _Last updated: 2026-10-24, logo library, your own channel categories, ThePosterD
 - **ThePosterDB** (Edit → Artwork → Poster): **Search** reads ThePosterDB's search page and the top three title pages (`metadata/tpdb.go`), shows thumbnails (downscaled and cached in `<data>/cache/tpdb/`), and a click downloads `https://theposterdb.com/api/assets/<id>`. You can also paste a title/set/poster link into the search box, and "Use URL" accepts poster page links. **Open site** opens their search in a new tab.
   - Michael chose scraping knowing ThePosterDB's terms forbid it and that it can break or be blocked by Cloudflare. Their markup was never seen raw from here (the build machine can't reach them): the parser looks for any `/posters/<id>` link and any poster id (`data-poster-id`, `/api/assets/<id>`, `/poster/<id>`), and was tested only against a stand-in (`-tpdb-url` / `BB_TPDB_URL`). If real searches come back empty, the fix is in `parseSearch`/`parsePosters`.
   - Anonymous downloads of `/api/assets/<id>` are assumed to work (Kometa uses them); if ThePosterDB starts requiring a login, downloads will fail with the HTTP status.
+
+## Hue Sync (M9 phase 2)
+
+- **Plugin** `server/plugins/hue-sync`, bundled, off by default. Lights follow the picture, not a poster palette (Michael's call).
+  - `sampler.go`: ffmpeg reads `/api/plugin/v1/files/{id}/direct` from the player's position at 4 fps, 48×27 px (`-skip_frame noref`, 2 threads), at most 45 s ahead of the playhead, keeping 30 s behind.
+  - `colour.go`: zones (all, left, centre, right, top, bottom); saturation-weighted average → CIE xy clamped to gamut C; brightness from luminance, never fully off, capped by the setting.
+  - `sync.go`: one followed player at a time. Position = last ping + elapsed; a jump > 2.5 s outside what's read restarts ffmpeg. Commands are skipped when nothing visibly changed, and the rate is capped at ~10 light commands a second. Light states are saved on start and restored on stop (or off/leave).
+  - `bridge.go`: Hue v1 local API (pair with the link button, lights, rooms, state). Pairing and light→zone choices live in `bridge.json` in the plugin's data, set from its admin page.
+- **Server:** new `player.play/pause/resume/stop` events (also for webhooks) and plugin-only `player.progress` on every ping (`emitPlayer` in `api/playback.go`). `Activity.OnExpire` plus a 15 s sweep send `player.stop` with `reason: timeout`. The plugin API gained `/files/{id}/direct`; managed plugins get `BINGEBANDIT_FFMPEG`/`_FFPROBE`.
+- **Players:** web reports at once on seek, on first play and on resume; the TV app reports at once on pause and resume (seeks were already reported).
+- **Tested:** unit tests for colours, the sampler on a red/green/blue video, and the engine against a fake bridge (filters, seek, restore). By hand: the real server and plugin with a fake bridge: red 0.3 s after play, green within 0.3 s of the cut, warm white on pause, the right colour on resume, yellow 0.2 s after a seek, and the lamp restored on stop. **Not tested:** a real Hue bridge, and CPU use on 4K HEVC (it decodes the whole picture; `-skip_frame noref` helps).
 
 ## Plugins (M9 phase 1)
 
