@@ -188,6 +188,7 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "hls")
 	if err != nil {
+		log.Printf("live tv: %s couldn't start channel %v %q: %v", currentUser(r).Username, ch.Number, ch.Name, err)
 		writeErr(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
@@ -197,13 +198,15 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.Live.HLSFile(r.Context(), ch.ID, "live.m3u8"); err != nil {
 		s.Live.Leave(v.ID)
 		if r.Context().Err() == nil {
+			log.Printf("live tv: %s couldn't start channel %v %q: %v", currentUser(r).Username, ch.Number, ch.Name, err)
 			writeErr(w, http.StatusServiceUnavailable, err.Error())
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{
-		"viewerId": v.ID,
-		"playlist": fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),
+	writeJSON(w, http.StatusOK, map[string]any{
+		"bufferSecs": s.Live.BufferSeconds(),
+		"viewerId":   v.ID,
+		"playlist":   fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),
 	})
 }
 

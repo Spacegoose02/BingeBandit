@@ -66,7 +66,7 @@ export default function LivePlayer() {
       retryTimer = window.setTimeout(() => setAttempt((n) => n + 1), failures.current > 3 ? 15000 : 1500 * failures.current)
     }
     api
-      .post<{ viewerId: string; playlist: string }>(`/api/live/channels/${id}/watch`)
+      .post<{ viewerId: string; playlist: string; bufferSecs?: number }>(`/api/live/channels/${id}/watch`)
       .then((res) => {
         if (cancelled) {
           api.del(`/api/live/viewers/${res.viewerId}`).catch(() => undefined)
@@ -78,9 +78,11 @@ export default function LivePlayer() {
           api.post(`/api/live/viewers/${viewer}/ping`).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
         }, 10000)
         if (Hls.isSupported()) {
-          // Start a few segments behind live so short upstream hiccups don't stall
-          // playback; the server keeps a longer window for pausing and rewinding.
-          hls = new Hls({ liveSyncDurationCount: 4, manifestLoadingTimeOut: 30000, manifestLoadingMaxRetry: 6, levelLoadingMaxRetry: 6, fragLoadingMaxRetry: 6 })
+          // Start behind live (the admin's buffer setting, in 2 s segments) so short
+          // upstream hiccups don't stall playback; the server keeps a longer
+          // window for pausing and rewinding.
+          const segs = Math.max(2, Math.ceil((res.bufferSecs ?? 8) / 2))
+          hls = new Hls({ liveSyncDurationCount: segs, manifestLoadingTimeOut: 30000, manifestLoadingMaxRetry: 6, levelLoadingMaxRetry: 6, fragLoadingMaxRetry: 6 })
           hlsRef.current = hls
           hls.on(Hls.Events.ERROR, (_e, d) => {
             if (!d.fatal) return

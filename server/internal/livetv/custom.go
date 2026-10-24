@@ -246,6 +246,7 @@ func (r *Relay) runCustomItem(args []string) error {
 	}
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
+	stall := r.m.stallTimeout()
 	go func() { // stall watchdog, as for provider streams
 		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
@@ -254,7 +255,7 @@ func (r *Relay) runCustomItem(args []string) error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if time.Since(time.Unix(0, last.Load())) > stallTimeout {
+				if time.Since(time.Unix(0, last.Load())) > stall {
 					cancel()
 					return
 				}
