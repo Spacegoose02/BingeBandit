@@ -343,7 +343,7 @@ _Last updated: 2026-10-24, logo library, your own channel categories, ThePosterD
 
 - **Edit dialog** (pencil on any item page, admins only): Details, Tags (genres, labels, collections), Artwork (TMDB picks, URL, upload) and Advanced (episode order, shows only). Editing a field locks it; the lock icon toggles it.
 - **Fix match** (magnifier on movies and shows): searches TMDB, re-points the item and refreshes it.
-- **Collections:** a Collections tab on each library and `/collection/:id` pages. Smart collections take a label rule.
+- **Collections:** a Collections tab on each library and `/collection/:id` pages. Smart collections take rules (genre, studio, a year range and/or a label; every set rule must match), and `/api/admin/libraries/{id}/facets` lists the values to pick from.
 - **Library access:** Users → "All libraries" or "N libraries" button per non-admin user.
 - Schema migration 2 adds these; it was tested upgrading a v1 database. Store tests cover locks, visibility and collections.
 - **Not tested yet:** the TMDB-backed parts (artwork alternatives, match search, TMDB collection linking) need a real key.

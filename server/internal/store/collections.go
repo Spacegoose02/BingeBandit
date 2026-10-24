@@ -8,7 +8,7 @@ import (
 
 // Collection groups movies or shows within one library. Members are linked
 // explicitly (TMDB collections, admin picks) and, for smart collections,
-// every item carrying the LabelRule label.
+// every item that matches all of its rules (label, genre, studio, years).
 type Collection struct {
 	ID        int64  `json:"id"`
 	LibraryID int64  `json:"libraryId"`
@@ -17,16 +17,36 @@ type Collection struct {
 	Poster    string `json:"poster,omitempty"`
 	Backdrop  string `json:"backdrop,omitempty"`
 	TMDBID    int64  `json:"tmdbId,omitempty"`
-	LabelRule string `json:"labelRule,omitempty"`
-	ItemCount int    `json:"itemCount"`
+	SmartRules
+	ItemCount int `json:"itemCount"`
+}
+
+// SmartRules pick a collection's members automatically. Each rule that is set
+// must match; with none set, the collection is hand-picked.
+type SmartRules struct {
+	LabelRule  string `json:"labelRule,omitempty"`
+	GenreRule  string `json:"genreRule,omitempty"`
+	StudioRule string `json:"studioRule,omitempty"` // studio for movies, network for shows
+	YearFrom   int    `json:"yearFrom,omitempty"`
+	YearTo     int    `json:"yearTo,omitempty"`
+}
+
+// Smart reports whether any rule is set.
+func (r SmartRules) Smart() bool {
+	return r.LabelRule != "" || r.GenreRule != "" || r.StudioRule != "" || r.YearFrom > 0 || r.YearTo > 0
 }
 
 // memberOf is true when item alias i belongs to collection alias c.
 const memberOf = `(i.library_id = c.library_id AND i.kind IN ('movie','show') AND (
 	i.id IN (SELECT x.item_id FROM collection_items x WHERE x.collection_id = c.id)
-	OR (c.label_rule != '' AND EXISTS (SELECT 1 FROM json_each(i.labels) j WHERE j.value = c.label_rule COLLATE NOCASE))))`
+	OR ((c.label_rule != '' OR c.genre_rule != '' OR c.studio_rule != '' OR c.year_from > 0 OR c.year_to > 0)
+		AND (c.label_rule = '' OR EXISTS (SELECT 1 FROM json_each(i.labels) j WHERE j.value = c.label_rule COLLATE NOCASE))
+		AND (c.genre_rule = '' OR EXISTS (SELECT 1 FROM json_each(i.genres) g WHERE g.value = c.genre_rule COLLATE NOCASE))
+		AND (c.studio_rule = '' OR i.studio = c.studio_rule COLLATE NOCASE)
+		AND (c.year_from = 0 OR i.year >= c.year_from)
+		AND (c.year_to = 0 OR (i.year > 0 AND i.year <= c.year_to)))))`
 
-const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.label_rule,
+const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to,
 	(SELECT COUNT(*) FROM items i WHERE ` + memberOf + `),
 	COALESCE((SELECT i.poster FROM items i WHERE ` + memberOf + ` AND i.poster != '' ORDER BY i.release_date LIMIT 1), '')
 FROM collections c`
@@ -34,7 +54,7 @@ FROM collections c`
 func scanCollection(r interface{ Scan(...any) error }) (*Collection, error) {
 	var c Collection
 	var fallback string
-	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.LabelRule, &c.ItemCount, &fallback)
+	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.ItemCount, &fallback)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -162,9 +182,10 @@ func (s *Store) SetItemCollections(itemID, libraryID int64, names []string) erro
 	return tx.Commit()
 }
 
-func (s *Store) CreateCollection(libraryID int64, name, labelRule string) (*Collection, error) {
-	res, err := s.db.Exec(`INSERT INTO collections (library_id, name, label_rule, created_at) VALUES (?, ?, ?, ?)`,
-		libraryID, name, labelRule, now())
+func (s *Store) CreateCollection(libraryID int64, name string, rules SmartRules) (*Collection, error) {
+	res, err := s.db.Exec(`INSERT INTO collections (library_id, name, label_rule, genre_rule, studio_rule, year_from, year_to, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		libraryID, name, rules.LabelRule, rules.GenreRule, rules.StudioRule, rules.YearFrom, rules.YearTo, now())
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +193,9 @@ func (s *Store) CreateCollection(libraryID int64, name, labelRule string) (*Coll
 	return s.Collection(id)
 }
 
-func (s *Store) UpdateCollection(id int64, name, overview, labelRule string) error {
-	_, err := s.db.Exec(`UPDATE collections SET name = ?, overview = ?, label_rule = ? WHERE id = ?`, name, overview, labelRule, id)
+func (s *Store) UpdateCollection(id int64, name, overview string, rules SmartRules) error {
+	_, err := s.db.Exec(`UPDATE collections SET name = ?, overview = ?, label_rule = ?, genre_rule = ?, studio_rule = ?, year_from = ?, year_to = ?
+		WHERE id = ?`, name, overview, rules.LabelRule, rules.GenreRule, rules.StudioRule, rules.YearFrom, rules.YearTo, id)
 	return err
 }
 
@@ -198,6 +220,33 @@ func (s *Store) ItemCollectionNames(itemID int64) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// LibraryGenres and LibraryStudios list the values used in a library, for
+// smart collection rules.
+func (s *Store) LibraryGenres(libraryID int64) ([]string, error) {
+	return s.queryStrings(`SELECT DISTINCT j.value FROM items i, json_each(i.genres) j WHERE i.library_id = ? ORDER BY 1 COLLATE NOCASE`, libraryID)
+}
+
+func (s *Store) LibraryStudios(libraryID int64) ([]string, error) {
+	return s.queryStrings(`SELECT DISTINCT studio FROM items WHERE library_id = ? AND studio != '' AND kind IN ('movie','show') ORDER BY 1 COLLATE NOCASE`, libraryID)
+}
+
+func (s *Store) queryStrings(q string, args ...any) ([]string, error) {
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
 	}
 	return out, rows.Err()
 }

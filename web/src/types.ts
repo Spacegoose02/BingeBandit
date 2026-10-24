@@ -455,6 +455,10 @@ export interface Collection {
   backdrop?: string
   tmdbId?: number
   labelRule?: string
+  genreRule?: string
+  studioRule?: string
+  yearFrom?: number
+  yearTo?: number
   itemCount: number
 }
 

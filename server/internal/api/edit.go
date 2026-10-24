@@ -358,6 +358,32 @@ func (s *Server) libraryLabels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, labels)
 }
 
+// libraryFacets lists the labels, genres and studios used in a library, for
+// smart collection rules.
+func (s *Server) libraryFacets(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	labels, err := s.Store.LibraryLabels(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	genres, err := s.Store.LibraryGenres(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	studios, err := s.Store.LibraryStudios(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{"labels": labels, "genres": genres, "studios": studios})
+}
+
 func (s *Server) libraryCollections(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {
@@ -409,15 +435,24 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 }
 
 type collectionReq struct {
-	Name      string `json:"name"`
-	Overview  string `json:"overview"`
-	LabelRule string `json:"labelRule"`
+	Name     string `json:"name"`
+	Overview string `json:"overview"`
+	store.SmartRules
 }
 
 func (c *collectionReq) clean() error {
 	c.Name, c.LabelRule = strings.TrimSpace(c.Name), strings.TrimSpace(c.LabelRule)
+	c.GenreRule, c.StudioRule = strings.TrimSpace(c.GenreRule), strings.TrimSpace(c.StudioRule)
 	if c.Name == "" {
 		return errors.New("name is required")
+	}
+	for _, y := range []int{c.YearFrom, c.YearTo} {
+		if y != 0 && (y < 1870 || y > 2200) {
+			return errors.New("years must look like 1985")
+		}
+	}
+	if c.YearFrom > 0 && c.YearTo > 0 && c.YearFrom > c.YearTo {
+		return errors.New("the first year must not be after the last")
 	}
 	return nil
 }
@@ -437,7 +472,7 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	c, err := s.Store.CreateCollection(libID, req.Name, req.LabelRule)
+	c, err := s.Store.CreateCollection(libID, req.Name, req.SmartRules)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			writeErr(w, http.StatusConflict, "a collection with that name already exists")
@@ -464,7 +499,7 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.Store.UpdateCollection(id, req.Name, req.Overview, req.LabelRule); err != nil {
+	if err := s.Store.UpdateCollection(id, req.Name, req.Overview, req.SmartRules); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			writeErr(w, http.StatusConflict, "a collection with that name already exists")
 			return

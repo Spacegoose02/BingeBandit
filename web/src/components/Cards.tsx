@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { img } from '../api'
-import { episodeLabel, progressFraction } from '../format'
+import { episodeLabel, progressFraction, smartRuleText } from '../format'
 import type { Collection, Item } from '../types'
 import { Icon } from './Icon'
 
@@ -70,8 +70,8 @@ export function CollectionCard({ collection }: { collection: Collection }) {
       <div className="poster-frame collection-frame">
         {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{collection.name}</div>}
         <span className="badge-count">{collection.itemCount}</span>
-        {collection.labelRule && (
-          <span className="badge-smart" title={`Everything labelled “${collection.labelRule}”`}>
+        {smartRuleText(collection) && (
+          <span className="badge-smart" title={`Smart: ${smartRuleText(collection)}`}>
             <Icon name="stack" size={12} /> Smart
           </span>
         )}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 )
@@ -160,7 +161,7 @@ func TestCollections(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A smart collection driven by a label.
-	smart, err := s.CreateCollection(lib.ID, "Disney Animation", "disney")
+	smart, err := s.CreateCollection(lib.ID, "Disney Animation", SmartRules{LabelRule: "disney"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,5 +220,57 @@ func TestProfilesBelongToTheirAccount(t *testing.T) {
 	}
 	if _, err := s.UserByID(kids.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("profile after deleting its account: %v", err)
+	}
+}
+
+func TestSmartCollectionRules(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	movie := func(title string, year int, studio string, genres ...string) {
+		t.Helper()
+		id := addMovie(t, s, lib.ID, title)
+		if err := s.UpdateMetadata(id, &Item{Title: title, Year: year, Studio: studio, Genres: genres}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	movie("Halloween", 1978, "Compass", "Horror")
+	movie("The Thing", 1982, "Universal", "Horror", "Science Fiction")
+	movie("Back to the Future", 1985, "Universal", "Comedy", "Science Fiction")
+	movie("Scream", 1996, "Dimension", "horror")
+	movie("Unknown year", 0, "", "Horror")
+
+	count := func(r SmartRules) int {
+		t.Helper()
+		c, err := s.CreateCollection(lib.ID, fmt.Sprintf("%+v", r), r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		members, err := s.CollectionMembers(0, c.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(members)
+	}
+	for _, tc := range []struct {
+		rules SmartRules
+		want  int
+	}{
+		{SmartRules{GenreRule: "horror"}, 4},
+		{SmartRules{GenreRule: "Horror", YearFrom: 1980, YearTo: 1989}, 1},
+		{SmartRules{StudioRule: "universal"}, 2},
+		{SmartRules{YearFrom: 1980}, 3},
+		{SmartRules{YearTo: 1990}, 3}, // the unknown year doesn't count as before 1990
+		{SmartRules{GenreRule: "Science Fiction", StudioRule: "Universal", YearTo: 1984}, 1},
+		{SmartRules{}, 0}, // hand-picked, nothing linked
+	} {
+		if got := count(tc.rules); got != tc.want {
+			t.Errorf("%+v: %d members, want %d", tc.rules, got, tc.want)
+		}
+	}
+	genres, _ := s.LibraryGenres(lib.ID)
+	studios, _ := s.LibraryStudios(lib.ID)
+	if len(studios) != 3 || len(genres) < 4 {
+		t.Errorf("genres %v, studios %v", genres, studios)
 	}
 }
