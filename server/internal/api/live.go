@@ -1,0 +1,579 @@
+package api
+
+import (
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+
+	"bingebandit/internal/livetv"
+	"bingebandit/internal/store"
+	"bingebandit/internal/stream"
+)
+
+// liveChannel is what non-admins see: no stream URLs (they often embed
+// provider credentials), plus what's on now and next.
+type liveChannel struct {
+	ID       int64               `json:"id"`
+	Number   float64             `json:"number"`
+	Name     string              `json:"name"`
+	Logo     string              `json:"logo,omitempty"`
+	Group    string              `json:"group,omitempty"`
+	EPGID    string              `json:"epgId,omitempty"`
+	Favorite bool                `json:"favorite"`
+	Now      *store.GuideProgram `json:"now,omitempty"`
+	Next     *store.GuideProgram `json:"next,omitempty"`
+}
+
+func (s *Server) liveChannels(w http.ResponseWriter, r *http.Request) {
+	chans, err := s.Store.Channels(currentUser(r).ID, false)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, s.withNowNext(chans))
+}
+
+func (s *Server) withNowNext(chans []*store.Channel) []liveChannel {
+	now := time.Now().Unix()
+	var ids []string
+	for _, c := range chans {
+		if c.EPGID != "" {
+			ids = append(ids, c.EPGID)
+		}
+	}
+	progs, _ := s.Store.Programs(ids, now, now+12*3600)
+	byID := map[string][]store.GuideProgram{}
+	for _, p := range progs {
+		byID[p.EPGID] = append(byID[p.EPGID], p)
+	}
+	out := make([]liveChannel, 0, len(chans))
+	for _, c := range chans {
+		lc := liveChannel{ID: c.ID, Number: c.Number, Name: c.Name, Logo: c.Logo, Group: c.Group, EPGID: c.EPGID, Favorite: c.Favorite}
+		list := byID[c.EPGID]
+		for i := range list {
+			if list[i].Start <= now && list[i].Stop > now {
+				lc.Now = &list[i]
+				if i+1 < len(list) {
+					lc.Next = &list[i+1]
+				}
+				break
+			}
+			if list[i].Start > now && lc.Next == nil {
+				lc.Next = &list[i]
+			}
+		}
+		out = append(out, lc)
+	}
+	return out
+}
+
+// liveGuide returns channels and their programs for [from, to) (unix seconds).
+func (s *Server) liveGuide(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, _ := strconv.ParseInt(q.Get("from"), 10, 64)
+	to, _ := strconv.ParseInt(q.Get("to"), 10, 64)
+	if from == 0 {
+		from = time.Now().Add(-30 * time.Minute).Unix()
+	}
+	if to <= from || to-from > 24*3600 {
+		to = from + 6*3600
+	}
+	chans, err := s.Store.Channels(currentUser(r).ID, false)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	var ids []string
+	for _, c := range chans {
+		if c.EPGID != "" {
+			ids = append(ids, c.EPGID)
+		}
+	}
+	progs, err := s.Store.Programs(ids, from, to)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	byID := map[string][]store.GuideProgram{}
+	for _, p := range progs {
+		byID[p.EPGID] = append(byID[p.EPGID], p)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"from": from, "to": to, "channels": s.withNowNext(chans), "programs": byID})
+}
+
+func (s *Server) setChannelFavorite(fav bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(r, "id")
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		if err := s.Store.SetChannelFavorite(currentUser(r).ID, id, fav); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) watchableChannel(w http.ResponseWriter, r *http.Request) *store.Channel {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return nil
+	}
+	ch, err := s.Store.Channel(currentUser(r).ID, id)
+	if err == nil && !ch.Enabled {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		writeStoreErr(w, err)
+		return nil
+	}
+	return ch
+}
+
+// watchChannel joins the channel's shared relay as a web (HLS) viewer.
+func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
+	ch := s.watchableChannel(w, r)
+	if ch == nil {
+		return
+	}
+	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "hls")
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"viewerId": v.ID,
+		"playlist": fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),
+	})
+}
+
+func (s *Server) liveHLS(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	name := chi.URLParam(r, "name")
+	if vid := r.URL.Query().Get("viewer"); vid != "" && !s.Live.Touch(id, vid) {
+		writeErr(w, http.StatusGone, "this viewing session ended; start the channel again")
+		return
+	}
+	path, err := s.Live.HLSFile(r.Context(), id, name)
+	if errors.Is(err, os.ErrNotExist) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	f, err := stream.OpenShared(path)
+	if err != nil {
+		http.NotFound(w, r) // the segment rotated out between listing and fetching
+		return
+	}
+	defer f.Close()
+	if strings.HasSuffix(name, ".m3u8") {
+		// Players poll the live playlist every few seconds; that poll (with
+		// ?viewer=) is what keeps the viewer counted as watching.
+		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		w.Header().Set("Cache-Control", "no-cache")
+		io.Copy(w, f)
+		return
+	}
+	w.Header().Set("Content-Type", "video/mp2t")
+	http.ServeContent(w, r, name, time.Time{}, f)
+}
+
+func (s *Server) leaveChannel(w http.ResponseWriter, r *http.Request) {
+	s.Live.Leave(chi.URLParam(r, "viewer"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// liveTS streams a channel as raw MPEG-TS for external players (VLC, Kodi,
+// TiviMate…). It shares the same upstream connection as web viewers.
+func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
+	ch := s.watchableChannel(w, r)
+	if ch == nil {
+		return
+	}
+	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "ts")
+	if err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+		return
+	}
+	defer s.Live.Leave(v.ID)
+	w.Header().Set("Content-Type", "video/mp2t")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-v.Done():
+			return
+		case chunk := <-v.Chunks():
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}
+}
+
+// requestToken recovers the caller's token so generated playlist URLs work
+// in apps that can't send headers or cookies.
+func requestToken(r *http.Request) string {
+	if t := r.URL.Query().Get("token"); t != "" {
+		return t
+	}
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimPrefix(h, "Bearer ")
+	}
+	if c, err := r.Cookie(cookieName); err == nil {
+		return c.Value
+	}
+	return ""
+}
+
+func baseURL(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host
+}
+
+// livePlaylist exports the channel lineup as M3U for other IPTV apps.
+func (s *Server) livePlaylist(w http.ResponseWriter, r *http.Request) {
+	chans, err := s.Store.Channels(currentUser(r).ID, false)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	token, base := requestToken(r), baseURL(r)
+	var b strings.Builder
+	fmt.Fprintf(&b, "#EXTM3U x-tvg-url=\"%s/api/live/epg.xml?token=%s\"\n", base, token)
+	clean := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ")
+	for _, c := range chans {
+		fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n%s/api/live/channels/%d/stream.ts?token=%s\n",
+			clean.Replace(c.EPGID), strconv.FormatFloat(c.Number, 'f', -1, 64), clean.Replace(c.Logo), clean.Replace(c.Group),
+			clean.Replace(c.Name), base, c.ID, token)
+	}
+	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
+	w.Header().Set("Content-Disposition", `inline; filename="bingebandit.m3u"`)
+	w.Write([]byte(b.String()))
+}
+
+// liveEPG exports the guide for the channel lineup as XMLTV.
+func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
+	chans, err := s.Store.Channels(currentUser(r).ID, false)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	now := time.Now()
+	var ids []string
+	for _, c := range chans {
+		if c.EPGID != "" {
+			ids = append(ids, c.EPGID)
+		}
+	}
+	progs, err := s.Store.Programs(ids, now.Add(-2*time.Hour).Unix(), now.Add(72*time.Hour).Unix())
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	type xmlText struct {
+		Value string `xml:",chardata"`
+	}
+	type xmlIcon struct {
+		Src string `xml:"src,attr"`
+	}
+	type xmlChan struct {
+		ID   string   `xml:"id,attr"`
+		Name xmlText  `xml:"display-name"`
+		Icon *xmlIcon `xml:"icon,omitempty"`
+	}
+	type xmlProg struct {
+		Start    string   `xml:"start,attr"`
+		Stop     string   `xml:"stop,attr"`
+		Channel  string   `xml:"channel,attr"`
+		Title    xmlText  `xml:"title"`
+		SubTitle *xmlText `xml:"sub-title,omitempty"`
+		Desc     *xmlText `xml:"desc,omitempty"`
+		Category *xmlText `xml:"category,omitempty"`
+	}
+	opt := func(s string) *xmlText {
+		if s == "" {
+			return nil
+		}
+		return &xmlText{s}
+	}
+	doc := struct {
+		XMLName  xml.Name  `xml:"tv"`
+		Gen      string    `xml:"generator-info-name,attr"`
+		Channels []xmlChan `xml:"channel"`
+		Programs []xmlProg `xml:"programme"`
+	}{Gen: "BingeBandit"}
+	seen := map[string]bool{}
+	for _, c := range chans {
+		if c.EPGID == "" || seen[c.EPGID] {
+			continue
+		}
+		seen[c.EPGID] = true
+		xc := xmlChan{ID: c.EPGID, Name: xmlText{c.Name}}
+		if c.Logo != "" {
+			xc.Icon = &xmlIcon{c.Logo}
+		}
+		doc.Channels = append(doc.Channels, xc)
+	}
+	const layout = "20060102150405 -0700"
+	for _, p := range progs {
+		doc.Programs = append(doc.Programs, xmlProg{
+			Start: time.Unix(p.Start, 0).UTC().Format(layout), Stop: time.Unix(p.Stop, 0).UTC().Format(layout), Channel: p.EPGID,
+			Title: xmlText{p.Title}, SubTitle: opt(p.Subtitle), Desc: opt(p.Description), Category: opt(p.Category),
+		})
+	}
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Write([]byte(xml.Header))
+	enc := xml.NewEncoder(w)
+	enc.Indent("", " ")
+	enc.Encode(doc)
+}
+
+// ---- admin ------------------------------------------------------------------
+
+func (s *Server) liveSources(w http.ResponseWriter, r *http.Request) {
+	srcs, err := s.Store.LiveSources("")
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, srcs)
+}
+
+func (s *Server) saveLiveSource(w http.ResponseWriter, r *http.Request) {
+	var src store.LiveSource
+	if err := readJSON(r, &src); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if id, ok := idParam(r, "id"); ok {
+		existing, err := s.Store.LiveSource(id)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		src.ID, src.Kind = id, existing.Kind
+	} else if src.Kind != "m3u" && src.Kind != "epg" {
+		writeErr(w, http.StatusBadRequest, "kind must be m3u or epg")
+		return
+	}
+	src.Name, src.URL = strings.TrimSpace(src.Name), strings.TrimSpace(src.URL)
+	if src.Name == "" || src.URL == "" {
+		writeErr(w, http.StatusBadRequest, "name and URL are required")
+		return
+	}
+	if src.RefreshHours <= 0 {
+		src.RefreshHours = 24
+	}
+	isNew := src.ID == 0
+	if err := s.Store.SaveLiveSource(&src); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if isNew {
+		go livetv.Refresh(s.ctx, s.Store, &src)
+	}
+	writeJSON(w, http.StatusOK, src)
+}
+
+func (s *Server) deleteLiveSource(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if err := s.Store.DeleteLiveSource(id); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// refreshLiveSource re-imports a source now and reports the outcome.
+func (s *Server) refreshLiveSource(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	src, err := s.Store.LiveSource(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if err := livetv.Refresh(r.Context(), s.Store, src); err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	src, _ = s.Store.LiveSource(id)
+	writeJSON(w, http.StatusOK, src)
+}
+
+func (s *Server) liveStreams(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, offset := pageParams(r)
+	source, _ := strconv.ParseInt(q.Get("source"), 10, 64)
+	streams, total, err := s.Store.LiveStreams(store.StreamQuery{SourceID: source, Group: q.Get("group"), Search: strings.TrimSpace(q.Get("q")), Offset: offset, Limit: limit})
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"streams": streams, "total": total})
+}
+
+func (s *Server) liveGroups(w http.ResponseWriter, r *http.Request) {
+	source, _ := strconv.ParseInt(r.URL.Query().Get("source"), 10, 64)
+	groups, err := s.Store.StreamGroups(source)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, groups)
+}
+
+func (s *Server) adminChannels(w http.ResponseWriter, r *http.Request) {
+	chans, err := s.Store.Channels(currentUser(r).ID, true)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, chans)
+}
+
+func (s *Server) createChannels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		StreamIDs   []int64 `json:"streamIds"`
+		StartNumber float64 `json:"startNumber"`
+	}
+	if err := readJSON(r, &req); err != nil || len(req.StreamIDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "pick at least one stream")
+		return
+	}
+	if req.StartNumber <= 0 {
+		req.StartNumber = 1
+	}
+	n, err := s.Store.CreateChannelsFromStreams(req.StreamIDs, req.StartNumber)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]int{"created": n})
+}
+
+func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		store.Channel
+		StreamIDs []int64 `json:"streamIds"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	req.ID = id
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" || req.Number <= 0 {
+		writeErr(w, http.StatusBadRequest, "a channel needs a name and a number above 0")
+		return
+	}
+	if err := s.Store.UpdateChannel(&req.Channel, req.StreamIDs); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	s.Live.Stop(id) // viewers reconnect with the new stream list
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	s.Live.Stop(id)
+	if err := s.Store.DeleteChannel(id); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) epgChannels(w http.ResponseWriter, r *http.Request) {
+	list, err := s.Store.EPGChannels(strings.TrimSpace(r.URL.Query().Get("q")), 50)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// liveActivity reports every running relay with its viewers and what's airing.
+func (s *Server) liveActivity(w http.ResponseWriter, r *http.Request) {
+	stats := s.Live.Stats()
+	type withNow struct {
+		livetv.RelayStat
+		Now *store.GuideProgram `json:"now,omitempty"`
+	}
+	now := time.Now().Unix()
+	out := make([]withNow, 0, len(stats))
+	for _, st := range stats {
+		wn := withNow{RelayStat: st}
+		if st.EPGID != "" {
+			if progs, err := s.Store.Programs([]string{st.EPGID}, now, now+1); err == nil && len(progs) > 0 {
+				wn.Now = &progs[0]
+			}
+		}
+		out = append(out, wn)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Number < out[j].Number })
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) stopRelay(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	s.Live.Stop(id)
+	log.Printf("live tv: %s stopped channel %d", currentUser(r).Username, id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) kickViewer(w http.ResponseWriter, r *http.Request) {
+	s.Live.Leave(chi.URLParam(r, "viewer"))
+	w.WriteHeader(http.StatusNoContent)
+}

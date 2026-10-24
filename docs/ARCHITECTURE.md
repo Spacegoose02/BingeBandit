@@ -41,6 +41,17 @@
 - **Collections** (`collections`, `collection_items`) belong to one library. Members are explicit links (TMDB `belongs_to_collection`, or the admin's Edit → Tags) **plus**, for smart collections, every item whose `labels` contains `label_rule` (case-insensitive). The membership test is one SQL fragment, `store.memberOf`.
 - **Library access:** `users.all_libraries` (default on), or the `user_libraries` rows. Every user-facing item query includes `store.visible`, which binds `@uid`. `uid 0` means the server itself and sees everything. Handlers that start from a library or file id check `CanSeeLibrary`, or load the item as the user, and answer 404 so hidden content isn't revealed.
 
+## Live TV
+
+- **Sources** (`live_sources`): M3U playlists import into `live_streams` (upserted by URL, with stale entries removed). XMLTV guides import into `epg_channels` and `epg_programs` (12h behind to 8 days ahead). Both are refreshed by the "Refresh Live TV" task according to each source's interval.
+- **Channels** (`channels` and `channel_streams`): a channel is a number, name and guide id plus an ordered list of streams, possibly from different providers.
+- **Relay** (`livetv.Manager`, one `Relay` per watched channel): a single upstream HTTP connection fans out to every viewer.
+  - **Fallback:** streams are tried in priority order, skipping providers at `max_streams` (counted across all running relays). A watchdog moves on to the next stream after a 12s stall.
+  - **Raw TS viewers** (`/api/live/channels/{id}/stream.ts`, used by external apps) get chunks through a buffered channel. A viewer that falls 512 chunks behind is dropped.
+  - **Web viewers** share one ffmpeg per channel that turns the relayed TS into a rolling HLS playlist (`hls_list_size 8`, `delete_segments`). The first ~3 MB of the stream are probed: H.264 is copied, anything else is converted with yadif deinterlacing.
+  - **Viewer lifetime:** web viewers stay counted while their player polls the playlist with `?viewer=`, and expire after 30s without a poll. A relay with no viewers for 15s stops.
+- **Testing without a provider:** `go run ./cmd/fakeiptv` serves six ffmpeg test channels (one MPEG-2, one "flaky" that dies after 20s and has a backup feed), an M3U playlist and an XMLTV guide on `:8585`.
+
 ## Scanning
 
 - **Full scan** (`Scanner.Scan`, `ScanWait`): walks every library folder, then processes files with 4 workers (`probeWorkers`). Each file becomes an item upsert, plus an ffprobe run if its size or mtime changed. Then it prunes, then fetches metadata for new items.

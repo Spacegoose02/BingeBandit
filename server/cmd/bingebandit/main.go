@@ -15,6 +15,7 @@ import (
 	"bingebandit/internal/api"
 	"bingebandit/internal/config"
 	"bingebandit/internal/library"
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
@@ -69,6 +70,7 @@ func main() {
 		Activity:   stream.NewActivity(),
 		Tasks:      scheduler,
 		Markers:    detector,
+		Live:       livetv.NewManager(st, cfg.FFmpeg, cfg.FFprobe, cfg.DataDir),
 		Logs:       logBuf,
 		Version:    version,
 		DataDir:    cfg.DataDir,

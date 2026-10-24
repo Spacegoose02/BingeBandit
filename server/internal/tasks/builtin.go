@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"bingebandit/internal/library"
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/media"
 	"bingebandit/internal/store"
@@ -33,6 +34,12 @@ func Builtin(d Deps) []*Task {
 			Description:    "Look for new, changed and removed files in every library.",
 			DefaultEnabled: true, DefaultHours: 6,
 			Run: d.scanLibraries,
+		},
+		{
+			ID: "refresh_live_tv", Name: "Refresh Live TV playlists and guides",
+			Description:    "Re-download M3U playlists and XMLTV guides whose refresh interval has passed, and drop guide data that has aired.",
+			DefaultEnabled: true, DefaultHours: 1,
+			Run: func(ctx context.Context) (string, error) { return livetv.RefreshDue(ctx, d.Store) },
 		},
 		{
 			ID: "refresh_metadata", Name: "Refresh metadata",

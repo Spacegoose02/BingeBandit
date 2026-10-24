@@ -4,7 +4,21 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: intro and credits detection (M3)
+## Latest: Live TV phase 1 (M4)
+
+- **Admin → Live TV:** Sources (M3U and XMLTV), Channels (add from streams, edit, fallback order, guide match), and Activity (per-channel stats and viewers).
+- **Viewer pages:** Live TV guide at `/live`, and the player at `/live/:id` (↑/↓ change channel, G toggles the mini guide).
+- **Tested against `cmd/fakeiptv`:**
+  - import, channel creation and guide matching
+  - two web viewers on one upstream connection (confirmed in the provider's log)
+  - MPEG-2 converted automatically
+  - flaky stream → backup within the same second
+  - M3U, XMLTV and raw TS output
+  - channel flipping cleans up viewers
+- **Not yet tested with a real IPTV provider or HDHomeRun.** Things to watch: provider-specific user agents, HTTPS redirects, and `.m3u8` (HLS) upstreams. Only MPEG-TS over HTTP is relayed today; HLS upstream support is the most likely next need.
+- The exported playlist embeds the requesting session's token. Per-user API keys (M6) should replace that.
+
+## Intro and credits detection (M3)
 
 - Pure Go (no Chromaprint dependency): `internal/markers`. The **Detect intros and credits** scheduled task (nightly, maintenance window) analyzes seasons that have new episodes. A show or season page has a "Detect now" button (admins).
 - Tested with generated episodes that share theme and credits music at different offsets and bitrates. All markers landed within about 1s, with no false positives on unrelated audio. **Not yet tried on real TV episodes**: the thresholds `maxBitErrors`, `maxGapFrames` and `edgeFrames` may need tuning against a real season.

@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"bingebandit/internal/library"
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
@@ -34,6 +35,7 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
+	Live       *livetv.Manager
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -74,6 +76,17 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/watchlist", s.watchlist)
 			r.Post("/watchlist/{id}", s.setWatchlist(true))
 			r.Delete("/watchlist/{id}", s.setWatchlist(false))
+
+			r.Get("/live/channels", s.liveChannels)
+			r.Get("/live/guide", s.liveGuide)
+			r.Post("/live/channels/{id}/favorite", s.setChannelFavorite(true))
+			r.Delete("/live/channels/{id}/favorite", s.setChannelFavorite(false))
+			r.Post("/live/channels/{id}/watch", s.watchChannel)
+			r.Get("/live/channels/{id}/hls/{name}", s.liveHLS)
+			r.Get("/live/channels/{id}/stream.ts", s.liveTS)
+			r.Delete("/live/viewers/{viewer}", s.leaveChannel)
+			r.Get("/live/playlist.m3u", s.livePlaylist)
+			r.Get("/live/epg.xml", s.liveEPG)
 
 			r.Get("/playlists", s.playlists)
 			r.Post("/playlists", s.createPlaylist)
@@ -137,6 +150,22 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/libraries/{id}/collections", s.createCollection)
 				r.Put("/collections/{id}", s.updateCollection)
 				r.Delete("/collections/{id}", s.deleteCollection)
+
+				r.Get("/live/sources", s.liveSources)
+				r.Post("/live/sources", s.saveLiveSource)
+				r.Put("/live/sources/{id}", s.saveLiveSource)
+				r.Delete("/live/sources/{id}", s.deleteLiveSource)
+				r.Post("/live/sources/{id}/refresh", s.refreshLiveSource)
+				r.Get("/live/streams", s.liveStreams)
+				r.Get("/live/groups", s.liveGroups)
+				r.Get("/live/channels", s.adminChannels)
+				r.Post("/live/channels", s.createChannels)
+				r.Put("/live/channels/{id}", s.updateChannel)
+				r.Delete("/live/channels/{id}", s.deleteChannel)
+				r.Get("/live/epg-channels", s.epgChannels)
+				r.Get("/live/activity", s.liveActivity)
+				r.Delete("/live/activity/{id}", s.stopRelay)
+				r.Delete("/live/viewers/{viewer}", s.kickViewer)
 
 				r.Get("/history", s.adminHistory)
 				r.Get("/statistics", s.adminStatistics)

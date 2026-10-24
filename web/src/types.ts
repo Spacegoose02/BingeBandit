@@ -158,6 +158,96 @@ export interface Prefs {
   skipCredits: 'button' | 'auto' | 'off'
 }
 
+export interface GuideProgram {
+  id: number
+  epgId: string
+  start: number
+  stop: number
+  title: string
+  subtitle?: string
+  description?: string
+  category?: string
+  icon?: string
+  episode?: string
+}
+
+export interface LiveChannel {
+  id: number
+  number: number
+  name: string
+  logo?: string
+  group?: string
+  epgId?: string
+  favorite: boolean
+  now?: GuideProgram
+  next?: GuideProgram
+}
+
+export interface ChannelStream {
+  streamId: number
+  name: string
+  sourceId: number
+  sourceName: string
+  url?: string
+}
+
+export interface AdminChannel {
+  id: number
+  number: number
+  name: string
+  logo?: string
+  group?: string
+  epgId?: string
+  enabled: boolean
+  favorite: boolean
+  streams?: ChannelStream[]
+}
+
+export interface LiveSource {
+  id: number
+  kind: 'm3u' | 'epg'
+  name: string
+  url: string
+  userAgent: string
+  maxStreams: number
+  refreshHours: number
+  enabled: boolean
+  lastRefresh: number
+  lastError?: string
+  entryCount: number
+}
+
+export interface LiveStream {
+  id: number
+  sourceId: number
+  sourceName: string
+  name: string
+  url: string
+  logo?: string
+  group?: string
+  tvgId?: string
+  tvgChno?: string
+  channelIds?: number[]
+}
+
+export interface RelayStat {
+  channelId: number
+  number: number
+  name: string
+  logo?: string
+  stream: string
+  source: string
+  started: number
+  bytes: number
+  avgBps: number
+  currentBps: number
+  video?: string
+  failovers: number
+  lastError?: string
+  now?: GuideProgram
+  viewers: { id: string; username: string; ip: string; kind: string; connected: number }[]
+}
+
 export interface Marker {
   kind: 'intro' | 'credits'
   start: number

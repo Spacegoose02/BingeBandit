@@ -30,6 +30,10 @@ export default function Layout() {
             <Icon name="search" />
             <span>Search</span>
           </NavLink>
+          <NavLink to="/live" className="nav-item">
+            <Icon name="broadcast" />
+            <span>Live TV</span>
+          </NavLink>
           <NavLink to="/watchlist" className="nav-item">
             <Icon name="bookmark" />
             <span>Watchlist</span>
@@ -55,6 +59,10 @@ export default function Layout() {
               <NavLink to="/admin/statistics" className="nav-item">
                 <Icon name="chart" />
                 <span>Statistics</span>
+              </NavLink>
+              <NavLink to="/admin/live" className="nav-item">
+                <Icon name="broadcast" />
+                <span>Live TV</span>
               </NavLink>
               <NavLink to="/admin/libraries" className="nav-item">
                 <Icon name="library" />

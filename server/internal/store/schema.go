@@ -224,4 +224,84 @@ CREATE TABLE markers (
 );
 ALTER TABLE items ADD COLUMN markers_at INTEGER NOT NULL DEFAULT 0;
 `,
+	// 7: Live TV — M3U/EPG sources, the raw streams they list, channels built
+	// from those streams (with fallbacks), guide data and favourites.
+	`
+CREATE TABLE live_sources (
+	id            INTEGER PRIMARY KEY,
+	kind          TEXT NOT NULL CHECK (kind IN ('m3u','epg')),
+	name          TEXT NOT NULL,
+	url           TEXT NOT NULL,          -- http(s) URL or a local file path
+	user_agent    TEXT NOT NULL DEFAULT '',
+	max_streams   INTEGER NOT NULL DEFAULT 0, -- provider connection limit, 0 = unlimited
+	refresh_hours INTEGER NOT NULL DEFAULT 24,
+	enabled       INTEGER NOT NULL DEFAULT 1,
+	last_refresh  INTEGER NOT NULL DEFAULT 0,
+	last_error    TEXT NOT NULL DEFAULT '',
+	entry_count   INTEGER NOT NULL DEFAULT 0,
+	created_at    INTEGER NOT NULL
+);
+
+CREATE TABLE live_streams (
+	id        INTEGER PRIMARY KEY,
+	source_id INTEGER NOT NULL REFERENCES live_sources(id) ON DELETE CASCADE,
+	name      TEXT NOT NULL,
+	url       TEXT NOT NULL,
+	logo      TEXT NOT NULL DEFAULT '',
+	grp       TEXT NOT NULL DEFAULT '',
+	tvg_id    TEXT NOT NULL DEFAULT '',
+	tvg_chno  TEXT NOT NULL DEFAULT '',
+	seen_gen  INTEGER NOT NULL DEFAULT 0,
+	UNIQUE (source_id, url)
+);
+CREATE INDEX live_streams_group ON live_streams(source_id, grp);
+
+CREATE TABLE channels (
+	id         INTEGER PRIMARY KEY,
+	number     REAL NOT NULL,
+	name       TEXT NOT NULL,
+	logo       TEXT NOT NULL DEFAULT '',
+	grp        TEXT NOT NULL DEFAULT '',
+	epg_id     TEXT NOT NULL DEFAULT '',    -- XMLTV channel id
+	enabled    INTEGER NOT NULL DEFAULT 1,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX channels_number ON channels(number);
+
+CREATE TABLE channel_streams (
+	channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	stream_id  INTEGER NOT NULL REFERENCES live_streams(id) ON DELETE CASCADE,
+	priority   INTEGER NOT NULL,
+	PRIMARY KEY (channel_id, stream_id)
+);
+
+CREATE TABLE epg_channels (
+	source_id    INTEGER NOT NULL REFERENCES live_sources(id) ON DELETE CASCADE,
+	xmltv_id     TEXT NOT NULL,
+	display_name TEXT NOT NULL,
+	icon         TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (source_id, xmltv_id)
+);
+
+CREATE TABLE epg_programs (
+	id          INTEGER PRIMARY KEY,
+	source_id   INTEGER NOT NULL REFERENCES live_sources(id) ON DELETE CASCADE,
+	xmltv_id    TEXT NOT NULL,
+	start_at    INTEGER NOT NULL,
+	stop_at     INTEGER NOT NULL,
+	title       TEXT NOT NULL,
+	subtitle    TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	category    TEXT NOT NULL DEFAULT '',
+	icon        TEXT NOT NULL DEFAULT '',
+	episode     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX epg_programs_channel ON epg_programs(xmltv_id, start_at);
+
+CREATE TABLE channel_favorites (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, channel_id)
+);
+`,
 }

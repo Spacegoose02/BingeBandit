@@ -18,6 +18,8 @@
   - resume, auto-play of the next episode, keyboard shortcuts
   - hardware encoding (NVENC, Quick Sync, VAAPI, AMF, VideoToolbox) and HDR→SDR tone mapping
 - Users with admin and regular roles, an admin dashboard with Now Playing (local/remote, IP, direct vs transcode, source → target) and library stats
+- **Live TV**: M3U and XMLTV sources, channels with automatic fallback streams, one shared provider connection per channel, a TV guide, a live player with a mini guide, Dispatcharr-style stats, and M3U/XMLTV output for other apps
+- Watchlist, playlists, watch history, profiles, server statistics, and intro/credits detection with Skip buttons
 - A single binary with the web UI embedded, for Windows, Linux, macOS and Docker/Unraid
 
 ## Run it
@@ -62,7 +64,13 @@ cd server; go run ./cmd/bingebandit -data ..\data
 cd web; npm install; npm run dev
 ```
 
-Then open http://localhost:5173. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand.
+Then open http://localhost:5173.
+
+To try Live TV without an IPTV subscription, run the bundled fake provider and add `http://localhost:8585/playlist.m3u` and `http://localhost:8585/epg.xml` as sources under Server → Live TV:
+
+```powershell
+cd server; go run ./cmd/fakeiptv
+``` Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand.
 
 ## Releasing
 

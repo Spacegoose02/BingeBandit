@@ -616,6 +616,97 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .ranked-bar { height: 10px; border-radius: 0 4px 4px 0; background: var(--chart-mark); min-width: 2px; }
 .ranked-value { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* ---------- live tv ---------- */
+.ch-logo { object-fit: contain; flex: none; }
+.ch-logo-fallback { display: inline-grid; place-items: center; flex: none; border-radius: 6px; background: var(--surface-3); color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: 0.04em; }
+.ch-num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--muted); }
+.ch-num.big { font-size: 18px; min-width: 44px; text-align: right; color: var(--text); }
+.guide-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 8px 0 22px; min-height: 150px; }
+.guide-hero-text { display: flex; flex-direction: column; gap: 8px; max-width: 760px; }
+.guide-hero h1 { font-size: clamp(26px, 3vw, 38px); }
+.guide-sub { font-weight: 600; color: #c3c9d0; }
+.guide-desc { margin: 0; color: #c3c9d0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.guide-toolbar { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.guide-toolbar select { width: auto; padding: 7px 10px; font-size: 14px; }
+.guide-grid { position: relative; border-top: 1px solid var(--border); }
+.guide-ruler { position: relative; height: 34px; border-bottom: 2px solid var(--border-strong); }
+.guide-ruler span { position: absolute; top: 9px; font-size: 13px; color: var(--muted); transform: translateX(2px); white-space: nowrap; }
+.guide-ruler .guide-now-label { color: var(--accent); font-weight: 700; top: 0; transform: translateX(-50%); font-size: 11px; }
+.guide-row { display: flex; height: 58px; border-bottom: 1px solid var(--border); }
+.guide-channel { display: flex; align-items: center; gap: 4px; flex: none; padding-right: 6px; background: var(--bg); position: sticky; left: 0; z-index: 2; }
+.guide-channel-btn { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 6px; border-radius: 8px; min-width: 0; flex: 1; text-align: left; }
+.guide-channel-btn:hover { background: var(--surface-2); }
+.guide-channel .ch-num { min-width: 34px; text-align: right; }
+.guide-channel .ch-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-star { background: none; border: 0; padding: 4px; color: var(--faint); border-radius: 6px; display: grid; }
+.fav-star.on { color: #fcd34d; }
+.guide-track { position: relative; flex: 1; overflow: hidden; }
+.guide-prog {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-2);
+  text-align: left;
+  overflow: hidden;
+  min-width: 0;
+}
+.guide-prog:hover { background: var(--surface-3); }
+.guide-prog.live { background: color-mix(in srgb, var(--accent) 14%, var(--surface-2)); }
+.guide-prog.past { opacity: 0.55; }
+.guide-prog.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+.gp-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-time { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.gp-cont { position: absolute; left: 2px; color: var(--muted); }
+.guide-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; z-index: 1; }
+
+.live-player { position: fixed; inset: 0; background: #000; display: flex; flex-direction: column; overflow: hidden; }
+.live-stage { position: relative; flex: 1; min-height: 0; }
+.live-player.with-guide .live-stage { flex: 0 0 72%; }
+.live-player .player-top, .live-controls { position: absolute; left: 0; right: 0; padding: 16px clamp(16px, 3vw, 32px); opacity: 0; transition: opacity 0.25s; pointer-events: none; display: flex; align-items: center; gap: 12px; }
+.live-player.show-controls .player-top, .live-player.show-controls .live-controls { opacity: 1; pointer-events: auto; }
+.live-player .player-top { top: 0; background: linear-gradient(180deg, rgba(0, 0, 0, 0.8), transparent); }
+.live-controls { bottom: 0; background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent); padding-top: 50px; }
+.live-controls .spacer, .live-player .player-top .spacer { flex: 1; }
+.live-info { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.live-progress { width: min(360px, 50vw); margin-top: 6px; }
+.live-badge { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; padding: 3px 10px; border-radius: 6px; background: #e11d48; color: #fff; }
+.btn.active { border-color: var(--accent); color: var(--accent); }
+.mini-guide { flex: 1; display: flex; gap: 12px; overflow-x: auto; padding: 14px clamp(16px, 3vw, 32px); background: #0b0d10; border-top: 1px solid var(--border); }
+.mini-ch { flex: 0 0 240px; display: flex; flex-direction: column; gap: 6px; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow: hidden; }
+.mini-ch:hover { border-color: var(--border-strong); }
+.mini-ch.current { border-color: var(--accent); }
+.mini-ch-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mini-ch-head .ch-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-ch-now { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-ch .progress.inline { max-width: none; }
+
+.channel-row.disabled { opacity: 0.5; }
+.stream-pick { max-height: 46vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.stream-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px !important; padding: 7px 10px; border-radius: 8px; color: var(--text) !important; font-size: 14px !important; cursor: pointer; }
+.stream-row:hover { background: var(--surface-2); }
+.stream-row.used { opacity: 0.6; }
+.stream-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+.pick-list { display: flex; flex-direction: column; border: 1px solid var(--border-strong); border-radius: 10px; padding: 4px; max-height: 220px; overflow-y: auto; background: var(--bg-elev); }
+.pick-list button { display: flex; gap: 8px; align-items: baseline; text-align: left; background: none; border: 0; padding: 7px 10px; border-radius: 8px; }
+.pick-list button:hover { background: var(--surface-2); }
+.list.compact .list-row { padding: 8px 10px; }
+.relay-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; }
+.relay-card { display: flex; flex-direction: column; gap: 12px; }
+.relay-head { display: flex; gap: 14px; align-items: center; }
+.relay-name { font-weight: 700; font-size: 16px; }
+.relay-stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; font-variant-numeric: tabular-nums; }
+.relay-stats span { display: inline-flex; align-items: center; gap: 6px; }
+.viewer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.viewer-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.viewer-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+
 /* ---------- tasks & logs ---------- */
 .task-row { display: flex; align-items: center; gap: 16px; padding: 14px 12px; flex-wrap: wrap; }
 .task-row + .task-row { border-top: 1px solid var(--border); }
@@ -796,6 +887,11 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   .lib-grid, .np-grid { grid-template-columns: 1fr; }
   .volume input, .mode-pill { display: none; }
   .field-grid { grid-template-columns: 1fr; }
+  .relay-grid { grid-template-columns: 1fr; }
+  .guide-hero .ch-logo, .guide-hero .ch-logo-fallback { display: none; }
+  .guide-row { height: 52px; }
+  .guide-channel .ch-logo, .guide-channel .ch-logo-fallback, .guide-channel .fav-star { display: none; }
+  .live-player.with-guide .live-stage { flex-basis: 60%; }
   .field-grid .span-2 { grid-column: auto; }
   .artwork-current { flex-direction: column; }
   .url-row { flex-direction: column; }

@@ -72,13 +72,20 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Watch Together: invite a user and sync playback |
 | | Notifications: new episodes, live sports starting, etc. |
 
-## M4: Live TV (Dispatcharr replacement)
+## M4: Live TV (Dispatcharr replacement) 🟡 (phase 1 done)
 
-- M3U and EPG manager: multiple M3U accounts, multiple EPGs, channel mapping (like Dispatcharr).
-- Logo manager, categories, favourites, favourite channels → custom categories, sort through categories.
-- Stream proxy: users watching the same channel share one upstream connection; fallback M3U streams per channel; buffering/proxy settings; reconnect logic tuned for remote viewers.
-- Live TV stats like Dispatcharr: channel, IP, user, average speed, data, duration, kill stream. Live TV logs.
-- TV Guide like the Rogers/Xfinity guide screenshot; mini guide while watching (picture top ¾, channel + summary, guide at the bottom).
+| | Item |
+|---|---|
+| ✅ | M3U and EPG manager: multiple M3U accounts (with connection limits and user agent), multiple XMLTV guides (gzip OK), scheduled refresh |
+| ✅ | Channels from playlist streams (by group or hand-picked), numbering, categories, logos, guide matching by tvg-id with manual override |
+| ✅ | **Shared stream proxy**: everyone on a channel shares one upstream connection; fallback streams per channel switch automatically on errors or stalls; provider connection limits respected |
+| ✅ | Automatic browser compatibility: H.264 passed through, MPEG-2/HEVC broadcast converted (with deinterlacing) |
+| ✅ | Live TV stats like Dispatcharr: channel, now playing, stream/provider, current and average Mbps, data, uptime, fail-overs, viewers with IP/user/player, stop channel or kick viewer |
+| ✅ | TV guide like the Rogers screenshot, favourites, category filter |
+| ✅ | Live player with channel up/down, now/next, and a mini guide (picture on top, guide at the bottom) |
+| ✅ | M3U + XMLTV output so other IPTV apps (TiviMate, VLC, Plex) can use BingeBandit's channels |
+| | Logo manager (upload and cache logos), favourite channels → custom categories |
+| | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
 - Guides from local providers by ZIP (DirecTV, Comcast…) via Schedules Direct / similar.
 - DVR: schedule recordings, admin-approval switch, DVR settings, admin chooses whether recordings go into the show's library or a temporary folder.
 - Sports tracker with scores and alerts (ESPN API: college football/basketball, NBA, MLB, MLS, NHL, NFL); notifications when a game or show is about to start.

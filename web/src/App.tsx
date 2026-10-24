@@ -11,6 +11,8 @@ import CollectionPage from './pages/Collection'
 import { PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
 import ProfilePage from './pages/Profile'
 import AdminStatistics from './pages/admin/Statistics'
+import AdminLiveTV from './pages/admin/LiveTV'
+import LiveGuide from './pages/LiveGuide'
 import Search from './pages/Search'
 import Account from './pages/Account'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -22,6 +24,7 @@ import AdminLogs from './pages/admin/Logs'
 
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
+const LivePlayer = lazy(() => import('./pages/LivePlayer'))
 
 function RequireUser() {
   const { user } = useAuth()
@@ -52,8 +55,17 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route
+          path="/live/:id"
+          element={
+            <Suspense fallback={<div className="player"><div className="spinner" /></div>}>
+              <LivePlayer />
+            </Suspense>
+          }
+        />
         <Route element={<Layout />}>
           <Route index element={<Home />} />
+          <Route path="/live" element={<LiveGuide />} />
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />
@@ -70,6 +82,7 @@ export default function App() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="statistics" element={<AdminStatistics />} />
+            <Route path="live" element={<AdminLiveTV />} />
             <Route path="tasks" element={<AdminTasks />} />
             <Route path="logs" element={<AdminLogs />} />
           </Route>
