@@ -99,3 +99,15 @@ export function languageName(code?: string): string {
     return code
   }
 }
+
+/** Describes a smart collection's rules, e.g. "Horror · 1980–1989", or "" for a hand-picked one. */
+export function smartRuleText(c: { labelRule?: string; genreRule?: string; studioRule?: string; yearFrom?: number; yearTo?: number }): string {
+  const parts: string[] = []
+  if (c.genreRule) parts.push(c.genreRule)
+  if (c.studioRule) parts.push(c.studioRule)
+  if (c.yearFrom && c.yearTo) parts.push(c.yearFrom === c.yearTo ? `${c.yearFrom}` : `${c.yearFrom}–${c.yearTo}`)
+  else if (c.yearFrom) parts.push(`${c.yearFrom} on`)
+  else if (c.yearTo) parts.push(`up to ${c.yearTo}`)
+  if (c.labelRule) parts.push(`labelled “${c.labelRule}”`)
+  return parts.join(' · ')
+}

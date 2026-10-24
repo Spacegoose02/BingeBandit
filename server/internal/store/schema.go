@@ -512,4 +512,11 @@ CREATE TABLE channel_category_members (
 	PRIMARY KEY (category_id, channel_id)
 );
 `,
+	// 19: smart collections by genre, studio or year range, alongside labels.
+	`
+ALTER TABLE collections ADD COLUMN genre_rule TEXT NOT NULL DEFAULT '';
+ALTER TABLE collections ADD COLUMN studio_rule TEXT NOT NULL DEFAULT '';
+ALTER TABLE collections ADD COLUMN year_from INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE collections ADD COLUMN year_to INTEGER NOT NULL DEFAULT 0;
+`,
 }

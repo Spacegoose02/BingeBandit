@@ -45,7 +45,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | True adaptive bitrate (multi-rendition HLS ladder) |
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
-| | Smart collections by genre, studio or year (today they work by label) |
+| ✅ | Smart collections by genre, studio, year range or label |
 
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.

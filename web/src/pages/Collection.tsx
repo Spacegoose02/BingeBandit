@@ -6,6 +6,7 @@ import { PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
+import { smartRuleText } from '../format'
 import type { Collection, Item } from '../types'
 
 export default function CollectionPage() {
@@ -36,7 +37,7 @@ export default function CollectionPage() {
           <header className="page-head">
             <div className="collection-head">
               <div className="muted small">
-                <Icon name="stack" size={14} /> Collection{collection.labelRule ? ` · smart: label “${collection.labelRule}”` : ''}
+                <Icon name="stack" size={14} /> Collection{smartRuleText(collection) ? ` · smart: ${smartRuleText(collection)}` : ''}
               </div>
               <h1 className="detail-title">{collection.name}</h1>
               <div className="muted">{items.length} {items.length === 1 ? 'item' : 'items'}</div>

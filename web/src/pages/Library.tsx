@@ -133,7 +133,7 @@ function CollectionsTab({ libraryId }: { libraryId: number }) {
           <button className="btn btn-glass btn-sm" onClick={() => setCreating(true)}>
             <Icon name="plus" size={16} /> New collection
           </button>
-          <span className="muted small">Add movies from their Edit dialog, or give a collection a label to fill it automatically.</span>
+          <span className="muted small">Add movies from their Edit dialog, or give a collection rules (genre, studio, years or a label) to fill it automatically.</span>
         </div>
       )}
       {data?.length === 0 && <div className="empty">No collections yet. TMDB collections appear here once metadata is fetched.</div>}

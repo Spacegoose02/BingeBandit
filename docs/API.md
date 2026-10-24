@@ -87,7 +87,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/home` | Hero, Continue Watching and the Home rows. |
 | GET | `/libraries` | Libraries you can see. |
 | GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
-| GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. |
+| GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
 | GET | `/items/{id}` | A movie, show, season or episode, with files, streams, cast and children. |
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |

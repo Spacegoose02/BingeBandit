@@ -234,6 +234,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/match", s.matchSearch)
 
 				r.Get("/libraries/{id}/labels", s.libraryLabels)
+				r.Get("/libraries/{id}/facets", s.libraryFacets)
 				r.Post("/libraries/{id}/collections", s.createCollection)
 				r.Put("/collections/{id}", s.updateCollection)
 				r.Delete("/collections/{id}", s.deleteCollection)
