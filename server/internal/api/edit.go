@@ -131,8 +131,12 @@ func (s *Server) setArtwork(w http.ResponseWriter, r *http.Request) {
 	ref := req.Ref
 	switch {
 	case req.URL != "":
+		u := strings.TrimSpace(req.URL)
+		if asset := s.TPDb.PosterLink(u); asset != "" {
+			u = asset // a ThePosterDB poster page: download its image
+		}
 		var err error
-		if ref, err = s.Artwork.Download(r.Context(), strings.TrimSpace(req.URL)); err != nil {
+		if ref, err = s.Artwork.Download(r.Context(), u); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -174,6 +178,53 @@ func (s *Server) uploadArtwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": store.ImageURL(ref)})
+}
+
+// tpdbSearch looks the item up on ThePosterDB (or opens a pasted ThePosterDB link).
+func (s *Server) tpdbSearch(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	kind := "movie"
+	if it.Kind == "show" || it.Kind == "season" || it.Kind == "episode" {
+		kind = "show"
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	year := it.Year
+	if q == "" {
+		q = it.Title
+		if it.ShowID != 0 && it.ShowID != it.ID { // a season or episode: search for its show
+			if show, err := s.Store.Item(0, it.ShowID); err == nil {
+				q, year = show.Title, show.Year
+			}
+		}
+	} else {
+		year = 0
+	}
+	titles, err := s.TPDb.Search(r.Context(), kind, q, year)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"query": q, "titles": titles})
+}
+
+// tpdbThumb serves a small copy of a ThePosterDB poster for the picker.
+func (s *Server) tpdbThumb(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "poster")
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	path, err := s.TPDb.Thumb(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=604800")
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) localImage(w http.ResponseWriter, r *http.Request) {

@@ -75,7 +75,12 @@ func (s *Server) saveCustomChannel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if msg := req.validate(); msg != "" {
+	msg := req.validate()
+	if msg == "" {
+		req.Logo = strings.TrimSpace(req.Logo)
+		msg = s.checkLogo(req.Logo)
+	}
+	if msg != "" {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}

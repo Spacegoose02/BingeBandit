@@ -99,6 +99,13 @@ export interface LiveChannel {
   next?: GuideProgram
 }
 
+/** A viewer's own channel category (made on the web). */
+export interface ChannelCategory {
+  id: number
+  name: string
+  channelIds: number[]
+}
+
 export interface ServerInfo {
   url: string
   name: string

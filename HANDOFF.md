@@ -2,7 +2,21 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, plugins (M9 phase 1) and profiles._
+_Last updated: 2026-10-24, logo library, your own channel categories, ThePosterDB search; plugins (M9 phase 1) and profiles._
+
+## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
+
+- **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 18).
+  - A channel that uses one has `logo = "library:<file>"`; provider URLs work as before. Playlist refreshes never touch channel logos, so library logos stick.
+  - "Give each to channels with the same name" and **Match all to channels** use `livetv.MatchName` (ignores case, HD/FHD/4K, `US:`/`CA |` prefixes and bracketed text; "TSN 1 FHD" = "TSN1.svg").
+  - **Channels** on a logo picks exactly which channels use it; unticked ones and those of a deleted logo go back to their first stream's provider logo.
+  - The channel and custom-channel editors have a logo field with a **Library** picker (and upload). `/api/admin/live/channels` adds `logoUrl` for display.
+  - Logo URLs carry `?v=<hash of the logo>` so browsers show a new logo at once. The exported M3U points library logos at the server (`…/logo?v=…&token=…`).
+- **My categories** (per viewer, so each profile has its own; `channel_categories` + `channel_category_members`): the guide's **My categories** button creates (optionally from your favourites), renames, orders, fills and deletes them; the hero has **Add to category…**. The filter lists Favorites, then your categories, then provider categories. `/api/live/guide` includes `categories`; `/api/live/categories` is the CRUD.
+  - **TV app:** the guide now has a row of filter chips (All, ★ Favourites, your categories, provider categories) above the timeline. Typechecked only; **not tried on a device**.
+- **ThePosterDB** (Edit → Artwork → Poster): **Search** reads ThePosterDB's search page and the top three title pages (`metadata/tpdb.go`), shows thumbnails (downscaled and cached in `<data>/cache/tpdb/`), and a click downloads `https://theposterdb.com/api/assets/<id>`. You can also paste a title/set/poster link into the search box, and "Use URL" accepts poster page links. **Open site** opens their search in a new tab.
+  - Michael chose scraping knowing ThePosterDB's terms forbid it and that it can break or be blocked by Cloudflare. Their markup was never seen raw from here (the build machine can't reach them): the parser looks for any `/posters/<id>` link and any poster id (`data-poster-id`, `/api/assets/<id>`, `/poster/<id>`), and was tested only against a stand-in (`-tpdb-url` / `BB_TPDB_URL`). If real searches come back empty, the fix is in `parseSearch`/`parsePosters`.
+  - Anonymous downloads of `/api/assets/<id>` are assumed to work (Kometa uses them); if ThePosterDB starts requiring a login, downloads will fail with the HTTP status.
 
 ## Plugins (M9 phase 1)
 

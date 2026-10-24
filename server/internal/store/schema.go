@@ -487,4 +487,29 @@ CREATE TABLE plugins (
 	added_at   INTEGER NOT NULL
 );
 `,
+	// 18: the channel logo library (admin uploads; a channel uses one with logo
+	// "library:<file>") and viewers' own channel categories.
+	`
+CREATE TABLE channel_logos (
+	id         INTEGER PRIMARY KEY,
+	name       TEXT NOT NULL,
+	file       TEXT NOT NULL UNIQUE,
+	created_at INTEGER NOT NULL
+);
+
+CREATE TABLE channel_categories (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name       TEXT NOT NULL,
+	position   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL
+);
+CREATE INDEX channel_categories_user ON channel_categories(user_id, position);
+
+CREATE TABLE channel_category_members (
+	category_id INTEGER NOT NULL REFERENCES channel_categories(id) ON DELETE CASCADE,
+	channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	PRIMARY KEY (category_id, channel_id)
+);
+`,
 }

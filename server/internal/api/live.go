@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -77,12 +79,15 @@ func (s *Server) withNowNext(chans []*store.Channel) []liveChannel {
 	return out
 }
 
-// logoURL points clients at the server's logo cache instead of the provider.
+// logoURL points clients at the server's logo cache (or the logo library)
+// instead of the provider. The version changes with the logo, so a new logo
+// shows up at once despite caching.
 func logoURL(channelID int64, logo string) string {
 	if logo == "" {
 		return ""
 	}
-	return fmt.Sprintf("/api/live/channels/%d/logo", channelID)
+	sum := sha256.Sum256([]byte(logo))
+	return fmt.Sprintf("/api/live/channels/%d/logo?v=%s", channelID, hex.EncodeToString(sum[:4]))
 }
 
 // channelLogo serves a channel's logo from the cache. Only URLs already on a
@@ -96,6 +101,10 @@ func (s *Server) channelLogo(w http.ResponseWriter, r *http.Request) {
 	ch, err := s.Store.Channel(currentUser(r).ID, id)
 	if err != nil || ch.Logo == "" {
 		http.NotFound(w, r)
+		return
+	}
+	if file, ok := strings.CutPrefix(ch.Logo, store.LibraryLogoPrefix); ok {
+		s.serveLibraryLogo(w, r, file)
 		return
 	}
 	path, ctype, err := s.Logos.Get(r.Context(), ch.Logo)
@@ -142,9 +151,14 @@ func (s *Server) liveGuide(w http.ResponseWriter, r *http.Request) {
 		byID[p.EPGID] = append(byID[p.EPGID], p)
 	}
 	recs, _ := s.Store.RecordingStatuses(from, to)
+	cats, err := s.Store.ChannelCategories(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"from": from, "to": to, "channels": s.withNowNext(chans), "programs": byID,
-		"recordings": recs, "canRecord": s.canRecord(currentUser(r)),
+		"recordings": recs, "canRecord": s.canRecord(currentUser(r)), "categories": cats,
 	})
 }
 
@@ -350,8 +364,12 @@ func (s *Server) livePlaylist(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(&b, "#EXTM3U x-tvg-url=\"%s/api/live/epg.xml?token=%s\"\n", base, token)
 	clean := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ")
 	for _, c := range chans {
+		logo := c.Logo
+		if strings.HasPrefix(logo, store.LibraryLogoPrefix) {
+			logo = base + logoURL(c.ID, logo) + "&token=" + token
+		}
 		fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n%s/api/live/channels/%d/stream.ts?token=%s\n",
-			clean.Replace(c.EPGID), strconv.FormatFloat(c.Number, 'f', -1, 64), clean.Replace(c.Logo), clean.Replace(c.Group),
+			clean.Replace(c.EPGID), strconv.FormatFloat(c.Number, 'f', -1, 64), clean.Replace(logo), clean.Replace(c.Group),
 			clean.Replace(c.Name), base, c.ID, token)
 	}
 	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
@@ -595,13 +613,24 @@ func (s *Server) liveGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, groups)
 }
 
+// adminChannel adds where clients load the logo from; Logo stays the saved
+// value (a provider URL or a library reference) for editing.
+type adminChannel struct {
+	*store.Channel
+	LogoURL string `json:"logoUrl,omitempty"`
+}
+
 func (s *Server) adminChannels(w http.ResponseWriter, r *http.Request) {
 	chans, err := s.Store.Channels(currentUser(r).ID, true)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, chans)
+	out := make([]adminChannel, 0, len(chans))
+	for _, c := range chans {
+		out = append(out, adminChannel{c, logoURL(c.ID, c.Logo)})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) createChannels(w http.ResponseWriter, r *http.Request) {
@@ -642,6 +671,10 @@ func (s *Server) updateChannel(w http.ResponseWriter, r *http.Request) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.Number <= 0 {
 		writeErr(w, http.StatusBadRequest, "a channel needs a name and a number above 0")
+		return
+	}
+	if msg := s.checkLogo(req.Logo); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
 	if err := s.Store.UpdateChannel(&req.Channel, req.StreamIDs); err != nil {

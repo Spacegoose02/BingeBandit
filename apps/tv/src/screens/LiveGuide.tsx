@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
 import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
@@ -7,7 +7,7 @@ import { Center } from '../components'
 import { joinChannel, leaveChannel } from '../live'
 import { useNav } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
-import type { GuideProgram, LiveChannel } from '../types'
+import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 import { lastChannel } from './LivePlayer'
 import { NO_LIVE_BADGE } from './Player'
 
@@ -29,6 +29,20 @@ interface Guide {
   to: number
   channels: LiveChannel[]
   programs: Record<string, GuideProgram[]>
+  categories?: ChannelCategory[] // the viewer's own; older servers send none
+}
+
+/** The guide's channel filter: all, favourites, one of your categories ("my:<id>") or a provider category. Kept while the app runs. */
+let lastFilter = 'all'
+
+function filterChannels(g: Guide, filter: string): LiveChannel[] {
+  if (filter === 'all') return g.channels
+  if (filter === 'fav') return g.channels.filter((c) => c.favorite)
+  if (filter.startsWith('my:')) {
+    const ids = new Set(g.categories?.find((c) => `my:${c.id}` === filter)?.channelIds ?? [])
+    return g.channels.filter((c) => ids.has(c.id))
+  }
+  return g.channels.filter((c) => c.group === filter)
 }
 
 /** A block in a channel's row: a program, or a gap with no guide data. */
@@ -103,6 +117,11 @@ export default function LiveGuide() {
   const [sel, setSel] = useState<{ channel: LiveChannel; seg: Seg } | null>(null)
   // The preview stays on the channel you were watching while you browse; only choosing one changes it.
   const [tuned, setTuned] = useState<LiveChannel | null>(null)
+  const [filter, setFilterState] = useState(lastFilter)
+  const setFilter = useCallback((f: string) => {
+    lastFilter = f
+    setFilterState(f)
+  }, [])
 
   // Two hours across on a TV or a sideways phone, one hour on a phone held upright.
   const { width, height } = useWindowDimensions()
@@ -182,6 +201,18 @@ export default function LiveGuide() {
     [clampStart, geo.perSec],
   )
 
+  const filters = useMemo(() => {
+    if (!guide) return []
+    const out = [{ key: 'all', label: 'All channels' }]
+    if (guide.channels.some((c) => c.favorite)) out.push({ key: 'fav', label: '★ Favourites' })
+    for (const c of guide.categories ?? []) out.push({ key: `my:${c.id}`, label: c.name })
+    for (const g of new Set(guide.channels.map((c) => c.group).filter(Boolean) as string[])) out.push({ key: g, label: g })
+    return out
+  }, [guide])
+  // A filter that went away (a deleted category, no favourites left) falls back to all.
+  const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all'
+  const shown = useMemo(() => (guide ? filterChannels(guide, activeFilter) : []), [guide, activeFilter])
+
   const preview = usePreview(tuned?.id)
   // Built once per load so the memoized rows only redraw when something they show changes.
   const segsByChannel = useMemo(
@@ -235,6 +266,14 @@ export default function LiveGuide() {
         </Pressable>
       </View>
 
+      {filters.length > 1 && (
+        <ScrollView horizontal style={st.filters} contentContainerStyle={st.filtersRow} showsHorizontalScrollIndicator={false}>
+          {filters.map((f) => (
+            <FilterChip key={f.key} label={f.label} on={f.key === activeFilter} onPress={() => setFilter(f.key)} />
+          ))}
+        </ScrollView>
+      )}
+
       <View style={st.flex} {...pan.panHandlers}>
         <View style={st.ruler}>
           <Text style={st.rulerDay}>{day(viewStart)}</Text>
@@ -256,8 +295,9 @@ export default function LiveGuide() {
 
         {/* TV: Left/Right stay in the grid; at either end of the timeline they do nothing. */}
         <TVFocusGuideView style={st.flex} trapFocusLeft trapFocusRight>
+          {shown.length === 0 && <Text style={[st.muted, st.noneShown]}>No channels in this category yet.</Text>}
           <FlatList
-            data={guide.channels}
+            data={shown}
             keyExtractor={(c) => String(c.id)}
             extraData={`${viewStart}:${now}:${sel?.channel.id}:${sel?.seg.key}:${geo.gridW}`}
             getItemLayout={(_, i) => ({ length: px(ROW_H + ROW_GAP), offset: px(ROW_H + ROW_GAP) * i, index: i })}
@@ -338,13 +378,27 @@ const ChannelRow = memo(function Row({
   )
 })
 
+function FilterChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <Pressable
+      onPress={onPress}
+      onFocus={() => setFocused(!isPhone)}
+      onBlur={() => setFocused(false)}
+      style={({ pressed }) => [st.chip, on && st.chipOn, focused && st.chipFocused, pressed && st.chipPressed]}
+    >
+      <Text style={[st.chipText, on && st.chipTextOn, focused && st.chipTextFocused]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  )
+}
+
 /** The channel's logo (Android's Image can't draw SVG, so those go through react-native-svg); the name if there's none. */
 function ChannelLogo({ channel }: { channel: LiveChannel }) {
   const [logo, setLogo] = useState<{ svg?: string; uri?: string } | null>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     if (!channel.logo) return
-    const uri = absolute(`/api/live/channels/${channel.id}/logo`)
+    const uri = absolute(channel.logo) // the server's logo URL, versioned so a new logo isn't cached away
     fetch(uri, { headers: authHeaders() }).then(
       async (r) => {
         if (!r.ok) return setFailed(true)
@@ -422,6 +476,16 @@ const st = StyleSheet.create(scaled({
   preview: { width: isPhone ? 300 : 480, height: isPhone ? 169 : 270, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   tunedTag: { position: 'absolute', left: 0, right: 0, bottom: 0, color: colors.text, backgroundColor: 'rgba(0,0,0,0.6)', fontSize: font.small, fontWeight: '700', paddingHorizontal: 12, paddingVertical: 4 },
   liveTag: { position: 'absolute', top: 12, left: 12, color: colors.accentText, backgroundColor: colors.accent, fontSize: 16, fontWeight: '900', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
+  filters: { flexGrow: 0, marginBottom: isPhone ? 6 : 4 },
+  filtersRow: { paddingHorizontal: gutter, gap: 12, alignItems: 'center' },
+  chip: { paddingHorizontal: 22, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 2, borderColor: 'transparent' },
+  chipOn: { borderColor: colors.accent },
+  chipFocused: { backgroundColor: colors.accent },
+  chipPressed: { opacity: 0.6 },
+  chipText: { color: colors.muted, fontSize: font.small, fontWeight: '700' },
+  chipTextOn: { color: colors.text },
+  chipTextFocused: { color: colors.accentText },
+  noneShown: { marginTop: 40 },
   ruler: { flexDirection: 'row', alignItems: 'flex-end', paddingLeft: gutter, height: 56, marginBottom: 10 },
   rulerDay: { width: CH_W, color: colors.muted, fontSize: font.small, paddingBottom: 14, paddingLeft: isPhone ? 12 : 24 },
   rulerTrack: { height: 56, overflow: 'hidden' },
