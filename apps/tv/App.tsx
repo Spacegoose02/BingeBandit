@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, View } from 'react-native'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ApiError, api, loadSession, saveSession, type Session } from './src/api'
 import { backInterceptor, NavContext, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
@@ -8,7 +9,7 @@ import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import Player from './src/screens/Player'
 import SignIn from './src/screens/SignIn'
-import { colors } from './src/theme'
+import { colors, isPhone } from './src/theme'
 import type { ServerInfo, User } from './src/types'
 
 type Phase = { name: 'loading' } | { name: 'connect' } | { name: 'signin'; server: ServerInfo } | { name: 'app' }
@@ -102,12 +103,22 @@ export default function App() {
       }
   }
 
+  const fullScreen = !isPhone || top.name === 'player' || top.name === 'live'
   return (
-    <NavContext.Provider value={nav}>
-      <StatusBar hidden />
-      <View style={styles.root}>{screen}</View>
-    </NavContext.Provider>
+    <SafeAreaProvider>
+      <NavContext.Provider value={nav}>
+        <StatusBar hidden={fullScreen} translucent backgroundColor="transparent" barStyle="light-content" />
+        <Insets enabled={!fullScreen}>{screen}</Insets>
+      </NavContext.Provider>
+    </SafeAreaProvider>
   )
+}
+
+/** Phones draw behind the status and navigation bars (edge-to-edge); keep screens clear of them. */
+function Insets({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  const i = useSafeAreaInsets()
+  const pad = enabled ? { paddingTop: i.top, paddingBottom: i.bottom, paddingLeft: i.left, paddingRight: i.right } : null
+  return <View style={[styles.root, pad]}>{children}</View>
 }
 
 const styles = StyleSheet.create({

@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, TextInput, View } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 import { ApiError, request, type Session } from '../api'
 import { Button } from '../components'
-import { px, scaled, colors, font, gutter } from '../theme'
+import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import type { ServerInfo, User } from '../types'
 
 function deviceName(): string {
@@ -20,7 +20,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
   const [link, setLink] = useState<{ code: string; pollToken: string; linkUrl: string } | null>(null)
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
-  const [usePassword, setUsePassword] = useState(false)
+  const [usePassword, setUsePassword] = useState(isPhone) // phones have a keyboard; TVs show a code
 
   useEffect(() => {
     if (usePassword) return
@@ -51,7 +51,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
     }
   }, [attempt, usePassword, server.url, onSignedIn])
 
-  if (usePassword) return <PasswordSignIn server={server} onSignedIn={onSignedIn} onBack={() => setUsePassword(false)} />
+  if (usePassword) return <PasswordSignIn server={server} onSignedIn={onSignedIn} onBack={() => setUsePassword(false)} onServer={onBack} />
 
   const shortUrl = link?.linkUrl.replace(/^https?:\/\//, '').replace(/\?code=.*$/, '')
   return (
@@ -59,7 +59,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
       <Text style={st.title}>Sign in to {server.name}</Text>
       <View style={st.columns}>
         <View style={st.left}>
-          <Text style={st.step}>1. On your phone or computer, go to</Text>
+          <Text style={st.step}>{isPhone ? '1. On another device that’s signed in, go to' : '1. On your phone or computer, go to'}</Text>
           <Text style={st.url}>{shortUrl ?? '…'}</Text>
           <Text style={st.step}>2. Enter this code</Text>
           <Text style={st.code}>{link ? `${link.code.slice(0, 3)}-${link.code.slice(3)}` : '······'}</Text>
@@ -74,7 +74,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
             <Text style={st.muted}>Waiting for you to approve it. The code works for 10 minutes.</Text>
           )}
         </View>
-        {link && (
+        {link && !isPhone && ( // nobody scans their own screen
           <View style={st.qr}>
             <QRCode value={link.linkUrl} size={px(380)} backgroundColor="#ffffff" color="#0b0d10" />
             <Text style={st.qrHint}>Or scan this with your phone's camera</Text>
@@ -89,7 +89,17 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
   )
 }
 
-function PasswordSignIn({ server, onSignedIn, onBack }: { server: ServerInfo; onSignedIn: (s: Session) => void; onBack: () => void }) {
+function PasswordSignIn({
+  server,
+  onSignedIn,
+  onBack,
+  onServer,
+}: {
+  server: ServerInfo
+  onSignedIn: (s: Session) => void
+  onBack: () => void
+  onServer: () => void
+}) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -138,7 +148,8 @@ function PasswordSignIn({ server, onSignedIn, onBack }: { server: ServerInfo; on
         {!!error && <Text style={st.error}>{error}</Text>}
         <View style={st.buttons}>
           <Button label={busy ? 'Signing in…' : 'Sign in'} primary onPress={submit} />
-          <Button label="Back" onPress={onBack} />
+          <Button label={isPhone ? 'Use a code instead' : 'Back'} onPress={onBack} />
+          {isPhone && <Button label="Different server" onPress={onServer} />}
         </View>
       </View>
     </View>
@@ -146,19 +157,19 @@ function PasswordSignIn({ server, onSignedIn, onBack }: { server: ServerInfo; on
 }
 
 const st = StyleSheet.create(scaled({
-  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: gutter * 1.5, paddingTop: 70 },
+  screen: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: isPhone ? gutter : gutter * 1.5, paddingTop: isPhone ? 40 : 70 },
   title: { color: colors.text, fontSize: font.title, fontWeight: '800', marginBottom: 40 },
-  columns: { flexDirection: 'row', alignItems: 'center' },
-  left: { flex: 1, paddingRight: 40 },
+  columns: { flexDirection: isPhone ? 'column' : 'row', alignItems: isPhone ? 'flex-start' : 'center' },
+  left: { flex: isPhone ? 0 : 1, paddingRight: 40 },
   step: { color: colors.muted, fontSize: font.body, marginBottom: 6 },
   url: { color: colors.text, fontSize: font.title, fontWeight: '700', marginBottom: 40 },
-  code: { color: colors.accent, fontSize: 150, fontWeight: '900', letterSpacing: 14, marginBottom: 24 },
+  code: { color: colors.accent, fontSize: isPhone ? 96 : 150, fontWeight: '900', letterSpacing: isPhone ? 8 : 14, marginBottom: 24 },
   qr: { alignItems: 'center', padding: 30, backgroundColor: '#ffffff', borderRadius: 16 },
   qrHint: { color: '#333', fontSize: font.small, marginTop: 12 },
   muted: { color: colors.muted, fontSize: font.body },
   error: { color: colors.danger, fontSize: font.body, marginTop: 8 },
-  buttons: { flexDirection: 'row', marginTop: 36 },
-  form: { width: 1100 },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 36 },
+  form: { width: 1100, maxWidth: '100%' },
   label: { color: colors.muted, fontSize: font.small, marginBottom: 8, marginTop: 14 },
   input: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 18, borderWidth: 2, borderColor: colors.border },
 }))

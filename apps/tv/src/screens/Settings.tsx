@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { current } from '../api'
 import { Button, Focusable } from '../components'
-import { scaled, colors, font, gutter } from '../theme'
+import { scaled, colors, font, gutter, isPhone } from '../theme'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
 
 export default function Settings({ onSignOut, update }: { onSignOut: () => void; update: AppRelease | null }) {
@@ -36,7 +36,7 @@ export default function Settings({ onSignOut, update }: { onSignOut: () => void;
   }
 
   return (
-    <View style={st.screen}>
+    <ScrollView contentContainerStyle={st.screen}>
       <View style={st.facts}>
         <Text style={st.label}>Signed in as</Text>
         <Text style={st.value}>{s?.user.username}</Text>
@@ -51,7 +51,9 @@ export default function Settings({ onSignOut, update }: { onSignOut: () => void;
           <Text style={st.value}>
             {progress !== null ? `Downloading… ${Math.round(progress * 100)}%` : `Update to version ${found.version}`}
           </Text>
-          <Text style={st.hint}>{Math.round(found.size / 1e6)} MB · press OK to download, then confirm the install on the TV.</Text>
+          <Text style={st.hint}>
+            {Math.round(found.size / 1e6)} MB · {isPhone ? 'tap to download, then confirm the install.' : 'press OK to download, then confirm the install on the TV.'}
+          </Text>
         </Focusable>
       ) : (
         <View style={st.buttons}>
@@ -63,12 +65,12 @@ export default function Settings({ onSignOut, update }: { onSignOut: () => void;
         <Button label="Sign out" onPress={onSignOut} />
       </View>
       <Text style={st.hint}>Signing out also lets you pick a different server.</Text>
-    </View>
+    </ScrollView>
   )
 }
 
 const st = StyleSheet.create(scaled({
-  screen: { flex: 1, paddingHorizontal: gutter, paddingTop: 30 },
+  screen: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 40 },
   facts: { backgroundColor: colors.surface, borderRadius: 22, padding: 40, maxWidth: 1100 },
   label: { color: colors.muted, fontSize: font.small, marginTop: 14 },
   value: { color: colors.text, fontSize: font.heading, fontWeight: '700', marginTop: 4 },

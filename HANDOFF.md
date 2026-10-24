@@ -2,9 +2,39 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, M8 phase 2 (TV app: controls, tracks, guide, search, updates)._
+_Last updated: 2026-10-24, M8 phase 3 (Android phones, kid lock, Unraid guide)._
 
-## Latest: TV app phase 2 (M8 phase 2)
+## Latest: phones, kid lock, Unraid (M8 phase 3)
+
+- **One APK for TVs and phones.** `isPhone = !Platform.isTV` in `theme.ts` switches layouts.
+  - Phones size from their short side: about 750 canvas units across, so text keeps its size when the phone turns.
+  - Phones use smaller gutters and their own font sizes. `units()` turns dp back into canvas units (the guide uses it).
+- **Edge-to-edge:** Android 15 draws behind the system bars. `react-native-safe-area-context` (5.10) pads the app on phones (`Insets` in `App.tsx`). The players stay full-screen and pad only their controls.
+- **Bold text:** Android's "Bold text" setting (`fontWeightAdjustment`) draws text bolder than RN measured it, which cut the last word off many labels. `MainActivity.attachBaseContext` sets it to 0 so measuring and drawing agree; the font size setting still applies. Found on a Galaxy S24+ with bold text on.
+- **Native:** `ScreenModule` (`Screen.setLandscape`) turns the phone sideways while a player is open (`useLandscape` in `src/screen.ts`). `BingeBanditPackage` (renamed from `AppUpdaterPackage`) registers it alongside `AppUpdater`.
+- **Screens on phones:**
+  - **Home:** a bottom tab bar.
+  - **Details:** a ‹ Back link and wrapping buttons.
+  - **Sign-in:** password first ("Use a code instead"); no QR code.
+  - **Player:** tap to show or hide the controls, a back arrow, and `SeekBar` (drag, seek on release; measured in page coordinates because Android ignores `pointerEvents` on Text).
+  - **Live player:** swipe up or down to change channel.
+  - **Guide:** geometry from the window width (two hours on a TV or a sideways phone, one hour upright). Drag sideways to move through time. Tap a block to select it; tap again, or tap the preview, to watch. A compact header when sideways.
+  - **Search:** `disableFullscreenUI`, so the landscape keyboard doesn't hide results.
+  - **Settings:** scrolls.
+  - **Touch feedback:** buttons dim when pressed and don't show the TV focus ring.
+- **Kid lock** (`src/lock.tsx`, `useLock`), in both players on phones:
+  - **Lock** asks for a 2-digit PIN chosen on the spot. While locked, taps only show "Locked · tap here to unlock" and Back is swallowed.
+  - The same PIN unlocks; a wrong one clears with a message. Nothing is stored.
+- **Unraid:** `unraid/bingebandit.xml` is a dockerMan template. Add the repo under Docker → Template repositories, or use it from the template URL. It has appdata, read-only media, and optional recordings, RAM transcode and `/dev/dri`. `docs/UNRAID.md` walks through install, first run, Intel/AMD/NVIDIA transcoding, apps, remote access, updates, backups and troubleshooting.
+- **Tested on a Galaxy S24+** (Android 15, 3-button navigation, font scale 1.15, bold text) over wireless debugging:
+  - discovery, code sign-in, Home, Details, playback with landscape
+  - controls, seek drag, the kid lock (wrong and right PIN)
+  - guide in both orientations: swipe, tap to select, preview tap to watch
+  - live channel swipe and the info bar, Search, Settings
+- **Not tested on a device:** the TV after these changes. TV code paths are unchanged apart from shared components; the guide geometry gives the same 2-hour/1500-unit grid on a 1080p TV.
+- **Dev gotcha:** Fast Refresh while the lock keypad is open can leave touches dead until the app restarts. This is a development-only effect.
+
+## TV app phase 2 (M8 phase 2)
 
 - **Player** (`screens/Player.tsx`):
   - Controls have three states: hidden, `seek` (◀/▶ jumps, a progress bar and hint) and `full`. OK, ▲ or ▼ opens the full bar: ⟲ 10s, Pause/Play, 30s ⟳, Next episode (episodes only, from `/api/items/{id}/next`), Audio & subtitles. The bar hides after 6 s unless paused.

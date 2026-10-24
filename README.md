@@ -41,7 +41,7 @@ Open http://localhost:8484. The first visit asks you to create the admin account
 docker compose up -d
 ```
 
-See [docker-compose.yml](docker-compose.yml) for media volumes and GPU passthrough.
+See [docker-compose.yml](docker-compose.yml) for media volumes and GPU passthrough. On Unraid, follow [docs/UNRAID.md](docs/UNRAID.md): it covers the container template, paths, hardware transcoding and the apps.
 
 ### Options
 

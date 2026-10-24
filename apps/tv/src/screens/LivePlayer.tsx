@@ -1,8 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
 import Video from 'react-native-video'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { absolute, api, authHeaders } from '../api'
-import { scaled, colors, font, gutter } from '../theme'
+import { Button } from '../components'
+import { useLock } from '../lock'
+import { backInterceptor } from '../nav'
+import { useLandscape } from '../screen'
+import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import type { LiveChannel } from '../types'
 import { NO_LIVE_BADGE } from './Player'
 
@@ -16,6 +21,17 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [info, setInfo] = useState(true)
   const viewer = useRef('')
   const hide = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const touchY = useRef(0)
+  useLandscape()
+  const insets = useSafeAreaInsets()
+  const lock = useLock()
+  // A locked player swallows Back (the keypad unlocks it).
+  useEffect(() => {
+    backInterceptor.current = lock.handleBack
+    return () => {
+      backInterceptor.current = null
+    }
+  })
 
   useEffect(() => {
     api.get<LiveChannel[]>('/api/live/channels').then(setChannels, () => undefined)
@@ -58,12 +74,14 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     if (!evt || evt.eventKeyAction === 0) return // act on key up, as in Player
     if (evt.eventType === 'up') step(-1)
     else if (evt.eventType === 'down') step(1)
-    else if (evt.eventType === 'select' || evt.eventType === 'left' || evt.eventType === 'right') {
-      setInfo(true)
-      if (hide.current) clearTimeout(hide.current)
-      hide.current = setTimeout(() => setInfo(false), 5000)
-    }
+    else if (evt.eventType === 'select' || evt.eventType === 'left' || evt.eventType === 'right') showInfo()
   })
+
+  const showInfo = () => {
+    setInfo(true)
+    if (hide.current) clearTimeout(hide.current)
+    hide.current = setTimeout(() => setInfo(false), 5000)
+  }
 
   const ch = channels.find((c) => c.id === id)
   return (
@@ -80,20 +98,47 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           onError={() => setError('This channel stopped. Try another one.')}
         />
       )}
-      {/* Something must hold focus or Android never hands the remote's keys to the app. */}
-      <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus focusable />
+      {isPhone ? (
+        // Phone: swipe up for the next channel, down for the previous; tap for the info bar.
+        <View
+          style={StyleSheet.absoluteFill}
+          onStartShouldSetResponder={() => true}
+          onResponderGrant={(e) => (touchY.current = e.nativeEvent.pageY)}
+          onResponderRelease={(e) => {
+            const dy = e.nativeEvent.pageY - touchY.current
+            if (lock.locked) lock.poke()
+            else if (Math.abs(dy) > 60) step(dy < 0 ? 1 : -1)
+            else showInfo()
+          }}
+        />
+      ) : (
+        // Something must hold focus or Android never hands the remote's keys to the app.
+        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus focusable />
+      )}
       {buffering && !error && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {!!error && <Text style={st.error}>{error}</Text>}
-      {(info || !!error) && ch && (
-        <View style={st.bar}>
+      {(info || !!error) && ch && !lock.locked && (
+        <View style={[st.bar, isPhone && { left: insets.left + px(gutter), right: insets.right + px(gutter) }]}>
           <Text style={st.number}>{ch.number}</Text>
           <View style={st.flex}>
             <Text style={st.name}>{ch.name}</Text>
             <Text style={st.now} numberOfLines={1}>{ch.now ? `Now: ${ch.now.title}` : 'No guide information'}{ch.next ? `   ·   Next: ${ch.next.title}` : ''}</Text>
           </View>
-          <Text style={st.hint}>▲▼ change channel</Text>
+          <Text style={st.hint}>{isPhone ? 'Swipe up or down to change channel' : '▲▼ change channel'}</Text>
+          {isPhone && (
+            <Button
+              small
+              label="Lock"
+              style={st.lockBtn}
+              onPress={() => {
+                setInfo(false)
+                lock.startLock()
+              }}
+            />
+          )}
         </View>
       )}
+      {lock.layer}
     </View>
   )
 }
@@ -107,5 +152,6 @@ const st = StyleSheet.create(scaled({
   number: { color: colors.accent, fontSize: font.title, fontWeight: '900', width: 160 },
   name: { color: colors.text, fontSize: font.heading, fontWeight: '800' },
   now: { color: colors.muted, fontSize: font.body, marginTop: 4 },
-  hint: { color: colors.muted, fontSize: font.small, marginLeft: 20 },
+  hint: { color: colors.muted, fontSize: font.small, marginLeft: 20, flexShrink: 0 }, // the Now/Next line gives way instead
+  lockBtn: { marginLeft: 24, marginRight: 0, marginBottom: 0 },
 }))

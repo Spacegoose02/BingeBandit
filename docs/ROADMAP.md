@@ -135,7 +135,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Watched state for managed/shared Plex users (needs each user's token, via plex.tv) |
 | | Simkl and other trackers with their own APIs |
 
-## M8: Apps 🟡 (phases 1–2: Android TV app)
+## M8: Apps 🟡 (phases 1–3: Android TV and phone app)
 
 | | Item |
 |---|---|
@@ -146,7 +146,10 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Cable-box style guide grid: timeline, programs sized by length, details and a live preview of the focused channel |
 | ✅ | Search; watchlist add/remove on details |
 | ✅ | In-app updates: the server checks GitHub for the newest TV APK (`/api/apps/android`); the app downloads it and hands it to Android's installer |
-| | Phones (same codebase, touch layouts) |
+| ✅ | **Android phones** (same APK): touch layouts, bottom tabs, tap controls and a draggable seek bar, landscape video, swipeable guide, swipe to change channel |
+| ✅ | Kid lock in the phone players: lock with a 2-digit PIN; taps and Back do nothing until it's entered |
+| ✅ | Unraid container template and install guide (`unraid/`, `docs/UNRAID.md`) |
+| | iPhone / iPad and Apple TV (react-native-tvos supports tvOS; needs a Mac to build) |
 | | **Windows EXE** client (desktop wrapper around the web UI with mpv for full codec support) |
 | | Roku app (BrightScript; separate codebase) |
 | | Casting to devices (Chromecast, DLNA) |

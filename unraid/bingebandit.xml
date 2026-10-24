@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>BingeBandit</Name>
+  <Repository>ghcr.io/spacegoose02/bingebandit:latest</Repository>
+  <Registry>https://github.com/Spacegoose02/BingeBandit/pkgs/container/bingebandit</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Spacegoose02/BingeBandit/issues</Support>
+  <Project>https://github.com/Spacegoose02/BingeBandit</Project>
+  <ReadMe>https://github.com/Spacegoose02/BingeBandit/blob/main/docs/UNRAID.md</ReadMe>
+  <Overview>Self-hosted media server: movies and TV with direct play and transcoding, live TV from M3U/XMLTV with a cable-style guide and DVR, custom channels, Trakt sync and imports from Plex/Tautulli. Apps for Android TV, Fire TV and Android phones. Setup guide: docs/UNRAID.md in the project.</Overview>
+  <Category>MediaServer:Video MediaServer:Other</Category>
+  <WebUI>http://[IP]:[PORT:8484]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Spacegoose02/BingeBandit/main/unraid/bingebandit.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Spacegoose02/BingeBandit/main/Brand/13_App_Icon_Tile_1024x1024.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <Requires/>
+  <Config Name="Web UI port" Target="8484" Default="8484" Mode="tcp" Description="The web app and the API. Keep it at 8484 so the TV and phone apps find the server by themselves." Type="Port" Display="always" Required="true" Mask="false">8484</Config>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/bingebandit" Mode="rw" Description="Database, artwork, caches, logs and backups." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/bingebandit</Config>
+  <Config Name="Media" Target="/media" Default="/mnt/user/media" Mode="ro" Description="Your movies and TV. Add libraries in the web app with paths under /media (e.g. /media/movies). Read-only is fine." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media</Config>
+  <Config Name="DVR recordings" Target="/config/recordings" Default="/mnt/user/media/recordings" Mode="rw" Description="Optional: where live TV recordings are saved. Leave empty to keep them in appdata." Type="Path" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Transcode folder" Target="/config/transcode" Default="/tmp/bingebandit-transcode" Mode="rw" Description="Optional: temporary conversion files. /tmp keeps them in RAM (needs a few GB free); leave empty to use appdata." Type="Path" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Intel/AMD GPU" Target="/dev/dri" Default="/dev/dri" Mode="" Description="Optional: hardware transcoding with Intel Quick Sync or AMD. Set to /dev/dri, then choose VAAPI under Server, Settings." Type="Device" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Update repository" Target="BB_UPDATE_REPO" Default="Spacegoose02/BingeBandit" Mode="" Description="Where the TV and phone apps look for app updates (GitHub owner/repo). Empty turns in-app updates off." Type="Variable" Display="advanced" Required="false" Mask="false">Spacegoose02/BingeBandit</Config>
+</Container>

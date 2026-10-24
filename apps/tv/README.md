@@ -1,6 +1,13 @@
-# BingeBandit for Android TV and Fire TV
+# BingeBandit for Android TV, Fire TV and Android phones
 
-A React Native app ([react-native-tvos](https://github.com/react-native-tvos/react-native-tvos)) for TVs, driven by the remote's D-pad. It talks to the same `/api` as the web UI.
+A React Native app ([react-native-tvos](https://github.com/react-native-tvos/react-native-tvos)), driven by the remote's D-pad on TVs and by touch on phones. The same APK installs on both and switches layouts. It talks to the same `/api` as the web UI.
+
+On phones:
+- **Navigation:** tabs sit along the bottom.
+- **Player:** tap for the controls, drag the bar to seek, and video turns sideways.
+- **Live TV:** swipe up or down to change channel.
+- **Guide:** swipe through time; tap a program to see it, and tap again to watch.
+- **Kid lock:** the **Lock** button in either player asks for a 2-digit PIN you choose. Until that PIN is entered, taps and Back do nothing.
 
 What it does:
 

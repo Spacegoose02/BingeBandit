@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Image, ImageBackground, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api, image, saveSession } from '../api'
 import { Button, Center, Focusable, PosterCard, Row, WideCard } from '../components'
 import { useNav } from '../nav'
-import { scaled, colors, font, gutter } from '../theme'
+import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { HomeData, Item } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LiveGuide from './LiveGuide'
@@ -27,19 +27,32 @@ export default function Home({ onSignedOut }: { onSignedOut: () => void }) {
   useEffect(() => {
     checkForUpdate().then(setUpdate, () => undefined)
   }, [])
+  const tabs = (Object.keys(tabNames) as Tab[]).map((t) => {
+    const label = (
+      <Text style={[isPhone ? st.tabText : st.menuText, tab === t && st.menuTextActive]}>
+        {tabNames[t]}
+        {t === 'settings' && update && <Text style={st.dot}> ●</Text>}
+      </Text>
+    )
+    // Phones: a bottom tab bar you tap. TVs: a top menu that switches as focus moves across it.
+    return isPhone ? (
+      <Pressable key={t} onPress={() => setTab(t)} style={[st.tab, tab === t && st.tabActive]}>
+        {label}
+      </Pressable>
+    ) : (
+      <Focusable key={t} hasTVPreferredFocus={t === tab && t !== 'home'} onFocus={() => setTab(t)} onPress={() => setTab(t)} style={st.menuItem}>
+        {label}
+      </Focusable>
+    )
+  })
   return (
     <View style={st.screen}>
-      <View style={st.menu}>
-        <Image source={require('../assets/mascot.png')} style={st.mascot} />
-        {(Object.keys(tabNames) as Tab[]).map((t) => (
-          <Focusable key={t} hasTVPreferredFocus={t === tab && t !== 'home'} onFocus={() => setTab(t)} onPress={() => setTab(t)} style={st.menuItem}>
-            <Text style={[st.menuText, tab === t && st.menuTextActive]}>
-              {tabNames[t]}
-              {t === 'settings' && update && <Text style={st.dot}> ●</Text>}
-            </Text>
-          </Focusable>
-        ))}
-      </View>
+      {!isPhone && (
+        <View style={st.menu}>
+          <Image source={require('../assets/mascot.png')} style={st.mascot} />
+          {tabs}
+        </View>
+      )}
       {tab === 'home' && <HomeRows />}
       {tab === 'search' && <Search />}
       {tab === 'live' && <LiveGuide />}
@@ -54,6 +67,7 @@ export default function Home({ onSignedOut }: { onSignedOut: () => void }) {
           }}
         />
       )}
+      {isPhone && <View style={st.tabBar}>{tabs}</View>}
     </View>
   )
 }
@@ -90,6 +104,7 @@ function Search() {
         placeholderTextColor={colors.muted}
         autoCorrect={false}
         returnKeyType="search"
+        disableFullscreenUI // a sideways phone would otherwise cover the results with a full-screen editor
       />
       {!!error && <Text style={st.error}>{error}</Text>}
       {results && results.length === 0 && <Text style={st.mutedLeft}>Nothing matches “{q.trim()}”.</Text>}
@@ -187,6 +202,10 @@ const st = StyleSheet.create(scaled({
   menuItem: { paddingHorizontal: 26, paddingVertical: 10, marginRight: 12 },
   menuText: { color: colors.muted, fontSize: font.heading, fontWeight: '700' },
   menuTextActive: { color: colors.text },
+  tabBar: { flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 26, borderTopWidth: 4, borderTopColor: 'transparent' },
+  tabActive: { borderTopColor: colors.accent },
+  tabText: { color: colors.muted, fontSize: font.small, fontWeight: '700' },
   heroImg: { opacity: 0.35 },
   shade: { flex: 1 },
   hero: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 10, maxWidth: 1500 },

@@ -1,23 +1,26 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TVFocusGuideView, View } from 'react-native'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
 import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Center } from '../components'
 import { useNav } from '../nav'
-import { colors, font, gutter, px, scaled } from '../theme'
+import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { GuideProgram, LiveChannel } from '../types'
 import { NO_LIVE_BADGE } from './Player'
 
-// Grid geometry on the 1920×1080 canvas: two hours fill the width beside the channel column.
-const SPAN = 2 * 3600
 const FETCH = 6 * 3600
 const HALF = 1800
-const CH_W = 300
-const GRID_W = 1920 - gutter - CH_W - 40
+const CH_W = isPhone ? 190 : 300 // channel column, canvas units
 const ROW_H = 92
 const ROW_GAP = 6
-const perSec = GRID_W / SPAN
+
+/** How the timeline maps to the screen: the grid's width in canvas units, the time it shows, and units per second. */
+interface Geo {
+  gridW: number
+  span: number
+  perSec: number
+}
 
 interface Guide {
   from: number
@@ -91,7 +94,7 @@ function usePreview(channelId?: number): string | null {
   return src
 }
 
-/** The cable-box style guide: what's focused up top, then channels against a timeline. */
+/** The cable-box style guide: what's selected up top, then channels against a timeline. */
 export default function LiveGuide() {
   const nav = useNav()
   const [guide, setGuide] = useState<Guide | null>(null)
@@ -99,6 +102,15 @@ export default function LiveGuide() {
   const [now, setNow] = useState(() => Date.now() / 1000)
   const [viewStart, setViewStart] = useState(() => floorHalf(Date.now() / 1000))
   const [sel, setSel] = useState<{ channel: LiveChannel; seg: Seg } | null>(null)
+
+  // Two hours across on a TV or a sideways phone, one hour on a phone held upright.
+  const { width, height } = useWindowDimensions()
+  const wide = isPhone && width > height // a sideways phone: shorter header, more rows
+  const geo: Geo = useMemo(() => {
+    const gridW = units(width) - gutter - CH_W - (isPhone ? gutter : 40)
+    const span = gridW >= 1100 ? 2 * 3600 : 3600
+    return { gridW, span, perSec: gridW / span }
+  }, [width])
 
   const load = useCallback(() => {
     const from = floorHalf(Date.now() / 1000)
@@ -121,25 +133,52 @@ export default function LiveGuide() {
     }
   }, [load])
 
-  // Android only moves focus to blocks it can see, so when the focused block
-  // reaches an edge of the visible two hours, slide the timeline to show what's next.
   const gridFrom = guide?.from ?? 0
   const gridTo = guide?.to ?? 0
+  const clampStart = useCallback((v: number) => Math.max(gridFrom, Math.min(v, gridTo - geo.span)), [gridFrom, gridTo, geo.span])
+
+  // TV: Android only moves focus to blocks it can see, so when the focused block
+  // reaches an edge of the visible window, slide the timeline to show what's next.
   const onFocusSeg = useCallback(
     (channel: LiveChannel, seg: Seg) => {
       setSel({ channel, seg })
       setViewStart((v) => {
         const atLeft = seg.start <= v && v > gridFrom
-        const atRight = seg.stop >= v + SPAN && v + SPAN < gridTo
+        const atRight = seg.stop >= v + geo.span && v + geo.span < gridTo
         let next = v
-        if (atRight && !atLeft) next = Math.max(v, Math.ceil(seg.stop / HALF) * HALF - SPAN + HALF)
+        if (atRight && !atLeft) next = Math.max(v, Math.ceil(seg.stop / HALF) * HALF - geo.span + HALF)
         else if (atLeft && !atRight) next = Math.min(v, floorHalf(seg.start) - HALF)
-        return Math.max(gridFrom, Math.min(next, gridTo - SPAN))
+        return clampStart(next)
       })
     },
-    [gridFrom, gridTo],
+    [gridFrom, gridTo, geo.span, clampStart],
   )
   const watch = useCallback((c: LiveChannel) => nav.push({ name: 'live', channelId: c.id }), [nav])
+  // Phone: the first tap on a block shows it up top; tapping it again tunes in.
+  const selRef = useRef(sel)
+  selRef.current = sel
+  const onTapSeg = useCallback(
+    (channel: LiveChannel, seg: Seg) => {
+      const s = selRef.current
+      if (s && s.channel.id === channel.id && s.seg.key === seg.key) watch(channel)
+      else setSel({ channel, seg })
+    },
+    [watch],
+  )
+
+  // Phone: drag sideways anywhere on the grid to move through time.
+  const dragFrom = useRef(0)
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_, g) => isPhone && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderGrant: () => setViewStart((v) => (dragFrom.current = v)),
+        onPanResponderMove: (_, g) => setViewStart(clampStart(dragFrom.current - units(g.dx) / geo.perSec)),
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [clampStart, geo.perSec],
+  )
+
   const preview = usePreview(sel?.channel.id)
   // Built once per load so the memoized rows only redraw when something they show changes.
   const segsByChannel = useMemo(
@@ -153,84 +192,92 @@ export default function LiveGuide() {
 
   const p = sel?.seg.program
   const ticks: number[] = []
-  for (let t = viewStart; t < viewStart + SPAN; t += HALF) ticks.push(t)
-  const nowX = Math.max(0, Math.min(GRID_W, (now - viewStart) * perSec))
+  for (let t = Math.ceil(viewStart / HALF) * HALF; t < viewStart + geo.span; t += HALF) ticks.push(t)
+  const nowX = (now - viewStart) * geo.perSec
 
   return (
     <View style={st.flex}>
-      <View style={st.header}>
+      <View style={[st.header, wide && st.headerWide]}>
         <View style={st.info}>
-          <Text style={st.title} numberOfLines={1}>{p?.title ?? sel?.channel.name ?? ''}</Text>
+          <Text style={st.title} numberOfLines={isPhone ? 2 : 1}>{p?.title ?? sel?.channel.name ?? ''}</Text>
           {sel && (
-            <Text style={st.meta} numberOfLines={1}>
+            <Text style={st.meta} numberOfLines={2}>
               {p ? `${day(p.start)} ${clock(p.start)} – ${clock(p.stop)}  ·  ` : ''}
               {sel.channel.number}  {sel.channel.name}
               {p?.episode ? `  ·  ${p.episode}` : ''}
             </Text>
           )}
           {!!p?.subtitle && <Text style={st.subtitle} numberOfLines={1}>{p.subtitle}</Text>}
-          <Text style={st.desc} numberOfLines={3}>{p ? p.description ?? '' : 'No guide information for this time.'}</Text>
+          <Text style={st.desc} numberOfLines={wide ? 1 : isPhone ? 2 : 3}>{p ? p.description ?? '' : 'No guide information for this time.'}</Text>
         </View>
-        <View style={st.preview}>
+        <Pressable style={[st.preview, wide && st.previewWide]} focusable={false} onPress={sel ? () => watch(sel.channel) : undefined}>
           {preview ? (
-            <Video
-              key={preview}
-              source={{ uri: preview, type: 'm3u8', headers: authHeaders() }}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-              muted
-              controlsStyles={NO_LIVE_BADGE}
-              focusable={false}
-            />
+            // The video surface would swallow taps meant for the preview (tap to watch).
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <Video
+                key={preview}
+                source={{ uri: preview, type: 'm3u8', headers: authHeaders() }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+                muted
+                controlsStyles={NO_LIVE_BADGE}
+                focusable={false}
+              />
+            </View>
           ) : (
             <ActivityIndicator color={colors.accent} />
           )}
-          <Text style={st.liveTag}>LIVE</Text>
-        </View>
+          <Text style={st.liveTag}>{isPhone ? 'LIVE · TAP TO WATCH' : 'LIVE'}</Text>
+        </Pressable>
       </View>
 
-      <View style={st.ruler}>
-        <Text style={st.rulerDay}>{day(viewStart)}</Text>
-        <View style={st.rulerTrack}>
-          {ticks.map((t, i) => (
-            <Text key={t} style={[st.tick, { left: px((t - viewStart) * perSec) }]}>
-              {i === 0 && now >= t && now < t + HALF ? 'On now' : clock(t)}
-            </Text>
-          ))}
-          <View style={st.rulerLine} />
-          {nowX > 0 && nowX < GRID_W && (
-            <>
-              <View style={[st.nowLine, { width: px(nowX) }]} />
-              <View style={[st.nowDot, { left: px(nowX) - px(6) }]} />
-            </>
-          )}
+      <View style={st.flex} {...pan.panHandlers}>
+        <View style={st.ruler}>
+          <Text style={st.rulerDay}>{day(viewStart)}</Text>
+          <View style={[st.rulerTrack, { width: px(geo.gridW) }]}>
+            {ticks.map((t) => (
+              <Text key={t} style={[st.tick, { left: px((t - viewStart) * geo.perSec) }]}>
+                {t === floorHalf(now) ? 'On now' : clock(t)}
+              </Text>
+            ))}
+            <View style={st.rulerLine} />
+            {nowX > 0 && nowX < geo.gridW && (
+              <>
+                <View style={[st.nowLine, { width: px(nowX) }]} />
+                <View style={[st.nowDot, { left: px(nowX) - px(6) }]} />
+              </>
+            )}
+          </View>
         </View>
-      </View>
 
-      {/* Left/Right stay in the grid; at either end of the timeline they do nothing. */}
-      <TVFocusGuideView style={st.flex} trapFocusLeft trapFocusRight>
-        <FlatList
-          data={guide.channels}
-          keyExtractor={(c) => String(c.id)}
-          extraData={`${viewStart}:${now}:${sel?.channel.id}`}
-          getItemLayout={(_, i) => ({ length: px(ROW_H + ROW_GAP), offset: px(ROW_H + ROW_GAP) * i, index: i })}
-          initialNumToRender={8}
-          windowSize={5}
-          contentContainerStyle={st.rows}
-          renderItem={({ item }) => (
-            <ChannelRow
-              channel={item}
-              segs={segsByChannel.get(item.id) ?? []}
-              from={guide.from}
-              viewStart={viewStart}
-              now={now}
-              active={sel?.channel.id === item.id}
-              onFocusSeg={onFocusSeg}
-              onWatch={watch}
-            />
-          )}
-        />
-      </TVFocusGuideView>
+        {/* TV: Left/Right stay in the grid; at either end of the timeline they do nothing. */}
+        <TVFocusGuideView style={st.flex} trapFocusLeft trapFocusRight>
+          <FlatList
+            data={guide.channels}
+            keyExtractor={(c) => String(c.id)}
+            extraData={`${viewStart}:${now}:${sel?.channel.id}:${sel?.seg.key}:${geo.gridW}`}
+            getItemLayout={(_, i) => ({ length: px(ROW_H + ROW_GAP), offset: px(ROW_H + ROW_GAP) * i, index: i })}
+            initialNumToRender={8}
+            windowSize={5}
+            contentContainerStyle={st.rows}
+            renderItem={({ item }) => (
+              <ChannelRow
+                channel={item}
+                segs={segsByChannel.get(item.id) ?? []}
+                from={guide.from}
+                viewStart={viewStart}
+                now={now}
+                geo={geo}
+                active={sel?.channel.id === item.id}
+                selKey={sel?.channel.id === item.id ? sel.seg.key : undefined}
+                onFocusSeg={onFocusSeg}
+                onTapSeg={onTapSeg}
+                onWatch={watch}
+              />
+            )}
+          />
+        </TVFocusGuideView>
+      </View>
     </View>
   )
 }
@@ -241,8 +288,11 @@ const ChannelRow = memo(function Row({
   from,
   viewStart,
   now,
+  geo,
   active,
+  selKey,
   onFocusSeg,
+  onTapSeg,
   onWatch,
 }: {
   channel: LiveChannel
@@ -250,8 +300,11 @@ const ChannelRow = memo(function Row({
   from: number
   viewStart: number
   now: number
+  geo: Geo
   active: boolean
+  selKey?: string
   onFocusSeg: (c: LiveChannel, s: Seg) => void
+  onTapSeg: (c: LiveChannel, s: Seg) => void
   onWatch: (c: LiveChannel) => void
 }) {
   return (
@@ -260,10 +313,20 @@ const ChannelRow = memo(function Row({
         <Text style={st.chNumber}>{channel.number}</Text>
         <ChannelLogo channel={channel} />
       </View>
-      <View style={st.track}>
-        <View style={[st.trackInner, { width: px((segs[segs.length - 1].stop - from) * perSec), transform: [{ translateX: -px((viewStart - from) * perSec) }] }]}>
+      <View style={[st.track, { width: px(geo.gridW) }]}>
+        <View style={[st.trackInner, { width: px((segs[segs.length - 1].stop - from) * geo.perSec), transform: [{ translateX: -px((viewStart - from) * geo.perSec) }] }]}>
           {segs.map((seg) => (
-            <Cell key={seg.key} seg={seg} from={from} viewStart={viewStart} airing={seg.start <= now && now < seg.stop} onFocus={() => onFocusSeg(channel, seg)} onPress={() => onWatch(channel)} />
+            <Cell
+              key={seg.key}
+              seg={seg}
+              from={from}
+              viewStart={viewStart}
+              perSec={geo.perSec}
+              airing={seg.start <= now && now < seg.stop}
+              selected={selKey === seg.key}
+              onFocus={() => onFocusSeg(channel, seg)}
+              onPress={() => (isPhone ? onTapSeg(channel, seg) : onWatch(channel))}
+            />
           ))}
         </View>
       </View>
@@ -288,13 +351,32 @@ function ChannelLogo({ channel }: { channel: LiveChannel }) {
     )
   }, [channel.id, channel.logo])
   if (!channel.logo || failed) return <Text style={st.chName} numberOfLines={2}>{channel.name}</Text>
-  if (logo?.svg) return <SvgXml xml={logo.svg} width={px(150)} height={px(64)} />
+  if (logo?.svg) return <SvgXml xml={logo.svg} width={px(LOGO_W)} height={px(LOGO_H)} />
   if (logo?.uri) return <Image source={{ uri: logo.uri, headers: authHeaders() }} style={st.chLogo} resizeMode="contain" onError={() => setFailed(true)} />
   return <View style={st.chLogo} />
 }
 
-function Cell({ seg, from, viewStart, airing, onFocus, onPress }: { seg: Seg; from: number; viewStart: number; airing: boolean; onFocus: () => void; onPress: () => void }) {
+function Cell({
+  seg,
+  from,
+  viewStart,
+  perSec,
+  airing,
+  selected,
+  onFocus,
+  onPress,
+}: {
+  seg: Seg
+  from: number
+  viewStart: number
+  perSec: number
+  airing: boolean
+  selected: boolean
+  onFocus: () => void
+  onPress: () => void
+}) {
   const [focused, setFocused] = useState(false)
+  const lit = isPhone ? selected : focused // a TV lights the focused block; a phone the tapped one
   const left = (seg.start - from) * perSec
   const width = (seg.stop - seg.start) * perSec
   // Keep the title readable when the block starts left of the visible window.
@@ -308,9 +390,9 @@ function Cell({ seg, from, viewStart, airing, onFocus, onPress }: { seg: Seg; fr
       }}
       onBlur={() => setFocused(false)}
       onPress={onPress}
-      style={[st.cell, airing && st.cellAiring, focused && st.cellFocused, { left: px(left), width: px(width) - px(ROW_GAP), paddingLeft: px(18 + inset) }]}
+      style={[st.cell, airing && st.cellAiring, lit && st.cellFocused, { left: px(left), width: px(width) - px(ROW_GAP), paddingLeft: px(18 + inset) }]}
     >
-      <Text style={[st.cellText, !seg.program && st.cellEmpty, focused && st.cellTextFocused]} numberOfLines={1}>
+      <Text style={[st.cellText, !seg.program && st.cellEmpty, lit && st.cellTextFocused]} numberOfLines={1}>
         {startedEarlier || inset > 0 ? '‹ ' : ''}
         {seg.program?.title ?? 'No guide information'}
       </Text>
@@ -318,33 +400,38 @@ function Cell({ seg, from, viewStart, airing, onFocus, onPress }: { seg: Seg; fr
   )
 }
 
+const LOGO_W = isPhone ? 100 : 150
+const LOGO_H = isPhone ? 50 : 64
+
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   error: { color: colors.danger, fontSize: font.body, textAlign: 'center' },
   muted: { color: colors.muted, fontSize: font.body, textAlign: 'center' },
-  header: { flexDirection: 'row', paddingHorizontal: gutter, paddingTop: 10, height: 300 },
-  info: { flex: 1, paddingRight: 40 },
+  header: { flexDirection: 'row', paddingHorizontal: gutter, paddingTop: isPhone ? 24 : 10, height: isPhone ? 260 : 300 },
+  headerWide: { height: 190, paddingTop: 12 },
+  previewWide: { width: 300, height: 169 },
+  info: { flex: 1, paddingRight: isPhone ? 24 : 40 },
   title: { color: colors.text, fontSize: font.title, fontWeight: '800' },
   meta: { color: colors.muted, fontSize: font.small, marginTop: 8 },
   subtitle: { color: colors.text, fontSize: font.body, marginTop: 10, fontWeight: '600' },
   desc: { color: colors.text, fontSize: font.small, marginTop: 10, lineHeight: 32, opacity: 0.85 },
-  preview: { width: 480, height: 270, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  preview: { width: isPhone ? 300 : 480, height: isPhone ? 169 : 270, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   liveTag: { position: 'absolute', top: 12, left: 12, color: colors.accentText, backgroundColor: colors.accent, fontSize: 16, fontWeight: '900', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
   ruler: { flexDirection: 'row', alignItems: 'flex-end', paddingLeft: gutter, height: 56, marginBottom: 10 },
-  rulerDay: { width: CH_W, color: colors.muted, fontSize: font.small, paddingBottom: 14, paddingLeft: 24 },
-  rulerTrack: { width: GRID_W, height: 56, overflow: 'hidden' },
+  rulerDay: { width: CH_W, color: colors.muted, fontSize: font.small, paddingBottom: 14, paddingLeft: isPhone ? 12 : 24 },
+  rulerTrack: { height: 56, overflow: 'hidden' },
   tick: { position: 'absolute', top: 6, color: colors.muted, fontSize: font.small },
   rulerLine: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: colors.surface3 },
   nowLine: { position: 'absolute', left: 0, bottom: 0, height: 4, backgroundColor: colors.accent },
   nowDot: { position: 'absolute', bottom: -4, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.accent },
   rows: { paddingLeft: gutter, paddingBottom: 40 },
   row: { flexDirection: 'row', height: ROW_H, marginBottom: ROW_GAP },
-  chCell: { width: CH_W - ROW_GAP, marginRight: ROW_GAP, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, borderRadius: 10 },
+  chCell: { width: CH_W - ROW_GAP, marginRight: ROW_GAP, flexDirection: 'row', alignItems: 'center', paddingHorizontal: isPhone ? 12 : 20, borderRadius: 10 },
   chCellActive: { backgroundColor: colors.surface2 },
-  chNumber: { color: colors.text, fontSize: font.body, fontWeight: '700', width: 82 },
-  chLogo: { width: 150, height: 64 },
+  chNumber: { color: colors.text, fontSize: font.body, fontWeight: '700', width: isPhone ? 60 : 82 },
+  chLogo: { width: LOGO_W, height: LOGO_H },
   chName: { color: colors.text, fontSize: font.small, fontWeight: '700', flex: 1 },
-  track: { width: GRID_W, overflow: 'hidden' },
+  track: { overflow: 'hidden' },
   trackInner: { height: ROW_H },
   cell: { position: 'absolute', top: 0, height: ROW_H, justifyContent: 'center', paddingRight: 14, backgroundColor: colors.surface, borderRadius: 10 },
   cellAiring: { backgroundColor: colors.surface3 },

@@ -97,7 +97,7 @@ const st = StyleSheet.create(scaled({
   serverUrl: { color: colors.muted, fontSize: font.small, marginTop: 4 },
   scanning: { flexDirection: 'row', alignItems: 'center', gap: 16, marginVertical: 20 },
   muted: { color: colors.muted, fontSize: font.body },
-  buttons: { flexDirection: 'row', marginTop: 24 },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 24 },
   label: { color: colors.muted, fontSize: font.small, marginBottom: 10 },
   input: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 20, borderWidth: 2, borderColor: colors.border },
   error: { color: colors.danger, fontSize: font.body, marginTop: 12 },

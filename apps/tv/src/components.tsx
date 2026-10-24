@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
-import { scaled, colors, font, gutter } from './theme'
+import { scaled, colors, font, gutter, isPhone } from './theme'
 import type { Item } from './types'
 
 /** A remote-friendly button: grows and lights up when focused. */
@@ -24,14 +24,15 @@ export function Button({
   return (
     <Pressable
       onPress={onPress}
-      onFocus={() => setFocused(true)}
+      onFocus={() => setFocused(!isPhone)} // phones can hold focus too, but show touch feedback instead
       onBlur={() => setFocused(false)}
       hasTVPreferredFocus={preferFocus}
-      style={[
+      style={({ pressed }) => [
         s.button,
         small && s.buttonSmall,
         primary && s.buttonPrimary,
         focused && (primary ? s.buttonPrimaryFocused : s.buttonFocused),
+        pressed && s.pressed,
         style,
       ]}
     >
@@ -47,14 +48,14 @@ export function Focusable({ children, style, ...props }: PressableProps & { styl
     <Pressable
       {...props}
       onFocus={(e) => {
-        setFocused(true)
+        setFocused(!isPhone)
         props.onFocus?.(e)
       }}
       onBlur={(e) => {
         setFocused(false)
         props.onBlur?.(e)
       }}
-      style={[style, s.focusable, focused && s.focused]}
+      style={({ pressed }) => [style, s.focusable, focused && s.focused, pressed && s.pressed]}
     >
       {children}
     </Pressable>
@@ -111,7 +112,7 @@ export function Center({ children }: { children: React.ReactNode }) {
 }
 
 const s = StyleSheet.create(scaled({
-  button: { paddingVertical: 22, paddingHorizontal: 44, borderRadius: 18, backgroundColor: colors.surface3, marginRight: 24, alignItems: 'center' },
+  button: { paddingVertical: 22, paddingHorizontal: 44, borderRadius: 18, backgroundColor: colors.surface3, marginRight: 24, marginBottom: isPhone ? 20 : 0, alignItems: 'center' },
   buttonSmall: { paddingVertical: 14, paddingHorizontal: 30 },
   buttonPrimary: { backgroundColor: colors.accent },
   buttonFocused: { backgroundColor: colors.text, transform: [{ scale: 1.06 }] },
@@ -121,6 +122,7 @@ const s = StyleSheet.create(scaled({
   buttonTextDark: { color: colors.accentText },
   focusable: { borderRadius: 16, borderWidth: 5, borderColor: 'transparent' },
   focused: { borderColor: colors.accent, transform: [{ scale: 1.07 }] },
+  pressed: { opacity: 0.6 }, // touch feedback on phones
   poster: { width: 230, height: 345, marginRight: 30, overflow: 'hidden', backgroundColor: colors.surface2 },
   posterImg: { width: '100%', height: '100%', borderRadius: 11 },
   wideWrap: { marginRight: 34, width: 420 },

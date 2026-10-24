@@ -2,7 +2,7 @@
 # as libraries in the web UI using the container paths (/media/movies, ...).
 services:
   bingebandit:
-    image: ghcr.io/OWNER/bingebandit:latest # replace OWNER with your GitHub user/org
+    image: ghcr.io/spacegoose02/bingebandit:latest
     container_name: bingebandit
     restart: unless-stopped
     ports:

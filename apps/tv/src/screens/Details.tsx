@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, ImageBackground, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, image } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { useNav } from '../nav'
-import { scaled, colors, font, gutter } from '../theme'
+import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Item, ItemDetail } from '../types'
 
 function fmtDuration(min?: number) {
@@ -40,6 +40,11 @@ export default function Details({ id }: { id: number }) {
   return (
     <ImageBackground source={bg ?? {}} style={st.screen} imageStyle={st.bgImg}>
       <ScrollView contentContainerStyle={st.body}>
+        {isPhone && (
+          <Pressable onPress={nav.back} hitSlop={20} style={st.back}>
+            <Text style={st.backText}>‹ Back</Text>
+          </Pressable>
+        )}
         {!!heading && <Text style={st.heading}>{heading}</Text>}
         <Text style={st.title}>
           {it.kind === 'episode' ? `S${it.seasonNumber} E${it.episodeNumber} · ${it.title}` : it.title}
@@ -123,19 +128,21 @@ const st = StyleSheet.create(scaled({
   screen: { flex: 1, backgroundColor: colors.bg },
   bgImg: { opacity: 0.3 },
   flex: { flex: 1 },
-  body: { paddingHorizontal: gutter * 1.5, paddingTop: 60, paddingBottom: 80 },
+  body: { paddingHorizontal: isPhone ? gutter : gutter * 1.5, paddingTop: isPhone ? 30 : 60, paddingBottom: 80 },
+  back: { alignSelf: 'flex-start', marginBottom: 24 },
+  backText: { color: colors.accent, fontSize: font.body, fontWeight: '700' },
   heading: { color: colors.muted, fontSize: font.heading, fontWeight: '700', marginBottom: 6 },
   title: { color: colors.text, fontSize: font.hero, fontWeight: '900', maxWidth: 1600 },
   meta: { color: colors.muted, fontSize: font.body, marginTop: 10 },
   tagline: { color: colors.text, fontSize: font.body, fontStyle: 'italic', marginTop: 14, opacity: 0.85 },
   overview: { color: colors.text, fontSize: font.body, lineHeight: 40, marginTop: 16, maxWidth: 1500, opacity: 0.9 },
-  buttons: { flexDirection: 'row', alignItems: 'center', marginTop: 30, marginBottom: 20 },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 30, marginBottom: 20 },
   muted: { color: colors.muted, fontSize: font.body, marginRight: 20 },
   error: { color: colors.danger, fontSize: font.body },
   section: { color: colors.text, fontSize: font.heading, fontWeight: '800', marginTop: 20, marginBottom: 10 },
   hlist: { paddingVertical: 10 },
   episode: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,24,29,0.85)', padding: 20, marginBottom: 16, maxWidth: 1600 },
-  epThumb: { width: 320, height: 180, marginRight: 30 },
+  epThumb: { width: isPhone ? 240 : 320, height: isPhone ? 135 : 180, marginRight: isPhone ? 20 : 30 },
   thumbFallback: { backgroundColor: colors.surface3, borderRadius: 8 },
   thumbImg: { borderRadius: 8 },
   epTitle: { color: colors.text, fontSize: font.body, fontWeight: '700' },

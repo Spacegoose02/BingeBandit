@@ -4,7 +4,10 @@ import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 're
 import { absolute, api, authHeaders } from '../api'
 import { Button } from '../components'
 import { backInterceptor, useNav } from '../nav'
-import { scaled, colors, font, gutter } from '../theme'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useLock } from '../lock'
+import { useLandscape } from '../screen'
+import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
 
@@ -30,6 +33,9 @@ function sessionId() {
  */
 export default function Player({ id, start = 0 }: { id: number; start?: number }) {
   const nav = useNav()
+  useLandscape()
+  const insets = useSafeAreaInsets()
+  const lock = useLock()
   const video = useRef<VideoRef>(null)
   const [item, setItem] = useState<Item | null>(null)
   const [file, setFile] = useState<MediaFile | null>(null)
@@ -116,7 +122,7 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           stopped,
           mode,
           transcodeId: transcodeId.current,
-          client: 'Android TV',
+          client: isPhone ? 'Android' : 'Android TV',
           played: Math.round(played.current),
         })
         .catch(() => undefined)
@@ -263,9 +269,10 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     if (item?.kind === 'episode') api.get<Item | undefined>(`/api/items/${item.id}/next`).then((n) => setNext(n ?? null), () => undefined)
   }, [item])
 
-  // Back closes the menu, then the controls, before leaving the player.
+  // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
   useEffect(() => {
     backInterceptor.current = () => {
+      if (lock.handleBack()) return true
       if (menu) {
         setMenu(false)
         return true
@@ -279,7 +286,7 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     return () => {
       backInterceptor.current = null
     }
-  }, [menu, controls])
+  })
 
   useTVEventHandler((evt) => {
     // Android TV only delivers the key-up half to JS (key-down drives native
@@ -333,6 +340,8 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
   const title = item ? (item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title) : ''
   const subtitleLine = item?.kind === 'episode' ? item.title : ''
   const pct = duration ? Math.min(100, (pos / duration) * 100) : 0
+  // A sideways phone has the navigation bar (or a camera cut-out) on one side; keep controls clear of it.
+  const barsPad = isPhone ? { paddingLeft: insets.left + px(60), paddingRight: insets.right + px(60), paddingBottom: insets.bottom + px(30) } : null
 
   return (
     <View style={st.screen}>
@@ -360,8 +369,14 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           progressUpdateInterval={250}
         />
       )}
-      {/* Something must hold focus or Android never hands the remote's keys to the app. */}
-      <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!menu && controls !== 'full'} focusable={!menu && controls !== 'full'} />
+      {/* TV: something must hold focus or Android never hands the remote's keys to the app.
+          Phone: tapping the picture shows or hides the controls. */}
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        hasTVPreferredFocus={!menu && controls !== 'full'}
+        focusable={!menu && controls !== 'full'}
+        onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
+      />
       {!!cue && (
         <View style={[st.cueWrap, (controls !== 'hidden' || paused || menu) && st.cueRaised]} pointerEvents="none">
           <Text style={st.cue}>{cue}</Text>
@@ -374,20 +389,34 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && (
-        <View style={st.overlay}>
-          <View>
-            <Text style={st.title} numberOfLines={1}>{title}</Text>
-            {!!subtitleLine && <Text style={st.sub} numberOfLines={1}>{subtitleLine}</Text>}
+      {(controls !== 'hidden' || paused) && !error && !menu && !lock.locked && (
+        <Pressable style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
+          <View style={st.topRow}>
+            {isPhone && (
+              <Pressable onPress={nav.back} hitSlop={24} style={st.backBtn}>
+                <Text style={st.backText}>‹</Text>
+              </Pressable>
+            )}
+            <View style={st.flex}>
+              <Text style={st.title} numberOfLines={1}>{title}</Text>
+              {!!subtitleLine && <Text style={st.sub} numberOfLines={1}>{subtitleLine}</Text>}
+            </View>
           </View>
           <View>
-            <View style={st.track}>
-              <View style={[st.fill, { width: `${pct}%` }]} />
-            </View>
+            {isPhone ? (
+              <SeekBar pct={pct} duration={duration} onSeek={(t) => {
+                seekTo(t)
+                showControls('full')
+              }} />
+            ) : (
+              <View style={st.track}>
+                <View style={[st.fill, { width: `${pct}%` }]} />
+              </View>
+            )}
             <View style={st.times}>
               <Text style={st.time}>{clock(pos)}</Text>
               <Text style={st.mode}>{paused ? 'Paused' : mode === 'transcode' ? 'Converting' : 'Direct play'}</Text>
-              <Text style={st.time}>-{clock(duration - pos)}</Text>
+              <Text style={[st.time, st.timeEnd]}>-{clock(duration - pos)}</Text>
             </View>
             {controls === 'full' ? (
               <View style={st.controlRow}>
@@ -396,15 +425,25 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
                 <Button small label="30s ⟳" onPress={() => seekTo(posRef.current + 30)} />
                 {next && <Button small label="Next episode  ▶▶" onPress={() => nav.replace({ name: 'player', id: next.id, start: 0 })} />}
                 <Button small label="Audio & subtitles" onPress={() => setMenu(true)} />
+                {isPhone && (
+                  <Button
+                    small
+                    label="Lock"
+                    onPress={() => {
+                      setControls('hidden')
+                      lock.startLock()
+                    }}
+                  />
+                )}
               </View>
             ) : (
-              <Text style={st.hint}>OK for controls   ◀ 10s back   ▶ 30s forward</Text>
+              <Text style={st.hint}>{isPhone ? 'Tap for controls' : 'OK for controls   ◀ 10s back   ▶ 30s forward'}</Text>
             )}
           </View>
-        </View>
+        </Pressable>
       )}
       {menu && (
-        <View style={st.menu}>
+        <View style={[st.menu, barsPad]}>
           {audios.length > 1 && (
             <>
               <Text style={st.menuTitle}>Audio</Text>
@@ -431,23 +470,65 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
             ))}
           </ScrollView>
           {subs.length === 0 && <Text style={st.hint}>This file has no subtitles.</Text>}
-          <Text style={st.hint}>Back closes this menu</Text>
+          {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} style={st.done} /> : <Text style={st.hint}>Back closes this menu</Text>}
         </View>
       )}
+      {lock.layer}
+    </View>
+  )
+}
+
+/** A touch progress bar: drag or tap to pick a time; the video seeks when the finger lifts. */
+function SeekBar({ pct, duration, onSeek }: { pct: number; duration: number; onSeek: (t: number) => void }) {
+  const bar = useRef<View>(null)
+  const box = useRef({ x: 0, width: 1 }) // the bar's position on screen
+  const [drag, setDrag] = useState<number | null>(null) // 0..1 while the finger is down
+  // Screen coordinates: locationX would be relative to whatever is under the finger (e.g. the time label).
+  const at = (pageX: number) => Math.max(0, Math.min(1, (pageX - box.current.x) / box.current.width))
+  const shown = drag !== null ? drag * 100 : pct
+  return (
+    <View
+      ref={bar}
+      style={st.seekArea}
+      onLayout={() => bar.current?.measureInWindow((x, _y, w) => (box.current = { x, width: w || 1 }))}
+      onStartShouldSetResponder={() => true}
+      onResponderTerminationRequest={() => false}
+      onResponderGrant={(e) => setDrag(at(e.nativeEvent.pageX))}
+      onResponderMove={(e) => setDrag(at(e.nativeEvent.pageX))}
+      onResponderRelease={() => {
+        if (drag !== null) onSeek(drag * duration)
+        setDrag(null)
+      }}
+    >
+      <View style={st.track} pointerEvents="none">
+        <View style={[st.fill, { width: `${shown}%` }]} />
+      </View>
+      <View style={[st.thumb, { left: `${shown}%` }]} pointerEvents="none" />
+      {drag !== null && <Text style={[st.dragTime, { left: `${shown}%` }]} pointerEvents="none">{clock(drag * duration)}</Text>}
     </View>
   )
 }
 
 const st = StyleSheet.create(scaled({
+  flex: { flex: 1 },
+  topRow: { flexDirection: 'row', alignItems: 'center' },
+  backBtn: { paddingRight: 24 },
+  backText: { color: '#fff', fontSize: 64, fontWeight: '300', lineHeight: 70 },
+  seekArea: { height: 60, justifyContent: 'center' },
+  thumb: { position: 'absolute', top: 15, width: 30, height: 30, marginLeft: -15, borderRadius: 15, backgroundColor: colors.accent },
+  dragTime: { position: 'absolute', top: -50, width: 140, marginLeft: -70, textAlign: 'center', color: '#fff', fontSize: font.body, fontWeight: '700' },
+  done: { alignSelf: 'flex-start', marginTop: 16 },
   screen: { flex: 1, backgroundColor: '#000' },
   spinner: { position: 'absolute', top: '50%', left: '50%', marginLeft: -18, marginTop: -18 },
-  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingHorizontal: gutter, paddingVertical: 60, backgroundColor: 'rgba(0,0,0,0.35)' },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between', paddingHorizontal: isPhone ? 60 : gutter, paddingVertical: isPhone ? 30 : 60, backgroundColor: 'rgba(0,0,0,0.35)' },
   title: { color: '#fff', fontSize: font.title, fontWeight: '800' },
   sub: { color: '#d6dbe1', fontSize: font.body, marginTop: 6 },
   track: { height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.25)' },
   fill: { height: 10, borderRadius: 5, backgroundColor: colors.accent },
   times: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
-  time: { color: '#fff', fontSize: font.body, fontVariant: ['tabular-nums'] },
+  // A minimum width keeps the times from shifting as the digits change.
+  time: { color: '#fff', fontSize: font.body, fontVariant: ['tabular-nums'], minWidth: 150 },
+  timeEnd: { textAlign: 'right' },
   mode: { color: colors.accent, fontSize: font.small, fontWeight: '700' },
   hint: { color: '#c3c9d0', fontSize: font.small, marginTop: 10, textAlign: 'center' },
   errorBox: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: 'rgba(20,24,29,0.95)', padding: 40, borderRadius: 20, maxWidth: 1300 },
