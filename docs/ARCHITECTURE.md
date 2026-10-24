@@ -72,6 +72,8 @@
 
 `internal/importer` turns a source (Plex API, Tautulli API, Tautulli DB file) into `Record`s. `Matcher` maps each one to a library item (file name → TMDB id → title + year; episodes via their show), and `Runner` writes plays (`plays.import_key`), watched marks, resume points and collections through the store's `Import*` methods. These never remove or un-watch anything and skip duplicates, so any import can be re-run. The API (`api/importing.go`) creates mapped users and starts the runner in the background; the admin page polls `/api/admin/import/status`.
 
+`internal/trakt` wraps Trakt's API (device-code OAuth, history read/write) and a `Syncer` that keeps per-user tokens, imports a user's Trakt history through `importer.RunOnce`, and pushes finished plays (`plays.trakt_at` marks what Trakt already has). The progress handler calls `Syncer.PushNew` when a play finishes.
+
 ## Auth
 
 - The first run (no users) exposes `POST /api/setup` to create the admin; after that it returns 409.

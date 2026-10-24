@@ -13,6 +13,8 @@ type Config struct {
 	DataDir string
 	FFmpeg  string
 	FFprobe string
+	// TraktAPI is Trakt's API address; only changed for testing against a fake.
+	TraktAPI string
 }
 
 func Load() Config {
@@ -21,6 +23,7 @@ func Load() Config {
 	flag.StringVar(&c.DataDir, "data", env("BB_DATA_DIR", defaultDataDir()), "directory for the database, caches and transcodes")
 	flag.StringVar(&c.FFmpeg, "ffmpeg", env("BB_FFMPEG", "ffmpeg"), "path to the ffmpeg binary")
 	flag.StringVar(&c.FFprobe, "ffprobe", env("BB_FFPROBE", "ffprobe"), "path to the ffprobe binary")
+	flag.StringVar(&c.TraktAPI, "trakt-api", env("BB_TRAKT_API", "https://api.trakt.tv"), "Trakt API address (for testing)")
 	flag.Parse()
 	return c
 }

@@ -120,7 +120,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Passkeys |
 | | Plex/Tautulli account linking (with M7 import) |
 
-## M7: Import 🟡 (phase 1 done)
+## M7: Import ✅ (phases 1–2 done)
 
 | | Item |
 |---|---|
@@ -129,8 +129,11 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Map source users to BingeBandit users, or create them |
 | ✅ | Collections from Plex, by library |
 | ✅ | Preview (dry run), a list of what didn't match, and safe re-runs (no duplicates, even across Plex and Tautulli) |
-| | Import/export progress for trackers such as Yamtrack and Trakt |
+| ✅ | Trakt: connect per user with a code, import Trakt history, send history, automatic sync of new watches |
+| ✅ | Yamtrack and other trackers: through Trakt, or Plex-style webhooks |
+| ✅ | Download your history as CSV (with TMDB ids) and as a Letterboxd import file |
 | | Watched state for managed/shared Plex users (needs each user's token, via plex.tv) |
+| | Simkl and other trackers with their own APIs |
 
 ## M8: Apps
 

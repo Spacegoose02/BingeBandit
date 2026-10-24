@@ -145,6 +145,7 @@ type Webhook struct {
 	Name       string   `json:"name"`
 	URL        string   `json:"url"`
 	Events     []string `json:"events"`
+	Format     string   `json:"format"` // "" = BingeBandit JSON, "plex" = Plex-style multipart (Yamtrack and other Plex webhook receivers)
 	Secret     string   `json:"secret,omitempty"`
 	Enabled    bool     `json:"enabled"`
 	LastStatus string   `json:"lastStatus,omitempty"`
@@ -152,7 +153,7 @@ type Webhook struct {
 }
 
 func (s *Store) Webhooks() ([]*Webhook, error) {
-	rows, err := s.db.Query(`SELECT id, name, url, events, secret, enabled, last_status, last_at FROM webhooks ORDER BY name COLLATE NOCASE`)
+	rows, err := s.db.Query(`SELECT id, name, url, events, format, secret, enabled, last_status, last_at FROM webhooks ORDER BY name COLLATE NOCASE`)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func (s *Store) Webhooks() ([]*Webhook, error) {
 	for rows.Next() {
 		var w Webhook
 		var ev string
-		if err := rows.Scan(&w.ID, &w.Name, &w.URL, &ev, &w.Secret, &w.Enabled, &w.LastStatus, &w.LastAt); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.URL, &ev, &w.Format, &w.Secret, &w.Enabled, &w.LastStatus, &w.LastAt); err != nil {
 			return nil, err
 		}
 		json.Unmarshal([]byte(ev), &w.Events)
@@ -173,16 +174,16 @@ func (s *Store) Webhooks() ([]*Webhook, error) {
 func (s *Store) SaveWebhook(w *Webhook) error {
 	ev, _ := json.Marshal(nonNil(w.Events))
 	if w.ID == 0 {
-		res, err := s.db.Exec(`INSERT INTO webhooks (name, url, events, secret, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-			w.Name, w.URL, string(ev), w.Secret, boolInt(w.Enabled), now())
+		res, err := s.db.Exec(`INSERT INTO webhooks (name, url, events, format, secret, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			w.Name, w.URL, string(ev), w.Format, w.Secret, boolInt(w.Enabled), now())
 		if err != nil {
 			return err
 		}
 		w.ID, _ = res.LastInsertId()
 		return nil
 	}
-	_, err := s.db.Exec(`UPDATE webhooks SET name = ?, url = ?, events = ?, secret = ?, enabled = ? WHERE id = ?`,
-		w.Name, w.URL, string(ev), w.Secret, boolInt(w.Enabled), w.ID)
+	_, err := s.db.Exec(`UPDATE webhooks SET name = ?, url = ?, events = ?, format = ?, secret = ?, enabled = ? WHERE id = ?`,
+		w.Name, w.URL, string(ev), w.Format, w.Secret, boolInt(w.Enabled), w.ID)
 	return err
 }
 

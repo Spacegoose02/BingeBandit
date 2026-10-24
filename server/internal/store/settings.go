@@ -25,6 +25,8 @@ const (
 	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
 	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
 	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
+	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
+	SettingTraktSecret       = "trakt_client_secret"
 )
 
 var SettingDefaults = map[string]string{
@@ -51,6 +53,8 @@ var SettingDefaults = map[string]string{
 	SettingTrustedProxies:    "",
 	SettingLANNetworks:       "",
 	SettingRemoteAccess:      "true",
+	SettingTraktClientID:     "",
+	SettingTraktSecret:       "",
 }
 
 func (s *Store) Setting(key string) string {

@@ -1,4 +1,4 @@
-// Command fakeplex pretends to be a Plex Media Server and a Tautulli instance
+// Command fakeplex pretends to be a Plex Media Server, a Tautulli instance and Trakt
 // with a small, fixed watch history, for developing and testing the importer.
 // It matches the generated test media (Big Test Movie, Subtitle Test, Marker
 // Show, Test Show) and adds a few things that won't match.
@@ -14,10 +14,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -268,6 +270,191 @@ func tautulli() http.Handler {
 	})
 }
 
+// ---- Trakt ----
+
+const (
+	traktClient = "fake-trakt-client"
+	traktSecret = "fake-trakt-secret"
+)
+
+type fakeTrakt struct {
+	mu       sync.Mutex
+	addr     string
+	approved bool
+	denied   bool
+	token    string
+	history  []map[string]any
+	received []any // bodies of POST /sync/history, for checking what BingeBandit sent
+	nextID   int
+}
+
+func newFakeTrakt(addr string) *fakeTrakt {
+	t := &fakeTrakt{addr: addr, nextID: 5000}
+	at := func(daysAgo int) string { return time.Unix(when(daysAgo), 0).UTC().Format(time.RFC3339) }
+	// Already on Trakt: one matches the test library by title, one by show + episode, one isn't in it.
+	t.history = []map[string]any{
+		{"id": 4001, "watched_at": at(40), "type": "movie", "movie": map[string]any{"title": "Big Test Movie", "year": 2021, "ids": map[string]any{"trakt": 1, "tmdb": 9001}}},
+		{"id": 4002, "watched_at": at(41), "type": "movie", "movie": map[string]any{"title": "Inception", "year": 2010, "ids": map[string]any{"trakt": 2, "tmdb": 27205}}},
+		{"id": 4003, "watched_at": at(42), "type": "episode", "show": map[string]any{"title": "Marker Show", "year": 2020, "ids": map[string]any{"trakt": 3, "tmdb": 5000}},
+			"episode": map[string]any{"season": 1, "number": 3, "title": "Part 3", "ids": map[string]any{"trakt": 30}}},
+	}
+	return t
+}
+
+func (t *fakeTrakt) handler() http.Handler {
+	mux := http.NewServeMux()
+	jsonBody := func(r *http.Request) map[string]any {
+		var m map[string]any
+		json.NewDecoder(r.Body).Decode(&m)
+		return m
+	}
+	issue := func(w http.ResponseWriter) {
+		t.token = fmt.Sprintf("trakt-token-%d", time.Now().UnixNano())
+		writeJSON(w, map[string]any{"access_token": t.token, "refresh_token": "refresh-" + t.token, "token_type": "bearer",
+			"expires_in": 7776000, "created_at": time.Now().Unix(), "scope": "public"})
+	}
+	authed := func(h http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("trakt: %s %s", r.Method, r.URL.Path)
+			t.mu.Lock()
+			ok := r.Header.Get("trakt-api-key") == traktClient && r.Header.Get("Authorization") == "Bearer "+t.token && t.token != ""
+			t.mu.Unlock()
+			if !ok {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			h(w, r)
+		}
+	}
+	mux.HandleFunc("POST /oauth/device/code", func(w http.ResponseWriter, r *http.Request) {
+		if jsonBody(r)["client_id"] != traktClient {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		t.mu.Lock()
+		t.approved, t.denied = false, false
+		t.mu.Unlock()
+		writeJSON(w, map[string]any{"device_code": "dev-code", "user_code": "FAKE1234", "verification_url": "http://localhost" + t.addr + "/activate",
+			"expires_in": 600, "interval": 1})
+	})
+	mux.HandleFunc("GET /activate", func(w http.ResponseWriter, r *http.Request) {
+		t.mu.Lock()
+		switch r.URL.Query().Get("answer") {
+		case "yes":
+			t.approved = true
+		case "no":
+			t.denied = true
+		}
+		approved := t.approved
+		t.mu.Unlock()
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if approved {
+			fmt.Fprint(w, `<body style="font-family:sans-serif;background:#111;color:#eee;padding:40px"><h1>Fake Trakt</h1><p>Approved. Go back to BingeBandit.</p>`)
+			return
+		}
+		fmt.Fprint(w, `<body style="font-family:sans-serif;background:#111;color:#eee;padding:40px"><h1>Fake Trakt</h1>
+<p>Code FAKE1234 wants access to fake_trakt_user's history.</p><p><a style="color:#ed1c24;font-size:20px" href="?answer=yes">Approve</a> &nbsp; <a style="color:#aaa" href="?answer=no">Deny</a></p>`)
+	})
+	mux.HandleFunc("POST /oauth/device/token", func(w http.ResponseWriter, r *http.Request) {
+		b := jsonBody(r)
+		if b["client_id"] != traktClient || b["client_secret"] != traktSecret {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		switch {
+		case t.denied:
+			w.WriteHeader(418)
+		case !t.approved:
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			t.approved = false
+			issue(w)
+		}
+	})
+	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		if jsonBody(r)["refresh_token"] != "refresh-"+t.token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		issue(w)
+	})
+	mux.HandleFunc("POST /oauth/revoke", func(w http.ResponseWriter, r *http.Request) {
+		t.mu.Lock()
+		t.token = ""
+		t.mu.Unlock()
+	})
+	mux.HandleFunc("GET /users/me", authed(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]any{"username": "fake_trakt_user", "name": "Fake Trakt User"})
+	}))
+	mux.HandleFunc("GET /sync/history/{kind}", authed(func(w http.ResponseWriter, r *http.Request) {
+		want := map[string]string{"movies": "movie", "episodes": "episode"}[r.PathValue("kind")]
+		t.mu.Lock()
+		var out []map[string]any
+		for _, h := range t.history {
+			if h["type"] == want {
+				out = append(out, h)
+			}
+		}
+		t.mu.Unlock()
+		w.Header().Set("X-Pagination-Page-Count", "1")
+		if out == nil {
+			out = []map[string]any{}
+		}
+		writeJSON(w, out)
+	}))
+	mux.HandleFunc("POST /sync/history", authed(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Movies []map[string]any `json:"movies"`
+			Shows  []struct {
+				Title   string         `json:"title"`
+				Year    int            `json:"year"`
+				IDs     map[string]any `json:"ids"`
+				Seasons []struct {
+					Number   int              `json:"number"`
+					Episodes []map[string]any `json:"episodes"`
+				} `json:"seasons"`
+			} `json:"shows"`
+		}
+		raw, _ := io.ReadAll(r.Body)
+		json.Unmarshal(raw, &body)
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		var parsed any
+		json.Unmarshal(raw, &parsed)
+		t.received = append(t.received, parsed)
+		movies, eps := 0, 0
+		for _, m := range body.Movies {
+			t.nextID++
+			t.history = append(t.history, map[string]any{"id": t.nextID, "watched_at": m["watched_at"], "type": "movie",
+				"movie": map[string]any{"title": m["title"], "year": m["year"], "ids": m["ids"]}})
+			movies++
+		}
+		for _, s := range body.Shows {
+			for _, se := range s.Seasons {
+				for _, e := range se.Episodes {
+					t.nextID++
+					t.history = append(t.history, map[string]any{"id": t.nextID, "watched_at": e["watched_at"], "type": "episode",
+						"show": map[string]any{"title": s.Title, "year": s.Year, "ids": s.IDs}, "episode": map[string]any{"season": se.Number, "number": e["number"]}})
+					eps++
+				}
+			}
+		}
+		w.WriteHeader(http.StatusCreated)
+		writeJSON(w, map[string]any{"added": map[string]int{"movies": movies, "episodes": eps},
+			"not_found": map[string]any{"movies": []any{}, "shows": []any{}, "episodes": []any{}}})
+	}))
+	mux.HandleFunc("GET /_received", func(w http.ResponseWriter, r *http.Request) {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		writeJSON(w, map[string]any{"received": t.received, "historySize": len(t.history)})
+	})
+	return mux
+}
+
 func makeDB(path string) error {
 	os.Remove(path)
 	db, err := sql.Open("sqlite", path)
@@ -324,6 +511,7 @@ func makeDB(path string) error {
 func main() {
 	plexAddr := flag.String("plex", ":32400", "Plex listen address")
 	tautulliAddr := flag.String("tautulli", ":8181", "Tautulli listen address")
+	traktAddr := flag.String("trakt", ":8282", "Trakt listen address")
 	dbPath := flag.String("makedb", "", "write a Tautulli database to this path and exit")
 	flag.Parse()
 	if *dbPath != "" {
@@ -334,6 +522,8 @@ func main() {
 		return
 	}
 	go func() { log.Fatal(http.ListenAndServe(*tautulliAddr, tautulli())) }()
+	go func() { log.Fatal(http.ListenAndServe(*traktAddr, newFakeTrakt(*traktAddr).handler())) }()
+	log.Printf("fake Trakt on %s (client %s / %s); run BingeBandit with -trakt-api http://localhost%s", *traktAddr, traktClient, traktSecret, *traktAddr)
 	log.Printf("fake Plex on %s (token %s), fake Tautulli on %s (API key %s)", *plexAddr, plexToken, *tautulliAddr, apiKey)
 	log.Fatal(http.ListenAndServe(*plexAddr, plex()))
 }

@@ -56,6 +56,7 @@ export interface Webhook {
   name: string
   url: string
   events: string[]
+  format: '' | 'plex' | string
   secret: string
   enabled: boolean
   lastStatus: string

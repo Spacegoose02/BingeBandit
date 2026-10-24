@@ -212,6 +212,185 @@ function LinkedAccounts() {
   )
 }
 
+interface TraktState {
+  configured: boolean
+  account: { username: string; autoSync: boolean; connectedAt: number; lastSync: number; lastError?: string } | null
+  pendingNew?: number
+  pendingAll?: number
+}
+
+function Trakt() {
+  const { user } = useAuth()
+  const { data, reload } = useApi<TraktState>('/api/me/trakt')
+  const [code, setCode] = useState<{ userCode: string; verificationUrl: string; interval: number } | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState('')
+
+  // Poll while a code is showing.
+  useEffect(() => {
+    if (!code) return
+    let stopped = false
+    let timer = 0
+    const poll = async () => {
+      try {
+        const acc = await api.post<TraktState['account'] | undefined>('/api/me/trakt/poll')
+        if (stopped) return
+        if (acc) {
+          setCode(null)
+          setMsg({ ok: true, text: `Connected as ${acc.username}. New things you finish will be added to your Trakt history.` })
+          reload()
+          return
+        }
+        timer = window.setTimeout(poll, Math.max(code.interval, 1) * 1000)
+      } catch (err) {
+        if (!stopped) {
+          setCode(null)
+          setMsg({ ok: false, text: (err as Error).message })
+        }
+      }
+    }
+    timer = window.setTimeout(poll, Math.max(code.interval, 1) * 1000)
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+    }
+  }, [code, reload])
+
+  if (!data) return null
+  const act = async (label: string, f: () => Promise<string>) => {
+    setBusy(label)
+    setMsg(null)
+    try {
+      setMsg({ ok: true, text: await f() })
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message })
+    } finally {
+      setBusy('')
+      reload()
+    }
+  }
+  const connect = () =>
+    act('connect', async () => {
+      setCode(await api.post('/api/me/trakt/connect'))
+      return ''
+    })
+  const importHistory = () =>
+    act('import', async () => {
+      const s = await api.post<{ plays: number; duplicates: number; watched: number; seen: number; matched: number; unmatchedCount: number }>(
+        '/api/me/trakt/import',
+      )
+      return `Read ${s.seen} plays from Trakt; ${s.matched} are in your libraries. Added ${s.plays} to your history${
+        s.duplicates ? ` (${s.duplicates} were already here)` : ''
+      } and marked ${s.watched} watched.${
+        s.unmatchedCount ? ` ${s.unmatchedCount} ${s.unmatchedCount === 1 ? "title isn't" : "titles aren't"} on this server.` : ''
+      }`
+    })
+  const push = (all: boolean) =>
+    act('push', async () => {
+      const r = await api.post<{ movies: number; episodes: number; notFound: number }>('/api/me/trakt/push', { all })
+      return `Sent ${r.movies} movies and ${r.episodes} episodes to Trakt.${r.notFound ? ` Trakt didn't recognise ${r.notFound}.` : ''}`
+    })
+  const setAuto = async (autoSync: boolean) => {
+    await api.put('/api/me/trakt', { autoSync }).catch((e) => alert(e.message))
+    reload()
+  }
+  const disconnect = async () => {
+    if (!confirm('Disconnect Trakt? Your Trakt history stays as it is.')) return
+    await api.del('/api/me/trakt').catch((e) => alert(e.message))
+    setMsg(null)
+    reload()
+  }
+  const acc = data.account
+
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Trakt</h3>
+      {!data.configured && !acc ? (
+        <p className="muted small">
+          Keep your Trakt history (and apps that read it, like Yamtrack) up to date with what you watch here.{' '}
+          {user?.isAdmin ? (
+            <>
+              First add a Trakt app under <Link to="/admin/settings">Settings → Trakt</Link>.
+            </>
+          ) : (
+            'Ask your server admin to set up Trakt first.'
+          )}
+        </p>
+      ) : acc ? (
+        <>
+          <p className="muted small">
+            Connected as <strong>{acc.username}</strong>
+            {acc.lastSync > 0 && <> · last synced {when(acc.lastSync)}</>}
+          </p>
+          {acc.lastError && <div className="form-error">Last sync failed: {acc.lastError}</div>}
+          <label className="check">
+            <input type="checkbox" checked={acc.autoSync} onChange={(e) => setAuto(e.target.checked)} />
+            Add what I finish here to my Trakt history automatically
+          </label>
+          <div className="actions">
+            <button type="button" className="btn btn-glass" disabled={!!busy} onClick={importHistory}>
+              {busy === 'import' ? 'Importing…' : 'Import my Trakt history'}
+            </button>
+            {(data.pendingAll ?? 0) > 0 && (
+              <button type="button" className="btn btn-glass" disabled={!!busy} onClick={() => push(true)}>
+                {busy === 'push' ? 'Sending…' : `Send ${data.pendingAll} plays to Trakt`}
+              </button>
+            )}
+            <button type="button" className="btn btn-glass danger" onClick={disconnect}>Disconnect</button>
+          </div>
+          {(data.pendingAll ?? 0) > 0 && (
+            <p className="muted small">
+              {data.pendingAll} finished plays aren't on Trakt yet
+              {(data.pendingNew ?? 0) < (data.pendingAll ?? 0) && ', mostly from before you connected (those are only sent when you ask)'}.
+            </p>
+          )}
+        </>
+      ) : code ? (
+        <div className="link-code">
+          <p className="muted">
+            Go to{' '}
+            <a href={code.verificationUrl} target="_blank" rel="noreferrer">
+              {code.verificationUrl.replace(/^https?:\/\//, '')}
+            </a>{' '}
+            and enter
+          </p>
+          <div className="link-code-value">{code.userCode}</div>
+          <p className="muted small">Waiting for you to approve it on Trakt…</p>
+          <button type="button" className="btn btn-glass btn-sm" onClick={() => setCode(null)}>Cancel</button>
+        </div>
+      ) : (
+        <>
+          <p className="muted small">Keep your Trakt history (and apps that read it, like Yamtrack) up to date with what you watch here.</p>
+          <div className="actions">
+            <button type="button" className="btn btn-primary" disabled={!!busy} onClick={connect}>Connect Trakt</button>
+          </div>
+        </>
+      )}
+      {msg?.text && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
+    </div>
+  )
+}
+
+function Downloads() {
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Download my history</h3>
+      <p className="muted small">Everything you've watched here, with TMDB ids so other apps can match it.</p>
+      <div className="actions">
+        <a className="btn btn-glass" href="/api/me/export/history.csv" download>
+          <Icon name="download" size={16} /> Watch history (CSV)
+        </a>
+        <a className="btn btn-glass" href="/api/me/export/letterboxd.csv" download>
+          <Icon name="download" size={16} /> Movies for Letterboxd
+        </a>
+      </div>
+      <p className="muted small">
+        Letterboxd: Settings → Import &amp; Export → Import your data, then pick the file.
+      </p>
+    </div>
+  )
+}
+
 function Devices() {
   const { data: sessions, reload } = useApi<DeviceSession[]>('/api/me/sessions')
   const revoke = async (s: DeviceSession) => {
@@ -438,6 +617,8 @@ export default function Account() {
       </p>
       <PlaybackPrefs />
       <Sharing />
+      <Trakt />
+      <Downloads />
       <LinkedAccounts />
       {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}
       {hasPassword && <TwoFactor />}

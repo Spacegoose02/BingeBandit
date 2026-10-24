@@ -138,6 +138,20 @@ func (r *Runner) Start(parent context.Context, src Source, opt Options) error {
 	return nil
 }
 
+// RunOnce imports synchronously, outside the shared admin runner (used for
+// one person's own Trakt history).
+func RunOnce(ctx context.Context, st *store.Store, src Source, opt Options) (Status, error) {
+	r := &Runner{st: st, missing: map[string]int{}}
+	r.status = Status{Running: true, Source: src.Kind(), DryRun: opt.DryRun, StartedAt: time.Now().Unix()}
+	err := r.run(ctx, src, opt)
+	r.status.Running, r.status.FinishedAt, r.status.Phase = false, time.Now().Unix(), "Finished"
+	if err != nil {
+		r.status.Error = err.Error()
+	}
+	r.status.Unmatched, r.status.UnmatchedNum = topMissing(r.missing, 50)
+	return r.status, err
+}
+
 func topMissing(m map[string]int, n int) ([]string, int) {
 	keys := make([]string, 0, len(m))
 	for k := range m {

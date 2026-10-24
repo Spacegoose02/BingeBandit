@@ -23,6 +23,7 @@ import (
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
+	"bingebandit/internal/trakt"
 )
 
 // version is set at build time: -ldflags "-X main.version=v0.1.0"
@@ -78,6 +79,7 @@ func main() {
 		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
 		DVR:        recorder,
 		Importer:   importer.NewRunner(st),
+		Trakt:      trakt.NewSyncer(st, cfg.TraktAPI),
 		Logs:       logBuf,
 		Version:    version,
 		DataDir:    cfg.DataDir,

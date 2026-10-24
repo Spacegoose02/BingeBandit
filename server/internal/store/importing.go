@@ -70,19 +70,32 @@ func (s *Store) ImportPlay(p *Play, key string) (bool, error) {
 		s.db.QueryRow(`SELECT COUNT(*) FROM plays WHERE user_id = ? AND item_id = ? AND ABS(stopped_at - ?) < 900`,
 			p.UserID, p.ItemID, p.StoppedAt).Scan(&dup)
 		if dup > 0 {
+			if traktAt(key) > 0 {
+				// Trakt already has this viewing: don't send ours there again.
+				s.db.Exec(`UPDATE plays SET trakt_at = ? WHERE user_id = ? AND item_id = ? AND ABS(stopped_at - ?) < 900 AND trakt_at = 0`,
+					now(), p.UserID, p.ItemID, p.StoppedAt)
+			}
 			return false, nil
 		}
 	}
 	res, err := s.db.Exec(`INSERT OR IGNORE INTO plays (user_id, item_id, title, subtitle, kind, library_id, show_id, started_at, stopped_at,
-			watched, completed, mode, client, ip, import_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)`,
+			watched, completed, mode, client, ip, import_key, trakt_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
 		p.UserID, item, p.Title, p.Subtitle, p.Kind, p.LibraryID, p.ShowID, p.StartedAt, p.StoppedAt,
-		p.Watched, boolInt(p.Completed), p.Mode, p.Client, key)
+		p.Watched, boolInt(p.Completed), p.Mode, p.Client, key, traktAt(key))
 	if err != nil {
 		return false, err
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// traktAt marks plays that came from Trakt as already on Trakt, so they aren't sent back.
+func traktAt(key string) int64 {
+	if strings.HasPrefix(key, "trakt:") {
+		return now()
+	}
+	return 0
 }
 
 // ImportWatched marks an item watched. It never un-watches anything.

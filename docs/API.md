@@ -55,6 +55,11 @@ Rules:
 | GET / POST / DELETE | `/me/keys`, `/me/keys/{id}` | API keys. POST `{name}` returns `{key, info}`; the key is only shown then. |
 | GET / DELETE | `/me/identities`, `/me/identities/{id}` | Accounts linked for single sign-on. |
 | PUT | `/me/share-activity` | `{share: true}` lets others see what you're watching. |
+| GET | `/me/export/history.csv`, `/me/export/letterboxd.csv` | Your watch history as CSV (TMDB ids), or finished movies in Letterboxd's import format. |
+| GET | `/me/trakt` | `{configured, account, pendingNew, pendingAll}`. |
+| POST | `/me/trakt/connect`, `/me/trakt/poll` | Connect Trakt: show `userCode` and `verificationUrl`, then poll (202 while waiting, 200 when connected). |
+| POST | `/me/trakt/import`, `/me/trakt/push` | Import your Trakt history; send plays to Trakt (`{all: true}` includes plays from before connecting). |
+| PUT / DELETE | `/me/trakt` | `{autoSync}`; disconnect. |
 | GET | `/activity/friends` | What people who share are watching now. |
 
 ## Browsing
@@ -125,5 +130,9 @@ Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editi
 | `playback.finished` | Something is marked watched by playing it. |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `test` | The *Send test* button. |
+
+Playback events also carry `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.
+
+A webhook whose format is **Plex-style** instead sends what Plex sends: `multipart/form-data` with a `payload` field holding `{event: "media.play" | "media.stop" | "media.scrobble", Account: {title: <username>}, Player, Server, Metadata}`. Only playback events are sent in this format. Use it for apps that accept Plex webhooks, such as Yamtrack.
 
 The `X-BingeBandit-Event` header names the event. If the webhook has a secret, `X-BingeBandit-Signature: sha256=<hex>` is the HMAC-SHA256 of the raw body with that secret. Compare it in constant time before trusting the request. Deliveries time out after 10 s and aren't retried.

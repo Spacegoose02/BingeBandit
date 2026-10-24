@@ -429,4 +429,20 @@ CREATE INDEX user_identities_user ON user_identities(user_id);
 ALTER TABLE plays ADD COLUMN import_key TEXT NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX plays_import ON plays(user_id, import_key) WHERE import_key != '';
 `,
+	// 13: Trakt accounts, and which plays have been sent to Trakt.
+	`
+CREATE TABLE trakt_accounts (
+	user_id       INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	username      TEXT NOT NULL DEFAULT '',
+	access_token  TEXT NOT NULL,
+	refresh_token TEXT NOT NULL,
+	expires_at    INTEGER NOT NULL,
+	auto_sync     INTEGER NOT NULL DEFAULT 1,
+	connected_at  INTEGER NOT NULL,
+	last_sync     INTEGER NOT NULL DEFAULT 0,
+	last_error    TEXT NOT NULL DEFAULT ''
+);
+ALTER TABLE plays ADD COLUMN trakt_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE webhooks ADD COLUMN format TEXT NOT NULL DEFAULT ''; -- '' (BingeBandit JSON) or 'plex'
+`,
 }

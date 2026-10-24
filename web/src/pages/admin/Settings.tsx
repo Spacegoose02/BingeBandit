@@ -152,6 +152,25 @@ export default function AdminSettings() {
         </section>
 
         <section className="panel form">
+          <h3>Trakt</h3>
+          <p className="muted small">
+            Lets people sync their watch history with Trakt from their Account page. Create an app at{' '}
+            <a href="https://trakt.tv/oauth/applications/new" target="_blank" rel="noreferrer">trakt.tv/oauth/applications</a> with the redirect URI{' '}
+            <code>urn:ietf:wg:oauth:2.0:oob</code>, then paste its keys here.
+          </p>
+          <div className="field-grid">
+            <label>
+              Client ID
+              <input className="mono" value={s.trakt_client_id ?? ''} onChange={set('trakt_client_id')} autoComplete="off" spellCheck={false} />
+            </label>
+            <label>
+              Client secret
+              <input className="mono" type="password" value={s.trakt_client_secret ?? ''} onChange={set('trakt_client_secret')} autoComplete="new-password" />
+            </label>
+          </div>
+        </section>
+
+        <section className="panel form">
           <h3>Network</h3>
           <label>
             Public URL
@@ -431,6 +450,13 @@ function WebhookEditor({ hook, events, onClose, onSaved }: { hook: Partial<Webho
         <label>
           URL
           <input className="mono" type="url" value={h.url ?? ''} onChange={(e) => setH({ ...h, url: e.target.value })} required placeholder="https://…" />
+        </label>
+        <label>
+          Format
+          <select value={h.format ?? ''} onChange={(e) => setH({ ...h, format: e.target.value })}>
+            <option value="">BingeBandit JSON</option>
+            <option value="plex">Plex-style (for Yamtrack and other apps that accept Plex webhooks; playback events only)</option>
+          </select>
         </label>
         <label>
           Secret (optional, for signing)

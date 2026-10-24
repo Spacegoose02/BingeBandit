@@ -2,9 +2,38 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, M7 phase 1 (Plex and Tautulli import)._
+_Last updated: 2026-10-24, M7 phase 2 (Trakt, exports, Plex-style webhooks)._
 
-## Latest: importing from Plex and Tautulli (M7 phase 1)
+## Latest: Trakt sync, history downloads, Plex-style webhooks (M7 phase 2)
+
+- **Trakt** (`internal/trakt`):
+  - An admin adds the server's Trakt app keys under Settings → Trakt (redirect URI `urn:ietf:wg:oauth:2.0:oob`).
+  - Each person uses Account → Trakt → **Connect**, which uses Trakt's device-code flow: they enter the code at trakt.tv/activate. Tokens are kept per user in `trakt_accounts` and refreshed within an hour of expiry.
+  - **Import my Trakt history** runs the M7 importer synchronously for that one user, with the source user "trakt". Imported plays are marked as already on Trakt. A Trakt viewing that matches a local play (±15 min) marks the local one as sent.
+  - **Send N plays to Trakt** pushes every finished play not yet sent (`plays.trakt_at = 0`), in batches of 100. Plays without a TMDB id go by title and year. Plays Trakt doesn't recognise are still marked, so they aren't retried forever.
+  - **Automatic sync** (on by default) pushes plays started after connecting, in the background, when a play finishes. Earlier history is only sent on request.
+  - Disconnect revokes the token. Trakt errors never answer 401, so they can't sign the person out of BingeBandit.
+- **Downloads** (Account → Download my history):
+  - `/api/me/export/history.csv`: every play, with type, title, year, TMDB id, season/episode, episode title and completed.
+  - `/api/me/export/letterboxd.csv`: finished movies in Letterboxd's import format, with repeat viewings marked as rewatches.
+- **Plex-style webhooks:** a webhook's Format can be "Plex-style". It sends multipart `payload` JSON with `media.play` / `media.stop` / `media.scrobble`, plus Account, Player and Metadata (movie `tmdb://` Guid; for episodes the show title, season and episode, and the show's TMDB id as `grandparentGuid`). This is for Yamtrack and other apps that accept Plex webhooks; recording events are skipped. Playback event data now includes `tmdbId`, `showTmdbId`, `season`, `episode` and `episodeTitle`.
+- **Dev:**
+  - `cmd/fakeplex` now also fakes Trakt on `:8282` (client `fake-trakt-client` / `fake-trakt-secret`; `/activate` approves the code; `/_received` shows what was sent).
+  - Run BingeBandit with `-trakt-api http://localhost:8282` (or `BB_TRAKT_API`). `.claude/launch.json` does.
+- **Tested in the browser against the fake:**
+  - connecting with a code
+  - import (2 of 3 matched; re-import added nothing)
+  - sending 6 plays (correct grouping by show and season)
+  - automatic sync after a real 35-second play, sent once
+  - both CSV downloads
+  - a Plex-style test webhook
+  - Unit tests cover the Trakt body grouping and the Plex payload.
+- **Not tested:**
+  - Real Trakt. Check token refresh: Trakt's token lifetime has changed before.
+  - Whether real Yamtrack accepts the Plex-style payload. It identifies the user by Plex username (Account.title, which is the BingeBandit username here), and its episode matching may expect episode-level GUIDs, which we don't have. Yamtrack can also import from Trakt, which is the safer route.
+- Migration 13 (`trakt_accounts`, `plays.trakt_at`, `webhooks.format`).
+
+## Importing from Plex and Tautulli (M7 phase 1)
 
 - **Server → Import** (`/admin/import`) has three steps:
   1. Pick a source: Plex (address + token), Tautulli (address + API key) or a Tautulli database file path. Credentials are used for the run only, never saved.

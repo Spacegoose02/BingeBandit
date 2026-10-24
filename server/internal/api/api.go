@@ -23,6 +23,7 @@ import (
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
+	"bingebandit/internal/trakt"
 	"bingebandit/internal/web"
 )
 
@@ -40,6 +41,7 @@ type Server struct {
 	Logos      *livetv.LogoCache
 	DVR        *livetv.Recorder
 	Importer   *importer.Runner
+	Trakt      *trakt.Syncer
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -97,6 +99,15 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/me/keys", s.createAPIKey)
 			r.Delete("/me/keys/{id}", s.deleteAPIKey)
 			r.Put("/me/share-activity", s.setShareActivity)
+			r.Get("/me/trakt", s.traktStatus)
+			r.Post("/me/trakt/connect", s.traktConnect)
+			r.Post("/me/trakt/poll", s.traktPoll)
+			r.Put("/me/trakt", s.traktSettings)
+			r.Delete("/me/trakt", s.traktDisconnect)
+			r.Post("/me/trakt/push", s.traktPush)
+			r.Post("/me/trakt/import", s.traktImport)
+			r.Get("/me/export/history.csv", s.exportHistory("history"))
+			r.Get("/me/export/letterboxd.csv", s.exportHistory("letterboxd"))
 			r.Get("/me/identities", s.identities)
 			r.Post("/me/identities/{id}/link", s.linkIdentity)
 			r.Delete("/me/identities/{id}", s.unlinkIdentity)

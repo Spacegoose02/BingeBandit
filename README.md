@@ -78,7 +78,7 @@ To try single sign-on, run the fake OpenID Connect provider and add it under Ser
 cd server; go run ./cmd/fakeoidc
 ```
 
-To try importing, run the fake Plex + Tautulli server and use Server → Import with `http://localhost:32400` and token `fake-plex-token`, or `http://localhost:8181` and API key `fake-tautulli-key`:
+To try importing, run the fake Plex + Tautulli + Trakt server and use Server → Import with `http://localhost:32400` and token `fake-plex-token`, or `http://localhost:8181` and API key `fake-tautulli-key`. For Trakt, start BingeBandit with `-trakt-api http://localhost:8282` and use client ID `fake-trakt-client` and secret `fake-trakt-secret` under Settings → Trakt:
 
 ```powershell
 cd server; go run ./cmd/fakeplex
