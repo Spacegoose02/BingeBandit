@@ -4,6 +4,15 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-24, live TV playback reliability._
 
+## Live TV settings, logs and playlist links
+
+- **Settings → Live TV playback** also has:
+  - **Buffer** (`live_buffer_seconds`, default 10). `/watch` returns it as `bufferSecs`; the web player sets `liveSyncDurationCount` from it and the TV app sets ExoPlayer's `targetOffsetMs`.
+  - **Switch streams after no data for** (`live_stall_seconds`, default 12). This replaced the `stallTimeout` constant.
+  - **Proxy for IPTV providers** (`live_proxy`): http, https or socks5. `livetv/proxy.go` applies it to streams, M3U/XMLTV refreshes and logos, and passes `-http_proxy` to ffmpeg for HLS upstreams (http proxies only). Empty falls back to `HTTP(S)_PROXY`.
+- **Live TV logs:** Admin → Logs has an Everything / Live TV switch (`/admin/logs?only=live`). It matches `live tv:`, `custom channel` and `dvr:` lines. Live TV → Activity links to it. Failed joins are now logged with the user and channel.
+- **Playlist URLs for everyone:** `components/IPTVLinks.tsx` makes a key and shows the M3U and XMLTV URLs. It's on Account → API keys for anyone who has channels, and on Admin → Live TV → Sources. The playlist only lists that user's channels.
+
 ## Settings passcode (after v0.6.0)
 
 - **Account → Settings passcode** sets a 4–8 digit passcode (bcrypt in `users.passcode_hash`, migration 15).

@@ -28,6 +28,9 @@ const (
 	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
 	SettingTraktSecret       = "trakt_client_secret"
 	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
+	SettingLiveBufferSeconds = "live_buffer_seconds"    // how far behind live players sit
+	SettingLiveStallSeconds  = "live_stall_seconds"     // no data this long → switch to the next stream
+	SettingLiveProxy         = "live_proxy"             // proxy for provider traffic; empty = HTTP(S)_PROXY environment
 )
 
 var SettingDefaults = map[string]string{
@@ -57,6 +60,9 @@ var SettingDefaults = map[string]string{
 	SettingTraktClientID:     "",
 	SettingTraktSecret:       "",
 	SettingLiveTimeshift:     "15",
+	SettingLiveBufferSeconds: "10",
+	SettingLiveStallSeconds:  "12",
+	SettingLiveProxy:         "",
 }
 
 func (s *Store) Setting(key string) string {

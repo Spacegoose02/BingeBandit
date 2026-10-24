@@ -27,7 +27,6 @@ import (
 )
 
 const (
-	stallTimeout   = 12 * time.Second // no bytes from upstream this long → fall back
 	idleShutdown   = 15 * time.Second // relay with no viewers this long → stop
 	hlsClientTTL   = 30 * time.Second // HLS viewer gone if it hasn't polled this long
 	clientBuffer   = 512              // chunks a raw-TS viewer may lag before being dropped
@@ -45,7 +44,7 @@ var (
 // upstreamClient has no overall timeout (streams run for hours) but does
 // time out connecting and waiting for headers.
 var upstreamClient = &http.Client{Transport: &http.Transport{
-	Proxy:                 http.ProxyFromEnvironment,
+	Proxy:                 providerProxy,
 	DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 	ResponseHeaderTimeout: 15 * time.Second,
 	MaxIdleConnsPerHost:   4,
@@ -90,6 +89,9 @@ type Manager struct {
 func NewManager(st *store.Store, ffmpeg, ffprobe, dataDir string) *Manager {
 	m := &Manager{st: st, ffmpeg: ffmpeg, ffprobe: ffprobe, dataDir: dataDir, relays: map[int64]*Relay{}}
 	os.RemoveAll(m.hlsBase())
+	if err := SetProxy(st.Setting(store.SettingLiveProxy)); err != nil {
+		log.Printf("live tv: ignoring the provider proxy setting: %v", err)
+	}
 	go m.janitor()
 	return m
 }
@@ -411,7 +413,8 @@ func (r *Relay) pull(s store.ChannelStream) error {
 	}
 	defer body.Close()
 
-	// Watchdog: cancel the request when no data arrives for stallTimeout.
+	// Watchdog: cancel the request when no data arrives for the stall timeout.
+	stall := r.m.stallTimeout()
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	go func() {
@@ -422,7 +425,7 @@ func (r *Relay) pull(s store.ChannelStream) error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if time.Since(time.Unix(0, last.Load())) > stallTimeout {
+				if time.Since(time.Unix(0, last.Load())) > stall {
 					cancel()
 					return
 				}
@@ -439,7 +442,7 @@ func (r *Relay) pull(s store.ChannelStream) error {
 		}
 		if err != nil {
 			if ctx.Err() != nil && r.ctx.Err() == nil {
-				return fmt.Errorf("no data for %s", stallTimeout)
+				return fmt.Errorf("no data for %s", stall)
 			}
 			if err == io.EOF {
 				return errors.New("upstream closed the stream")
@@ -483,9 +486,10 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 
 // remuxHLS runs ffmpeg to follow a live HLS playlist and emit MPEG-TS.
 func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
-	cmd := exec.CommandContext(ctx, m.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-		"-user_agent", userAgent, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
+	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, ffmpegProxyArgs()...)
+	args = append(args, "-user_agent", userAgent, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
 		"-i", url, "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-f", "mpegts", "pipe:1")
+	cmd := exec.CommandContext(ctx, m.ffmpeg, args...)
 	media.HideWindow(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -783,6 +787,26 @@ func liveEncoder(hw string) (in, out []string) {
 	in, out = encodeArgs(hw, liveFilter, "6M", "8M")
 	g := []string{"-g", fmt.Sprint(hlsSegmentSecs * 30), "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", hlsSegmentSecs)}
 	return in, append(out, g...)
+}
+
+// stallTimeout is how long a stream may send nothing before the relay
+// switches to the channel's next stream.
+func (m *Manager) stallTimeout() time.Duration {
+	secs, err := strconv.Atoi(m.st.Setting(store.SettingLiveStallSeconds))
+	if err != nil || secs < 3 {
+		secs = 12
+	}
+	return time.Duration(secs) * time.Second
+}
+
+// BufferSeconds is how far behind live players sit, so hiccups upstream eat
+// into that cushion instead of stalling the picture.
+func (m *Manager) BufferSeconds() int {
+	secs, err := strconv.Atoi(m.st.Setting(store.SettingLiveBufferSeconds))
+	if err != nil || secs < 2 {
+		return 10
+	}
+	return secs
 }
 
 // playlistSegments is how many segments each channel's live playlist keeps:
