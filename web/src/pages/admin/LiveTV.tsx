@@ -8,8 +8,10 @@ import { formatBytes, formatClock, timeAgo } from '../../format'
 import type { AdminChannel, LiveSource, LiveStream, RelayStat } from '../../types'
 import { ChannelLogo, channelNo } from '../LiveGuide'
 import { CustomChannelEditor } from './CustomChannel'
+import { Logos } from './Logos'
+import { LogoField } from '../../components/ChannelLogos'
 
-type Tab = 'channels' | 'sources' | 'activity'
+type Tab = 'channels' | 'logos' | 'sources' | 'activity'
 
 export default function AdminLiveTV() {
   useDocumentTitle('Live TV')
@@ -23,15 +25,16 @@ export default function AdminLiveTV() {
           <div className="muted">Playlists and guides from your IPTV providers, the channels built from them, and who's watching.</div>
         </div>
         <div className="segmented">
-          {(['activity', 'channels', 'sources'] as Tab[]).map((t) => (
+          {(['activity', 'channels', 'logos', 'sources'] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? 'active' : ''} onClick={() => setParams({ tab: t }, { replace: true })}>
-              {t === 'activity' ? 'Activity' : t === 'channels' ? 'Channels' : 'Sources'}
+              {({ activity: 'Activity', channels: 'Channels', logos: 'Logos', sources: 'Sources' } as Record<Tab, string>)[t]}
             </button>
           ))}
         </div>
       </header>
       {tab === 'sources' && <Sources />}
       {tab === 'channels' && <Channels />}
+      {tab === 'logos' && <Logos />}
       {tab === 'activity' && <Activity />}
     </div>
   )
@@ -313,7 +316,7 @@ function Channels() {
         {shown?.map((c) => (
           <div key={c.id} className={`list-row channel-row ${c.enabled ? '' : 'disabled'}`}>
             <span className="ch-num big">{channelNo(c.number)}</span>
-            <ChannelLogo channel={c} size={30} />
+            <ChannelLogo channel={{ name: c.name, logo: c.logoUrl }} size={30} />
             <div className="grow">
               <div>{c.name}</div>
               <div className="muted small">
@@ -481,11 +484,9 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
             Category
             <input value={c.group ?? ''} onChange={(e) => setC({ ...c, group: e.target.value })} placeholder="News, Sports…" />
           </label>
-          <label>
-            Logo URL
-            <input value={c.logo ?? ''} onChange={(e) => setC({ ...c, logo: e.target.value })} />
-          </label>
         </div>
+        <div className="label">Logo</div>
+        <LogoField value={c.logo ?? ''} onChange={(logo) => setC({ ...c, logo })} />
 
         <div className="label">Guide match</div>
         <div className="actions">

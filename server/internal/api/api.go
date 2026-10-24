@@ -33,12 +33,14 @@ type Server struct {
 	Metadata   *metadata.Service
 	Images     *metadata.ImageCache
 	Artwork    *metadata.Artwork
+	TPDb       *metadata.TPDb
 	Transcoder *stream.Manager
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
 	Live       *livetv.Manager
 	Logos      *livetv.LogoCache
+	LogoLib    *livetv.LogoLibrary
 	DVR        *livetv.Recorder
 	Importer   *importer.Runner
 	Trakt      *trakt.Syncer
@@ -135,6 +137,14 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/live/channels/{id}/hls/{name}", s.liveHLS)
 			r.Get("/live/channels/{id}/stream.ts", s.liveTS)
 			r.Get("/live/channels/{id}/logo", s.channelLogo)
+			r.Get("/live/logos/{file}", s.libraryLogo)
+			r.Get("/live/categories", s.liveCategories)
+			r.Post("/live/categories", s.saveCategory)
+			r.Put("/live/categories/order", s.orderCategories)
+			r.Put("/live/categories/{id}", s.saveCategory)
+			r.Delete("/live/categories/{id}", s.deleteCategory)
+			r.Post("/live/categories/{id}/channels/{channel}", s.setChannelCategory(true))
+			r.Delete("/live/categories/{id}/channels/{channel}", s.setChannelCategory(false))
 			r.Delete("/live/viewers/{viewer}", s.leaveChannel)
 			r.Post("/live/viewers/{viewer}/ping", s.pingViewer)
 			r.Get("/dvr", s.recordings)
@@ -197,6 +207,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/items/{id}/artwork", s.artworkOptions)
 				r.Put("/items/{id}/artwork", s.setArtwork)
 				r.Post("/items/{id}/artwork/upload", s.uploadArtwork)
+				r.Get("/items/{id}/tpdb", s.tpdbSearch)
+				r.Get("/tpdb/{poster}/thumb", s.tpdbThumb)
 				r.Post("/items/{id}/match", s.matchItem)
 				r.Put("/items/{id}/markers", s.setMarkers)
 				r.Post("/items/{id}/detect-markers", s.detectMarkers)
@@ -221,6 +233,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/live/channels/{id}", s.updateChannel)
 				r.Delete("/live/channels/{id}", s.deleteChannel)
 				r.Get("/live/epg-channels", s.epgChannels)
+				r.Get("/live/logos", s.adminLogos)
+				r.Post("/live/logos", s.uploadLogos)
+				r.Post("/live/logos/match", s.matchAllLogos)
+				r.Put("/live/logos/{id}", s.renameLogo)
+				r.Delete("/live/logos/{id}", s.deleteLogo)
+				r.Post("/live/logos/{id}/assign", s.assignLogo)
 				r.Get("/live/content-sources", s.contentSources)
 				r.Post("/live/custom", s.saveCustomChannel)
 				r.Get("/live/custom/{id}", s.customChannel)

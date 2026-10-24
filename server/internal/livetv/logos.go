@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -92,4 +93,70 @@ func extOf(contentType string, data []byte) string {
 
 func typeOf(ext string) string {
 	return map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".webp": "image/webp", ".gif": "image/gif"}[ext]
+}
+
+// LogoLibrary stores logos admins upload. Files are content-addressed, so the
+// same image is stored once however many times it's uploaded.
+type LogoLibrary struct{ dir string }
+
+func NewLogoLibrary(dir string) *LogoLibrary { return &LogoLibrary{dir: dir} }
+
+var reLibraryFile = regexp.MustCompile(`^[0-9a-f]{32}\.(png|jpg|svg|webp|gif)$`)
+
+// Save stores an image (PNG, JPEG, SVG, WebP or GIF, up to 2 MB) and returns its file name.
+func (l *LogoLibrary) Save(r io.Reader) (string, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxLogoBytes+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) > maxLogoBytes {
+		return "", fmt.Errorf("logos can be up to %d MB", maxLogoBytes>>20)
+	}
+	ext := extOf("", data)
+	if ext == "" {
+		return "", fmt.Errorf("only PNG, JPEG, SVG, WebP and GIF images are supported")
+	}
+	sum := sha256.Sum256(data)
+	name := hex.EncodeToString(sum[:16]) + ext
+	if err := os.MkdirAll(l.dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(l.dir, name)
+	if _, err := os.Stat(path); err != nil {
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return "", err
+		}
+	}
+	return name, nil
+}
+
+// Path resolves a library file name to its path and content type.
+func (l *LogoLibrary) Path(file string) (string, string, error) {
+	if !reLibraryFile.MatchString(file) {
+		return "", "", os.ErrNotExist
+	}
+	return filepath.Join(l.dir, file), typeOf(filepath.Ext(file)), nil
+}
+
+func (l *LogoLibrary) Remove(file string) {
+	if reLibraryFile.MatchString(file) {
+		os.Remove(filepath.Join(l.dir, file))
+	}
+}
+
+var (
+	reNamePrefix  = regexp.MustCompile(`^\s*[A-Za-z]{2,4}\s*[:|]\s*`) // "US: ", "CA | "
+	reNameBracket = regexp.MustCompile(`[(\[{][^)\]}]*[)\]}]`)        // "(East)", "[HD]"
+	reNameQuality = regexp.MustCompile(`(?i)\b(hd|fhd|uhd|sd|4k|hevc|h265|1080p?|720p?)\b`)
+	reNameJunk    = regexp.MustCompile(`[^a-z0-9]+`)
+)
+
+// MatchName reduces a channel or logo file name to what identifies the channel,
+// so "US: CNN HD", "CNN (East)" and "cnn.png" all become "cnn".
+func MatchName(s string) string {
+	s = strings.TrimSuffix(s, filepath.Ext(s))
+	s = reNamePrefix.ReplaceAllString(s, "")
+	s = reNameBracket.ReplaceAllString(s, " ")
+	s = reNameQuality.ReplaceAllString(s, " ")
+	return reNameJunk.ReplaceAllString(strings.ToLower(s), "")
 }

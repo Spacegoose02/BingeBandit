@@ -247,6 +247,23 @@ export interface LiveChannel {
   next?: GuideProgram
 }
 
+/** A viewer's own channel category. */
+export interface ChannelCategory {
+  id: number
+  name: string
+  channelIds: number[]
+}
+
+/** An image in the admin's channel logo library. */
+export interface ChannelLogo {
+  id: number
+  name: string
+  file: string
+  url: string
+  channels: number
+  createdAt: number
+}
+
 export interface ChannelStream {
   streamId: number
   name: string
@@ -259,7 +276,8 @@ export interface AdminChannel {
   id: number
   number: number
   name: string
-  logo?: string
+  logo?: string // saved value: a provider URL or "library:<file>"
+  logoUrl?: string // where to load it from
   group?: string
   epgId?: string
   enabled: boolean

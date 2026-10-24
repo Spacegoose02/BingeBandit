@@ -43,7 +43,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Transcode throttling (stays ~2× ahead of playback after a 60s head start) |
 | ✅ | Restore a database backup from Admin → Tasks (the current database is backed up first) |
 | | True adaptive bitrate (multi-rendition HLS ladder) |
-| | ThePosterDB built-in search (no public API; needs a scraper) |
+| ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
 | | Smart collections by genre, studio or year (today they work by label) |
 
@@ -88,7 +88,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | HLS (`.m3u8`) upstreams, remuxed by ffmpeg without re-encoding |
 | ✅ | Channel logos cached by the server |
 | ✅ | **DVR**: record a program or a whole series from the guide, padding, recordings named for a TV library (or one folder), admin approval switch, let-users-record switch, Recordings page; date-named recordings show up as episodes |
-| | Logo manager (upload your own logos), favourite channels → custom categories |
+| ✅ | Logo library (upload your own logos, match them to channels by name), your own channel categories (start from your favourites) on the web and TV guide |
 | | DVR: conflict handling when providers are at their connection limit, keep-last-N episodes per series |
 | | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
 - Guides from local providers by ZIP (DirecTV, Comcast…) via Schedules Direct / similar.

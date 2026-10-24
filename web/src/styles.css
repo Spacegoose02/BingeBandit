@@ -954,3 +954,31 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .hw-test { white-space: pre-wrap; font-size: 12px; padding: 10px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); margin: 0; }
 .hw-test.ok { border-color: #16a34a; }
 .hw-test.bad { border-color: #e11d48; }
+
+/* Channel logo library, logo picker, your own categories, ThePosterDB */
+.logo-library { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.logo-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; min-width: 0; }
+.logo-card .actions { margin-top: auto; }
+.logo-name { background: none; border: 0; padding: 0; color: var(--text); font-weight: 600; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo-name:hover { color: var(--accent); }
+.toolbar-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+.logo-field { display: flex; flex-direction: column; gap: 8px; }
+.logo-field .url-row { align-items: center; }
+.logo-field .url-row input { flex: 1; min-width: 0; }
+.logo-preview { width: 96px; height: 42px; flex: none; aspect-ratio: auto; }
+.logo-picker { border: 1px solid var(--border); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 10px; background: var(--bg-elev); }
+.art-grid.compact { max-height: 240px; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.art-thumb.chosen { box-shadow: 0 0 0 2px var(--accent); }
+.assign-list { max-height: 50vh; overflow-y: auto; }
+.form .assign-list label.list-row, .assign-list .list-row { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 12px; cursor: pointer; font-size: 14px; color: var(--text); }
+.assign-list input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.fav-mark { color: var(--warn, #f5c542); flex: none; }
+.category-menu { width: auto; max-width: 240px; }
+.guide-toolbar optgroup { color: var(--muted); }
+.tpdb-title { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.tpdb-title > a { color: var(--muted); }
+.tpdb-title > a:hover { color: var(--accent); }
+.tpdb-title .art-grid { max-height: none; }
+@media (max-width: 560px) {
+  .logo-library { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

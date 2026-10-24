@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../../api'
+import { LogoField } from '../../components/ChannelLogos'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi } from '../../hooks'
@@ -79,11 +80,9 @@ export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: {
             Category
             <input value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} />
           </label>
-          <label>
-            Logo URL (optional)
-            <input value={form.logo} onChange={(e) => setForm({ ...form, logo: e.target.value })} />
-          </label>
         </div>
+        <div className="label">Logo (optional)</div>
+        <LogoField value={form.logo} onChange={(logo) => setForm({ ...form, logo })} />
 
         <div className="label">What plays</div>
         {blocks.map((b, i) => (

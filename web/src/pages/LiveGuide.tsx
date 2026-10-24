@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { CategoryMenu, ManageCategories } from '../components/ChannelCategories'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
-import type { GuideProgram, LiveChannel } from '../types'
+import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 
 const HOURS = 4 // guide window width
 const SLOT = 30 * 60 // ruler step, seconds
@@ -18,6 +19,7 @@ interface Guide {
   programs: Record<string, GuideProgram[]>
   recordings: Record<string, string> // "epgId:start" → status
   canRecord: boolean
+  categories: ChannelCategory[] // the viewer's own
 }
 
 export function ChannelLogo({ channel, size = 40 }: { channel: Pick<LiveChannel, 'logo' | 'name'>; size?: number }) {
@@ -51,8 +53,18 @@ export default function LiveGuide() {
   }, [data])
   useEffect(() => localStorage.setItem('bb.guideFilter', filter), [filter])
 
+  const [managing, setManaging] = useState(false)
   const groups = useMemo(() => [...new Set((data?.channels ?? []).map((c) => c.group).filter(Boolean))] as string[], [data])
-  const channels = (data?.channels ?? []).filter((c) => filter === 'all' || (filter === 'fav' ? c.favorite : c.group === filter))
+  const categories = data?.categories ?? []
+  // Your own categories are "my:<id>"; anything else is all, favourites or a provider category.
+  const myCategory = filter.startsWith('my:') ? categories.find((c) => `my:${c.id}` === filter) : undefined
+  useEffect(() => {
+    if (data && filter.startsWith('my:') && !myCategory) setFilter('all') // deleted
+  }, [data, filter, myCategory])
+  const inCategory = useMemo(() => new Set(myCategory?.channelIds ?? []), [myCategory])
+  const channels = (data?.channels ?? []).filter((c) =>
+    filter === 'all' || (filter === 'fav' ? c.favorite : myCategory ? inCategory.has(c.id) : c.group === filter),
+  )
   const labelW = width < 560 ? 120 : Math.min(270, Math.max(210, width * 0.26))
   const pxPerSec = (width - labelW) / (to - from)
   const x = (t: number) => (Math.max(Math.min(t, to), from) - from) * pxPerSec
@@ -125,6 +137,7 @@ export default function LiveGuide() {
                     'Set to record'}
                 </Link>
               )}
+              <CategoryMenu channel={hero.channel} categories={categories} onChanged={reload} />
               {note && <span className="muted small">{note}</span>}
             </div>
           </div>
@@ -136,10 +149,24 @@ export default function LiveGuide() {
         <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter channels">
           <option value="all">All channels</option>
           <option value="fav">Favorites</option>
-          {groups.map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
+          {categories.length > 0 && (
+            <optgroup label="My categories">
+              {categories.map((c) => (
+                <option key={c.id} value={`my:${c.id}`}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {groups.length > 0 && (
+            <optgroup label="Provider categories">
+              {groups.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
+        <button className="btn btn-glass btn-sm" onClick={() => setManaging(true)}>
+          <Icon name="list" size={16} /> My categories
+        </button>
         <div className="actions">
           <button className="btn btn-glass btn-sm" onClick={() => setFrom(from - 2 * 3600)} aria-label="Earlier"><Icon name="back" size={16} /></button>
           <button className="btn btn-glass btn-sm" onClick={() => setFrom(Math.floor(Date.now() / 1000 / SLOT) * SLOT)}>Now</button>
@@ -150,6 +177,10 @@ export default function LiveGuide() {
         </span>
       </div>
 
+      {managing && data && (
+        <ManageCategories categories={categories} channels={data.channels} onClose={() => setManaging(false)} onChanged={reload} />
+      )}
+
       <div className="guide-grid" ref={grid}>
         <div className="guide-ruler" style={{ paddingLeft: labelW }}>
           {Array.from({ length: (HOURS * 3600) / SLOT }, (_, i) => from + i * SLOT).map((t) => (
@@ -157,7 +188,11 @@ export default function LiveGuide() {
           ))}
           {now >= from && now < to && <span className="guide-now-label" style={{ left: labelW + x(now) }}>Now</span>}
         </div>
-        {channels.length === 0 && <div className="empty">No channels match this filter.</div>}
+        {channels.length === 0 && (
+          <div className="empty">
+            {myCategory ? `“${myCategory.name}” has no channels yet. Add some with My categories, or “Add to category” above.` : 'No channels match this filter.'}
+          </div>
+        )}
         {channels.map((c) => {
           const progs = (c.epgId && data?.programs[c.epgId]) || []
           return (
