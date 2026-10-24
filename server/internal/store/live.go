@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // LiveSource is an M3U playlist or XMLTV guide provider.
@@ -21,14 +22,17 @@ type LiveSource struct {
 	LastError    string `json:"lastError,omitempty"`
 	EntryCount   int    `json:"entryCount"`
 	CreatedAt    int64  `json:"createdAt"`
+	// NewGroupsEnabled decides whether groups a refresh finds for the first
+	// time are imported. Set through SaveSourceGroups, not SaveLiveSource.
+	NewGroupsEnabled bool `json:"newGroupsEnabled"`
 }
 
-const liveSourceCols = `id, kind, name, url, user_agent, max_streams, refresh_hours, enabled, last_refresh, last_error, entry_count, created_at`
+const liveSourceCols = `id, kind, name, url, user_agent, max_streams, refresh_hours, enabled, last_refresh, last_error, entry_count, created_at, new_groups_enabled`
 
 func scanLiveSource(r interface{ Scan(...any) error }) (*LiveSource, error) {
 	var s LiveSource
 	err := r.Scan(&s.ID, &s.Kind, &s.Name, &s.URL, &s.UserAgent, &s.MaxStreams, &s.RefreshHours, &s.Enabled,
-		&s.LastRefresh, &s.LastError, &s.EntryCount, &s.CreatedAt)
+		&s.LastRefresh, &s.LastError, &s.EntryCount, &s.CreatedAt, &s.NewGroupsEnabled)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -88,6 +92,56 @@ func (s *Store) SetSourceRefreshed(id int64, count int, refreshErr error) error 
 	return err
 }
 
+// SourceGroup is one group (group-title) of a playlist and whether its
+// streams are imported.
+type SourceGroup struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Streams int    `json:"streams"` // in the playlist at the last refresh
+}
+
+func (s *Store) SourceGroups(sourceID int64) ([]SourceGroup, error) {
+	rows, err := s.db.Query(`SELECT name, enabled, streams FROM live_source_groups WHERE source_id = ? ORDER BY name COLLATE NOCASE`, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SourceGroup{}
+	for rows.Next() {
+		var g SourceGroup
+		if err := rows.Scan(&g.Name, &g.Enabled, &g.Streams); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// SaveSourceGroups sets which of a playlist's known groups are imported, and
+// whether groups found later are. Names it doesn't know are ignored; the next
+// refresh applies the change.
+func (s *Store) SaveSourceGroups(sourceID int64, newGroupsEnabled bool, enabled map[string]bool) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE live_sources SET new_groups_enabled = ? WHERE id = ?`, boolInt(newGroupsEnabled), sourceID); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`UPDATE live_source_groups SET enabled = ? WHERE source_id = ? AND name = ?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for name, on := range enabled {
+		if _, err := stmt.Exec(boolInt(on), sourceID, name); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // StreamEntry is one stream from a playlist, as imported.
 type StreamEntry struct {
 	Name, URL, Logo, Group, TvgID, TvgChno string
@@ -95,12 +149,21 @@ type StreamEntry struct {
 
 // StreamImport upserts a playlist's streams in one transaction. Streams the
 // playlist no longer lists are removed on Finish (and drop out of channels).
+//
+// Streams in a disabled group are skipped, except ones a channel already
+// uses, so turning a group off never breaks a channel.
 type StreamImport struct {
 	tx       *sql.Tx
 	stmt     *sql.Stmt
 	sourceID int64
 	gen      int64
 	count    int
+	total    int
+
+	newGroups bool
+	enabled   map[string]bool // known groups
+	streams   map[string]int  // streams per group in this playlist
+	used      map[string]bool // URLs channels use
 }
 
 func (s *Store) BeginStreamImport(sourceID int64) (*StreamImport, error) {
@@ -116,10 +179,63 @@ func (s *Store) BeginStreamImport(sourceID int64) (*StreamImport, error) {
 		tx.Rollback()
 		return nil, err
 	}
-	return &StreamImport{tx: tx, stmt: stmt, sourceID: sourceID, gen: now()}, nil
+	// Nanoseconds, so two refreshes in the same second still prune.
+	im := &StreamImport{tx: tx, stmt: stmt, sourceID: sourceID, gen: time.Now().UnixNano(),
+		enabled: map[string]bool{}, streams: map[string]int{}, used: map[string]bool{}}
+	if err := im.load(); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	return im, nil
+}
+
+func (im *StreamImport) load() error {
+	if err := im.tx.QueryRow(`SELECT new_groups_enabled FROM live_sources WHERE id = ?`, im.sourceID).Scan(&im.newGroups); err != nil {
+		return err
+	}
+	rows, err := im.tx.Query(`SELECT name, enabled FROM live_source_groups WHERE source_id = ?`, im.sourceID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var name string
+		var on bool
+		if err := rows.Scan(&name, &on); err != nil {
+			rows.Close()
+			return err
+		}
+		im.enabled[name] = on
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows, err = im.tx.Query(`SELECT DISTINCT ls.url FROM live_streams ls JOIN channel_streams cs ON cs.stream_id = ls.id WHERE ls.source_id = ?`, im.sourceID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var url string
+		if err := rows.Scan(&url); err != nil {
+			return err
+		}
+		im.used[url] = true
+	}
+	return rows.Err()
 }
 
 func (im *StreamImport) Add(e StreamEntry) error {
+	im.total++
+	im.streams[e.Group]++
+	on, known := im.enabled[e.Group]
+	if !known {
+		on = im.newGroups
+		im.enabled[e.Group] = on
+	}
+	if !on && !im.used[e.URL] {
+		return nil
+	}
 	im.count++
 	_, err := im.stmt.Exec(im.sourceID, e.Name, e.URL, e.Logo, e.Group, e.TvgID, e.TvgChno, im.gen)
 	return err
@@ -127,10 +243,25 @@ func (im *StreamImport) Add(e StreamEntry) error {
 
 func (im *StreamImport) Abort() { im.tx.Rollback() }
 
+// Total is how many streams the playlist listed, imported or not.
+func (im *StreamImport) Total() int { return im.total }
+
+// Finish removes streams the playlist no longer lists (or whose group was
+// turned off), records the playlist's groups, and returns how many streams
+// were imported.
 func (im *StreamImport) Finish() (int, error) {
 	defer im.tx.Rollback()
 	if _, err := im.tx.Exec(`DELETE FROM live_streams WHERE source_id = ? AND seen_gen != ?`, im.sourceID, im.gen); err != nil {
 		return 0, err
+	}
+	if _, err := im.tx.Exec(`DELETE FROM live_source_groups WHERE source_id = ?`, im.sourceID); err != nil {
+		return 0, err
+	}
+	for name, n := range im.streams {
+		if _, err := im.tx.Exec(`INSERT INTO live_source_groups (source_id, name, enabled, streams) VALUES (?, ?, ?, ?)`,
+			im.sourceID, name, boolInt(im.enabled[name]), n); err != nil {
+			return 0, err
+		}
 	}
 	return im.count, im.tx.Commit()
 }

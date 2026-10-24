@@ -103,11 +103,11 @@ func refresh(ctx context.Context, st *store.Store, src *store.LiveSource) (int, 
 			im.Abort()
 			return 0, err
 		}
-		n, err := im.Finish()
-		if err == nil && n == 0 {
-			err = fmt.Errorf("the playlist has no streams")
+		if im.Total() == 0 {
+			im.Abort()
+			return 0, fmt.Errorf("the playlist has no streams")
 		}
-		return n, err
+		return im.Finish()
 	case "epg":
 		gi, err := st.BeginGuideImport(src.ID)
 		if err != nil {
