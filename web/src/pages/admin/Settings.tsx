@@ -148,6 +148,28 @@ export default function AdminSettings() {
             How far back viewers can pause or rewind a channel. Each channel being watched keeps this much video in the transcode folder
             (about 40 MB per minute for HD), so keep it modest if that folder is in RAM. 0 keeps only a short buffer.
           </p>
+          <div className="field-grid">
+            <label>
+              Buffer (seconds behind live)
+              <input type="number" min={2} max={60} value={s.live_buffer_seconds ?? '10'} onChange={set('live_buffer_seconds')} />
+            </label>
+            <label>
+              Switch streams after no data for (seconds)
+              <input type="number" min={3} max={120} value={s.live_stall_seconds ?? '12'} onChange={set('live_stall_seconds')} />
+            </label>
+          </div>
+          <p className="muted small">
+            A bigger buffer rides out provider hiccups but starts each channel further behind live. When a stream sends nothing for the
+            switch time, the channel moves to its next stream.
+          </p>
+          <label>
+            Proxy for IPTV providers
+            <input className="mono" value={s.live_proxy ?? ''} onChange={set('live_proxy')} placeholder="None (http://host:port or socks5://user:pass@host:port)" autoComplete="off" spellCheck={false} />
+          </label>
+          <p className="muted small">
+            Streams, playlists, guides and logos are fetched through this, for example a VPN container. Leave it empty to connect
+            directly (or use the container's HTTP_PROXY). HLS provider streams can only use an http:// proxy.
+          </p>
         </section>
 
         <section className="panel form">

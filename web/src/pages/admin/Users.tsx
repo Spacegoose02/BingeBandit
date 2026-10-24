@@ -19,6 +19,11 @@ export default function AdminUsers() {
     await api.del(`/api/admin/users/${u.id}`).catch((e) => alert(e.message))
     reload()
   }
+  const clearPasscode = async (u: User) => {
+    if (!confirm(`Remove ${u.username}'s settings passcode? They can set a new one under Account.`)) return
+    await api.del(`/api/admin/users/${u.id}/passcode`).catch((e) => alert(e.message))
+    reload()
+  }
   const reset2FA = async (u: User) => {
     if (!confirm(`Turn off two-step sign-in for ${u.username}? They can sign in with just their password until they set it up again.`)) return
     await api.del(`/api/admin/users/${u.id}/2fa`).catch((e) => alert(e.message))
@@ -49,6 +54,11 @@ export default function AdminUsers() {
             ) : (
               <button className="btn btn-glass btn-sm" onClick={() => setAccess(u)}>
                 <Icon name="library" size={16} /> {u.allLibraries ? 'All libraries' : `${u.libraryIds?.length ?? 0} libraries`}
+              </button>
+            )}
+            {u.hasPasscode && (
+              <button className="btn btn-glass btn-sm" onClick={() => clearPasscode(u)} title="For someone who forgot their settings passcode">
+                <Icon name="unlock" size={16} /> Clear passcode
               </button>
             )}
             {u.totpEnabled && (

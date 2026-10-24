@@ -67,7 +67,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **Intro and credits detection** (audio fingerprints compared across episodes) with Skip Intro / Next buttons; per-user skip settings (button / automatic / off); admins can set or fix times by hand |
 | | Credits detection for movies (no sibling episodes to compare; needs black-frame/text detection) |
 | | Trailers or a custom intro video before a movie (user setting) |
-| | Passcode-protected settings |
+| ✅ | **Settings passcode**: a per-user 4–8 digit passcode locks Account changes and the Admin pages in the web UI until it (or the password) is entered; unlocks last 15 minutes of use; apps and API keys aren't affected; admins can clear a forgotten one |
 | | Recommendations from other users on Home (opt-in) |
 | | Discover: new shows and movie trailers (admin adds YouTube playlists) |
 | | Watch Together: invite a user and sync playback |
@@ -90,7 +90,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **DVR**: record a program or a whole series from the guide, padding, recordings named for a TV library (or one folder), admin approval switch, let-users-record switch, Recordings page; date-named recordings show up as episodes |
 | | Logo manager (upload your own logos), favourite channels → custom categories |
 | | DVR: conflict handling when providers are at their connection limit, keep-last-N episodes per series |
-| | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
+| ✅ | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
 - Guides from local providers by ZIP (DirecTV, Comcast…) via Schedules Direct / similar.
 - Sports tracker with scores and alerts (ESPN API: college football/basketball, NBA, MLB, MLS, NHL, NFL); notifications when a game or show is about to start.
 - YouTube live channels plugin: an admin-managed list of channels that turn on and off automatically.

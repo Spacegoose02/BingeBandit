@@ -460,7 +460,11 @@ CREATE TABLE live_source_groups (
 INSERT INTO live_source_groups (source_id, name, enabled, streams)
 	SELECT source_id, grp, 1, COUNT(*) FROM live_streams GROUP BY source_id, grp;
 `,
-	// 15: plugins (M9). Each one is a separate process or service that speaks
+	// 15: a per-user passcode that guards settings (Account and Admin).
+	`
+ALTER TABLE users ADD COLUMN passcode_hash TEXT NOT NULL DEFAULT '';
+`,
+	// 16: plugins (M9). Each one is a separate process or service that speaks
 	// HTTP; see docs/PLUGINS.md. The key authenticates both directions.
 	`
 CREATE TABLE plugins (

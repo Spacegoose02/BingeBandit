@@ -25,6 +25,7 @@ import AdminTasks from './pages/admin/Tasks'
 import AdminLogs from './pages/admin/Logs'
 import AdminImport from './pages/admin/Import'
 import AdminPlugins from './pages/admin/Plugins'
+import { PasscodeGate } from './components/Passcode'
 
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
@@ -80,19 +81,21 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/:username" element={<ProfilePage />} />
           <Route path="/search" element={<Search />} />
-          <Route path="/account" element={<Account />} />
-          <Route path="/link" element={<LinkDevice />} />
+          <Route path="/account" element={<PasscodeGate><Account /></PasscodeGate>} />
+          <Route path="/link" element={<PasscodeGate><LinkDevice /></PasscodeGate>} />
           <Route path="/admin" element={<RequireAdmin />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="libraries" element={<AdminLibraries />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="settings" element={<AdminSettings />} />
-            <Route path="statistics" element={<AdminStatistics />} />
-            <Route path="live" element={<AdminLiveTV />} />
-            <Route path="tasks" element={<AdminTasks />} />
-            <Route path="logs" element={<AdminLogs />} />
-            <Route path="import" element={<AdminImport />} />
-            <Route path="plugins" element={<AdminPlugins />} />
+            <Route element={<PasscodeGate />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="libraries" element={<AdminLibraries />} />
+              <Route path="users" element={<AdminUsers />} />
+              <Route path="settings" element={<AdminSettings />} />
+              <Route path="statistics" element={<AdminStatistics />} />
+              <Route path="live" element={<AdminLiveTV />} />
+              <Route path="tasks" element={<AdminTasks />} />
+              <Route path="logs" element={<AdminLogs />} />
+              <Route path="import" element={<AdminImport />} />
+              <Route path="plugins" element={<AdminPlugins />} />
+            </Route>
           </Route>
         </Route>
       </Route>

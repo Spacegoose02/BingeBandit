@@ -57,6 +57,7 @@ type Server struct {
 	links       *linkManager
 	oidc        *oidcFlows
 	netp        netHolder
+	unlocks     unlocks
 	ctx         context.Context // server lifetime, for work that outlives a request
 }
 
@@ -92,7 +93,13 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
+			r.Use(s.settingsLock)
 			r.Post("/auth/logout", s.logout)
+			r.Get("/me/passcode", s.passcodeStatus)
+			r.Put("/me/passcode", s.setPasscode)
+			r.Delete("/me/passcode", s.removePasscode)
+			r.Post("/me/passcode/unlock", s.unlockSettings)
+			r.Post("/me/passcode/lock", s.lockSettings)
 			r.Get("/me", s.me)
 			r.Put("/me/password", s.changePassword)
 			r.Get("/me/prefs", s.getPrefs)
@@ -252,6 +259,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 				r.Put("/users/{id}/libraries", s.setUserLibraries)
 				r.Delete("/users/{id}/2fa", s.adminReset2FA)
+				r.Delete("/users/{id}/passcode", s.clearUserPasscode)
 				r.Get("/webhooks", s.webhooks)
 				r.Post("/webhooks", s.saveWebhook)
 				r.Put("/webhooks/{id}", s.saveWebhook)

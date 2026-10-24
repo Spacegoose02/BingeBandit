@@ -4,7 +4,7 @@ import Video, { type OnProgressData, type VideoRef } from 'react-native-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
 import { Button } from '../components'
-import { LIVE_BUFFER, LIVE_OFFSET_SECS, fmtBehind, joinChannel, leaveChannel, pingViewer } from '../live'
+import { DEFAULT_BUFFER_SECS, fmtBehind, liveBuffer, joinChannel, leaveChannel, pingViewer } from '../live'
 import { useLock } from '../lock'
 import { backInterceptor } from '../nav'
 import { useLandscape } from '../screen'
@@ -29,6 +29,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [tuned, setTuned] = useState(channelId) // the channel being streamed
   const [attempt, setAttempt] = useState(0) // bumped to rejoin after a failure
   const [src, setSrc] = useState<string | null>(null)
+  const [offset, setOffset] = useState(DEFAULT_BUFFER_SECS) // how far behind live "live" is
   const [error, setError] = useState('')
   const [reconnecting, setReconnecting] = useState(false)
   const [buffering, setBuffering] = useState(true)
@@ -95,6 +96,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           return
         }
         viewer.current = r.viewerId
+        setOffset(r.bufferSecs)
         setSrc(r.playlist)
         ping = setInterval(() => {
           pingViewer(r.viewerId).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
@@ -137,21 +139,21 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
 
   const onProgress = (p: OnProgressData) => {
     progress.current = { pos: p.currentTime, window: p.seekableDuration }
-    const b = p.seekableDuration - p.currentTime - LIVE_OFFSET_SECS
+    const b = p.seekableDuration - p.currentTime - offset
     setBehind(b < 4 ? 0 : Math.round(b))
   }
 
   const seekBy = (secs: number) => {
     const { pos, window } = progress.current
     if (!window) return
-    const live = Math.max(0, window - LIVE_OFFSET_SECS)
+    const live = Math.max(0, window - offset)
     video.current?.seek(Math.min(live, Math.max(1, pos + secs)))
     showInfo(paused)
   }
 
   const goLive = () => {
     const { window } = progress.current
-    if (window) video.current?.seek(Math.max(0, window - LIVE_OFFSET_SECS))
+    if (window) video.current?.seek(Math.max(0, window - offset))
     setPaused(false)
     showInfo()
   }
@@ -218,7 +220,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           key={`${src}#${attempt}`}
           ref={video}
           controlsStyles={NO_LIVE_BADGE}
-          source={{ uri: src, type: 'm3u8', headers: authHeaders(), bufferConfig: LIVE_BUFFER }}
+          source={{ uri: src, type: 'm3u8', headers: authHeaders(), bufferConfig: liveBuffer(offset) }}
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
           paused={paused}

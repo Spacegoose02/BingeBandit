@@ -6,9 +6,9 @@ import { absolute, api, request } from './api'
  * segments exist (up to ~25 s while the provider connects), so ExoPlayer
  * never waits on a slow playlist and times out.
  */
-export async function joinChannel(channelId: number): Promise<{ viewerId: string; playlist: string }> {
-  const r = await request<{ viewerId: string; playlist: string }>('POST', `/api/live/channels/${channelId}/watch`, {}, undefined, 40000)
-  return { viewerId: r.viewerId, playlist: absolute(r.playlist) }
+export async function joinChannel(channelId: number): Promise<{ viewerId: string; playlist: string; bufferSecs: number }> {
+  const r = await request<{ viewerId: string; playlist: string; bufferSecs?: number }>('POST', `/api/live/channels/${channelId}/watch`, {}, undefined, 40000)
+  return { viewerId: r.viewerId, playlist: absolute(r.playlist), bufferSecs: r.bufferSecs ?? DEFAULT_BUFFER_SECS }
 }
 
 export function leaveChannel(viewerId: string) {
@@ -20,20 +20,23 @@ export function pingViewer(viewerId: string): Promise<unknown> {
   return api.post(`/api/live/viewers/${viewerId}/ping`)
 }
 
-/**
- * Plays about 10 s behind live, so a provider hiccup or a slow segment eats
- * into that cushion instead of stalling the picture, and waits for 5 s of
- * video before resuming after a stall. Speed stays at 1× so the audio never
- * wobbles while ExoPlayer chases the live edge; Go live catches up instead.
- */
-export const LIVE_BUFFER: BufferConfig = {
-  bufferForPlaybackMs: 2500,
-  bufferForPlaybackAfterRebufferMs: 5000,
-  live: { targetOffsetMs: 10000, minPlaybackSpeed: 1, maxPlaybackSpeed: 1 },
-}
+/** How far behind live players sit unless the server says otherwise. */
+export const DEFAULT_BUFFER_SECS = 10
 
-/** How far a live player sits behind the live edge when "at live". */
-export const LIVE_OFFSET_SECS = 10
+/**
+ * Plays `secs` behind live (the admin's buffer setting), so a provider hiccup
+ * or a slow segment eats into that cushion instead of stalling the picture,
+ * and waits for up to 5 s of video before resuming after a stall. Speed stays
+ * at 1× so the audio never wobbles while ExoPlayer chases the live edge; Go
+ * live catches up instead.
+ */
+export function liveBuffer(secs: number): BufferConfig {
+  return {
+    bufferForPlaybackMs: 2500,
+    bufferForPlaybackAfterRebufferMs: Math.min(5000, secs * 1000),
+    live: { targetOffsetMs: secs * 1000, minPlaybackSpeed: 1, maxPlaybackSpeed: 1 },
+  }
+}
 
 export function fmtBehind(secs: number): string {
   const m = Math.floor(secs / 60)
