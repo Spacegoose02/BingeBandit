@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
-import Video, { type OnProgressData, type VideoRef } from 'react-native-video'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
+import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
-import { useNav } from '../nav'
+import { Button } from '../components'
+import { backInterceptor, useNav } from '../nav'
 import { scaled, colors, font, gutter } from '../theme'
+import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
 
 const REPORT_EVERY = 10 // seconds
@@ -37,8 +39,14 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
   const [buffering, setBuffering] = useState(true)
   const [pos, setPos] = useState(start)
   const [error, setError] = useState('')
-  const [controls, setControls] = useState(true)
+  const [controls, setControls] = useState<'hidden' | 'seek' | 'full'>('hidden')
+  const [audio, setAudio] = useState(-1) // stream index; -1 = the file's default
+  const [sub, setSub] = useState<MediaStream | undefined>()
+  const [cues, setCues] = useState<Cue[]>([])
+  const [menu, setMenu] = useState(false)
 
+  const audioRef = useRef(-1) // what the transcoder is told
+  const burnRef = useRef(-1) // image subtitle stream burned in by the server
   const offset = useRef(0) // transcodes start at `offset` seconds into the file
   const transcodeId = useRef('')
   const playSession = useRef(sessionId())
@@ -51,10 +59,10 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
 
   const duration = file?.duration || (item?.runtime ? item.runtime * 60 : 0)
 
-  // Load the item and its file.
+  // Load the item, its file and the viewer's track preferences, then start.
   useEffect(() => {
-    api.get<ItemDetail>(`/api/items/${id}`).then(
-      (d) => {
+    Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null)]).then(
+      ([d, prefs]) => {
         setItem(d.item)
         const f = d.files?.[0]
         if (!f) {
@@ -62,11 +70,37 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           return
         }
         setFile(f)
-        setSrc({ uri: absolute(`/api/files/${f.id}/direct`), startPosition: start * 1000 })
+        const picked = pickTracks(f.streams ?? [], prefs)
+        setAudio(picked.audio)
+        audioRef.current = picked.audio
+        if (picked.sub && IMAGE_SUBS.has(picked.sub.codec)) {
+          // Image subtitles need the server to burn them in.
+          burnRef.current = picked.sub.index
+          setSub(picked.sub)
+          startTranscode.current = true
+        } else {
+          if (picked.sub) setSub(picked.sub)
+          setSrc({ uri: absolute(`/api/files/${f.id}/direct`), startPosition: start * 1000 })
+        }
       },
       (e) => setError(e.message),
     )
   }, [id, start])
+
+  // Text subtitles are drawn by the app from the server's WebVTT, so they
+  // stay in sync in both direct play and conversion (cue times are file time).
+  useEffect(() => {
+    setCues([])
+    if (!file || !sub || !TEXT_SUBS.has(sub.codec)) return
+    let stale = false
+    fetch(absolute(`/api/files/${file.id}/subtitles/${sub.index}.vtt`), { headers: authHeaders() })
+      .then((r) => (r.ok ? r.text() : ''))
+      .then((t) => !stale && setCues(parseVtt(t)))
+      .catch(() => undefined)
+    return () => {
+      stale = true
+    }
+  }, [file, sub])
 
   const report = useCallback(
     (stopped = false, done = false) => {
@@ -110,8 +144,8 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
         const res = await api.post<{ session: { id: string }; playlist: string }>(`/api/files/${file.id}/transcode`, {
           start: at,
           maxHeight: 0,
-          audioStream: -1,
-          burnSubtitle: -1,
+          audioStream: audioRef.current,
+          burnSubtitle: burnRef.current,
           replace: transcodeId.current,
         })
         transcodeId.current = res.session.id
@@ -125,6 +159,30 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     },
     [file],
   )
+
+  // Burned-in subtitles chosen up front: start converting once the file is known.
+  const startTranscode = useRef(false)
+  useEffect(() => {
+    if (file && startTranscode.current) {
+      startTranscode.current = false
+      transcode(start)
+    }
+  }, [file, transcode, start])
+
+  const chooseAudio = (index: number) => {
+    setAudio(index)
+    audioRef.current = index
+    if (mode === 'transcode') transcode(posRef.current) // the server mixes the new track
+  }
+
+  const chooseSub = (s?: MediaStream) => {
+    setSub(s)
+    const burn = s && IMAGE_SUBS.has(s.codec) ? s.index : -1
+    if (burn !== burnRef.current) {
+      burnRef.current = burn
+      transcode(posRef.current)
+    }
+  }
 
   const onError = useCallback(() => {
     if (mode === 'direct') transcode(posRef.current)
@@ -183,54 +241,97 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     else transcode(t) // the server converts from the new point
   }
 
-  const showControls = () => {
-    setControls(true)
+  // Controls: hidden; "seek" (just the progress bar, after ◀/▶ while hidden);
+  // or "full" (focusable buttons). They hide again unless paused.
+  const showControls = (kind: 'seek' | 'full') => {
+    setControls((c) => (c === 'full' ? 'full' : kind))
     if (hideTimer.current) clearTimeout(hideTimer.current)
-    hideTimer.current = setTimeout(() => setControls(false), 4000)
+    hideTimer.current = setTimeout(() => setControls('hidden'), kind === 'full' ? 6000 : 2500)
   }
   useEffect(() => {
-    if (!paused && !buffering) showControls()
-    return () => {
-      if (hideTimer.current) clearTimeout(hideTimer.current)
+    if (paused && hideTimer.current) clearTimeout(hideTimer.current) // stay up while paused
+    if (!paused && controls !== 'hidden') showControls(controls)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused])
+  useEffect(() => () => {
+    if (hideTimer.current) clearTimeout(hideTimer.current)
+  }, [])
+
+  // The next episode, for the Next button.
+  const [next, setNext] = useState<Item | null>(null)
+  useEffect(() => {
+    if (item?.kind === 'episode') api.get<Item | undefined>(`/api/items/${item.id}/next`).then((n) => setNext(n ?? null), () => undefined)
+  }, [item])
+
+  // Back closes the menu, then the controls, before leaving the player.
+  useEffect(() => {
+    backInterceptor.current = () => {
+      if (menu) {
+        setMenu(false)
+        return true
+      }
+      if (controls === 'full') {
+        setControls('hidden')
+        return true
+      }
+      return false
     }
-  }, [paused, buffering])
+    return () => {
+      backInterceptor.current = null
+    }
+  }, [menu, controls])
 
   useTVEventHandler((evt) => {
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0) return
+    if (menu) return // the menu's buttons handle the keys
+    if (controls === 'full') {
+      // The buttons have focus; any key just keeps the controls up.
+      if (!paused) showControls('full')
+      if (evt.eventType === 'playPause') setPaused((p) => !p)
+      return
+    }
     switch (evt.eventType) {
       case 'select':
+      case 'up':
+      case 'down':
+      case 'menu':
+      case 'info':
+        showControls('full')
+        break
       case 'playPause':
         setPaused((p) => !p)
-        showControls()
+        showControls('full')
         break
       case 'play':
         setPaused(false)
         break
       case 'pause':
         setPaused(true)
-        showControls()
+        showControls('full')
         break
       case 'left':
       case 'rewind':
         seekTo(posRef.current - 10)
-        showControls()
+        showControls('seek')
         break
       case 'right':
       case 'fastForward':
         seekTo(posRef.current + 30)
-        showControls()
-        break
-      case 'up':
-      case 'down':
-        showControls()
+        showControls('seek')
         break
     }
   })
 
+  const audios = (file?.streams ?? []).filter((s) => s.type === 'audio')
+  const subs = (file?.streams ?? []).filter((s) => s.type === 'subtitle' && (TEXT_SUBS.has(s.codec) || IMAGE_SUBS.has(s.codec)))
+  // ExoPlayer numbers audio tracks in file order, so the direct-play choice is a position.
+  const audioPos = audios.findIndex((s) => s.index === audio)
+  const cue = sub && TEXT_SUBS.has(sub.codec) ? cueAt(cues, pos) : ''
+
   const title = item ? (item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title) : ''
-  const sub = item?.kind === 'episode' ? item.title : ''
+  const subtitleLine = item?.kind === 'episode' ? item.title : ''
   const pct = duration ? Math.min(100, (pos / duration) * 100) : 0
 
   return (
@@ -247,16 +348,25 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
           paused={paused}
+          selectedAudioTrack={mode === 'direct' && audioPos >= 0 ? { type: SelectedTrackType.INDEX, value: audioPos } : undefined}
           onProgress={onProgress}
-          onLoad={() => setBuffering(false)}
+          onLoad={() => {
+            setBuffering(false)
+            showControls('seek') // a glimpse of the title and position
+          }}
           onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
           onError={onError}
           onEnd={onEnd}
-          progressUpdateInterval={500}
+          progressUpdateInterval={250}
         />
       )}
       {/* Something must hold focus or Android never hands the remote's keys to the app. */}
-      <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus focusable />
+      <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!menu && controls !== 'full'} focusable={!menu && controls !== 'full'} />
+      {!!cue && (
+        <View style={[st.cueWrap, (controls !== 'hidden' || paused || menu) && st.cueRaised]} pointerEvents="none">
+          <Text style={st.cue}>{cue}</Text>
+        </View>
+      )}
       {buffering && !error && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {!!error && (
         <View style={st.errorBox}>
@@ -264,11 +374,11 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls || paused) && !error && (
+      {(controls !== 'hidden' || paused) && !error && !menu && (
         <View style={st.overlay}>
           <View>
             <Text style={st.title} numberOfLines={1}>{title}</Text>
-            {!!sub && <Text style={st.sub} numberOfLines={1}>{sub}</Text>}
+            {!!subtitleLine && <Text style={st.sub} numberOfLines={1}>{subtitleLine}</Text>}
           </View>
           <View>
             <View style={st.track}>
@@ -279,8 +389,49 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
               <Text style={st.mode}>{paused ? 'Paused' : mode === 'transcode' ? 'Converting' : 'Direct play'}</Text>
               <Text style={st.time}>-{clock(duration - pos)}</Text>
             </View>
-            <Text style={st.hint}>OK: play/pause   ◀ 10s back   ▶ 30s forward</Text>
+            {controls === 'full' ? (
+              <View style={st.controlRow}>
+                <Button small label="⟲ 10s" onPress={() => seekTo(posRef.current - 10)} />
+                <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => setPaused((p) => !p)} />
+                <Button small label="30s ⟳" onPress={() => seekTo(posRef.current + 30)} />
+                {next && <Button small label="Next episode  ▶▶" onPress={() => nav.replace({ name: 'player', id: next.id, start: 0 })} />}
+                <Button small label="Audio & subtitles" onPress={() => setMenu(true)} />
+              </View>
+            ) : (
+              <Text style={st.hint}>OK for controls   ◀ 10s back   ▶ 30s forward</Text>
+            )}
           </View>
+        </View>
+      )}
+      {menu && (
+        <View style={st.menu}>
+          {audios.length > 1 && (
+            <>
+              <Text style={st.menuTitle}>Audio</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {audios.map((a, i) => {
+                  const on = audio === a.index || (audio === -1 && (a.default || (i === 0 && !audios.some((x) => x.default))))
+                  return <Button key={a.index} small primary={on} label={streamLabel(a)} onPress={() => chooseAudio(a.default || (i === 0 && !audios.some((x) => x.default)) ? -1 : a.index)} />
+                })}
+              </ScrollView>
+            </>
+          )}
+          <Text style={st.menuTitle}>Subtitles</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button small primary={!sub} preferFocus={!sub} label="Off" onPress={() => chooseSub(undefined)} />
+            {subs.map((s) => (
+              <Button
+                key={s.index}
+                small
+                primary={sub?.index === s.index}
+                preferFocus={sub?.index === s.index}
+                label={streamLabel(s) + (IMAGE_SUBS.has(s.codec) ? ' · burned in' : '')}
+                onPress={() => chooseSub(s)}
+              />
+            ))}
+          </ScrollView>
+          {subs.length === 0 && <Text style={st.hint}>This file has no subtitles.</Text>}
+          <Text style={st.hint}>Back closes this menu</Text>
         </View>
       )}
     </View>
@@ -301,4 +452,11 @@ const st = StyleSheet.create(scaled({
   hint: { color: '#c3c9d0', fontSize: font.small, marginTop: 10, textAlign: 'center' },
   errorBox: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: 'rgba(20,24,29,0.95)', padding: 40, borderRadius: 20, maxWidth: 1300 },
   errorText: { color: colors.text, fontSize: font.body, textAlign: 'center' },
+  cueWrap: { position: 'absolute', left: 160, right: 160, bottom: 90, alignItems: 'center' },
+  cueRaised: { bottom: 260 },
+  cue: { color: '#fff', fontSize: 46, fontWeight: '600', textAlign: 'center', lineHeight: 60, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 18, borderRadius: 8 },
+  menu: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 50, backgroundColor: 'rgba(11,13,16,0.94)' },
+  menuTitle: { color: colors.muted, fontSize: font.small, fontWeight: '700', marginTop: 10, marginBottom: 6 },
+  menuRow: { paddingVertical: 10 },
+  controlRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
 }))

@@ -135,16 +135,18 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Watched state for managed/shared Plex users (needs each user's token, via plex.tv) |
 | | Simkl and other trackers with their own APIs |
 
-## M8: Apps 🟡 (phase 1: Android TV app)
+## M8: Apps 🟡 (phases 1–2: Android TV app)
 
 | | Item |
 |---|---|
 | ✅ | **Android TV / Fire TV APK** (`apps/tv`, react-native-tvos): home rows, details, seasons/episodes, player with resume/next episode/progress, Live TV with channel up/down |
 | ✅ | Easy setup: finds the server on the home network, signs in with a code or QR code (or password + 2FA), big remote-friendly screens |
 | ✅ | APK built and attached to GitHub releases (signed when the key secrets are set) |
-| | Subtitles and audio track choice in the TV player; guide grid; search; watchlist |
+| ✅ | TV player control bar (⟲ 10 s / play-pause / 30 s ⟳ / next episode / audio & subtitles); audio and subtitle choice from the viewer's preferences, text subtitles drawn by the app, image subtitles burned in |
+| ✅ | Cable-box style guide grid: timeline, programs sized by length, details and a live preview of the focused channel |
+| ✅ | Search; watchlist add/remove on details |
+| ✅ | In-app updates: the server checks GitHub for the newest TV APK (`/api/apps/android`); the app downloads it and hands it to Android's installer |
 | | Phones (same codebase, touch layouts) |
-| | In-app updates delivered from the server |
 | | **Windows EXE** client (desktop wrapper around the web UI with mpv for full codec support) |
 | | Roku app (BrightScript; separate codebase) |
 | | Casting to devices (Chromecast, DLNA) |

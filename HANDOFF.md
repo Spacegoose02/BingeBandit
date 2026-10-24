@@ -2,9 +2,31 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, M8 phase 1 (Android TV app)._
+_Last updated: 2026-10-24, M8 phase 2 (TV app: controls, tracks, guide, search, updates)._
 
-## Latest: the Android TV / Fire TV app (M8 phase 1)
+## Latest: TV app phase 2 (M8 phase 2)
+
+- **Player** (`screens/Player.tsx`):
+  - Controls have three states: hidden, `seek` (◀/▶ jumps, a progress bar and hint) and `full`. OK, ▲ or ▼ opens the full bar: ⟲ 10s, Pause/Play, 30s ⟳, Next episode (episodes only, from `/api/items/{id}/next`), Audio & subtitles. The bar hides after 6 s unless paused.
+  - Back closes the menu, then the bar, then leaves. Screens take Back first through `backInterceptor` in `nav.tsx`.
+  - Tracks: `src/tracks.ts` ports the web player's `pickTracks` and the viewer's prefs (`/api/me/prefs`).
+    - Direct play picks audio with `selectedAudioTrack` (ExoPlayer's track position).
+    - Text subtitles are fetched as VTT and drawn by the app.
+    - Image subtitles (PGS/VobSub) force a transcode with burn-in.
+- **Guide** (`screens/LiveGuide.tsx`), the Live TV tab:
+  - A header shows the focused program's details and a muted live preview. The preview joins the channel's stream 1.2 s after focus settles and leaves on change.
+  - Then a half-hour ruler with a teal "now" line, and channel rows whose program blocks are sized by duration. Each row uses a FlatList, so big channel lists stay light.
+  - Android only moves focus to blocks it can see. So when the focused block touches an edge of the visible two hours, the timeline slides to show what's next. `TVFocusGuideView trapFocusLeft/Right` keeps Left/Right inside the grid.
+  - Channel logos that are SVG go through react-native-svg, because Android's Image can't draw them.
+- **Search** tab (`/api/search`, 350 ms debounce) and **watchlist** add/remove on Details.
+- **In-app updates:**
+  - Server: `GET /api/apps/android` (`api/apps.go`) reads the newest GitHub release of `-update-repo` (default `Spacegoose02/BingeBandit`; empty disables it), caches it for an hour, and returns the `BingeBandit-TV-*.apk` asset with a versionCode computed like Gradle's.
+  - App: the native `AppUpdater` module downloads the APK to the cache and opens Android's installer via a FileProvider. The first time, it sends the viewer to "Install unknown apps" for BingeBandit.
+  - Settings shows the version, and a dot appears on the tab when an update exists.
+- **Home** remembers the last tab, so Back from the player or details returns to Live TV or Search, not Home.
+- **Tested on the onn box:** the control bar, pause and seek, the audio/subtitle menu, subtitle cues, Search, the guide (focus, sliding, preview, tune and Back), and the update offer up to the "Install unknown apps" permission page. The final install step wasn't run, because that permission is the TV owner's to grant.
+
+## The Android TV / Fire TV app (M8 phase 1)
 
 - **`apps/tv`:** react-native-tvos 0.83 (RN 0.83, New Architecture, Hermes), React 19, TypeScript. The libraries are react-native-video 6 (ExoPlayer), AsyncStorage 3, NetInfo, react-native-svg and react-native-qrcode-svg. `.npmrc` sets `legacy-peer-deps`, because the tvos fork's pre-release version doesn't satisfy plain `react-native` peer ranges.
 - **Screens:**
@@ -49,7 +71,7 @@ _Last updated: 2026-10-24, M8 phase 1 (Android TV app)._
   - **Development loop:**
     - Debug APK (`assembleDebug -PreactNativeArchitectures=armeabi-v7a`), `npx react-native start`, then `adb reverse tcp:8081 tcp:8081`. Changes reload on the TV in seconds; JS logs show in `adb logcat` under `ReactNativeJS`.
     - Fast Refresh while the player is open can raise "Rendered more hooks…". Restart the app; it's not a real bug.
-- **Not done yet:** subtitles and audio track choice in the player, a guide grid, search, watchlist, phone layouts, in-app updates.
+- **Not done yet:** phone layouts.
 
 ## Trakt sync, history downloads, Plex-style webhooks (M7 phase 2)
 

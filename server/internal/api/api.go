@@ -47,7 +47,9 @@ type Server struct {
 	DataDir    string
 	FFmpeg     string
 	FFprobe    string
+	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
 
+	updates     appUpdates
 	limiter     *loginLimiter
 	linkLimiter *loginLimiter
 	links       *linkManager
@@ -103,6 +105,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/me/keys", s.createAPIKey)
 			r.Delete("/me/keys/{id}", s.deleteAPIKey)
 			r.Put("/me/share-activity", s.setShareActivity)
+			r.Get("/apps/android", s.androidApp)
 			r.Get("/me/trakt", s.traktStatus)
 			r.Post("/me/trakt/connect", s.traktConnect)
 			r.Post("/me/trakt/poll", s.traktPoll)

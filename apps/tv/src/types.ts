@@ -34,6 +34,7 @@ export interface Item {
   showBackdrop?: string
   childCount?: number
   unwatchedCount?: number
+  onWatchlist?: boolean
   watch: WatchState
 }
 
@@ -47,6 +48,7 @@ export interface MediaFile {
   hdr: boolean
   audioCodec: string
   audioChannels: number
+  streams: import('./tracks').MediaStream[]
 }
 
 export interface ItemDetail {
@@ -65,8 +67,12 @@ export interface HomeData {
 }
 
 export interface GuideProgram {
+  id?: number
   title: string
   subtitle?: string
+  description?: string
+  episode?: string
+  category?: string
   start: number
   stop: number
 }
@@ -77,6 +83,7 @@ export interface LiveChannel {
   name: string
   logo?: string
   group?: string
+  epgId?: string
   favorite: boolean
   now?: GuideProgram
   next?: GuideProgram

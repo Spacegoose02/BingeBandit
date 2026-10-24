@@ -61,6 +61,15 @@ export default function Details({ id }: { id: number }) {
           ) : (
             !d.children?.length && <Text style={st.muted}>Nothing to play here yet.</Text>
           )}
+          {(it.kind === 'movie' || it.kind === 'show') && (
+            <Button
+              label={it.onWatchlist ? 'On your watchlist ✓' : 'Add to watchlist'}
+              onPress={async () => {
+                await (it.onWatchlist ? api.del(`/api/watchlist/${it.id}`) : api.post(`/api/watchlist/${it.id}`)).catch(() => undefined)
+                load()
+              }}
+            />
+          )}
           <Button
             label={it.watch?.watched || (it.childCount && it.unwatchedCount === 0) ? 'Mark unwatched' : 'Mark watched'}
             onPress={async () => {

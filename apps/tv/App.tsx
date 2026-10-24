@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, View } from 'react-native'
 import { ApiError, api, loadSession, saveSession, type Session } from './src/api'
-import { NavContext, type Nav, type Route } from './src/nav'
+import { backInterceptor, NavContext, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import Home from './src/screens/Home'
@@ -48,6 +48,7 @@ export default function App() {
   // The remote's Back button pops a screen; on Home it leaves the app.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (backInterceptor.current?.()) return true
       if (phase.name === 'signin') {
         setPhase({ name: 'connect' })
         return true

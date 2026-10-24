@@ -18,3 +18,9 @@ export const NavContext = createContext<Nav>({ push: () => {}, replace: () => {}
 export function useNav() {
   return useContext(NavContext)
 }
+
+/**
+ * Lets the current screen take the Back button first (e.g. to close a menu).
+ * The function returns true when it handled Back.
+ */
+export const backInterceptor: { current: (() => boolean) | null } = { current: null }

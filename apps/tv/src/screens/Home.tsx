@@ -1,39 +1,109 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Image, ImageBackground, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { api, current, image, saveSession } from '../api'
+import { ActivityIndicator, Image, ImageBackground, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { api, image, saveSession } from '../api'
 import { Button, Center, Focusable, PosterCard, Row, WideCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter } from '../theme'
-import type { HomeData, Item, LiveChannel } from '../types'
+import type { HomeData, Item } from '../types'
+import { checkForUpdate, type AppRelease } from '../updates'
+import LiveGuide from './LiveGuide'
 import Settings from './Settings'
 
-type Tab = 'home' | 'live' | 'settings'
+type Tab = 'home' | 'search' | 'live' | 'settings'
+const tabNames: Record<Tab, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings' }
+
+// Survives the remount when Back returns here from the player or details.
+let lastTab: Tab = 'home'
 
 /** The main screen: a menu across the top and the chosen section below. */
 export default function Home({ onSignedOut }: { onSignedOut: () => void }) {
-  const [tab, setTab] = useState<Tab>('home')
+  const [tab, setTabState] = useState<Tab>(lastTab)
+  const setTab = (t: Tab) => {
+    lastTab = t
+    setTabState(t)
+  }
+  const [update, setUpdate] = useState<AppRelease | null>(null)
+  // Look for a newer app once per launch; the Settings tab then shows a dot.
+  useEffect(() => {
+    checkForUpdate().then(setUpdate, () => undefined)
+  }, [])
   return (
     <View style={st.screen}>
       <View style={st.menu}>
         <Image source={require('../assets/mascot.png')} style={st.mascot} />
-        {(['home', 'live', 'settings'] as Tab[]).map((t) => (
-          <Focusable key={t} onFocus={() => setTab(t)} onPress={() => setTab(t)} style={st.menuItem}>
-            <Text style={[st.menuText, tab === t && st.menuTextActive]}>{t === 'home' ? 'Home' : t === 'live' ? 'Live TV' : 'Settings'}</Text>
+        {(Object.keys(tabNames) as Tab[]).map((t) => (
+          <Focusable key={t} hasTVPreferredFocus={t === tab && t !== 'home'} onFocus={() => setTab(t)} onPress={() => setTab(t)} style={st.menuItem}>
+            <Text style={[st.menuText, tab === t && st.menuTextActive]}>
+              {tabNames[t]}
+              {t === 'settings' && update && <Text style={st.dot}> ●</Text>}
+            </Text>
           </Focusable>
         ))}
       </View>
       {tab === 'home' && <HomeRows />}
-      {tab === 'live' && <LiveList />}
+      {tab === 'search' && <Search />}
+      {tab === 'live' && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
+          update={update}
           onSignOut={async () => {
             await api.post('/api/auth/logout').catch(() => undefined)
             await saveSession(null)
+            lastTab = 'home'
             onSignedOut()
           }}
         />
       )}
     </View>
+  )
+}
+
+/** Type to search titles and people; results update as you type. */
+function Search() {
+  const nav = useNav()
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<Item[] | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (q.trim().length < 2) {
+      setResults(null)
+      return
+    }
+    const t = setTimeout(() => {
+      api.get<Item[]>(`/api/search?q=${encodeURIComponent(q.trim())}`).then(
+        (r) => {
+          setResults(r)
+          setError('')
+        },
+        (e) => setError(e.message),
+      )
+    }, 350)
+    return () => clearTimeout(t)
+  }, [q])
+  return (
+    <ScrollView contentContainerStyle={st.search}>
+      <TextInput
+        style={st.searchInput}
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search movies and shows"
+        placeholderTextColor={colors.muted}
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {!!error && <Text style={st.error}>{error}</Text>}
+      {results && results.length === 0 && <Text style={st.mutedLeft}>Nothing matches “{q.trim()}”.</Text>}
+      {results && results.length > 0 && (
+        <View style={st.grid}>
+          {results.map((it) => (
+            <View key={it.id} style={st.gridCell}>
+              <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
+              <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
   )
 }
 
@@ -109,38 +179,6 @@ function HomeRows() {
   )
 }
 
-function LiveList() {
-  const nav = useNav()
-  const [channels, setChannels] = useState<LiveChannel[] | null>(null)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    api.get<LiveChannel[]>('/api/live/channels').then(setChannels, (e) => setError(e.message))
-  }, [])
-  if (error) return <Center><Text style={st.error}>{error}</Text></Center>
-  if (!channels) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
-  if (channels.length === 0) return <Center><Text style={st.muted}>No live channels on this server yet.</Text></Center>
-  const server = current()?.server ?? ''
-  return (
-    <ScrollView contentContainerStyle={st.liveList}>
-      {channels.map((c) => (
-        <Focusable key={c.id} onPress={() => nav.push({ name: 'live', channelId: c.id })} style={st.channel}>
-          <Text style={st.chNumber}>{c.number}</Text>
-          {c.logo ? (
-            <Image source={{ uri: `${server}/api/live/channels/${c.id}/logo`, headers: { Authorization: `Bearer ${current()?.token}` } }} style={st.chLogo} resizeMode="contain" />
-          ) : (
-            <View style={st.chLogo} />
-          )}
-          <View style={st.flex}>
-            <Text style={st.chName} numberOfLines={1}>{c.name}</Text>
-            <Text style={st.chNow} numberOfLines={1}>{c.now ? `Now: ${c.now.title}` : 'No guide information'}</Text>
-          </View>
-          {c.next && <Text style={st.chNext} numberOfLines={1}>Next: {c.next.title}</Text>}
-        </Focusable>
-      ))}
-    </ScrollView>
-  )
-}
-
 const st = StyleSheet.create(scaled({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
@@ -158,11 +196,11 @@ const st = StyleSheet.create(scaled({
   rows: { paddingBottom: 60 },
   error: { color: colors.danger, fontSize: font.body, marginBottom: 20, textAlign: 'center' },
   muted: { color: colors.muted, fontSize: font.body, textAlign: 'center' },
-  liveList: { paddingHorizontal: gutter, paddingVertical: 20 },
-  channel: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, padding: 24, marginBottom: 16 },
-  chNumber: { color: colors.muted, fontSize: font.heading, fontWeight: '700', width: 110 },
-  chLogo: { width: 150, height: 84, marginRight: 30 },
-  chName: { color: colors.text, fontSize: font.heading, fontWeight: '700' },
-  chNow: { color: colors.muted, fontSize: font.body, marginTop: 4 },
-  chNext: { color: colors.muted, fontSize: font.small, maxWidth: 560, marginLeft: 30 },
+  dot: { color: colors.accent, fontSize: font.small },
+  search: { paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
+  searchInput: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 18, borderWidth: 2, borderColor: colors.border, maxWidth: 1100, marginBottom: 30 },
+  mutedLeft: { color: colors.muted, fontSize: font.body },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  gridCell: { marginBottom: 30 },
+  gridTitle: { color: colors.text, fontSize: font.small, marginTop: 8, width: 230 },
 }))

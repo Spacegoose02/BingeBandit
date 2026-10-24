@@ -43,6 +43,10 @@ Rules:
 
 **TV code flow:** call `/link/start`, show the code and "go to `linkUrl`" (a QR code of `linkUrl` works well), poll `/link/poll` until you get a token, then store the token.
 
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/apps/android` | The newest Android TV APK on the server's update repository (GitHub releases, checked at most hourly): `{version, versionCode, url, size, publishedAt, notes}`, or `204` when there's none or updates are off (`-update-repo ""`). Install it when `versionCode` is greater than the app's own. |
+
 ## You
 
 | Method | Path | Notes |

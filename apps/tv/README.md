@@ -7,8 +7,13 @@ What it does:
 - **Finds the server** on the home network by itself, or you type its address.
 - **Signs in without typing a password:** it shows a code and a QR code. Approve it from a phone at `/link`, where an admin can pick whose account it is. A password works too, including two-step codes.
 - Home rows, Continue Watching, movie/show/season/episode pages, mark watched.
-- **Plays** directly when the TV can decode the file, otherwise through the server's transcoder. ◀/▶ seek, OK pauses. It resumes where you left off, plays the next episode, and reports progress (history, Continue Watching, Trakt sync).
-- **Live TV:** the channel list, the player, and ▲/▼ to change channel.
+- **Plays** directly when the TV can decode the file, otherwise through the server's transcoder. It resumes where you left off, plays the next episode, and reports progress (history, Continue Watching, Trakt sync).
+  - ◀/▶ seek.
+  - OK opens a control bar: back 10 s, pause/play, forward 30 s, next episode, and audio & subtitles.
+  - Audio and subtitles follow your preferences from the web app, and can be changed while watching.
+- **Live TV:** a guide grid like a cable box, with the focused channel previewing live. OK tunes in; ▲/▼ changes channel while watching.
+- **Search**, and adding to or removing from your watchlist.
+- **Updates itself:** when a newer APK is on GitHub, Settings offers it. The first time, Android asks you to allow BingeBandit to install apps.
 
 ## Building
 
