@@ -4,6 +4,16 @@ export interface User {
   id: number
   username: string
   isAdmin: boolean
+  profileName?: string // set for a profile under an account
+}
+
+/** A person in the account's household: the account or one of its profiles. */
+export interface Member {
+  id: number
+  name: string
+  isOwner: boolean
+  hasPin: boolean
+  current: boolean
 }
 
 export interface WatchState {

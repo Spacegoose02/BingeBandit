@@ -70,6 +70,10 @@ func guardedPath(r *http.Request) bool {
 		return true
 	case p == "/api/link/approve":
 		return true
+	case strings.HasPrefix(p, "/api/household/") && r.Method != http.MethodGet:
+		return !strings.HasSuffix(p, "/switch")
+	case p == "/api/household" && r.Method != http.MethodGet:
+		return true
 	case strings.HasPrefix(p, "/api/me/") && r.Method != http.MethodGet && r.Method != http.MethodHead:
 		return p != "/api/me/passcode/unlock" && p != "/api/me/passcode/lock"
 	}

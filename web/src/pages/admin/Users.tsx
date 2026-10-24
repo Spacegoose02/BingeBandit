@@ -45,7 +45,13 @@ export default function AdminUsers() {
             <div className="grow">
               <div>
                 {u.username} {u.id === me?.id && <span className="muted small">(you)</span>}{' '}
-                {!u.hasPassword && <span className="pill" title="Made by single sign-on; no password yet">SSO only</span>}
+                {u.ownerId ? (
+                  <span className="pill" title="A profile under another account; it has no password of its own">
+                    Profile of {users?.find((o) => o.id === u.ownerId)?.username ?? 'an account'}
+                  </span>
+                ) : (
+                  !u.hasPassword && <span className="pill" title="Made by single sign-on; no password yet">SSO only</span>
+                )}
               </div>
               <div className="muted small">Joined {new Date(u.createdAt * 1000).toLocaleDateString()}</div>
             </div>
@@ -66,9 +72,11 @@ export default function AdminUsers() {
                 Turn off 2-step
               </button>
             )}
-            <button className="btn btn-glass btn-sm" onClick={() => setResetting(u)}>
-              <Icon name="key" size={16} /> Reset password
-            </button>
+            {!u.ownerId && (
+              <button className="btn btn-glass btn-sm" onClick={() => setResetting(u)}>
+                <Icon name="key" size={16} /> Reset password
+              </button>
+            )}
             {u.id !== me?.id && (
               <button className="btn btn-glass btn-sm danger" onClick={() => remove(u)} aria-label={`Delete ${u.username}`}>
                 <Icon name="trash" size={16} />

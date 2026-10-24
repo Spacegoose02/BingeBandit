@@ -25,6 +25,8 @@ import AdminTasks from './pages/admin/Tasks'
 import AdminLogs from './pages/admin/Logs'
 import AdminImport from './pages/admin/Import'
 import { PasscodeGate } from './components/Passcode'
+import WhoIsWatching from './pages/WhoIsWatching'
+import { profilePickPending } from './profilePick'
 
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
@@ -34,6 +36,7 @@ function RequireUser() {
   const { user } = useAuth()
   const loc = useLocation()
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />
+  if (profilePickPending()) return <Navigate to="/who" replace />
   return <Outlet />
 }
 
@@ -50,6 +53,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/who" element={user ? <WhoIsWatching /> : <Navigate to="/login" replace />} />
       <Route element={<RequireUser />}>
         <Route
           path="/play/:id"

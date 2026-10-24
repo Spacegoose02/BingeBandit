@@ -1,12 +1,17 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { current } from '../api'
 import { Button, Focusable } from '../components'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
+import { fetchHousehold } from './Profiles'
 
-export default function Settings({ onSignOut, update }: { onSignOut: () => void; update: AppRelease | null }) {
+export default function Settings({ onSignOut, onSwitchProfile, update }: { onSignOut: () => void; onSwitchProfile: () => void; update: AppRelease | null }) {
   const s = current()
+  const [hasProfiles, setHasProfiles] = useState(false)
+  useEffect(() => {
+    fetchHousehold().then((m) => setHasProfiles(m.length > 1), () => undefined)
+  }, [])
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
@@ -39,7 +44,7 @@ export default function Settings({ onSignOut, update }: { onSignOut: () => void;
     <ScrollView contentContainerStyle={st.screen}>
       <View style={st.facts}>
         <Text style={st.label}>Signed in as</Text>
-        <Text style={st.value}>{s?.user.username}</Text>
+        <Text style={st.value}>{s?.user.profileName ?? s?.user.username}</Text>
         <Text style={st.label}>Server</Text>
         <Text style={st.value}>{s?.server.replace(/^https?:\/\//, '')}</Text>
         <Text style={st.label}>App version</Text>
@@ -62,6 +67,7 @@ export default function Settings({ onSignOut, update }: { onSignOut: () => void;
       )}
       {!!msg && <Text style={st.msg}>{msg}</Text>}
       <View style={st.signOut}>
+        {hasProfiles && <Button label="Switch profile" onPress={onSwitchProfile} style={st.gap} />}
         <Button label="Sign out" onPress={onSignOut} />
       </View>
       <Text style={st.hint}>Signing out also lets you pick a different server.</Text>
@@ -77,6 +83,7 @@ const st = StyleSheet.create(scaled({
   update: { backgroundColor: colors.surface2, borderRadius: 22, padding: 30, maxWidth: 1100, marginTop: 24, borderWidth: 2, borderColor: colors.accent },
   buttons: { flexDirection: 'row', marginTop: 28 },
   signOut: { flexDirection: 'row', marginTop: 48 },
+  gap: { marginRight: 24 },
   msg: { color: colors.text, fontSize: font.body, marginTop: 18 },
   hint: { color: colors.muted, fontSize: font.small, marginTop: 14 },
 }))

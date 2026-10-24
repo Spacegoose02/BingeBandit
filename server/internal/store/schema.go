@@ -464,7 +464,15 @@ INSERT INTO live_source_groups (source_id, name, enabled, streams)
 	`
 ALTER TABLE users ADD COLUMN passcode_hash TEXT NOT NULL DEFAULT '';
 `,
-	// 16: the channel logo library (admin uploads; a channel uses one with logo
+	// 16: profiles. A profile is a user under an account (owner_id): one
+	// sign-in, separate history, watchlist and preferences. Profiles have no
+	// password; they're reached by switching from another member.
+	`
+ALTER TABLE users ADD COLUMN owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE users ADD COLUMN profile_name TEXT NOT NULL DEFAULT '';
+CREATE INDEX users_owner ON users(owner_id);
+`,
+	// 17: the channel logo library (admin uploads; a channel uses one with logo
 	// "library:<file>") and viewers' own channel categories.
 	`
 CREATE TABLE channel_logos (
