@@ -43,6 +43,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Lower quality automatically when playback keeps buffering (user setting) |
 | ✅ | Transcode throttling (stays ~2× ahead of playback after a 60s head start) |
 | ✅ | Restore a database backup from Admin → Tasks (the current database is backed up first) |
+| ✅ | Backups also uploaded to S3-compatible storage (Amazon S3, Backblaze B2, Wasabi, R2, MinIO) with the same retention, a connection test, and restore straight from the bucket |
 | ✅ | Download a backup, and restore from an uploaded file: in Admin → Tasks, or on a new server's first screen instead of creating an admin |
 | | True adaptive bitrate (multi-rendition HLS ladder) |
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
@@ -52,7 +53,6 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
-- Remote backup targets beyond a folder path (S3/Backblaze).
 - Tone mapping algorithm choice and hardware decoding device selection.
 
 ## M3: User features 🟡 (in progress)

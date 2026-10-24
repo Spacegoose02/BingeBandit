@@ -15,6 +15,13 @@ const (
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
 	SettingBackupDir         = "backup_dir"
 	SettingBackupKeep        = "backup_keep"
+	// S3-compatible storage that each backup is also uploaded to.
+	SettingBackupS3Endpoint  = "backup_s3_endpoint" // e.g. https://s3.us-west-002.backblazeb2.com; empty = off
+	SettingBackupS3Region    = "backup_s3_region"
+	SettingBackupS3Bucket    = "backup_s3_bucket"
+	SettingBackupS3Prefix    = "backup_s3_prefix" // folder inside the bucket
+	SettingBackupS3AccessKey = "backup_s3_access_key"
+	SettingBackupS3SecretKey = "backup_s3_secret_key"
 	SettingDVRFolder         = "dvr_folder"
 	SettingDVRNaming         = "dvr_naming" // library (Show/Season 01/…) | folder (one flat folder)
 	SettingDVRApproval       = "dvr_require_approval"
@@ -47,6 +54,12 @@ var SettingDefaults = map[string]string{
 	SettingMaintenanceEnd:    "5",
 	SettingBackupDir:         "",
 	SettingBackupKeep:        "7",
+	SettingBackupS3Endpoint:  "",
+	SettingBackupS3Region:    "",
+	SettingBackupS3Bucket:    "",
+	SettingBackupS3Prefix:    "bingebandit",
+	SettingBackupS3AccessKey: "",
+	SettingBackupS3SecretKey: "",
 	SettingDVRFolder:         "",
 	SettingDVRNaming:         "library",
 	SettingDVRApproval:       "false",
