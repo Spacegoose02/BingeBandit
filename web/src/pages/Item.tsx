@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { PersonCard, PosterCard } from '../components/Cards'
+import { AddToPlaylist, WatchlistButton } from '../components/AddToPlaylist'
 import { EditItem } from '../components/EditItem'
 import { MatchDialog } from '../components/MatchDialog'
 import { MetaLine } from '../components/Hero'
@@ -129,6 +130,8 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               <button className="btn btn-glass icon-only" onClick={toggleWatched} title={watchedNow ? 'Mark unwatched' : 'Mark watched'}>
                 <Icon name="check" size={18} className={watchedNow ? 'accent' : ''} />
               </button>
+              {(item.kind === 'movie' || item.kind === 'show') && <WatchlistButton item={item} onChange={reload} />}
+              <AddToPlaylist item={item} />
               {user?.isAdmin && (
                 <button className="btn btn-glass icon-only" onClick={() => setDialog('edit')} title="Edit details and artwork">
                   <Icon name="edit" size={18} />

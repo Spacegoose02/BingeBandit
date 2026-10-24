@@ -53,19 +53,23 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Tone mapping algorithm choice and hardware decoding device selection.
 - Subtitles in a `Subs/` folder (common in release downloads).
 
-## M3: User features
+## M3: User features 🟡 (in progress)
 
-- User settings: skip intro, skip outro, auto-adjust quality, passcode-protected settings.
-- **Intro and credits detection** (audio fingerprinting across episodes, black-frame detection).
-- Trailers or a custom intro video before a movie (user setting).
-- Watchlist ("add to my watchlist or library" from Discover).
-- Playlists, plus user-made lists for TV ("what I want to watch next").
-- User profile with stats, shareable profile (off by default), recommendations from other users on Home (opt-in).
-- Discover: new shows and movie trailers (admin adds YouTube playlists).
-- Recently Added and Recently Released per library.
-- Watch Together: invite a user and sync playback.
-- Admin: watch statistics graphs, top played per library, play history (Tautulli replacement).
-- Notifications: new episodes, live sports starting, etc.
+| | Item |
+|---|---|
+| ✅ | Watchlist (bookmark on movies and shows, Home row, finished movies drop off) |
+| ✅ | Playlists, which double as "my own lists for TV": add movies, episodes, seasons or whole shows; reorder; Play all with continuous playback |
+| ✅ | Watch history per user, plus a server-wide history with IP, client and direct/transcode |
+| ✅ | User profile with stats (hours, movies, episodes, shows, top genres and shows, monthly chart, favorite time); shareable with other users, off by default |
+| ✅ | Admin statistics: plays per day, top movies, shows and viewers, direct play vs. transcode, clients (Tautulli replacement) |
+| ✅ | Auto-adjust quality user setting (done in M2) |
+| | **Intro and credits detection** + skip intro/outro user settings |
+| | Trailers or a custom intro video before a movie (user setting) |
+| | Passcode-protected settings |
+| | Recommendations from other users on Home (opt-in) |
+| | Discover: new shows and movie trailers (admin adds YouTube playlists) |
+| | Watch Together: invite a user and sync playback |
+| | Notifications: new episodes, live sports starting, etc. |
 
 ## M4: Live TV (Dispatcharr replacement)
 

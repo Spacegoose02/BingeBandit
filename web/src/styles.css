@@ -12,6 +12,8 @@
   --accent: #2dd4bf;
   --accent-strong: #14b8a6;
   --accent-ink: #04201c;
+  --chart-mark: #0d9488; /* validated for the dark surface (dataviz lightness band + contrast) */
+  --chart-grid: #262b33;
   --warn: #f5b041;
   --danger: #f2626b;
   --ok: #4ade80;
@@ -559,6 +561,60 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .detail-backdrop.short, .detail-shade.short { height: 50vh; }
 .collection-head { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 .collection-head .muted svg { display: inline; vertical-align: -2px; }
+
+/* ---------- lists, profile, statistics ---------- */
+.menu.dropdown { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 260px; max-height: 360px; overflow-y: auto; }
+.menu .push { margin-left: auto; }
+.menu-pad { padding: 6px 12px; }
+.menu-create { display: flex; gap: 6px; padding: 8px 6px 4px; border-top: 1px solid var(--border); margin-top: 4px; }
+.menu-create input { padding: 6px 10px !important; font-size: 13px !important; }
+.inline-note { position: absolute; top: calc(100% + 8px); left: 0; white-space: nowrap; font-size: 13px; background: var(--surface-3); padding: 4px 10px; border-radius: 8px; z-index: 20; }
+.playlist-row { flex-wrap: nowrap; }
+.pl-num { width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.pl-art { position: relative; width: 48px; aspect-ratio: 2 / 3; border: 0; padding: 0; border-radius: 6px; overflow: hidden; background: var(--surface-3); display: grid; place-items: center; color: var(--faint); flex: none; }
+.pl-art.wide { width: 96px; aspect-ratio: 16 / 9; }
+.pl-art img { width: 100%; height: 100%; object-fit: cover; }
+.pl-play { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.15s; color: #fff; }
+.pl-art:hover .pl-play { opacity: 1; }
+.history-row { flex-wrap: nowrap; }
+.history-poster { width: 36px; aspect-ratio: 2 / 3; border-radius: 4px; overflow: hidden; background: var(--surface-3); flex: none; }
+.history-poster img { width: 100%; height: 100%; object-fit: cover; }
+.profile-head { display: flex; align-items: center; gap: 16px; }
+.avatar.big { width: 64px; height: 64px; font-size: 26px; }
+.share-toggle { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 0 20px; }
+.chart { margin: 0; }
+.chart-box { position: relative; width: 100%; }
+.chart-box svg { display: block; overflow: visible; }
+.chart-grid { stroke: var(--chart-grid); stroke-width: 1; shape-rendering: crispEdges; }
+.chart-tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-tip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  background: rgba(31, 36, 44, 0.97);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.chart-tip strong { display: block; font-weight: 600; }
+.chart-tip div { color: var(--muted); }
+.chart-table { margin-top: 8px; font-size: 13px; color: var(--muted); }
+.chart-table summary { cursor: pointer; width: max-content; }
+.chart-table table { margin-top: 8px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.chart-table td, .chart-table th { padding: 3px 16px 3px 0; text-align: left; border-bottom: 1px solid var(--border); }
+.ranked { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ranked li { display: flex; gap: 12px; align-items: center; }
+.ranked-poster { width: 32px; aspect-ratio: 2 / 3; border-radius: 4px; overflow: hidden; background: var(--surface-3); flex: none; }
+.ranked-poster img { width: 100%; height: 100%; object-fit: cover; }
+.ranked-body { flex: 1; min-width: 0; }
+.ranked-label { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.ranked-track { display: flex; align-items: center; gap: 10px; }
+.ranked-bar { height: 10px; border-radius: 0 4px 4px 0; background: var(--chart-mark); min-width: 2px; }
+.ranked-value { font-size: 12.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ---------- tasks & logs ---------- */
 .task-row { display: flex; align-items: center; gap: 16px; padding: 14px 12px; flex-wrap: wrap; }

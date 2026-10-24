@@ -224,6 +224,7 @@ type progressReq struct {
 	Mode          string  `json:"mode"`
 	TranscodeID   string  `json:"transcodeId"`
 	Client        string  `json:"client"`
+	Played        float64 `json:"played"` // seconds actually played this session
 }
 
 // progress saves the resume point and keeps the admin "Now Playing" list current.
@@ -245,21 +246,51 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if watched && it.Kind == "movie" {
+		s.Store.RemoveFromWatchlist(u.ID, it.ID) // finished: no longer "to watch"
+	}
 	if req.PlaySessionID != "" {
+		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
+		s.recordPlay(np, it, watched)
 		if req.Stopped {
 			s.Activity.Stop(req.PlaySessionID)
-		} else {
-			s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+}
+
+// minRecordedPlay keeps accidental clicks out of the history.
+const minRecordedPlay = 30
+
+// recordPlay creates or updates the session's play-history row.
+func (s *Server) recordPlay(np stream.NowPlaying, it *store.Item, completed bool) {
+	if np.PlayID == 0 {
+		if np.Watched < minRecordedPlay {
+			return
+		}
+		p := &store.Play{
+			UserID: np.UserID, ItemID: it.ID, Title: np.Title, Subtitle: np.Subtitle, Kind: it.Kind,
+			LibraryID: it.LibraryID, ShowID: it.ShowID, StartedAt: np.StartedAt, StoppedAt: np.UpdatedAt,
+			Watched: int64(np.Watched), Completed: completed, Mode: np.Mode, Client: np.Client, IP: np.IP,
+		}
+		id, err := s.Store.StartPlay(p)
+		if err != nil {
+			log.Printf("history: %v", err)
+			return
+		}
+		s.Activity.SetPlayID(np.ID, id)
+		return
+	}
+	if err := s.Store.UpdatePlay(np.PlayID, np.UpdatedAt, int64(np.Watched), completed, np.Mode); err != nil {
+		log.Printf("history: %v", err)
+	}
 }
 
 func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip string) stream.NowPlaying {
 	np := stream.NowPlaying{
 		ID: req.PlaySessionID, UserID: u.ID, Username: u.Username, ItemID: it.ID, Title: it.Title, Poster: it.Poster,
 		FileID: req.FileID, Mode: req.Mode, Position: req.Position, Duration: req.Duration, Paused: req.Paused,
-		IP: ip, Local: stream.IsLocalIP(ip), Client: req.Client, TranscodeID: req.TranscodeID,
+		IP: ip, Local: stream.IsLocalIP(ip), Client: req.Client, TranscodeID: req.TranscodeID, Watched: req.Played,
 	}
 	if it.Kind == "episode" && it.SeasonNumber != nil && it.EpisodeNumber != nil {
 		np.Title = it.ShowTitle

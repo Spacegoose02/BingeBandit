@@ -7,6 +7,7 @@ export interface User {
   createdAt: number
   allLibraries: boolean
   libraryIds?: number[]
+  profilePublic: boolean
 }
 
 export interface WatchState {
@@ -64,6 +65,70 @@ export interface Item {
   showTitle?: string
   showPoster?: string
   showBackdrop?: string
+  onWatchlist?: boolean
+}
+
+export interface Playlist {
+  id: number
+  userId: number
+  name: string
+  itemCount: number
+  duration: number
+  poster?: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface Play {
+  id: number
+  userId: number
+  username?: string
+  itemId?: number
+  title: string
+  subtitle?: string
+  kind: ItemKind
+  libraryId: number
+  showId?: number
+  startedAt: number
+  stoppedAt: number
+  watched: number
+  completed: boolean
+  mode: string
+  client: string
+  ip?: string
+  poster?: string
+}
+
+export interface Count {
+  key: string
+  itemId?: number
+  poster?: string
+  plays: number
+  hours: number
+}
+
+export interface UserStats {
+  hours: number
+  plays: number
+  movies: number
+  episodes: number
+  shows: number
+  topGenres: Count[]
+  topShows: Count[]
+  monthlyHours: Count[]
+  favoriteHour: number
+}
+
+export interface ServerStats {
+  days: number
+  daily: Count[]
+  topMovies: Count[]
+  topShows: Count[]
+  topUsers: Count[]
+  modes: Count[]
+  clients: Count[]
+  totalPlays: number
+  totalHours: number
 }
 
 export interface MediaStream {

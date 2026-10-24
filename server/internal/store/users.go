@@ -8,13 +8,15 @@ import (
 )
 
 type User struct {
-	ID           int64   `json:"id"`
-	Username     string  `json:"username"`
-	IsAdmin      bool    `json:"isAdmin"`
-	CreatedAt    int64   `json:"createdAt"`
-	AllLibraries bool    `json:"allLibraries"`
-	LibraryIDs   []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
-	PasswordHash string  `json:"-"`
+	ID           int64  `json:"id"`
+	Username     string `json:"username"`
+	IsAdmin      bool   `json:"isAdmin"`
+	CreatedAt    int64  `json:"createdAt"`
+	AllLibraries bool   `json:"allLibraries"`
+	// ProfilePublic lets other users of this server see the profile and stats.
+	ProfilePublic bool    `json:"profilePublic"`
+	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
+	PasswordHash  string  `json:"-"`
 }
 
 func (s *Store) CountUsers() (int, error) {
@@ -34,11 +36,11 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, password_hash`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, password_hash`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.PasswordHash); err != nil {
+	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.PasswordHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -119,6 +121,11 @@ func (s *Store) SetUserLibraries(userID int64, all bool, libraryIDs []int64) err
 	return tx.Commit()
 }
 
+func (s *Store) SetProfilePublic(userID int64, public bool) error {
+	_, err := s.db.Exec(`UPDATE users SET profile_public = ? WHERE id = ?`, boolInt(public), userID)
+	return err
+}
+
 // CanSeeLibrary reports whether u may browse the library.
 func (s *Store) CanSeeLibrary(u *User, libraryID int64) bool {
 	if u.IsAdmin || u.AllLibraries {
@@ -160,9 +167,9 @@ func (s *Store) UserBySession(token string) (*User, error) {
 	h := hashToken(token)
 	var lastSeen int64
 	var u User
-	err := s.db.QueryRow(`SELECT u.id, u.username, u.is_admin, u.created_at, u.all_libraries, u.password_hash, s.last_seen
+	err := s.db.QueryRow(`SELECT u.id, u.username, u.is_admin, u.created_at, u.all_libraries, u.profile_public, u.password_hash, s.last_seen
 		FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`, h).
-		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.PasswordHash, &lastSeen)
+		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.PasswordHash, &lastSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

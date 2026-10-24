@@ -166,4 +166,50 @@ DELETE FROM settings WHERE key = 'scan_interval_hours';
 `,
 	// 4: per-user playback preferences (JSON, see store.Prefs).
 	`ALTER TABLE users ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}';`,
+	// 5: play history, watchlist, playlists, shareable profiles.
+	`
+CREATE TABLE plays (
+	id          INTEGER PRIMARY KEY,
+	user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id     INTEGER REFERENCES items(id) ON DELETE SET NULL,
+	title       TEXT NOT NULL,              -- kept so history survives library removals
+	subtitle    TEXT NOT NULL DEFAULT '',
+	kind        TEXT NOT NULL,
+	library_id  INTEGER NOT NULL DEFAULT 0,
+	show_id     INTEGER NOT NULL DEFAULT 0,
+	started_at  INTEGER NOT NULL,
+	stopped_at  INTEGER NOT NULL,
+	watched     INTEGER NOT NULL DEFAULT 0, -- seconds actually played
+	completed   INTEGER NOT NULL DEFAULT 0,
+	mode        TEXT NOT NULL DEFAULT '',
+	client      TEXT NOT NULL DEFAULT '',
+	ip          TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX plays_user ON plays(user_id, started_at);
+CREATE INDEX plays_started ON plays(started_at);
+
+CREATE TABLE watchlist (
+	user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+
+CREATE TABLE playlists (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	name       TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+CREATE INDEX playlists_user ON playlists(user_id);
+CREATE TABLE playlist_items (
+	playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+	item_id     INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	position    INTEGER NOT NULL,
+	PRIMARY KEY (playlist_id, item_id)
+);
+
+ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 0;
+`,
 }

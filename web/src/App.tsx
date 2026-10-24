@@ -8,6 +8,9 @@ import Home from './pages/Home'
 import LibraryPage from './pages/Library'
 import ItemPage from './pages/Item'
 import CollectionPage from './pages/Collection'
+import { PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
+import ProfilePage from './pages/Profile'
+import AdminStatistics from './pages/admin/Statistics'
 import Search from './pages/Search'
 import Account from './pages/Account'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -54,6 +57,11 @@ export default function App() {
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />
+          <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/playlists" element={<PlaylistsPage />} />
+          <Route path="/playlist/:id" element={<PlaylistPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile/:username" element={<ProfilePage />} />
           <Route path="/search" element={<Search />} />
           <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<RequireAdmin />}>
@@ -61,6 +69,7 @@ export default function App() {
             <Route path="libraries" element={<AdminLibraries />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="statistics" element={<AdminStatistics />} />
             <Route path="tasks" element={<AdminTasks />} />
             <Route path="logs" element={<AdminLogs />} />
           </Route>

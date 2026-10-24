@@ -65,6 +65,7 @@ type Item struct {
 	ShowTitle      string     `json:"showTitle,omitempty"`
 	ShowPoster     string     `json:"showPoster,omitempty"`
 	ShowBackdrop   string     `json:"showBackdrop,omitempty"`
+	OnWatchlist    bool       `json:"onWatchlist,omitempty"`
 
 	MatchKey   string `json:"-"`
 	MetadataAt int64  `json:"-"`
@@ -93,7 +94,8 @@ const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i
 		WHEN 'season' THEN (SELECT COUNT(*) FROM items e WHERE e.parent_id = i.id
 			AND NOT EXISTS (SELECT 1 FROM watch_state x WHERE x.item_id = e.id AND x.user_id = @uid AND x.watched = 1))
 		ELSE 0 END,
-	COALESCE(sh.title, ''), COALESCE(sh.poster, ''), COALESCE(sh.backdrop, '')
+	COALESCE(sh.title, ''), COALESCE(sh.poster, ''), COALESCE(sh.backdrop, ''),
+	EXISTS (SELECT 1 FROM watchlist wl WHERE wl.user_id = @uid AND wl.item_id = i.id)
 FROM items i
 LEFT JOIN watch_state w ON w.item_id = i.id AND w.user_id = @uid
 LEFT JOIN items sh ON sh.id = i.show_id`
@@ -110,7 +112,7 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 		&it.AddedAt, &it.MatchKey, &it.MetadataAt,
 		&it.Watch.Position, &it.Watch.Duration, &watched, &it.Watch.UpdatedAt,
 		&it.ChildCount, &it.UnwatchedCount,
-		&it.ShowTitle, &it.ShowPoster, &it.ShowBackdrop)
+		&it.ShowTitle, &it.ShowPoster, &it.ShowBackdrop, &it.OnWatchlist)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -275,7 +277,8 @@ func (s *Store) Search(uid int64, q string, limit int) ([]*Item, error) {
 // LeafIDs expands a show or season to its episodes; movies and episodes map to themselves.
 func (s *Store) LeafIDs(id int64) ([]int64, error) {
 	rows, err := s.db.Query(`SELECT id FROM items WHERE (id = ?1 AND kind IN ('movie','episode'))
-		OR (kind = 'episode' AND (show_id = ?1 OR parent_id = ?1))`, id)
+		OR (kind = 'episode' AND (show_id = ?1 OR parent_id = ?1))
+		ORDER BY season_number = 0, season_number, episode_number`, id)
 	if err != nil {
 		return nil, err
 	}

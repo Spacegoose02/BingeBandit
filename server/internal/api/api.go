@@ -64,6 +64,24 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/me/password", s.changePassword)
 			r.Get("/me/prefs", s.getPrefs)
 			r.Put("/me/prefs", s.putPrefs)
+			r.Get("/me/history", s.myHistory)
+			r.Put("/me/profile", s.setProfileVisibility)
+			r.Get("/profiles", s.publicProfiles)
+			r.Get("/profiles/{username}", s.profile)
+
+			r.Get("/watchlist", s.watchlist)
+			r.Post("/watchlist/{id}", s.setWatchlist(true))
+			r.Delete("/watchlist/{id}", s.setWatchlist(false))
+
+			r.Get("/playlists", s.playlists)
+			r.Post("/playlists", s.createPlaylist)
+			r.Get("/playlists/{id}", s.playlist)
+			r.Put("/playlists/{id}", s.renamePlaylist)
+			r.Delete("/playlists/{id}", s.deletePlaylist)
+			r.Post("/playlists/{id}/items", s.addToPlaylist)
+			r.Delete("/playlists/{id}/items/{item}", s.removeFromPlaylist)
+			r.Put("/playlists/{id}/order", s.reorderPlaylist)
+			r.Get("/playlists/{id}/next", s.playlistNext)
 
 			r.Get("/home", s.home)
 			r.Get("/libraries", s.libraries)
@@ -116,6 +134,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/collections/{id}", s.updateCollection)
 				r.Delete("/collections/{id}", s.deleteCollection)
 
+				r.Get("/history", s.adminHistory)
+				r.Get("/statistics", s.adminStatistics)
 				r.Get("/tasks", s.listTasks)
 				r.Put("/tasks/{id}", s.configureTask)
 				r.Post("/tasks/{id}/run", s.runTask)

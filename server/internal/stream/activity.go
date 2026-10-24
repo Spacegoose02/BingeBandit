@@ -29,7 +29,15 @@ type NowPlaying struct {
 	StartedAt   int64   `json:"startedAt"`
 	UpdatedAt   int64   `json:"updatedAt"`
 	TranscodeID string  `json:"transcodeId,omitempty"`
+	// Watched is how many seconds have actually played in this session.
+	Watched float64 `json:"watched"`
+	// PlayID is the play-history row, once the session is long enough to record.
+	PlayID int64 `json:"-"`
 }
+
+// maxPingGap caps how much play time one ping can add, so a laptop that
+// slept with the player open doesn't log hours of viewing.
+const maxPingGap = 20
 
 const activityTTL = 45 // seconds without a ping before a player is dropped
 
@@ -40,16 +48,36 @@ type Activity struct {
 
 func NewActivity() *Activity { return &Activity{m: map[string]*NowPlaying{}} }
 
-func (a *Activity) Update(np NowPlaying) {
+// Update records a ping and returns the session with its accumulated play time.
+func (a *Activity) Update(np NowPlaying) NowPlaying {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	np.UpdatedAt = time.Now().Unix()
+	played := np.Watched // what the client says it has played this session
 	if prev, ok := a.m[np.ID]; ok && prev.ItemID == np.ItemID {
-		np.StartedAt = prev.StartedAt
+		np.StartedAt, np.PlayID, np.Watched = prev.StartedAt, prev.PlayID, prev.Watched
+		// Count the time since the last ping only if the player was playing.
+		if !prev.Paused {
+			np.Watched += float64(min(np.UpdatedAt-prev.UpdatedAt, maxPingGap))
+		}
 	} else {
 		np.StartedAt = np.UpdatedAt
 	}
+	// Prefer the client's own count (it includes the time before the first
+	// ping), but never more than the wall-clock time the session has existed.
+	if played > 0 {
+		np.Watched = min(played, float64(np.UpdatedAt-np.StartedAt+maxPingGap))
+	}
 	a.m[np.ID] = &np
+	return np
+}
+
+func (a *Activity) SetPlayID(id string, playID int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if np, ok := a.m[id]; ok {
+		np.PlayID = playID
+	}
 }
 
 func (a *Activity) Stop(id string) {

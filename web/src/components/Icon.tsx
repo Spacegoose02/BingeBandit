@@ -44,6 +44,12 @@ const paths: Record<string, string> = {
   stack: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+  bookmark: 'M6 3h12v18l-6-4.5L6 21z',
+  list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
+  arrowUp: 'M12 19V5M5 12l7-7 7 7',
+  arrowDown: 'M12 5v14M19 12l-7 7-7-7',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3M12 15h5',
 }
 

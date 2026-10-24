@@ -4,7 +4,16 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: playback polish (M2)
+## Latest: watchlist, playlists, history, stats (M3)
+
+- **Watchlist** (bookmark button; sidebar page; "On Your Watchlist" Home row). Finished movies leave it automatically.
+- **Playlists** (+ button on any item, sidebar page, `/playlist/:id`). Shows and seasons expand to episodes in order. Reorder and remove rows; "Play all" plays continuously through `?playlist=` on the player.
+- **Play history:** a `plays` row is written once a session has played 30s. The player reports the seconds it actually played; the server caps that at wall-clock time. Rows keep title and subtitle, so history survives library removals.
+- **Profiles** (`/profile`, `/profile/:username`): stats plus recent history. Private unless the owner turns sharing on; admins can always view.
+- **Admin Statistics** (`/admin/statistics`): daily plays, top movies, shows and viewers, streaming mode, clients, and paged history. Chart marks use `--chart-mark` (#0d9488), validated with the dataviz palette checker for the dark surface.
+- Migration 5 adds these tables plus `users.profile_public`.
+
+## Playback polish (M2)
 
 - **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex.
 - **Image subtitles** (PGS/VobSub/DVB) are burned in by the transcoder when picked. ffmpeg can't create bitmap subtitles, so this is only unit-tested against the generated command line; **check it with a real Blu-ray rip.**

@@ -32,6 +32,15 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, homeRow{ID: id, Title: title, Items: items})
 		}
 	}
+	if wl, err := s.Store.Watchlist(uid); err == nil {
+		toWatch := []*store.Item{}
+		for _, it := range wl {
+			if (it.Kind == "movie" && !it.Watch.Watched) || (it.Kind == "show" && it.UnwatchedCount > 0) {
+				toWatch = append(toWatch, it)
+			}
+		}
+		add("watchlist", "On Your Watchlist", toWatch, nil)
+	}
 	movies, err := s.Store.RecentlyAdded(uid, "movie", 24)
 	add("recent-movies", "Recently Added Movies", movies, err)
 	shows, err := s.Store.RecentlyAdded(uid, "show", 24)

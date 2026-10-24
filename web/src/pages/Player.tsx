@@ -19,7 +19,16 @@ export default function Player() {
   useDocumentTitle(data ? (data.item.kind === 'episode' ? `${data.item.showTitle} ${episodeLabel(data.item)}` : data.item.title) : 'Player')
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
   if (!data || !prefs) return <div className="player"><div className="spinner" /></div>
-  return <PlayerView key={id} detail={data} prefs={prefs} startAt={Number(params.get('t')) || 0} fileId={Number(params.get('file')) || 0} />
+  return (
+    <PlayerView
+      key={id}
+      detail={data}
+      prefs={prefs}
+      startAt={Number(params.get('t')) || 0}
+      fileId={Number(params.get('file')) || 0}
+      playlistId={Number(params.get('playlist')) || 0}
+    />
+  )
 }
 
 /** Whether this browser can play the file as-is (no server work at all). */
@@ -109,7 +118,19 @@ function streamLabel(s: MediaStream): string {
   return bits.join(' · ')
 }
 
-function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; prefs: Prefs; startAt: number; fileId: number }) {
+function PlayerView({
+  detail,
+  prefs,
+  startAt,
+  fileId,
+  playlistId,
+}: {
+  detail: ItemDetail
+  prefs: Prefs
+  startAt: number
+  fileId: number
+  playlistId: number // continue through this playlist instead of the show
+}) {
   const { item, files = [] } = detail
   const file = files.find((f) => f.id === fileId) ?? files[0]
   const nav = useNavigate()
@@ -125,6 +146,10 @@ function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; pr
   const settlingRef = useRef(true) // a load or seek is in progress, so waiting isn't a stall
   const stalls = useRef<number[]>([])
   const retries = useRef(0)
+  // Seconds actually played (for watch history): small forward steps of
+  // currentTime while playing; seeks and pauses add nothing.
+  const playedRef = useRef(0)
+  const lastTick = useRef<number | null>(null)
   const playSession = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36))
   const hideTimer = useRef<number>()
 
@@ -181,6 +206,7 @@ function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; pr
             mode,
             transcodeId: transcodeRef.current ?? '',
             client: 'Web',
+            played: Math.round(playedRef.current),
           },
           { keepalive: true },
         )
@@ -393,22 +419,26 @@ function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; pr
 
   const onEnded = async () => {
     report()
-    if (item.kind !== 'episode') return nav(`/item/${item.id}`, { replace: true })
+    const done = playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`
+    if (!playlistId && item.kind !== 'episode') return nav(done, { replace: true })
     try {
-      const next = await api.get<Item | undefined>(`/api/items/${item.id}/next`)
+      const next = await api.get<Item | undefined>(
+        playlistId ? `/api/playlists/${playlistId}/next?after=${item.id}` : `/api/items/${item.id}/next`,
+      )
       if (next) {
         setCountdown(10)
         setUpNext(next)
-      } else nav(`/item/${item.showId}`, { replace: true })
+      } else nav(done, { replace: true })
     } catch {
       nav(-1)
     }
   }
+  const nextUrl = (next: Item) => `/play/${next.id}${playlistId ? `?playlist=${playlistId}` : ''}`
 
   useEffect(() => {
     if (!upNext || !prefs.autoPlayNext) return
     if (countdown <= 0) {
-      nav(`/play/${upNext.id}`, { replace: true })
+      nav(nextUrl(upNext), { replace: true })
       return
     }
     const t = window.setTimeout(() => setCountdown((c) => c - 1), 1000)
@@ -465,7 +495,18 @@ function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; pr
           setBuffering(false)
         }}
         onWaiting={onStall}
-        onTimeUpdate={() => setTime(position())}
+        onTimeUpdate={() => {
+          const v = videoRef.current
+          if (v && !v.paused) {
+            const now = v.currentTime
+            const step = lastTick.current === null ? 0 : now - lastTick.current
+            if (step > 0 && step < 2) playedRef.current += step
+            lastTick.current = now
+          }
+          setTime(position())
+        }}
+        onSeeking={() => (lastTick.current = null)}
+        onEmptied={() => (lastTick.current = null)}
         onEnded={onEnded}
         onError={() => {
           // The browser couldn't decode the file after all: let the server convert it.
@@ -587,15 +628,20 @@ function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; pr
 
       {upNext && (
         <div className="up-next">
-          {img(upNext.backdrop, 'w500') && <img src={img(upNext.backdrop, 'w500')} alt="" />}
+          {img(upNext.backdrop || upNext.showBackdrop, 'w500') && <img src={img(upNext.backdrop || upNext.showBackdrop, 'w500')} alt="" />}
           <div>
             <div className="muted small">{prefs.autoPlayNext ? `Up next in ${countdown}s` : 'Up next'}</div>
-            <div className="up-next-title">{episodeLabel(upNext)} · {upNext.title}</div>
+            <div className="up-next-title">
+              {upNext.kind === 'episode' ? `${upNext.showTitle} · ${episodeLabel(upNext)} · ${upNext.title}` : upNext.title}
+            </div>
             <div className="actions">
-              <button className="btn btn-primary" onClick={() => nav(`/play/${upNext.id}`, { replace: true })}>
+              <button className="btn btn-primary" onClick={() => nav(nextUrl(upNext), { replace: true })}>
                 <Icon name="play" fill size={16} /> Play now
               </button>
-              <button className="btn btn-glass" onClick={() => nav(`/item/${item.showId}`, { replace: true })}>
+              <button
+                className="btn btn-glass"
+                onClick={() => nav(playlistId ? `/playlist/${playlistId}` : `/item/${item.showId ?? item.id}`, { replace: true })}
+              >
                 Cancel
               </button>
             </div>

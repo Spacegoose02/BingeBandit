@@ -30,6 +30,14 @@ export default function Layout() {
             <Icon name="search" />
             <span>Search</span>
           </NavLink>
+          <NavLink to="/watchlist" className="nav-item">
+            <Icon name="bookmark" />
+            <span>Watchlist</span>
+          </NavLink>
+          <NavLink to="/playlists" className="nav-item">
+            <Icon name="list" />
+            <span>Playlists</span>
+          </NavLink>
           {libraries && libraries.length > 0 && <div className="nav-section">Libraries</div>}
           {libraries?.map((l) => (
             <NavLink key={l.id} to={`/library/${l.id}`} className="nav-item">
@@ -43,6 +51,10 @@ export default function Layout() {
               <NavLink to="/admin" end className="nav-item">
                 <Icon name="dashboard" />
                 <span>Dashboard</span>
+              </NavLink>
+              <NavLink to="/admin/statistics" className="nav-item">
+                <Icon name="chart" />
+                <span>Statistics</span>
               </NavLink>
               <NavLink to="/admin/libraries" className="nav-item">
                 <Icon name="library" />
@@ -74,6 +86,9 @@ export default function Layout() {
           </button>
           {menuOpen && (
             <div className="menu user-menu" role="menu">
+              <button role="menuitem" onClick={() => nav('/profile')}>
+                <Icon name="user" size={18} /> My profile
+              </button>
               <button role="menuitem" onClick={() => nav('/account')}>
                 <Icon name="key" size={18} /> Account
               </button>
