@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -60,6 +61,7 @@ type Server struct {
 	oidc        *oidcFlows
 	netp        netHolder
 	unlocks     unlocks
+	restoreMu   sync.Mutex      // one restore at a time
 	ctx         context.Context // server lifetime, for work that outlives a request
 }
 
@@ -69,6 +71,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 	s.links = newLinkManager()
 	s.oidc = newOIDCFlows()
 	s.ctx = ctx
+	if s.Activity != nil {
+		s.Activity.OnExpire = s.playerExpired
+		go s.sweepPlayers(ctx)
+	}
 	s.reloadNetwork()
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -85,6 +91,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		})
 		r.Get("/setup", s.setupStatus)
 		r.Post("/setup", s.setup)
+		r.Post("/setup/restore", s.setupRestore)
 		r.Post("/auth/login", s.login)
 		r.Post("/link/start", s.linkStart)
 		r.Get("/link/poll", s.linkPoll)
@@ -279,6 +286,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/tasks/{id}/run", s.runTask)
 				r.Get("/backups", s.listBackups)
 				r.Post("/backups/{name}/restore", s.restoreBackup)
+				r.Get("/backups/{name}/download", s.downloadBackup)
+				r.Post("/backups/upload", s.uploadRestore)
 				r.Get("/logs", s.logLines)
 				r.Get("/logs/download", s.downloadLog)
 
@@ -363,4 +372,18 @@ func clientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// sweepPlayers drops players that stopped pinging, so player.stop is sent for them too.
+func (s *Server) sweepPlayers(ctx context.Context) {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.Activity.List()
+		}
+	}
 }

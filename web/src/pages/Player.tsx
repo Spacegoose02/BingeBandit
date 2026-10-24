@@ -553,7 +553,10 @@ function PlayerView({
           setPaused(true)
           report()
         }}
+        onSeeked={() => report()}
         onPlaying={() => {
+          // Report at once, so plugins following the player (Hue) see starts and resumes.
+          if (!startedRef.current || paused) queueMicrotask(() => report())
           startedRef.current = true
           settlingRef.current = false
           retries.current = 0

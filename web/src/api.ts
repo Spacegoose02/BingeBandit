@@ -40,3 +40,19 @@ export function img(url: string | undefined, width: string): string | undefined 
   if (!url) return undefined
   return url.startsWith('/api/images/') ? `${url}?w=${width}` : url
 }
+
+/** Sends a database backup file as the request body (it can be large, so not as a form). */
+export async function uploadBackup(path: string, file: File): Promise<{ restored: string; previous?: string }> {
+  const res = await fetch(path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'X-Requested-With': 'BingeBandit', 'Content-Type': 'application/octet-stream' },
+    body: file,
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) {
+    if (res.status === 423) window.dispatchEvent(new Event('bb:locked'))
+    throw new ApiError(res.status, data?.error ?? res.statusText, data ?? undefined)
+  }
+  return data
+}

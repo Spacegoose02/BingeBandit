@@ -172,13 +172,45 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// transcodeAccessEvery is how often a running transcode re-checks that its
+// user can still see the file, so taking a library away (or deleting the
+// user or library) also ends playback that already started.
+const transcodeAccessEvery = 30 * time.Second
+
 func (s *Server) transcodeSession(w http.ResponseWriter, r *http.Request) *stream.Session {
 	sess := s.Transcoder.Get(chi.URLParam(r, "sid"))
-	if sess == nil || (sess.UserID != currentUser(r).ID && !currentUser(r).IsAdmin) {
+	if sess == nil || (sess.UserID != currentUser(r).ID && !currentUser(r).IsAdmin) ||
+		(sess.AccessCheckDue(transcodeAccessEvery) && !s.transcodeAllowed(sess)) {
 		writeErr(w, http.StatusNotFound, "transcode session not found")
 		return nil
 	}
 	return sess
+}
+
+// transcodeAllowed reports whether the user who started sess can still see
+// its file, and stops the session when they can't.
+func (s *Server) transcodeAllowed(sess *stream.Session) bool {
+	mf, err := s.Store.File(sess.FileID)
+	if err == nil {
+		_, err = s.Store.Item(sess.UserID, mf.ItemID)
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return true // allowed, or a passing database error that shouldn't end playback
+	}
+	log.Printf("transcode %s: user %d can no longer see file %d; stopping", sess.ID, sess.UserID, sess.FileID)
+	s.Transcoder.Stop(sess.ID)
+	return false
+}
+
+// recheckTranscodes ends running transcodes whose users lost access. It runs
+// right after library access changes.
+func (s *Server) recheckTranscodes() {
+	if s.Transcoder == nil {
+		return
+	}
+	for _, sess := range s.Transcoder.List() {
+		s.transcodeAllowed(sess)
+	}
 }
 
 func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +288,9 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		s.Store.RemoveFromWatchlist(u.ID, it.ID) // finished: no longer "to watch"
 	}
 	if req.PlaySessionID != "" {
+		prev, had := s.Activity.Get(req.PlaySessionID)
 		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
+		s.emitPlayer(prev, had, np, it, req.Stopped)
 		s.recordPlay(np, it, watched)
 		if watched && !it.Watch.Watched {
 			s.Emit("playback.finished", s.playbackEvent(np, it))
@@ -273,6 +307,45 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+}
+
+// emitPlayer sends the live player events, which follow the player itself
+// (unlike playback.*, which wait for 30 s of play): player.play on a
+// session's first ping, player.pause and player.resume, player.stop, and
+// player.progress on every ping (for plugins that follow the position).
+func (s *Server) emitPlayer(prev stream.NowPlaying, had bool, np stream.NowPlaying, it *store.Item, stopped bool) {
+	ev := s.playerEvent(np, it)
+	switch {
+	case !had || prev.ItemID != np.ItemID:
+		s.Emit("player.play", ev)
+	case prev.Paused != np.Paused && np.Paused:
+		s.Emit("player.pause", ev)
+	case prev.Paused != np.Paused:
+		s.Emit("player.resume", ev)
+	}
+	if stopped {
+		ev["reason"] = "stopped"
+		s.Emit("player.stop", ev)
+		return
+	}
+	s.Emit("player.progress", ev)
+}
+
+// playerExpired reports a player that stopped pinging (closed tab, lost network).
+func (s *Server) playerExpired(np stream.NowPlaying) {
+	it, err := s.Store.Item(0, np.ItemID)
+	if err != nil {
+		return
+	}
+	ev := s.playerEvent(np, it)
+	ev["reason"] = "timeout"
+	s.Emit("player.stop", ev)
+}
+
+func (s *Server) playerEvent(np stream.NowPlaying, it *store.Item) map[string]any {
+	ev := s.playbackEvent(np, it)
+	ev["sessionId"], ev["fileId"], ev["paused"] = np.ID, np.FileID, np.Paused
+	return ev
 }
 
 // playbackEvent is the webhook payload for playback events.

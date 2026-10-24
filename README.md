@@ -20,7 +20,7 @@
 - Users with admin and regular roles, an admin dashboard with Now Playing (local/remote, IP, direct vs transcode, source → target) and library stats
 - **Live TV**: M3U and XMLTV sources, channels with automatic fallback streams, one shared provider connection per channel, a TV guide, a live player with a mini guide, Dispatcharr-style stats, and M3U/XMLTV output for other apps
 - Watchlist, playlists, watch history, profiles, server statistics, and intro/credits detection with Skip buttons
-- **Plugins** that run as their own processes or containers and use a plugin API ([docs/PLUGINS.md](docs/PLUGINS.md)); Watchlist RSS is bundled
+- **Plugins** that run as their own processes or containers and use a plugin API ([docs/PLUGINS.md](docs/PLUGINS.md)); Watchlist RSS and Hue Sync (lights follow the screen) are bundled
 - A single binary with the web UI embedded, for Windows, Linux, macOS and Docker/Unraid
 
 ## Run it

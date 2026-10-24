@@ -130,6 +130,14 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     [item, file, duration, paused, mode],
   )
 
+  // Pausing and resuming are reported at once, for plugins that follow the player (Hue).
+  const pauseSeen = useRef(false)
+  useEffect(() => {
+    if (pauseSeen.current) report()
+    pauseSeen.current = true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused])
+
   // Report a final position and free the transcoder when leaving.
   const reportRef = useRef(report)
   reportRef.current = report

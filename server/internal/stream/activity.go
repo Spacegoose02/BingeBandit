@@ -44,6 +44,8 @@ const activityTTL = 45 // seconds without a ping before a player is dropped
 type Activity struct {
 	mu sync.Mutex
 	m  map[string]*NowPlaying
+	// OnExpire is called for each player dropped for not pinging.
+	OnExpire func(NowPlaying)
 }
 
 func NewActivity() *Activity { return &Activity{m: map[string]*NowPlaying{}} }
@@ -72,6 +74,17 @@ func (a *Activity) Update(np NowPlaying) NowPlaying {
 	return np
 }
 
+// Get returns a session as of its last ping.
+func (a *Activity) Get(id string) (NowPlaying, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	np, ok := a.m[id]
+	if !ok {
+		return NowPlaying{}, false
+	}
+	return *np, true
+}
+
 func (a *Activity) SetPlayID(id string, playID int64) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -86,17 +99,25 @@ func (a *Activity) Stop(id string) {
 	a.mu.Unlock()
 }
 
+// List returns the current players, dropping ones that stopped pinging.
 func (a *Activity) List() []NowPlaying {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	cutoff := time.Now().Unix() - activityTTL
-	out := []NowPlaying{}
+	out, expired := []NowPlaying{}, []NowPlaying{}
 	for id, np := range a.m {
 		if np.UpdatedAt < cutoff {
 			delete(a.m, id)
+			expired = append(expired, *np)
 			continue
 		}
 		out = append(out, *np)
+	}
+	onExpire := a.OnExpire
+	a.mu.Unlock()
+	if onExpire != nil {
+		for _, np := range expired {
+			onExpire(np)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt < out[j].StartedAt })
 	return out

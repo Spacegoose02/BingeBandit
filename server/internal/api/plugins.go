@@ -189,6 +189,7 @@ func (s *Server) pluginAPI(r chi.Router) {
 	r.Get("/items/{id}", s.item)
 	r.Get("/lookup", s.pluginLookup)
 	r.Get("/search", s.search)
+	r.Get("/files/{id}/direct", s.directPlay)
 	r.Get("/images/tmdb/{file}", s.tmdbImage)
 	r.Get("/images/local/{file}", s.localImage)
 	r.Route("/users/{uid}", func(r chi.Router) {

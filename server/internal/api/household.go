@@ -181,6 +181,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.recheckTranscodes()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -226,6 +227,7 @@ func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	s.recheckTranscodes()
 	w.WriteHeader(http.StatusNoContent)
 }
 

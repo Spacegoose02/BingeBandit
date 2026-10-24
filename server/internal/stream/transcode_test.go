@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bingebandit/internal/store"
 )
@@ -74,5 +75,20 @@ func TestAudioArgs(t *testing.T) {
 		if got != c.want || s.AudioCodec != c.codec || s.AudioChannels != c.ch || s.AudioCopy != (c.want == "-c:a copy") {
 			t.Errorf("%s: got %q (%s %d copy=%v), want %q", c.name, got, s.AudioCodec, s.AudioChannels, s.AudioCopy, c.want)
 		}
+	}
+}
+
+func TestAccessCheckDue(t *testing.T) {
+	s := &Session{}
+	s.accessChecked.Store(time.Now().UnixNano())
+	if s.AccessCheckDue(time.Minute) {
+		t.Fatal("due right after a check")
+	}
+	s.accessChecked.Store(time.Now().Add(-2 * time.Minute).UnixNano())
+	if !s.AccessCheckDue(time.Minute) {
+		t.Fatal("not due after the interval")
+	}
+	if s.AccessCheckDue(time.Minute) {
+		t.Fatal("due twice in a row")
 	}
 }
