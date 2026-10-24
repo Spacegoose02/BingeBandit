@@ -27,6 +27,7 @@ const (
 	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
 	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
 	SettingTraktSecret       = "trakt_client_secret"
+	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
 )
 
 var SettingDefaults = map[string]string{
@@ -55,6 +56,7 @@ var SettingDefaults = map[string]string{
 	SettingRemoteAccess:      "true",
 	SettingTraktClientID:     "",
 	SettingTraktSecret:       "",
+	SettingLiveTimeshift:     "15",
 }
 
 func (s *Store) Setting(key string) string {

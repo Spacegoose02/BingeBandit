@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -33,6 +34,7 @@ const (
 	headBytes      = 3 << 20          // start of the stream kept for codec probing
 	maxPasses      = 3                // times to cycle through a channel's streams before giving up
 	hlsSegmentSecs = 2
+	hlsMinSegments = 8 // playlist length when time-shift is off
 )
 
 var (
@@ -78,6 +80,8 @@ type Manager struct {
 	ffmpeg  string
 	ffprobe string
 	dataDir string
+
+	hw hwHealth
 
 	mu     sync.Mutex
 	relays map[int64]*Relay
@@ -151,6 +155,22 @@ func (m *Manager) Touch(channelID int64, viewerID string) bool {
 	return false
 }
 
+// Ping keeps an HLS viewer alive while its player isn't fetching the
+// playlist, for example while paused. It reports whether the viewer is still
+// connected.
+func (m *Manager) Ping(viewerID string) bool {
+	for _, r := range m.snapshot() {
+		r.mu.Lock()
+		v := r.viewers[viewerID]
+		r.mu.Unlock()
+		if v != nil {
+			v.lastSeen.Store(time.Now().Unix())
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Manager) relay(channelID int64) *Relay {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -183,6 +203,38 @@ func (m *Manager) sourceInUse(sourceID int64, except *Relay) int {
 		}
 	}
 	return n
+}
+
+// reclaimIdle stops one relay that is pulling from the source but has no
+// viewers left (someone flipped away or a guide preview moved on), so its
+// connection can be used by a channel someone wants to watch now. Without
+// this, flipping channels on a provider with a connection limit fails until
+// the idle relay times out.
+func (m *Manager) reclaimIdle(sourceID int64, except *Relay) bool {
+	m.mu.Lock()
+	var idle *Relay
+	for _, r := range m.relays {
+		if r == except || r.stopped.Load() || r.sourceID.Load() != sourceID {
+			continue
+		}
+		r.mu.Lock()
+		empty := len(r.viewers) == 0
+		r.mu.Unlock()
+		if empty {
+			idle = r
+			break
+		}
+	}
+	if idle != nil {
+		idle.stop("its connection was needed for another channel")
+	}
+	m.mu.Unlock()
+	if idle == nil {
+		return false
+	}
+	// Give the provider a moment to see the old connection close.
+	sleepCtx(except.ctx, 500*time.Millisecond)
+	return true
 }
 
 func (m *Manager) janitor() {
@@ -310,7 +362,7 @@ func (r *Relay) run() {
 			if r.ctx.Err() != nil {
 				return
 			}
-			if s.MaxStreams > 0 && r.m.sourceInUse(s.SourceID, r) >= s.MaxStreams {
+			if s.MaxStreams > 0 && r.m.sourceInUse(s.SourceID, r) >= s.MaxStreams && !r.m.reclaimIdle(s.SourceID, r) {
 				busy++
 				continue
 			}
@@ -332,10 +384,14 @@ func (r *Relay) run() {
 			log.Printf("live tv: channel %v %q: stream %q failed: %v; trying the next one", r.channel.Number, r.channel.Name, s.Name, err)
 		}
 		if busy == len(streams) {
+			// Someone may be just leaving another channel; wait a pass
+			// before telling the viewer every connection is taken.
 			r.mu.Lock()
 			r.lastError = ErrAllBusy.Error()
 			r.mu.Unlock()
-			return
+			if pass == maxPasses-1 {
+				return
+			}
 		}
 		select {
 		case <-r.ctx.Done():
@@ -515,7 +571,9 @@ type RelayStat struct {
 	Bytes      int64        `json:"bytes"`
 	AvgBps     float64      `json:"avgBps"`
 	CurrentBps float64      `json:"currentBps"`
-	Video      string       `json:"video,omitempty"` // copy | transcode, once HLS runs
+	Video      string       `json:"video,omitempty"`   // copy | transcode, once HLS runs
+	Encoder    string       `json:"encoder,omitempty"` // when transcoding: none (CPU) | nvenc | qsv | vaapi | amf | videotoolbox
+	HWError    string       `json:"hwError,omitempty"` // why the configured hardware encoder isn't being used
 	Failovers  int          `json:"failovers"`
 	LastError  string       `json:"lastError,omitempty"`
 	Viewers    []ViewerStat `json:"viewers"`
@@ -541,6 +599,12 @@ func (r *Relay) stat() RelayStat {
 	}
 	if r.hls != nil {
 		st.Video = r.hls.video
+		if st.Video == "transcode" {
+			st.Encoder = r.hls.encoder
+			if want := r.m.st.Setting(store.SettingHWEncoder); want != "none" && want != st.Encoder {
+				st.HWError = r.m.hw.lastFailure(want)
+			}
+		}
 	}
 	for _, v := range r.viewers {
 		st.Viewers = append(st.Viewers, ViewerStat{ID: v.ID, Username: v.Username, IP: v.IP, Kind: v.Kind, Connected: v.Connected})
@@ -565,11 +629,12 @@ func (m *Manager) Stats() []RelayStat {
 // hlsOutput is one ffmpeg per channel turning the relayed MPEG-TS into a
 // rolling HLS playlist that every web viewer of the channel shares.
 type hlsOutput struct {
-	dir   string
-	video string // copy | transcode
-	in    chan []byte
-	done  chan struct{} // closed when ffmpeg has exited (or never started)
-	once  sync.Once
+	dir     string
+	video   string // copy | transcode
+	encoder string // when transcoding: the encoder in use
+	in      chan []byte
+	done    chan struct{} // closed when ffmpeg has exited (or never started)
+	once    sync.Once
 
 	mu      sync.Mutex
 	cmd     *exec.Cmd
@@ -626,17 +691,21 @@ func (r *Relay) ensureHLS() {
 			close(h.done)
 			return
 		}
-		args := []string{"-hide_banner", "-loglevel", "error", "-nostdin",
-			"-fflags", "+genpts+discardcorrupt", "-analyzeduration", "3000000", "-probesize", "3000000",
-			"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0?", "-map", "0:a:0?"}
+		args := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
+		var videoArgs []string
 		if h.video == "copy" {
-			args = append(args, "-c:v", "copy")
+			videoArgs = []string{"-c:v", "copy"}
 		} else {
-			// Broadcast feeds are often interlaced MPEG-2: deinterlace while converting.
-			args = append(args, liveEncoder(r.m.st.Setting(store.SettingHWEncoder))...)
+			h.encoder = r.m.hw.pick(r.m.st.Setting(store.SettingHWEncoder))
+			var in []string
+			in, videoArgs = liveEncoder(h.encoder)
+			args = append(args, in...)
 		}
+		args = append(args, "-fflags", "+genpts+discardcorrupt", "-analyzeduration", "3000000", "-probesize", "3000000",
+			"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0?", "-map", "0:a:0?")
+		args = append(args, videoArgs...)
 		args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k",
-			"-f", "hls", "-hls_time", fmt.Sprint(hlsSegmentSecs), "-hls_list_size", "8",
+			"-f", "hls", "-hls_time", fmt.Sprint(hlsSegmentSecs), "-hls_list_size", fmt.Sprint(r.m.playlistSegments()),
 			"-hls_flags", "delete_segments+independent_segments+omit_endlist",
 			"-hls_segment_filename", filepath.Join(dir, "s%06d.ts"), filepath.Join(dir, "live.m3u8"))
 		cmd := exec.Command(r.m.ffmpeg, args...)
@@ -679,11 +748,21 @@ func (r *Relay) ensureHLS() {
 				}
 			}
 		}()
+		started := time.Now()
 		err = cmd.Wait()
 		close(h.done)
 		stdin.Close()
 		if err != nil && !r.stopped.Load() {
-			log.Printf("live tv: channel %q HLS output ended: %v %s", r.channel.Name, err, strings.TrimSpace(stderr.String()))
+			msg := strings.TrimSpace(stderr.String())
+			log.Printf("live tv: channel %q HLS output ended: %v %s", r.channel.Name, err, msg)
+			if h.encoder != "" && h.encoder != "none" && time.Since(started) < 20*time.Second {
+				// A hardware encoder that dies right away will keep dying;
+				// the next start converts on the CPU instead.
+				if msg == "" {
+					msg = err.Error()
+				}
+				r.m.hw.markFailed(h.encoder, lastLines(msg, 4))
+			}
 		}
 		// Let the next playlist request start a fresh output if viewers remain.
 		r.mu.Lock()
@@ -694,39 +773,57 @@ func (r *Relay) ensureHLS() {
 	}()
 }
 
-func liveEncoder(hw string) []string {
-	vf := []string{"-vf", "yadif=mode=send_frame:deint=interlaced,format=yuv420p"}
+// liveFilter deinterlaces while converting: broadcast feeds are often
+// interlaced MPEG-2.
+const liveFilter = "yadif=mode=send_frame:deint=interlaced,format=yuv420p"
+
+// liveEncoder returns the ffmpeg arguments for converting a channel's video,
+// split into those that go before the input and those after it.
+func liveEncoder(hw string) (in, out []string) {
+	in, out = encodeArgs(hw, liveFilter, "6M", "8M")
 	g := []string{"-g", fmt.Sprint(hlsSegmentSecs * 30), "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", hlsSegmentSecs)}
-	switch hw {
-	case "nvenc":
-		return append(append(vf, "-c:v", "h264_nvenc", "-preset", "p4", "-b:v", "6M", "-maxrate", "8M", "-bufsize", "12M"), g...)
-	case "qsv":
-		return append(append([]string{"-vf", "yadif=mode=send_frame:deint=interlaced,format=nv12"}, "-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", "6M"), g...)
-	case "amf":
-		return append(append(vf, "-c:v", "h264_amf", "-quality", "speed", "-b:v", "6M"), g...)
-	default:
-		return append(append(vf, "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-crf", "22", "-maxrate", "8M", "-bufsize", "12M"), g...)
-	}
+	return in, append(out, g...)
 }
 
-// probeVideo runs ffprobe over the buffered start of the stream.
+// playlistSegments is how many segments each channel's live playlist keeps:
+// the time-shift window viewers can pause into and rewind through.
+func (m *Manager) playlistSegments() int {
+	mins, err := strconv.Atoi(m.st.Setting(store.SettingLiveTimeshift))
+	if err != nil || mins <= 0 {
+		return hlsMinSegments
+	}
+	return max(hlsMinSegments, mins*60/hlsSegmentSecs)
+}
+
+// probeVideo runs ffprobe over the buffered start of the stream. It tries
+// early with a little data (enough for most streams, and it gets the first
+// picture out sooner) and again with more if that wasn't enough.
 func (r *Relay) probeVideo() string {
 	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) {
-		r.mu.Lock()
-		n := r.head.Len()
-		r.mu.Unlock()
-		if n >= 1<<20 || r.stopped.Load() {
-			break
+	for _, want := range []int{256 << 10, 1 << 20} {
+		for time.Now().Before(deadline) {
+			r.mu.Lock()
+			n := r.head.Len()
+			r.mu.Unlock()
+			if n >= want || r.stopped.Load() {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
 		}
-		time.Sleep(200 * time.Millisecond)
+		r.mu.Lock()
+		head := append([]byte(nil), r.head.Bytes()...)
+		r.mu.Unlock()
+		if len(head) == 0 || r.stopped.Load() {
+			return ""
+		}
+		if codec := r.ffprobeCodec(head); codec != "" || !time.Now().Before(deadline) {
+			return codec
+		}
 	}
-	r.mu.Lock()
-	head := append([]byte(nil), r.head.Bytes()...)
-	r.mu.Unlock()
-	if len(head) == 0 {
-		return ""
-	}
+	return ""
+}
+
+func (r *Relay) ffprobeCodec(head []byte) string {
 	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, r.m.ffprobe, "-v", "error", "-f", "mpegts", "-i", "pipe:0",

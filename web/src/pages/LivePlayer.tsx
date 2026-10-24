@@ -1,7 +1,7 @@
 import Hls from 'hls.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { api, type ApiError } from '../api'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
 import type { LiveChannel } from '../types'
@@ -17,15 +17,28 @@ export default function LivePlayer() {
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
   const hideTimer = useRef<number>()
+  const failures = useRef(0)
+  const [attempt, setAttempt] = useState(0) // bumped to rejoin after a failure
   const [error, setError] = useState('')
+  const [reconnecting, setReconnecting] = useState(false)
   const [buffering, setBuffering] = useState(true)
+  const [paused, setPaused] = useState(false)
+  const [behind, setBehind] = useState(0) // seconds behind live
   const [guide, setGuide] = useState(() => localStorage.getItem('bb.miniGuide') === '1')
   const [controls, setControls] = useState(true)
   const [muted, setMuted] = useState(false)
   const [, tick] = useState(0)
 
-  // Start (or switch) the stream whenever the channel changes.
+  // A new channel starts with a clean slate.
+  useEffect(() => {
+    failures.current = 0
+    setError('')
+  }, [id])
+
+  // Start (or switch) the stream whenever the channel changes, and rejoin
+  // after a failure.
   useEffect(() => {
     if (!id) return
     const video = videoRef.current
@@ -33,8 +46,25 @@ export default function LivePlayer() {
     let hls: Hls | null = null
     let viewer = ''
     let cancelled = false
-    setError('')
+    let retryTimer = 0
+    let ping = 0
     setBuffering(true)
+    setPaused(false)
+    setBehind(0)
+    // Rejoin on its own instead of leaving an error up: streams drop, providers
+    // hiccup and the server restarts the conversion. Quick retries first, then
+    // every 15 s while the error shows.
+    const fail = (msg: string) => {
+      if (cancelled) return
+      cancelled = true
+      hls?.destroy()
+      hls = null
+      hlsRef.current = null
+      failures.current++
+      if (failures.current > 3) setError(msg)
+      setReconnecting(true)
+      retryTimer = window.setTimeout(() => setAttempt((n) => n + 1), failures.current > 3 ? 15000 : 1500 * failures.current)
+    }
     api
       .post<{ viewerId: string; playlist: string }>(`/api/live/channels/${id}/watch`)
       .then((res) => {
@@ -43,16 +73,23 @@ export default function LivePlayer() {
           return
         }
         viewer = res.viewerId
+        // Paused players stop fetching the playlist; this keeps the seat.
+        ping = window.setInterval(() => {
+          api.post(`/api/live/viewers/${viewer}/ping`).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
+        }, 10000)
         if (Hls.isSupported()) {
-          hls = new Hls({ liveSyncDurationCount: 3, maxLiveSyncPlaybackRate: 1.2, manifestLoadingMaxRetry: 6, levelLoadingMaxRetry: 6 })
+          // Start a few segments behind live so short upstream hiccups don't stall
+          // playback; the server keeps a longer window for pausing and rewinding.
+          hls = new Hls({ liveSyncDurationCount: 4, manifestLoadingTimeOut: 30000, manifestLoadingMaxRetry: 6, levelLoadingMaxRetry: 6, fragLoadingMaxRetry: 6 })
+          hlsRef.current = hls
           hls.on(Hls.Events.ERROR, (_e, d) => {
             if (!d.fatal) return
             if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
               const status = (d.response as { code?: number } | undefined)?.code
-              if (status === 503 || status === 410) setError('This channel is unavailable right now. Try again in a moment.')
+              if (status === 503 || status === 410 || status === 404) fail('This channel is unavailable right now.')
               else hls?.startLoad()
             } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls?.recoverMediaError()
-            else setError('Playback failed.')
+            else fail('Playback failed.')
           })
           hls.loadSource(res.playlist)
           hls.attachMedia(video)
@@ -61,16 +98,64 @@ export default function LivePlayer() {
         }
         video.play().catch(() => undefined)
       })
-      .catch((e) => !cancelled && setError((e as Error).message))
+      .catch((e) => fail((e as Error).message || 'This channel is unavailable right now.'))
     const leave = () => viewer && api.del(`/api/live/viewers/${viewer}`, { keepalive: true }).catch(() => undefined)
     window.addEventListener('pagehide', leave)
     return () => {
       cancelled = true
+      window.clearTimeout(retryTimer)
+      window.clearInterval(ping)
       window.removeEventListener('pagehide', leave)
       hls?.destroy()
+      hlsRef.current = null
       leave()
     }
-  }, [id])
+  }, [id, attempt])
+
+  const onPlaying = () => {
+    setBuffering(false)
+    setReconnecting(false)
+    setError('')
+    failures.current = 0
+  }
+
+  // How far behind live we are, for the badge and the "Go live" button.
+  const liveEdge = (): number | null => {
+    const video = videoRef.current
+    if (!video) return null
+    const sync = hlsRef.current?.liveSyncPosition
+    if (sync) return sync
+    return video.seekable.length ? video.seekable.end(video.seekable.length - 1) : null
+  }
+  const onTimeUpdate = () => {
+    const video = videoRef.current
+    const edge = liveEdge()
+    if (!video || edge == null) return
+    const b = Math.max(0, edge - video.currentTime)
+    setBehind(b < 4 ? 0 : Math.round(b))
+  }
+
+  const togglePause = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) video.play().catch(() => undefined)
+    else video.pause()
+  }, [])
+
+  const seekBy = useCallback((secs: number) => {
+    const video = videoRef.current
+    if (!video || !video.seekable.length) return
+    const start = video.seekable.start(0)
+    const end = liveEdge() ?? video.seekable.end(video.seekable.length - 1)
+    video.currentTime = Math.min(end, Math.max(start + 1, video.currentTime + secs))
+  }, [])
+
+  const goLive = useCallback(() => {
+    const video = videoRef.current
+    const edge = liveEdge()
+    if (video && edge != null) video.currentTime = edge
+    video?.play().catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     const t = window.setInterval(() => tick((n) => n + 1), 15000) // progress bar
@@ -106,6 +191,11 @@ export default function LivePlayer() {
         PageDown: () => step(1),
         g: () => setGuide((g) => !g),
         m: () => setMuted((m) => !m),
+        ' ': togglePause,
+        k: togglePause,
+        ArrowLeft: () => seekBy(-10),
+        ArrowRight: () => seekBy(30),
+        l: goLive,
         f: () => (document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()),
         Escape: () => !document.fullscreenElement && nav('/live'),
       }
@@ -117,7 +207,7 @@ export default function LivePlayer() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, poke, nav])
+  }, [step, poke, nav, togglePause, seekBy, goLive])
 
   const now = Date.now() / 1000
   const prog = channel?.now
@@ -137,12 +227,21 @@ export default function LivePlayer() {
           className="player-video"
           playsInline
           autoPlay
-          onPlaying={() => setBuffering(false)}
+          onPlaying={onPlaying}
           onWaiting={() => setBuffering(true)}
+          onPause={() => setPaused(true)}
+          onPlay={() => setPaused(false)}
+          onTimeUpdate={onTimeUpdate}
           onClick={() => setGuide((g) => !g)}
         />
-        {buffering && !error && <div className="spinner" />}
-        {error && <div className="player-error">{error}</div>}
+        {(buffering || reconnecting) && !error && !paused && <div className="spinner" />}
+        {error && (
+          <div className="player-error">
+            <div>{error}</div>
+            <div className="muted small">Retrying on its own. You can also pick another channel.</div>
+            <button className="btn btn-glass btn-sm" onClick={() => setError('')}>Dismiss</button>
+          </div>
+        )}
 
         <div className="player-top">
           <button className="icon-btn" onClick={() => nav('/live')} aria-label="Back to the guide">
@@ -168,12 +267,17 @@ export default function LivePlayer() {
             </div>
           )}
           <div className="spacer" />
-          <span className="live-badge">LIVE</span>
+          <button className={`live-badge ${behind ? 'behind' : ''}`} onClick={goLive} title={behind ? 'Jump to live (L)' : 'Watching live'}>
+            {behind ? `−${fmtBehind(behind)} · GO LIVE` : 'LIVE'}
+          </button>
         </div>
 
         <div className="live-controls">
           <button className="icon-btn" onClick={() => step(-1)} aria-label="Previous channel"><Icon name="arrowUp" size={22} /></button>
           <button className="icon-btn" onClick={() => step(1)} aria-label="Next channel"><Icon name="arrowDown" size={22} /></button>
+          <button className="icon-btn" onClick={() => seekBy(-10)} aria-label="Back 10 seconds"><Icon name="replay10" size={22} /></button>
+          <button className="icon-btn" onClick={togglePause} aria-label={paused ? 'Play' : 'Pause'}><Icon name={paused ? 'play' : 'pause'} size={22} /></button>
+          <button className="icon-btn" onClick={() => seekBy(30)} aria-label="Forward 30 seconds"><Icon name="forward30" size={22} /></button>
           <button className="icon-btn" onClick={() => setMuted((m) => !m)} aria-label={muted ? 'Unmute' : 'Mute'}>
             <Icon name={muted ? 'mute' : 'volume'} size={22} />
           </button>
@@ -222,4 +326,10 @@ export default function LivePlayer() {
       )}
     </div>
   )
+}
+
+function fmtBehind(secs: number): string {
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}:${String(s).padStart(2, '0')}`
 }

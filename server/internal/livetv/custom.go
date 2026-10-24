@@ -170,19 +170,11 @@ func RefillPlayouts(st *store.Store) (string, error) {
 
 // customVideo normalizes every item to the same 720p30 H.264 + AAC stereo so
 // one continuous stream can be built from files with different formats.
-func customVideo(hw string) []string {
+// The returned slices go before and after the input.
+func customVideo(hw string) (in, out []string) {
 	vf := "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,fps=30,setsar=1,format=yuv420p"
-	keys := []string{"-g", "60", "-force_key_frames", "expr:gte(t,n_forced*2)"}
-	switch hw {
-	case "nvenc":
-		return append([]string{"-vf", vf, "-c:v", "h264_nvenc", "-preset", "p4", "-b:v", "4M"}, keys...)
-	case "qsv":
-		return append([]string{"-vf", strings.Replace(vf, "yuv420p", "nv12", 1), "-c:v", "h264_qsv", "-preset", "veryfast", "-b:v", "4M"}, keys...)
-	case "amf":
-		return append([]string{"-vf", vf, "-c:v", "h264_amf", "-quality", "speed", "-b:v", "4M"}, keys...)
-	default:
-		return append([]string{"-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "5M", "-bufsize", "10M"}, keys...)
-	}
+	in, out = encodeArgs(hw, vf, "4M", "5M")
+	return in, append(out, "-g", "60", "-force_key_frames", "expr:gte(t,n_forced*2)")
 }
 
 // pullCustom plays a custom channel: for whatever airs now, ffmpeg reads the
@@ -212,9 +204,11 @@ func (r *Relay) pullCustom() error {
 		r.head.Reset()
 		r.mu.Unlock()
 
-		args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-re",
-			"-ss", fmt.Sprintf("%.3f", offset), "-i", f.Path, "-map", "0:v:0", "-map", "0:a:0?"}
-		args = append(args, customVideo(r.m.st.Setting(store.SettingHWEncoder))...)
+		hw := r.m.hw.pick(r.m.st.Setting(store.SettingHWEncoder))
+		vin, vout := customVideo(hw)
+		args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, vin...)
+		args = append(args, "-re", "-ss", fmt.Sprintf("%.3f", offset), "-i", f.Path, "-map", "0:v:0", "-map", "0:a:0?")
+		args = append(args, vout...)
 		args = append(args, "-c:a", "aac", "-ac", "2", "-ar", "48000", "-b:a", "160k",
 			"-t", fmt.Sprintf("%.3f", remaining),
 			"-output_ts_offset", fmt.Sprintf("%.3f", time.Since(r.started).Seconds()),
@@ -225,6 +219,9 @@ func (r *Relay) pullCustom() error {
 				return nil
 			}
 			if time.Since(started) < 3*time.Second {
+				if hw != "none" {
+					r.m.hw.markFailed(hw, lastLines(err.Error(), 4)) // the retry uses the CPU
+				}
 				return fmt.Errorf("%q could not be played: %w", it.Title, err)
 			}
 			log.Printf("custom channel %q: %q ended early: %v", r.channel.Name, it.Title, err)

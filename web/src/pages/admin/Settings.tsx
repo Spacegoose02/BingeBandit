@@ -24,6 +24,18 @@ export default function AdminSettings() {
   const { data } = useApi<Settings>('/api/admin/settings')
   const [s, setS] = useState<Settings>({})
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [hwTest, setHwTest] = useState<{ ok?: boolean; text: string } | null>(null)
+
+  const testEncoder = async () => {
+    const enc = s.hw_encoder ?? 'none'
+    setHwTest({ text: 'Testing…' })
+    try {
+      const r = await api.post<{ ok: boolean; error?: string }>(`/api/admin/live/test-encoder?encoder=${encodeURIComponent(enc)}`)
+      setHwTest(r.ok ? { ok: true, text: 'Works: a 1080i test picture was converted with this encoder.' } : { ok: false, text: r.error ?? 'Failed.' })
+    } catch (err) {
+      setHwTest({ ok: false, text: (err as Error).message })
+    }
+  }
 
   useEffect(() => {
     if (data) setS(data)
@@ -88,6 +100,14 @@ export default function AdminSettings() {
               ))}
             </select>
           </label>
+          <div>
+            <button type="button" className="btn btn-glass btn-sm" onClick={testEncoder}>Test encoder</button>
+          </div>
+          {hwTest && <pre className={`hw-test ${hwTest.ok === false ? 'bad' : hwTest.ok ? 'ok' : ''}`}>{hwTest.text}</pre>}
+          <p className="muted small">
+            If the hardware encoder fails during Live TV, channels are converted on the CPU for the next 30 minutes and Live TV → Activity says why.
+            Channels that are already H.264 are passed through without converting, so they never use the encoder.
+          </p>
           <label>
             Temporary transcode folder
             <input value={s.transcode_dir ?? ''} onChange={set('transcode_dir')} placeholder="Default: inside the data folder" className="mono" />
@@ -116,6 +136,18 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
             Let users download original files
           </label>
+        </section>
+
+        <section className="panel form">
+          <h3>Live TV playback</h3>
+          <label>
+            Pause and rewind window (minutes)
+            <input type="number" min={0} max={240} value={s.live_timeshift_minutes ?? '15'} onChange={set('live_timeshift_minutes')} />
+          </label>
+          <p className="muted small">
+            How far back viewers can pause or rewind a channel. Each channel being watched keeps this much video in the transcode folder
+            (about 40 MB per minute for HD), so keep it modest if that folder is in RAM. 0 keeps only a short buffer.
+          </p>
         </section>
 
         <section className="panel form">

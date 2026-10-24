@@ -191,6 +191,16 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	// Answer once the first segments exist. Players (ExoPlayer especially)
+	// give up on a playlist request that hangs while the upstream connects
+	// and ffmpeg starts, which showed up as timeouts when flipping channels.
+	if _, err := s.Live.HLSFile(r.Context(), ch.ID, "live.m3u8"); err != nil {
+		s.Live.Leave(v.ID)
+		if r.Context().Err() == nil {
+			writeErr(w, http.StatusServiceUnavailable, err.Error())
+		}
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{
 		"viewerId": v.ID,
 		"playlist": fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),
@@ -233,6 +243,34 @@ func (s *Server) liveHLS(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "video/mp2t")
 	http.ServeContent(w, r, name, time.Time{}, f)
+}
+
+// pingViewer keeps a web or app viewer counted while its player is paused
+// and not fetching the playlist.
+func (s *Server) pingViewer(w http.ResponseWriter, r *http.Request) {
+	if !s.Live.Ping(chi.URLParam(r, "viewer")) {
+		writeErr(w, http.StatusGone, "this viewing session ended; start the channel again")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// testEncoder tries the hardware encoder (the saved one, or ?encoder=) the
+// way live TV uses it and reports ffmpeg's error if it fails.
+func (s *Server) testEncoder(w http.ResponseWriter, r *http.Request) {
+	enc := r.URL.Query().Get("encoder")
+	if enc == "" {
+		enc = s.Store.Setting(store.SettingHWEncoder)
+	}
+	if !validEncoders[enc] {
+		writeErr(w, http.StatusBadRequest, "unknown hardware encoder")
+		return
+	}
+	if err := s.Live.TestEncoder(r.Context(), enc); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) leaveChannel(w http.ResponseWriter, r *http.Request) {
