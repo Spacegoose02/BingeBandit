@@ -16,6 +16,10 @@ RUN go mod download
 COPY server/ ./
 COPY --from=web /src/server/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bingebandit ./cmd/bingebandit
+# Bundled plugins: each gets its own folder with its plugin.json. They're off until an admin turns them on.
+RUN mkdir -p /plugins/watchlist-rss \
+ && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/watchlist-rss/watchlist-rss ./plugins/watchlist-rss \
+ && cp plugins/watchlist-rss/plugin.json /plugins/watchlist-rss/
 
 FROM debian:bookworm-slim
 ARG TARGETARCH
@@ -26,7 +30,8 @@ RUN apt-get update \
  && if [ "$TARGETARCH" = "amd64" ]; then apt-get install -y --no-install-recommends intel-media-va-driver; fi \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /bingebandit /usr/local/bin/bingebandit
-ENV BB_DATA_DIR=/config BB_ADDR=:8484
+COPY --from=server /plugins /usr/local/lib/bingebandit/plugins
+ENV BB_DATA_DIR=/config BB_ADDR=:8484 BB_PLUGINS_DIR=/usr/local/lib/bingebandit/plugins
 VOLUME ["/config"]
 EXPOSE 8484
 ENTRYPOINT ["/usr/local/bin/bingebandit"]

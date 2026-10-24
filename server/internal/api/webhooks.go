@@ -21,9 +21,12 @@ var WebhookEvents = []string{"playback.start", "playback.stop", "playback.finish
 
 var webhookClient = &http.Client{Timeout: 10 * time.Second}
 
-// Emit sends an event to every enabled webhook subscribed to it, in the
+// Emit sends an event to every enabled webhook and plugin subscribed to it, in the
 // background. Payloads are signed with HMAC-SHA256 when a secret is set.
 func (s *Server) Emit(event string, data any) {
+	if s.Plugins != nil {
+		s.Plugins.Emit(event, data)
+	}
 	hooks, err := s.Store.Webhooks()
 	if err != nil {
 		return

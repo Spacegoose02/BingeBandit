@@ -2,11 +2,11 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, logo library, your own channel categories, ThePosterDB search._
+_Last updated: 2026-10-24, logo library, your own channel categories, ThePosterDB search; plugins (M9 phase 1) and profiles._
 
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 
-- **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 17).
+- **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 18).
   - A channel that uses one has `logo = "library:<file>"`; provider URLs work as before. Playlist refreshes never touch channel logos, so library logos stick.
   - "Give each to channels with the same name" and **Match all to channels** use `livetv.MatchName` (ignores case, HD/FHD/4K, `US:`/`CA |` prefixes and bracketed text; "TSN 1 FHD" = "TSN1.svg").
   - **Channels** on a logo picks exactly which channels use it; unticked ones and those of a deleted logo go back to their first stream's provider logo.
@@ -17,6 +17,17 @@ _Last updated: 2026-10-24, logo library, your own channel categories, ThePosterD
 - **ThePosterDB** (Edit → Artwork → Poster): **Search** reads ThePosterDB's search page and the top three title pages (`metadata/tpdb.go`), shows thumbnails (downscaled and cached in `<data>/cache/tpdb/`), and a click downloads `https://theposterdb.com/api/assets/<id>`. You can also paste a title/set/poster link into the search box, and "Use URL" accepts poster page links. **Open site** opens their search in a new tab.
   - Michael chose scraping knowing ThePosterDB's terms forbid it and that it can break or be blocked by Cloudflare. Their markup was never seen raw from here (the build machine can't reach them): the parser looks for any `/posters/<id>` link and any poster id (`data-poster-id`, `/api/assets/<id>`, `/poster/<id>`), and was tested only against a stand-in (`-tpdb-url` / `BB_TPDB_URL`). If real searches come back empty, the fix is in `parseSearch`/`parsePosters`.
   - Anonymous downloads of `/api/assets/<id>` are assumed to work (Kometa uses them); if ThePosterDB starts requiring a login, downloads will fail with the HTTP status.
+
+## Plugins (M9 phase 1)
+
+- **Out-of-process plugins** (`internal/plugins`, protocol in `docs/PLUGINS.md`). A plugin is an HTTP service. Managed plugins sit in a plugins folder (bundled: `BB_PLUGINS_DIR`, `/usr/local/lib/bingebandit/plugins` in Docker; user: `<data>/plugins`) and BingeBandit runs them on loopback with their key in the environment. Remote plugins (own container) are added by address and paired over `POST /bingebandit/pair`.
+- **Admin → Plugins** (`web/src/pages/admin/Plugins.tsx`): on/off, state and errors, a settings form from the manifest (password values never come back), Restart/Check, Add by address. Running plugins' pages show under **Account → Plugins**.
+- **Plugin API** `/api/plugin/v1` (`api/plugins.go`): reuses the user API handlers as the server, or as a user under `/users/{uid}/…`. Events from `Server.Emit` go to webhooks and subscribed plugins; playback events now carry `userId`.
+- **Proxy** `/api/plugins/{id}/*`: strips the user's cookie/Authorization/`?token=`, adds `X-BingeBandit-User-*`, blocks `/bingebandit/*`, drops `Set-Cookie`.
+- **Watchlist RSS** (`server/plugins/watchlist-rss`, bundled, off by default): `feed.xml?token=<API key>` per person, subscribed feeds fill the watchlist (TMDB id from Letterboxd-style tags, else "Title (Year)"), optional removal of finished movies. Non-admins can't subscribe to loopback/private addresses. Built by `build.sh`/`build.ps1`, the Dockerfile and release zips.
+- **Go kit** `server/pkg/bbplugin` for writing plugins.
+- **Tested:** `go test` covers pairing, re-pairing and unpairing, the proxy (credential stripping, `/bingebandit` blocking), events, settings, the plugin API as a user, disabling, and a managed plugin's lifecycle. By hand: the real server with the bundled plugin, subscribing to a local feed (2 of 3 matched), the feed with an API key, the non-admin private-address block, and the admin page, settings modal and plugin page in Chromium. **Not tested:** the Docker image build and release zips (no Docker here), Windows.
+- **Trust model:** plugin pages are served on BingeBandit's origin, so a plugin's JavaScript runs with the viewer's session. Fine for trusted plugins; a sandboxed origin for plugin pages would be the fix if third-party plugins appear.
 
 ## Profiles (after v0.6.0)
 
