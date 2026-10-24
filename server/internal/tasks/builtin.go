@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"bingebandit/internal/library"
+	"bingebandit/internal/markers"
 	"bingebandit/internal/media"
 	"bingebandit/internal/store"
 )
@@ -19,6 +20,7 @@ import (
 type Deps struct {
 	Store   *store.Store
 	Scanner *library.Scanner
+	Markers *markers.Detector
 	DataDir string
 	FFprobe string
 }
@@ -55,6 +57,12 @@ func Builtin(d Deps) []*Task {
 			Description: "Delete cached artwork and subtitles that nothing uses any more.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.cleanCache,
+		},
+		{
+			ID: "detect_markers", Name: "Detect intros and credits",
+			Description: "Compare the audio of episodes in each season to find intros and end credits for the Skip buttons.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
+			Run: d.Markers.Pending,
 		},
 		{
 			ID: "analyze_media", Name: "Analyze media",
@@ -190,6 +198,22 @@ func (d Deps) cleanCache(ctx context.Context) (string, error) {
 		mediaSize, exists := sizes[id]
 		// Sidecar caches carry the subtitle file's size, not the video's.
 		if !exists || (index < store.ExternalIndexBase && mediaSize != size) {
+			drop(p, info)
+		}
+		return nil
+	})
+	// Audio fingerprints: <fileID>-<size>-<part>-<seconds>.fp
+	filepath.Walk(filepath.Join(d.DataDir, "cache", "fingerprints"), func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		parts := strings.Split(info.Name(), "-")
+		id, _ := strconv.ParseInt(parts[0], 10, 64)
+		size := int64(-1)
+		if len(parts) > 1 {
+			size, _ = strconv.ParseInt(parts[1], 10, 64)
+		}
+		if mediaSize, ok := sizes[id]; !ok || mediaSize != size {
 			drop(p, info)
 		}
 		return nil

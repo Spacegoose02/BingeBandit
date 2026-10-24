@@ -4,7 +4,15 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: watchlist, playlists, history, stats (M3)
+## Latest: intro and credits detection (M3)
+
+- Pure Go (no Chromaprint dependency): `internal/markers`. The **Detect intros and credits** scheduled task (nightly, maintenance window) analyzes seasons that have new episodes. A show or season page has a "Detect now" button (admins).
+- Tested with generated episodes that share theme and credits music at different offsets and bitrates. All markers landed within about 1s, with no false positives on unrelated audio. **Not yet tried on real TV episodes**: the thresholds `maxBitErrors`, `maxGapFrames` and `edgeFrames` may need tuning against a real season.
+- `markers` table (migration 6): `source` is `detected` or `manual`. Manual markers (Edit → Advanced on an episode or movie) are never overwritten.
+- Player: Skip Intro, plus Next / Skip Credits. Skipping the credits counts as finishing the episode. User settings for each: button, automatic or off.
+- Movies get no automatic markers (there's nothing to compare against), but manual ones work.
+
+## Watchlist, playlists, history, stats (M3)
 
 - **Watchlist** (bookmark button; sidebar page; "On Your Watchlist" Home row). Finished movies leave it automatically.
 - **Playlists** (+ button on any item, sidebar page, `/playlist/:id`). Shows and seasons expand to episodes in order. Reorder and remove rows; "Play all" plays continuously through `?playlist=` on the player.

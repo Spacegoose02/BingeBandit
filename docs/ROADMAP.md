@@ -63,7 +63,8 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | User profile with stats (hours, movies, episodes, shows, top genres and shows, monthly chart, favorite time); shareable with other users, off by default |
 | ✅ | Admin statistics: plays per day, top movies, shows and viewers, direct play vs. transcode, clients (Tautulli replacement) |
 | ✅ | Auto-adjust quality user setting (done in M2) |
-| | **Intro and credits detection** + skip intro/outro user settings |
+| ✅ | **Intro and credits detection** (audio fingerprints compared across episodes) with Skip Intro / Next buttons; per-user skip settings (button / automatic / off); admins can set or fix times by hand |
+| | Credits detection for movies (no sibling episodes to compare; needs black-frame/text detection) |
 | | Trailers or a custom intro video before a movie (user setting) |
 | | Passcode-protected settings |
 | | Recommendations from other users on Home (opt-in) |

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { api, ApiError, img } from '../api'
 import { useApi } from '../hooks'
-import type { Collection, Item } from '../types'
+import { formatClock } from '../format'
+import type { Collection, Item, Marker } from '../types'
 import { ChipsInput } from './ChipsInput'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
@@ -29,12 +30,14 @@ interface Form {
 export function EditItem({
   item,
   collectionNames,
+  markers = [],
   onClose,
   onSaved,
   onChanged,
 }: {
   item: Item
   collectionNames: string[]
+  markers?: Marker[]
   onClose: () => void
   /** The form was saved; close and reload. */
   onSaved: () => void
@@ -119,7 +122,7 @@ export function EditItem({
     ['tags', 'Tags'],
     ['artwork', 'Artwork'],
   ]
-  if (item.kind === 'show') tabs.push(['advanced', 'Advanced'])
+  if (item.kind !== 'season') tabs.push(['advanced', 'Advanced'])
 
   return (
     <Modal title={`Edit ${item.title}`} onClose={onClose} wide>
@@ -183,7 +186,7 @@ export function EditItem({
             </>
           )}
 
-          {tab === 'advanced' && (
+          {tab === 'advanced' && item.kind === 'show' && (
             <label>
               Episode order
               <select value={form.episodeOrder} onChange={(e) => set('episodeOrder', null)(e.target.value as Form['episodeOrder'])}>
@@ -192,6 +195,7 @@ export function EditItem({
               </select>
             </label>
           )}
+          {tab === 'advanced' && (item.kind === 'movie' || item.kind === 'episode') && <MarkerEditor item={item} markers={markers} onSaved={onChanged} />}
 
           {error && <div className="form-error">{error}</div>}
           <div className="actions end">
@@ -204,6 +208,83 @@ export function EditItem({
         </form>
       )}
     </Modal>
+  )
+}
+
+/** "1:23" or "1:02:03" → seconds; "" → null. */
+function parseClock(v: string): number | null | undefined {
+  if (!v.trim()) return null
+  const parts = v.trim().split(':').map(Number)
+  if (parts.some((n) => !Number.isFinite(n) || n < 0) || parts.length > 3) return undefined
+  return parts.reduce((acc, n) => acc * 60 + n, 0)
+}
+
+/** Intro and credits times for one movie or episode, entered as m:ss. */
+function MarkerEditor({ item, markers, onSaved }: { item: Item; markers: Marker[]; onSaved: () => void }) {
+  const get = (kind: Marker['kind']) => markers.find((m) => m.kind === kind)
+  const fmt = (n?: number) => (n === undefined ? '' : formatClock(n))
+  const [v, setV] = useState({
+    introStart: fmt(get('intro')?.start),
+    introEnd: fmt(get('intro')?.end),
+    creditsStart: fmt(get('credits')?.start),
+    creditsEnd: fmt(get('credits')?.end),
+  })
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const save = async () => {
+    const out: { kind: string; start: number; end: number }[] = []
+    for (const [kind, s, e] of [
+      ['intro', v.introStart, v.introEnd],
+      ['credits', v.creditsStart, v.creditsEnd],
+    ] as const) {
+      const start = parseClock(s)
+      const end = parseClock(e)
+      if (start === undefined || end === undefined) return setMsg({ ok: false, text: 'Use times like 1:05 or 1:02:30' })
+      if (start === null && end === null) continue
+      if (start === null || end === null) return setMsg({ ok: false, text: `Fill in both ${kind} times, or neither` })
+      out.push({ kind, start, end })
+    }
+    try {
+      await api.put(`/api/admin/items/${item.id}/markers`, { markers: out })
+      setMsg({ ok: true, text: 'Saved. Detection will not change these.' })
+      onSaved()
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message })
+    }
+  }
+
+  const source = (kind: Marker['kind']) => {
+    const m = get(kind)
+    return m ? (m.source === 'manual' ? 'set by hand' : 'detected') : 'not found'
+  }
+
+  return (
+    <div className="form">
+      <div className="label">Skip markers</div>
+      <div className="field-grid">
+        <label>
+          Intro starts <span className="muted small">({source('intro')})</span>
+          <input value={v.introStart} onChange={(e) => setV({ ...v, introStart: e.target.value })} placeholder="0:45" />
+        </label>
+        <label>
+          Intro ends
+          <input value={v.introEnd} onChange={(e) => setV({ ...v, introEnd: e.target.value })} placeholder="1:30" />
+        </label>
+        <label>
+          Credits start <span className="muted small">({source('credits')})</span>
+          <input value={v.creditsStart} onChange={(e) => setV({ ...v, creditsStart: e.target.value })} placeholder="42:10" />
+        </label>
+        <label>
+          Credits end
+          <input value={v.creditsEnd} onChange={(e) => setV({ ...v, creditsEnd: e.target.value })} placeholder="43:20" />
+        </label>
+      </div>
+      <p className="muted small">Leave both times of a section empty to let automatic detection handle it.</p>
+      {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
+      <div className="actions">
+        <button type="button" className="btn btn-glass btn-sm" onClick={save}>Save markers</button>
+      </div>
+    </div>
   )
 }
 

@@ -231,6 +231,68 @@ func (s *Server) matchItem(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// setMarkers saves admin-entered intro/credits times for a movie or episode.
+func (s *Server) setMarkers(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	if it.Kind != "movie" && it.Kind != "episode" {
+		writeErr(w, http.StatusBadRequest, "markers belong to movies and episodes")
+		return
+	}
+	var req struct {
+		Markers []store.Marker `json:"markers"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	seen := map[string]bool{}
+	for _, m := range req.Markers {
+		if (m.Kind != "intro" && m.Kind != "credits") || seen[m.Kind] || m.Start < 0 || m.End <= m.Start {
+			writeErr(w, http.StatusBadRequest, "each marker needs kind intro or credits and an end after its start")
+			return
+		}
+		seen[m.Kind] = true
+	}
+	if err := s.Store.SetManualMarkers(it.ID, req.Markers); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// detectMarkers re-runs intro/credits detection for a show or season in the background.
+func (s *Server) detectMarkers(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	id := it.ID
+	if it.Kind == "episode" {
+		id = it.ParentID
+	}
+	seasons, err := s.Store.SeasonIDs(id)
+	if err != nil || len(seasons) == 0 {
+		writeErr(w, http.StatusBadRequest, "detection runs on shows, seasons and episodes")
+		return
+	}
+	go func() {
+		total := 0
+		for _, sid := range seasons {
+			n, err := s.Markers.Season(s.ctx, sid)
+			if err != nil {
+				log.Printf("markers: season %d: %v", sid, err)
+				return
+			}
+			total += n
+		}
+		log.Printf("markers: %q: set %d markers in %d seasons", it.Title, total, len(seasons))
+	}()
+	w.WriteHeader(http.StatusAccepted)
+}
+
 func (s *Server) libraryLabels(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {

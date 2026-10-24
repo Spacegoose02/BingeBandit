@@ -65,6 +65,24 @@ function PlaybackPrefs() {
           Dark box behind subtitles
         </label>
       </div>
+      <div className="field-grid">
+        <label>
+          Intros
+          <select value={p.skipIntro} onChange={(e) => set('skipIntro', e.target.value as Prefs['skipIntro'])}>
+            <option value="button">Show a Skip Intro button</option>
+            <option value="auto">Skip automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
+        <label>
+          End credits
+          <select value={p.skipCredits} onChange={(e) => set('skipCredits', e.target.value as Prefs['skipCredits'])}>
+            <option value="button">Show a Next button</option>
+            <option value="auto">Go to the next episode automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
+      </div>
       <label className="check">
         <input type="checkbox" checked={p.autoQuality} onChange={(e) => set('autoQuality', e.target.checked)} />
         Lower the quality automatically when playback keeps buffering

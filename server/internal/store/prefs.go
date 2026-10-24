@@ -17,11 +17,14 @@ type Prefs struct {
 	SubtitleBackground bool   `json:"subtitleBackground"`
 	AutoQuality        bool   `json:"autoQuality"`  // step quality down when playback keeps buffering
 	AutoPlayNext       bool   `json:"autoPlayNext"` // count down into the next episode
+	// SkipIntro and SkipCredits: "button" (offer it), "auto" (just do it) or "off".
+	SkipIntro   string `json:"skipIntro"`
+	SkipCredits string `json:"skipCredits"`
 }
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
-	AutoQuality: true, AutoPlayNext: true,
+	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
 }
 
 func (p *Prefs) Validate() error {
@@ -34,6 +37,11 @@ func (p *Prefs) Validate() error {
 	case "small", "medium", "large":
 	default:
 		return fmt.Errorf("subtitle size must be small, medium or large")
+	}
+	for _, v := range []string{p.SkipIntro, p.SkipCredits} {
+		if v != "button" && v != "auto" && v != "off" {
+			return fmt.Errorf("skip settings must be button, auto or off")
+		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {
 		return fmt.Errorf("language codes are at most 8 characters")

@@ -24,6 +24,7 @@
 | `server/internal/metadata` | TMDB client, metadata refresh for movies/shows/seasons/episodes, image cache |
 | `server/internal/tasks` | Scheduler (1-minute tick, maintenance window, Run now) and the built-in tasks: scan, metadata refresh, backup, optimize, cache cleanup, media analysis |
 | `server/internal/logs` | `log` output tee: console, rotating `<data>/logs/bingebandit.log` (10 MB × 3) and a 3000-line ring buffer for the Logs page |
+| `server/internal/markers` | Intro/credits detection: ffmpeg decodes mono 5512 Hz audio from each episode's start (≤10 min / 50%) and end (≤7 min / 30%); `Fingerprint` makes a 32-bit hash per ~0.124s frame (33 log-spaced bands, Haitsma–Kalker style); `FindCommon` scores every alignment against a neighbouring episode, then takes the longest run of near-matching frames (≤10 bit errors) and trims sparse edges. Fingerprints are cached in `<data>/cache/fingerprints` |
 | `server/internal/stream` | Transcode sessions (ffmpeg → HLS segments), Now Playing tracker |
 | `server/internal/api` | HTTP handlers. `auth.go`, `browse.go` (home/items/search), `playback.go`, `admin.go` |
 | `server/internal/web` | `go:embed` of `dist/`, which `npm run build` in `web/` fills |

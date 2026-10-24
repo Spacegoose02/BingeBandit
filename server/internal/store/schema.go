@@ -212,4 +212,16 @@ CREATE TABLE playlist_items (
 
 ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 0;
 `,
+	// 6: intro/credits markers. markers_at records when detection last ran on an episode.
+	`
+CREATE TABLE markers (
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	kind     TEXT NOT NULL CHECK (kind IN ('intro','credits')),
+	start_at REAL NOT NULL,
+	end_at   REAL NOT NULL,
+	source   TEXT NOT NULL DEFAULT 'detected' CHECK (source IN ('detected','manual')),
+	PRIMARY KEY (item_id, kind)
+);
+ALTER TABLE items ADD COLUMN markers_at INTEGER NOT NULL DEFAULT 0;
+`,
 }

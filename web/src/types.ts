@@ -154,6 +154,15 @@ export interface Prefs {
   subtitleBackground: boolean
   autoQuality: boolean
   autoPlayNext: boolean
+  skipIntro: 'button' | 'auto' | 'off'
+  skipCredits: 'button' | 'auto' | 'off'
+}
+
+export interface Marker {
+  kind: 'intro' | 'credits'
+  start: number
+  end: number
+  source: 'detected' | 'manual'
 }
 
 export interface MediaFile {
@@ -193,6 +202,7 @@ export interface ItemDetail {
   upNext?: Item
   collections?: { collection: Collection; items: Item[] }[]
   collectionNames?: string[] // admin only: explicit collection links
+  markers?: Marker[]
 }
 
 export interface Collection {

@@ -16,6 +16,7 @@ import (
 
 	"bingebandit/internal/library"
 	"bingebandit/internal/logs"
+	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
@@ -32,6 +33,7 @@ type Server struct {
 	Transcoder *stream.Manager
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
+	Markers    *markers.Detector
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -127,6 +129,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/items/{id}/artwork", s.setArtwork)
 				r.Post("/items/{id}/artwork/upload", s.uploadArtwork)
 				r.Post("/items/{id}/match", s.matchItem)
+				r.Put("/items/{id}/markers", s.setMarkers)
+				r.Post("/items/{id}/detect-markers", s.detectMarkers)
 				r.Get("/match", s.matchSearch)
 
 				r.Get("/libraries/{id}/labels", s.libraryLabels)

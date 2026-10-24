@@ -16,6 +16,7 @@ import (
 	"bingebandit/internal/config"
 	"bingebandit/internal/library"
 	"bingebandit/internal/logs"
+	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
@@ -51,7 +52,10 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{Store: st, Scanner: scanner, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe})...)
+	detector := markers.NewDetector(st, cfg.FFmpeg, filepath.Join(cfg.DataDir, "cache", "fingerprints"))
+	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{
+		Store: st, Scanner: scanner, Markers: detector, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
+	})...)
 	go scheduler.Start(ctx)
 	go scanner.Watch(ctx)
 
@@ -64,6 +68,7 @@ func main() {
 		Transcoder: transcoder,
 		Activity:   stream.NewActivity(),
 		Tasks:      scheduler,
+		Markers:    detector,
 		Logs:       logBuf,
 		Version:    version,
 		DataDir:    cfg.DataDir,

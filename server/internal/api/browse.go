@@ -185,6 +185,9 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp["files"] = files
+		if ms, err := s.Store.Markers(it.ID); err == nil {
+			resp["markers"] = ms
+		}
 	case "show", "season":
 		children, err := s.Store.Children(u.ID, it.ID)
 		if err != nil {

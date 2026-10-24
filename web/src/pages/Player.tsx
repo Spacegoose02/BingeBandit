@@ -189,7 +189,7 @@ function PlayerView({
   }, [])
 
   const report = useCallback(
-    (stopped = false) => {
+    (stopped = false, finished = false) => {
       const video = videoRef.current
       if (!video || !file || !startedRef.current) return
       api
@@ -199,7 +199,8 @@ function PlayerView({
             playSessionId: playSession.current,
             itemId: item.id,
             fileId: file.id,
-            position: video.ended ? duration : position(),
+            // Skipping the credits counts as finishing, wherever they start.
+            position: video.ended || finished ? duration : position(),
             duration,
             paused: video.paused,
             stopped,
@@ -418,7 +419,7 @@ function PlayerView({
   })
 
   const onEnded = async () => {
-    report()
+    report(false, true)
     const done = playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`
     if (!playlistId && item.kind !== 'episode') return nav(done, { replace: true })
     try {
@@ -434,6 +435,33 @@ function PlayerView({
     }
   }
   const nextUrl = (next: Item) => `/play/${next.id}${playlistId ? `?playlist=${playlistId}` : ''}`
+
+  // Intro and credits markers: offer a button or act automatically, once per
+  // visit, so seeking back into the intro doesn't skip it again.
+  const intro = detail.markers?.find((m) => m.kind === 'intro')
+  const credits = detail.markers?.find((m) => m.kind === 'credits')
+  const introDone = useRef(false)
+  const creditsDone = useRef(false)
+  const inIntro = !!intro && time >= intro.start && time < intro.end - 1
+  const inCredits = !!credits && time >= credits.start && time < Math.min(credits.end, duration) - 1 && !upNext
+  const hasNext = item.kind === 'episode' || !!playlistId
+  const skipIntro = () => {
+    introDone.current = true
+    if (intro) seek(intro.end)
+  }
+  const skipCredits = () => {
+    creditsDone.current = true
+    onEnded()
+  }
+  useEffect(() => {
+    if (inIntro && prefs.skipIntro === 'auto' && !introDone.current) {
+      introDone.current = true
+      setToast('Skipped the intro')
+      skipIntro()
+    }
+    if (inCredits && prefs.skipCredits === 'auto' && !creditsDone.current && hasNext) skipCredits()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inIntro, inCredits])
 
   useEffect(() => {
     if (!upNext || !prefs.autoPlayNext) return
@@ -524,6 +552,16 @@ function PlayerView({
       {buffering && !error && <div className="spinner" />}
       {error && <div className="player-error">{error}</div>}
       {toast && <div className="player-toast">{toast}</div>}
+      {inIntro && prefs.skipIntro === 'button' && (
+        <button className="skip-btn" onClick={skipIntro}>
+          Skip Intro <Icon name="next" size={18} />
+        </button>
+      )}
+      {inCredits && prefs.skipCredits === 'button' && (
+        <button className="skip-btn" onClick={skipCredits}>
+          {hasNext ? 'Next' : 'Skip Credits'} <Icon name="next" size={18} />
+        </button>
+      )}
 
       <div className="player-top">
         <button className="icon-btn" onClick={() => nav(-1)} aria-label="Back">
