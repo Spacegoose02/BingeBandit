@@ -305,10 +305,19 @@ _Last updated: 2026-10-24, M8 phase 3 (Android phones, kid lock, Unraid guide)._
 
 ## Known gaps and next steps
 
-1. Add a TMDB key and run "Refresh metadata". Check movie/show matching on a real library and tune `library/names.go` with new test cases.
-2. Rest of M2: TheTVDB, OMDb ratings, image subtitles, transcode throttling (see ROADMAP).
-3. Transcoding: throttle ffmpeg so it doesn't run far ahead; add an adaptive bitrate ladder; burn in image subtitles; add external `.srt` sidecars.
-4. No UI to restore a database backup yet: stop the server and copy the backup over `bingebandit.db`.
-5. Transcode sessions don't re-check library access after they start (they're bound to the user who started them).
-6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for capable clients.
-7. Then start M4 Live TV, the biggest differentiator.
+_Refreshed 2026-10-24. The full backlog is in `docs/ROADMAP.md`._
+
+Needs real hardware or real media (can't be checked with generated test files):
+
+1. **Retest the TV app on v0.6.0.** The onn box wasn't retested after the phone work (M8 phase 3), and the last step of the in-app update (installing the APK) has never been run.
+2. **Metadata matching on a real library.** Add a TMDB key, run "Refresh metadata", and tune `library/names.go` with new test cases.
+3. **Live TV with a real IPTV provider or HDHomeRun.** Watch for provider-specific user agents and HTTPS redirects.
+4. **Intro and credits detection on real episodes.** `maxBitErrors`, `maxGapFrames` and `edgeFrames` may need tuning against a real season.
+5. **Custom channel source picker.** Its display-name fix was never re-checked in the browser.
+
+Code gaps:
+
+6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for clients that can play it.
+7. Transcode sessions don't re-check library access after they start (they're bound to the user who started them).
+8. True adaptive bitrate (a multi-rendition HLS ladder).
+9. Backups only go to a folder. Restore works from Admin → Tasks, but there's no upload of a backup file (for example, when moving to a new server) and no remote targets such as S3.

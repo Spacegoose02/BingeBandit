@@ -1,9 +1,13 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"time"
 )
@@ -147,4 +151,205 @@ func (s *Store) UpdateProbe(f *MediaFile) error {
 		f.Container, f.Duration, f.Bitrate, f.VideoCodec, f.Width, f.Height, f.BitDepth, boolInt(f.HDR),
 		f.AudioCodec, f.AudioChannels, string(streams), f.ProbedAt, f.ID)
 	return err
+}
+
+// Restore replaces every row of the live database with the rows of the backup
+// at path. The backup is migrated on a temporary copy first, so a backup from
+// an older version works; one from a newer version is refused. The live file
+// stays in place, so open connections and the rest of the server carry on.
+//
+// keepToken is the session of the admin doing the restore. It survives when
+// the backup has the same admin, so they aren't signed out mid-task.
+func (s *Store) Restore(ctx context.Context, path, keepToken string) error {
+	tmp, err := os.CreateTemp("", "bingebandit-restore-*.db")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	defer os.Remove(tmpPath)
+	if err := copyFile(path, tmpPath); err != nil {
+		return err
+	}
+	if err := checkBackup(tmpPath); err != nil {
+		return err
+	}
+
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// Foreign keys can only be switched outside a transaction. Turn them back
+	// on before the connection returns to the pool.
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer conn.ExecContext(context.Background(), `PRAGMA foreign_keys = ON`)
+	if _, err := conn.ExecContext(ctx, `ATTACH DATABASE ? AS bk`, tmpPath); err != nil {
+		return err
+	}
+	defer conn.ExecContext(context.Background(), `DETACH DATABASE bk`)
+
+	tables, err := tableNames(ctx, conn, "main")
+	if err != nil {
+		return err
+	}
+	backupTables, err := tableNames(ctx, conn, "bk")
+	if err != nil {
+		return err
+	}
+	inBackup := map[string]bool{}
+	for _, t := range backupTables {
+		inBackup[t] = true
+	}
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var keep struct {
+		userID               int64
+		username, device, ip string
+		created, lastSeen    int64
+	}
+	keepErr := tx.QueryRowContext(ctx, `SELECT s.user_id, u.username, s.device, s.ip, s.created_at, s.last_seen
+		FROM main.sessions s JOIN main.users u ON u.id = s.user_id WHERE s.token_hash = ?`, hashToken(keepToken)).
+		Scan(&keep.userID, &keep.username, &keep.device, &keep.ip, &keep.created, &keep.lastSeen)
+	for _, t := range tables {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM main.`+quoteIdent(t)); err != nil {
+			return fmt.Errorf("clear %s: %w", t, err)
+		}
+		if !inBackup[t] {
+			continue
+		}
+		cols, err := sharedColumns(ctx, tx, t)
+		if err != nil {
+			return err
+		}
+		list := strings.Join(cols, ", ")
+		if _, err := tx.ExecContext(ctx, `INSERT INTO main.`+quoteIdent(t)+` (`+list+`) SELECT `+list+` FROM bk.`+quoteIdent(t)); err != nil {
+			return fmt.Errorf("restore %s: %w", t, err)
+		}
+	}
+	if keepErr == nil {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO main.sessions (token_hash, user_id, device, ip, created_at, last_seen)
+			SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM main.users WHERE id = ? AND username = ? AND is_admin = 1)`,
+			hashToken(keepToken), keep.userID, keep.device, keep.ip, keep.created, keep.lastSeen, keep.userID, keep.username); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// checkBackup migrates the copy at path and makes sure it is a sound
+// BingeBandit database with an admin who can sign in.
+func checkBackup(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	var version int
+	err = db.QueryRow(`PRAGMA user_version`).Scan(&version)
+	db.Close()
+	if err != nil {
+		return errors.New("not a BingeBandit backup")
+	}
+	if version > len(migrations) {
+		return errors.New("this backup is from a newer version of BingeBandit; update the server first")
+	}
+	b, err := Open(path)
+	if err != nil {
+		return fmt.Errorf("not a BingeBandit backup: %w", err)
+	}
+	defer b.Close()
+	var check string
+	if err := b.db.QueryRow(`PRAGMA integrity_check`).Scan(&check); err != nil || check != "ok" {
+		return errors.New("the backup is damaged")
+	}
+	var admins int
+	if err := b.db.QueryRow(`SELECT COUNT(*) FROM users WHERE is_admin = 1`).Scan(&admins); err != nil || admins == 0 {
+		return errors.New("the backup has no admin account")
+	}
+	return nil
+}
+
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// tableNames lists the tables of schema, including sqlite_sequence so
+// AUTOINCREMENT counters come back too.
+func tableNames(ctx context.Context, q queryer, schema string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT name FROM `+schema+`.sqlite_master
+		WHERE type = 'table' AND (name NOT LIKE 'sqlite_%' OR name = 'sqlite_sequence') ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// sharedColumns lists the quoted columns that table has in both databases.
+func sharedColumns(ctx context.Context, q queryer, table string) ([]string, error) {
+	names := func(schema string) (map[string]bool, []string, error) {
+		rows, err := q.QueryContext(ctx, `SELECT name FROM pragma_table_info(?, ?)`, table, schema)
+		if err != nil {
+			return nil, nil, err
+		}
+		defer rows.Close()
+		set, order := map[string]bool{}, []string{}
+		for rows.Next() {
+			var n string
+			if err := rows.Scan(&n); err != nil {
+				return nil, nil, err
+			}
+			set[n] = true
+			order = append(order, n)
+		}
+		return set, order, rows.Err()
+	}
+	_, mainCols, err := names("main")
+	if err != nil {
+		return nil, err
+	}
+	bkCols, _, err := names("bk")
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, c := range mainCols {
+		if bkCols[c] {
+			out = append(out, quoteIdent(c))
+		}
+	}
+	return out, nil
+}
+
+func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }

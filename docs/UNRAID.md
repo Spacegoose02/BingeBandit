@@ -97,6 +97,7 @@ Most TVs play files directly. Hardware transcoding helps phones, browsers and re
 ## 7. Backups
 
 - BingeBandit backs up its database daily, during the maintenance window, to `/config/backups` in your appdata. You can change the folder and how many copies to keep under **Server → Tasks**.
+- To go back to a backup, open **Server → Tasks**, scroll to **Restore a backup** and click **Restore** next to it. BingeBandit backs up the current database first, so a restore can be undone the same way. Restart the container afterwards.
 - The **Appdata Backup** plugin also covers `/mnt/user/appdata/bingebandit`. Stop the container during its backup, as with any database app.
 
 ## Troubleshooting

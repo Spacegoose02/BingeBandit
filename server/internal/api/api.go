@@ -235,6 +235,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/tasks", s.listTasks)
 				r.Put("/tasks/{id}", s.configureTask)
 				r.Post("/tasks/{id}/run", s.runTask)
+				r.Get("/backups", s.listBackups)
+				r.Post("/backups/{name}/restore", s.restoreBackup)
 				r.Get("/logs", s.logLines)
 				r.Get("/logs/download", s.downloadLog)
 
