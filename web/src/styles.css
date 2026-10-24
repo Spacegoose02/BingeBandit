@@ -129,7 +129,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
   transition: transform 0.12s, background 0.15s, border-color 0.15s;
 }
 .btn:active { transform: scale(0.97); }
-.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:disabled, .btn.disabled { opacity: 0.5; cursor: default; }
+.btn.disabled { pointer-events: none; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { background: #5eead4; color: var(--accent-ink); }
 .btn-glass { background: rgba(255, 255, 255, 0.08); border-color: var(--border); backdrop-filter: blur(10px); }

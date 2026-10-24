@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api'
+import { api, uploadBackup } from '../../api'
 import { Icon } from '../../components/Icon'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, timeAgo } from '../../format'
@@ -195,6 +195,23 @@ function Restore() {
     reload()
   }
 
+  const upload = async (file: File) => {
+    if (!confirm(`Restore from ${file.name}? Users, watch history, settings and edits are replaced by the ones in the file. The current database is backed up first.`)) return
+    setBusy('upload')
+    setMsg(null)
+    try {
+      const res = await uploadBackup('/api/admin/backups/upload', file)
+      setMsg({
+        ok: true,
+        text: `Restored from ${file.name}. The data from before is saved as ${res.previous}. If the backup came from another server, check the library folders in Settings, then restart the server.`,
+      })
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message })
+    }
+    setBusy('')
+    reload()
+  }
+
   return (
     <>
       <h2 className="section-title">Restore a backup</h2>
@@ -210,11 +227,34 @@ function Restore() {
                 {b.name} · {formatBytes(b.size)} · {timeAgo(b.modified)}
               </div>
             </div>
+            <a className="btn btn-glass btn-sm" href={`/api/admin/backups/${b.name}/download`} download title="Download, to keep elsewhere or move to a new server">
+              <Icon name="download" size={14} /> Download
+            </a>
             <button className="btn btn-glass btn-sm danger" disabled={!!busy} onClick={() => restore(b)}>
               <Icon name="refresh" size={14} className={busy === b.name ? 'spin' : ''} /> Restore
             </button>
           </div>
         ))}
+        <div className="task-row">
+          <div className="grow">
+            <div className="task-name">Restore from a file</div>
+            <div className="muted small">A backup downloaded from this or another BingeBandit server (a .db file)</div>
+          </div>
+          <label className={`btn btn-glass btn-sm danger${busy ? ' disabled' : ''}`}>
+            <Icon name="upload" size={14} className={busy === 'upload' ? 'spin' : ''} /> {busy === 'upload' ? 'Uploading…' : 'Upload'}
+            <input
+              type="file"
+              accept=".db,application/vnd.sqlite3,application/x-sqlite3"
+              hidden
+              disabled={!!busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) upload(f)
+              }}
+            />
+          </label>
+        </div>
       </div>
       {data && <p className="muted small">Backups in <span className="mono">{data.dir}</span></p>}
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'} style={{ maxWidth: 760 }}>{msg.text}</div>}
