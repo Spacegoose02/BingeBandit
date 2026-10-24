@@ -211,6 +211,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/live/sources/{id}", s.saveLiveSource)
 				r.Delete("/live/sources/{id}", s.deleteLiveSource)
 				r.Post("/live/sources/{id}/refresh", s.refreshLiveSource)
+				r.Get("/live/sources/{id}/groups", s.liveSourceGroups)
+				r.Put("/live/sources/{id}/groups", s.saveLiveSourceGroups)
 				r.Get("/live/streams", s.liveStreams)
 				r.Get("/live/groups", s.liveGroups)
 				r.Get("/live/channels", s.adminChannels)

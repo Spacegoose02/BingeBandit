@@ -295,6 +295,7 @@ export interface LiveSource {
   lastRefresh: number
   lastError?: string
   entryCount: number
+  newGroupsEnabled: boolean
 }
 
 export interface LiveStream {

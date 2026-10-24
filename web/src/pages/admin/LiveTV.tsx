@@ -42,6 +42,7 @@ export default function AdminLiveTV() {
 function Sources() {
   const { data, reload } = useApi<LiveSource[]>('/api/admin/live/sources', 5000)
   const [editing, setEditing] = useState<Partial<LiveSource> | null>(null)
+  const [filtering, setFiltering] = useState<LiveSource | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
   const [appKey, setAppKey] = useState<string | null>(null)
   const createAppKey = async () => {
@@ -90,6 +91,7 @@ function Sources() {
             <button className="btn btn-glass btn-sm" disabled={busy === s.id} onClick={() => refresh(s)}>
               <Icon name="refresh" size={16} className={busy === s.id ? 'spin' : ''} /> Refresh
             </button>
+            {kind === 'm3u' && <button className="btn btn-glass btn-sm" onClick={() => setFiltering(s)}>Groups</button>}
             <button className="btn btn-glass btn-sm" onClick={() => setEditing(s)}><Icon name="edit" size={16} /></button>
             <button className="btn btn-glass btn-sm danger" onClick={() => remove(s)} aria-label="Remove source"><Icon name="trash" size={16} /></button>
           </div>
@@ -123,7 +125,98 @@ function Sources() {
         )}
       </div>
       {editing && <SourceEditor source={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
+      {filtering && <GroupFilter source={filtering} onClose={() => setFiltering(null)} onSaved={() => { setFiltering(null); reload() }} />}
     </>
+  )
+}
+
+type SourceGroups = { newGroupsEnabled: boolean; groups: { name: string; enabled: boolean; streams: number }[] }
+
+// GroupFilter picks which of a playlist's groups are imported. Streams in a
+// disabled group are dropped on the next refresh, unless a channel uses them.
+function GroupFilter({ source, onClose, onSaved }: { source: LiveSource; onClose: () => void; onSaved: () => void }) {
+  const { data } = useApi<SourceGroups>(`/api/admin/live/sources/${source.id}/groups`)
+  const [enabled, setEnabled] = useState<Map<string, boolean> | null>(null)
+  const [newGroups, setNewGroups] = useState(true)
+  const [q, setQ] = useState('')
+  const [show, setShow] = useState<'all' | 'on' | 'off'>('all')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!data || enabled) return
+    setEnabled(new Map(data.groups.map((g) => [g.name, g.enabled])))
+    setNewGroups(data.newGroupsEnabled)
+  }, [data, enabled])
+  const on = (name: string) => enabled?.get(name) ?? true
+  const needle = q.trim().toLowerCase()
+  const visible = (data?.groups ?? []).filter(
+    (g) => (!needle || (g.name || '(no group)').toLowerCase().includes(needle)) && (show === 'all' || (show === 'on') === on(g.name)),
+  )
+  const setAll = (names: string[], value: boolean) =>
+    setEnabled((m) => {
+      const n = new Map(m)
+      names.forEach((name) => n.set(name, value))
+      return n
+    })
+  const onCount = data?.groups.filter((g) => on(g.name)).length ?? 0
+  const onStreams = data?.groups.reduce((sum, g) => sum + (on(g.name) ? g.streams : 0), 0) ?? 0
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.put(`/api/admin/live/sources/${source.id}/groups`, {
+        newGroupsEnabled: newGroups,
+        groups: [...(enabled ?? new Map())].map(([name, value]) => ({ name, enabled: value })),
+      })
+      await api.post(`/api/admin/live/sources/${source.id}/refresh`)
+      onSaved()
+    } catch (e) {
+      setError((e as Error).message)
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={`Groups in ${source.name}`} onClose={onClose} wide>
+      <div className="form">
+        <p className="muted small" style={{ margin: 0 }}>
+          Only streams in enabled groups are imported, so Add channels has less to search. Turning a group off never
+          breaks a channel: streams your channels already use are kept.
+        </p>
+        <label className="check">
+          <input type="checkbox" checked={newGroups} onChange={(e) => setNewGroups(e.target.checked)} /> Enable groups that appear in future refreshes
+        </label>
+        <div className="actions">
+          <input className="grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter groups…" style={{ minWidth: 180 }} />
+          <div className="segmented">
+            {(['all', 'on', 'off'] as const).map((v) => (
+              <button key={v} className={show === v ? 'active' : ''} onClick={() => setShow(v)}>
+                {v === 'all' ? 'All' : v === 'on' ? 'Enabled' : 'Disabled'}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-glass btn-sm" onClick={() => setAll(visible.map((g) => g.name), true)}>Enable shown</button>
+          <button className="btn btn-glass btn-sm" onClick={() => setAll(visible.map((g) => g.name), false)}>Disable shown</button>
+        </div>
+        <div className="group-grid">
+          {visible.map((g) => (
+            <button key={g.name} type="button" className={`group-toggle ${on(g.name) ? 'on' : ''}`} onClick={() => setAll([g.name], !on(g.name))}>
+              <Icon name={on(g.name) ? 'check' : 'x'} size={14} />
+              <span className="grow" title={g.name}>{g.name || '(no group)'}</span>
+              <span className="small">{g.streams.toLocaleString()}</span>
+            </button>
+          ))}
+          {data && visible.length === 0 && <div className="muted small">{data.groups.length ? 'No groups match.' : 'No groups yet. Refresh the playlist first.'}</div>}
+        </div>
+        <div className="actions end">
+          <span className="muted small grow">
+            {onCount} of {data?.groups.length ?? 0} groups on · {onStreams.toLocaleString()} streams
+          </span>
+          {error && <span className="form-error small">{error}</span>}
+          <button className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!enabled || busy} onClick={save}>{busy ? 'Refreshing…' : 'Save and refresh'}</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
@@ -256,10 +349,13 @@ function Channels() {
 }
 
 function AddChannels({ onClose, onDone, nextNumber }: { onClose: () => void; onDone: () => void; nextNumber: number }) {
-  const { data: groups } = useApi<{ name: string; count: number }[]>('/api/admin/live/groups')
+  const { data: sources } = useApi<LiveSource[]>('/api/admin/live/sources')
+  const providers = sources?.filter((s) => s.kind === 'm3u') ?? []
+  const [source, setSource] = useState(0)
+  const { data: groups } = useApi<{ name: string; count: number }[]>(`/api/admin/live/groups?source=${source}`)
   const [group, setGroup] = useState('')
   const [q, setQ] = useState('')
-  const { data } = useApi<{ streams: LiveStream[]; total: number }>(`/api/admin/live/streams?limit=200&group=${encodeURIComponent(group)}&q=${encodeURIComponent(q)}`)
+  const { data } = useApi<{ streams: LiveStream[]; total: number }>(`/api/admin/live/streams?limit=200&source=${source}&group=${encodeURIComponent(group)}&q=${encodeURIComponent(q)}`)
   const [picked, setPicked] = useState<Set<number>>(new Set())
   const [start, setStart] = useState(nextNumber)
   const [error, setError] = useState('')
@@ -285,6 +381,17 @@ function AddChannels({ onClose, onDone, nextNumber }: { onClose: () => void; onD
     <Modal title="Add channels" onClose={onClose} wide>
       <div className="form">
         <div className="field-grid">
+          {providers.length > 1 && (
+            <label className="span-2">
+              Provider
+              <select value={source} onChange={(e) => { setSource(Number(e.target.value)); setGroup('') }}>
+                <option value={0}>All providers</option>
+                {providers.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.entryCount.toLocaleString()})</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             Group
             <select value={group} onChange={(e) => setGroup(e.target.value)}>
@@ -312,7 +419,7 @@ function AddChannels({ onClose, onDone, nextNumber }: { onClose: () => void; onD
               <input type="checkbox" checked={picked.has(s.id)} onChange={() => toggle(s.id)} />
               <ChannelLogo channel={s} size={22} />
               <span className="grow">{s.name}</span>
-              <span className="muted small">{s.group}</span>
+              <span className="muted small">{providers.length > 1 && !source ? [s.group, s.sourceName].filter(Boolean).join(' · ') : s.group}</span>
               {s.channelIds?.length ? <span className="pill">in use</span> : null}
             </label>
           ))}
