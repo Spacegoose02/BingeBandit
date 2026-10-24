@@ -4,7 +4,18 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: Live TV phase 2 — DVR, HLS upstreams, logos (M4)
+## Latest: custom channels (M5)
+
+- Admin → Live TV → Channels → **New custom channel**: number, name, an all-day block, optional time blocks, shuffle or order, and sources from libraries, shows, collections, playlists and labels. The editor shows the next 12 airings.
+- **Tested:** a channel with Movies (shuffle, all day) plus Test Show (in order, now to +30 min) built 2,644 entries over 48h.
+  - The guide showed the right "now".
+  - Watching through an item boundary kept the stream continuous, with no fail-overs.
+  - The web player played it at 720p.
+  - A builder unit test covers contiguity, shuffle-without-repeats, timed blocks and refill.
+- **Known limits:** an item that runs past a block's start delays that block (no hard cut). An item with no audio track is streamed without audio rather than with generated silence, which some players dislike. The custom source picker's display-name fix was not re-verified in the browser.
+- Migration 9.
+
+## Live TV phase 2 — DVR, HLS upstreams, logos (M4)
 
 - **HLS upstreams:** `.m3u8` provider streams now relay. Tested with fakeiptv channel 7: video passed through at ~260 kbps.
 - **DVR:**

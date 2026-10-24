@@ -339,4 +339,34 @@ CREATE TABLE recordings (
 );
 CREATE INDEX recordings_due ON recordings(status, start_at);
 `,
+	// 9: custom channels (ErsatzTV-style) built from library content.
+	`
+ALTER TABLE channels ADD COLUMN custom INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE custom_blocks (
+	id           INTEGER PRIMARY KEY,
+	channel_id   INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	position     INTEGER NOT NULL DEFAULT 0,
+	start_minute INTEGER NOT NULL DEFAULT -1, -- minutes after midnight; -1 = all day (the default block)
+	end_minute   INTEGER NOT NULL DEFAULT -1,
+	mode         TEXT NOT NULL DEFAULT 'shuffle' CHECK (mode IN ('shuffle','order')),
+	sources      TEXT NOT NULL DEFAULT '[]',
+	cursor       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE playout_items (
+	id          INTEGER PRIMARY KEY,
+	channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	item_id     INTEGER REFERENCES items(id) ON DELETE SET NULL,
+	file_id     INTEGER NOT NULL,
+	start_at    INTEGER NOT NULL,
+	stop_at     INTEGER NOT NULL,
+	title       TEXT NOT NULL,
+	subtitle    TEXT NOT NULL DEFAULT '',
+	description TEXT NOT NULL DEFAULT '',
+	category    TEXT NOT NULL DEFAULT '',
+	icon        TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX playout_channel ON playout_items(channel_id, start_at);
+`,
 }

@@ -242,9 +242,20 @@ func (s *Store) DeleteRule(id int64) error {
 	return tx.Commit()
 }
 
-// ProgramByID returns one guide entry.
+// ProgramByID returns one guide entry. Negative ids are custom-channel
+// schedule entries (see PlayoutPrograms).
 func (s *Store) ProgramByID(id int64) (*GuideProgram, error) {
 	var p GuideProgram
+	if id < 0 {
+		var ch int64
+		err := s.db.QueryRow(`SELECT id, channel_id, start_at, stop_at, title, subtitle, description, category, icon FROM playout_items WHERE id = ?`, -id).
+			Scan(&p.ID, &ch, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		p.ID, p.EPGID = -p.ID, CustomEPGID(ch)
+		return &p, err
+	}
 	err := s.db.QueryRow(`SELECT id, xmltv_id, start_at, stop_at, title, subtitle, description, category, icon, episode FROM epg_programs WHERE id = ?`, id).
 		Scan(&p.ID, &p.EPGID, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon, &p.Episode)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -200,7 +200,23 @@ export interface AdminChannel {
   epgId?: string
   enabled: boolean
   favorite: boolean
+  custom: boolean
   streams?: ChannelStream[]
+}
+
+export interface ContentSource {
+  type: 'library' | 'show' | 'collection' | 'playlist' | 'label'
+  id?: number
+  label?: string
+  name?: string // display only
+}
+
+export interface Block {
+  id?: number
+  startMinute: number // -1 = all day
+  endMinute: number
+  mode: 'shuffle' | 'order'
+  sources: ContentSource[]
 }
 
 export interface LiveSource {

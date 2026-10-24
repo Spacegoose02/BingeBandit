@@ -42,6 +42,12 @@ func Builtin(d Deps) []*Task {
 			Run: func(ctx context.Context) (string, error) { return livetv.RefreshDue(ctx, d.Store) },
 		},
 		{
+			ID: "build_custom_channels", Name: "Build custom channel schedules",
+			Description:    "Keep 48 hours of programming scheduled on every custom channel.",
+			DefaultEnabled: true, DefaultHours: 1,
+			Run: func(ctx context.Context) (string, error) { return livetv.RefillPlayouts(d.Store) },
+		},
+		{
 			ID: "refresh_metadata", Name: "Refresh metadata",
 			Description: "Re-download titles, artwork, ratings and cast from TMDB for everything (locked fields are kept).",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24 * 7,

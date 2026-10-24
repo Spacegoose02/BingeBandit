@@ -7,6 +7,7 @@ import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
 import type { AdminChannel, LiveSource, LiveStream, RelayStat } from '../../types'
 import { ChannelLogo, channelNo } from '../LiveGuide'
+import { CustomChannelEditor } from './CustomChannel'
 
 type Tab = 'channels' | 'sources' | 'activity'
 
@@ -171,7 +172,9 @@ function Channels() {
   const { data, reload } = useApi<AdminChannel[]>('/api/admin/live/channels')
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<AdminChannel | null>(null)
+  const [custom, setCustom] = useState<AdminChannel | 'new' | null>(null)
   const [q, setQ] = useState('')
+  const nextNumber = Math.floor(Math.max(0, ...(data ?? []).map((c) => c.number))) + 1
 
   const toggle = async (c: AdminChannel) => {
     await api.put(`/api/admin/live/channels/${c.id}`, { ...c, enabled: !c.enabled, streamIds: null })
@@ -190,6 +193,9 @@ function Channels() {
         <button className="btn btn-primary" onClick={() => setAdding(true)}>
           <Icon name="plus" size={18} /> Add channels
         </button>
+        <button className="btn btn-glass" onClick={() => setCustom('new')}>
+          <Icon name="film" size={18} /> New custom channel
+        </button>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a channel" style={{ width: 220 }} />
         <span className="muted small">{data?.length ?? 0} channels</span>
       </div>
@@ -201,22 +207,32 @@ function Channels() {
             <div className="grow">
               <div>{c.name}</div>
               <div className="muted small">
-                {[c.group, c.epgId ? `guide: ${c.epgId}` : 'no guide match', `${c.streams?.length ?? 0} stream${c.streams?.length === 1 ? '' : 's'}`]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {c.custom
+                  ? [c.group, 'custom channel from your library'].filter(Boolean).join(' · ')
+                  : [c.group, c.epgId ? `guide: ${c.epgId}` : 'no guide match', `${c.streams?.length ?? 0} stream${c.streams?.length === 1 ? '' : 's'}`]
+                      .filter(Boolean)
+                      .join(' · ')}
               </div>
             </div>
             <label className="switch" title={c.enabled ? 'Enabled' : 'Hidden from viewers'}>
               <input type="checkbox" checked={c.enabled} onChange={() => toggle(c)} />
               <span />
             </label>
-            <button className="btn btn-glass btn-sm" onClick={() => setEditing(c)}><Icon name="edit" size={16} /> Edit</button>
+            <button className="btn btn-glass btn-sm" onClick={() => (c.custom ? setCustom(c) : setEditing(c))}><Icon name="edit" size={16} /> Edit</button>
             <button className="btn btn-glass btn-sm danger" onClick={() => remove(c)} aria-label="Delete channel"><Icon name="trash" size={16} /></button>
           </div>
         ))}
         {data?.length === 0 && <div className="list-row muted">No channels yet. Add an M3U playlist under Sources, then use Add channels.</div>}
       </div>
-      {adding && <AddChannels onClose={() => setAdding(false)} onDone={() => { setAdding(false); reload() }} nextNumber={Math.floor(Math.max(0, ...(data ?? []).map((c) => c.number))) + 1} />}
+      {adding && <AddChannels onClose={() => setAdding(false)} onDone={() => { setAdding(false); reload() }} nextNumber={nextNumber} />}
+      {custom && (
+        <CustomChannelEditor
+          channel={custom === 'new' ? undefined : custom}
+          nextNumber={nextNumber}
+          onClose={() => setCustom(null)}
+          onSaved={reload}
+        />
+      )}
       {editing && <ChannelEditor channel={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
     </>
   )

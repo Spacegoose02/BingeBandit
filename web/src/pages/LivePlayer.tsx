@@ -156,7 +156,7 @@ export default function LivePlayer() {
                   <span className="ch-num">{channelNo(channel.number)}</span> {channel.name}
                 </div>
                 <div className="player-sub">
-                  {prog ? `${prog.title} · ${clock(prog.start)}–${clock(prog.stop)}` : 'Live'}
+                  {prog ? `${prog.title}${prog.subtitle ? ` — ${prog.subtitle}` : ''} · ${clock(prog.start)}–${clock(prog.stop)}` : 'Live'}
                   {channel.next && ` · Next: ${channel.next.title} at ${clock(channel.next.start)}`}
                 </div>
                 {prog && (

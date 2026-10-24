@@ -94,11 +94,15 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Sports tracker with scores and alerts (ESPN API: college football/basketball, NBA, MLB, MLS, NHL, NFL); notifications when a game or show is about to start.
 - YouTube live channels plugin: an admin-managed list of channels that turn on and off automatically.
 
-## M5: Custom TV channels (ErsatzTV replacement)
+## M5: Custom TV channels (ErsatzTV replacement) 🟡 (phase 1 done)
 
-- Channels built from server content, with schedules.
-- Channels from RSS / API lists (e.g. Yamtrack pending list), named after the source.
-- Everything else ErsatzTV does: filler, commercials/bumpers, watermarks, flex time.
+| | Item |
+|---|---|
+| ✅ | Channels built from server content: libraries, shows, collections (including smart label collections), playlists, labels |
+| ✅ | Schedules: time-of-day blocks over an all-day default; shuffle (each item once per cycle) or in order (continues where it left off) |
+| ✅ | 48-hour playout in the guide; plays like any live channel (shared, DVR-able, in Activity and the M3U export) |
+| | Channels from RSS / API lists (e.g. Yamtrack pending list), named after the source |
+| | Filler, commercials/bumpers, watermarks, flex time, hard block boundaries |
 
 ## M6: Users and security
 

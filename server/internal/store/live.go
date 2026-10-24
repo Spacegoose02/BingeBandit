@@ -330,7 +330,21 @@ func (s *Store) Programs(epgIDs []string, from, to int64) ([]GuideProgram, error
 		}
 		out = append(out, p)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	// Custom channels' "guide" is their playout schedule.
+	for _, id := range epgIDs {
+		if chID, ok := CustomChannelID(id); ok {
+			items, err := s.PlayoutPrograms(chID, from, to)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, items...)
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) PruneProgramsBefore(t int64) error {
@@ -358,6 +372,7 @@ type Channel struct {
 	EPGID    string          `json:"epgId,omitempty"`
 	Enabled  bool            `json:"enabled"`
 	Favorite bool            `json:"favorite"`
+	Custom   bool            `json:"custom"` // built from library content rather than a provider stream
 	Streams  []ChannelStream `json:"streams,omitempty"`
 }
 
@@ -365,7 +380,7 @@ type Channel struct {
 // and the user's favourites. Disabled channels are only included for admins.
 func (s *Store) Channels(uid int64, includeDisabled bool) ([]*Channel, error) {
 	rows, err := s.db.Query(`SELECT c.id, c.number, c.name, c.logo, c.grp, c.epg_id, c.enabled,
-			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?)
+			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?), c.custom
 		FROM channels c WHERE ? OR c.enabled = 1 ORDER BY c.number, c.name COLLATE NOCASE`, uid, includeDisabled)
 	if err != nil {
 		return nil, err
@@ -375,7 +390,7 @@ func (s *Store) Channels(uid int64, includeDisabled bool) ([]*Channel, error) {
 	byID := map[int64]*Channel{}
 	for rows.Next() {
 		var c Channel
-		if err := rows.Scan(&c.ID, &c.Number, &c.Name, &c.Logo, &c.Group, &c.EPGID, &c.Enabled, &c.Favorite); err != nil {
+		if err := rows.Scan(&c.ID, &c.Number, &c.Name, &c.Logo, &c.Group, &c.EPGID, &c.Enabled, &c.Favorite, &c.Custom); err != nil {
 			return nil, err
 		}
 		out = append(out, &c)
@@ -400,9 +415,9 @@ func (s *Store) Channels(uid int64, includeDisabled bool) ([]*Channel, error) {
 func (s *Store) Channel(uid, id int64) (*Channel, error) {
 	var c Channel
 	err := s.db.QueryRow(`SELECT c.id, c.number, c.name, c.logo, c.grp, c.epg_id, c.enabled,
-			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?)
+			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?), c.custom
 		FROM channels c WHERE c.id = ?`, uid, id).
-		Scan(&c.ID, &c.Number, &c.Name, &c.Logo, &c.Group, &c.EPGID, &c.Enabled, &c.Favorite)
+		Scan(&c.ID, &c.Number, &c.Name, &c.Logo, &c.Group, &c.EPGID, &c.Enabled, &c.Favorite, &c.Custom)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

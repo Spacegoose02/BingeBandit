@@ -105,7 +105,7 @@ func newID() string {
 
 // Join adds a viewer to the channel's relay, starting it if needed.
 func (m *Manager) Join(ch *store.Channel, user *store.User, ip, kind string) (*Viewer, error) {
-	if len(ch.Streams) == 0 {
+	if len(ch.Streams) == 0 && !ch.Custom {
 		return nil, ErrNoStreams
 	}
 	v := &Viewer{ID: newID(), UserID: user.ID, Username: user.Username, IP: ip, Kind: kind,
@@ -288,6 +288,21 @@ func (r *Relay) stop(reason string) {
 // and stalls, and skipping providers that are at their connection limit.
 func (r *Relay) run() {
 	defer r.stop("stream ended")
+	if r.channel.Custom {
+		for attempt := 0; attempt < maxPasses && r.ctx.Err() == nil; attempt++ {
+			err := r.pullCustom()
+			if err == nil {
+				return
+			}
+			r.failures.Add(1)
+			r.mu.Lock()
+			r.lastError = err.Error()
+			r.mu.Unlock()
+			log.Printf("live tv: custom channel %q: %v", r.channel.Name, err)
+			sleepCtx(r.ctx, 3*time.Second)
+		}
+		return
+	}
 	streams := r.channel.Streams
 	for pass := 0; pass < maxPasses && r.ctx.Err() == nil; pass++ {
 		busy := 0

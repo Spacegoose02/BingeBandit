@@ -56,6 +56,10 @@
   - A recording is a `ts` viewer of the shared relay writing to disk, so it rides fail-over and shares the provider connection. If the stream drops it rejoins until `stop_at`.
   - Files go to `dvr_folder`, in either "library" naming (`Show/Season NN/Show - SxxEyy - Subtitle.ts`, or `Show/Show - YYYY-MM-DD HH.MM.ts` without episode numbers) or a flat folder.
   - The TV scanner understands date names (season = year, episode = MMDDhhmm, titled with the air date).
+- **Custom channels** (`channels.custom = 1`, `custom_blocks`, `playout_items`): `BuildPlayout` keeps 48h scheduled.
+  - **Content:** each block's sources resolve to movies and episodes with a known duration. The block covering a time of day picks the next item; shuffle uses a seeded permutation per cycle, and order uses a persisted cursor.
+  - **Guide:** the guide id is `custom.<id>`, and `Programs()` serves `playout_items` for it with negative ids (so `ProgramByID` and the DVR can tell them from XMLTV entries).
+  - **Playback:** `Relay.pullCustom` starts one real-time ffmpeg per item at the right offset, normalized to 720p30 H.264 + AAC. `-output_ts_offset` keeps timestamps continuous across items, so the shared HLS output just copies.
 - **Testing without a provider:** `go run ./cmd/fakeiptv` serves six ffmpeg test channels (one MPEG-2, one "flaky" that dies after 20s and has a backup feed), an M3U playlist and an XMLTV guide on `:8585`.
 
 ## Scanning
