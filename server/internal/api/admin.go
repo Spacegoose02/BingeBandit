@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"bingebandit/internal/library"
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/media"
 	"bingebandit/internal/store"
 )
@@ -100,12 +101,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for key, rng := range map[string][2]int{
-		store.SettingMaintenanceStart: {0, 23},
-		store.SettingMaintenanceEnd:   {0, 23},
-		store.SettingBackupKeep:       {1, 365},
-		store.SettingDVRPadBefore:     {0, 60},
-		store.SettingDVRPadAfter:      {0, 120},
-		store.SettingLiveTimeshift:    {0, 240},
+		store.SettingMaintenanceStart:  {0, 23},
+		store.SettingMaintenanceEnd:    {0, 23},
+		store.SettingBackupKeep:        {1, 365},
+		store.SettingDVRPadBefore:      {0, 60},
+		store.SettingDVRPadAfter:       {0, 120},
+		store.SettingLiveTimeshift:     {0, 240},
+		store.SettingLiveBufferSeconds: {2, 60},
+		store.SettingLiveStallSeconds:  {3, 120},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {
@@ -123,6 +126,12 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if u, ok := in[store.SettingPublicURL]; ok {
 		in[store.SettingPublicURL] = strings.TrimRight(u, "/")
 		if err := validPublicURL(in[store.SettingPublicURL]); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if v, ok := in[store.SettingLiveProxy]; ok {
+		if _, err := livetv.ParseProxy(v); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -146,6 +155,9 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.SetSettings(in); err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if v, ok := in[store.SettingLiveProxy]; ok {
+		livetv.SetProxy(v) // already validated
 	}
 	s.reloadNetwork()
 	s.getSettings(w, r)

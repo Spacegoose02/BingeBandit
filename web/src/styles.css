@@ -100,6 +100,11 @@ input:not([type='checkbox']):not([type='range']), select {
 input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .form-error { color: var(--danger); font-size: 14px; }
 .form-ok { color: var(--ok); font-size: 14px; }
+.field-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.field-row input { width: auto; flex: 1 1 180px; }
+.passcode-input { letter-spacing: 0.4em; font-variant-numeric: tabular-nums; }
+.passcode-panel { padding: 28px; display: grid; gap: 8px; justify-items: start; }
+.passcode-panel h2 { margin: 4px 0 0; }
 
 .btn {
   display: inline-flex;

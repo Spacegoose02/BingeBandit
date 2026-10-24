@@ -6,7 +6,7 @@ _Last updated: 2026-10-24, logo library, your own channel categories, ThePosterD
 
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 
-- **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 15).
+- **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 16).
   - A channel that uses one has `logo = "library:<file>"`; provider URLs work as before. Playlist refreshes never touch channel logos, so library logos stick.
   - "Give each to channels with the same name" and **Match all to channels** use `livetv.MatchName` (ignores case, HD/FHD/4K, `US:`/`CA |` prefixes and bracketed text; "TSN 1 FHD" = "TSN1.svg").
   - **Channels** on a logo picks exactly which channels use it; unticked ones and those of a deleted logo go back to their first stream's provider logo.
@@ -18,6 +18,24 @@ _Last updated: 2026-10-24, logo library, your own channel categories, ThePosterD
   - Michael chose scraping knowing ThePosterDB's terms forbid it and that it can break or be blocked by Cloudflare. Their markup was never seen raw from here (the build machine can't reach them): the parser looks for any `/posters/<id>` link and any poster id (`data-poster-id`, `/api/assets/<id>`, `/poster/<id>`), and was tested only against a stand-in (`-tpdb-url` / `BB_TPDB_URL`). If real searches come back empty, the fix is in `parseSearch`/`parsePosters`.
   - Anonymous downloads of `/api/assets/<id>` are assumed to work (Kometa uses them); if ThePosterDB starts requiring a login, downloads will fail with the HTTP status.
 
+
+## Live TV settings, logs and playlist links
+
+- **Settings → Live TV playback** also has:
+  - **Buffer** (`live_buffer_seconds`, default 10). `/watch` returns it as `bufferSecs`; the web player sets `liveSyncDurationCount` from it and the TV app sets ExoPlayer's `targetOffsetMs`.
+  - **Switch streams after no data for** (`live_stall_seconds`, default 12). This replaced the `stallTimeout` constant.
+  - **Proxy for IPTV providers** (`live_proxy`): http, https or socks5. `livetv/proxy.go` applies it to streams, M3U/XMLTV refreshes and logos, and passes `-http_proxy` to ffmpeg for HLS upstreams (http proxies only). Empty falls back to `HTTP(S)_PROXY`.
+- **Live TV logs:** Admin → Logs has an Everything / Live TV switch (`/admin/logs?only=live`). It matches `live tv:`, `custom channel` and `dvr:` lines. Live TV → Activity links to it. Failed joins are now logged with the user and channel.
+- **Playlist URLs for everyone:** `components/IPTVLinks.tsx` makes a key and shows the M3U and XMLTV URLs. It's on Account → API keys for anyone who has channels, and on Admin → Live TV → Sources. The playlist only lists that user's channels.
+
+## Settings passcode (after v0.6.0)
+
+- **Account → Settings passcode** sets a 4–8 digit passcode (bcrypt in `users.passcode_hash`, migration 15).
+- **What it locks:** `settingsLock` middleware (`api/passcode.go`). For a user with a passcode, a session answers 423 on `/api/admin/*`, non-GET `/api/me/*` and `/api/link/approve` until unlocked. Watching, reading prefs, progress and the watchlist are never locked, so the TV app is unaffected. API keys are never locked.
+- **Unlocking:** `POST /api/me/passcode/unlock` with the passcode, or the account password as a fallback. It's rate limited like logins, and a wrong one answers 403, not 401, so the web UI doesn't sign out. The unlock is per session, in memory, and slides to 15 minutes after the last guarded request. A restart or "Lock now" locks it again.
+- **Web:** `PasscodeGate` wraps `/account`, `/link` and every `/admin` page. `PasscodePrompt` (in `Layout`) pops up when a locked action happens elsewhere, such as editing an item. `api.ts` fires `bb:locked` on any 423.
+- **Admin → Users → Clear passcode** is for someone who forgot theirs.
+- **Next:** profiles under one account, with this passcode as the profile PIN.
 
 ## Live TV playback reliability (after v0.6.0)
 

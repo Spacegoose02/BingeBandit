@@ -460,7 +460,11 @@ CREATE TABLE live_source_groups (
 INSERT INTO live_source_groups (source_id, name, enabled, streams)
 	SELECT source_id, grp, 1, COUNT(*) FROM live_streams GROUP BY source_id, grp;
 `,
-	// 15: the channel logo library (admin uploads; a channel uses one with logo
+	// 15: a per-user passcode that guards settings (Account and Admin).
+	`
+ALTER TABLE users ADD COLUMN passcode_hash TEXT NOT NULL DEFAULT '';
+`,
+	// 16: the channel logo library (admin uploads; a channel uses one with logo
 	// "library:<file>") and viewers' own channel categories.
 	`
 CREATE TABLE channel_logos (

@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../../api'
 import { Icon } from '../../components/Icon'
+import { IPTVLinks } from '../../components/IPTVLinks'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
@@ -47,14 +48,6 @@ function Sources() {
   const [editing, setEditing] = useState<Partial<LiveSource> | null>(null)
   const [filtering, setFiltering] = useState<LiveSource | null>(null)
   const [busy, setBusy] = useState<number | null>(null)
-  const [appKey, setAppKey] = useState<string | null>(null)
-  const createAppKey = async () => {
-    try {
-      setAppKey((await api.post<{ key: string }>('/api/me/keys', { name: 'IPTV app' })).key)
-    } catch (err) {
-      alert((err as Error).message)
-    }
-  }
   const refresh = async (s: LiveSource) => {
     setBusy(s.id)
     await api.post(`/api/admin/live/sources/${s.id}/refresh`).catch((e) => alert(e.message))
@@ -66,7 +59,6 @@ function Sources() {
     await api.del(`/api/admin/live/sources/${s.id}`)
     reload()
   }
-  const origin = window.location.origin
 
   const section = (kind: 'm3u' | 'epg', title: string, blurb: string) => (
     <section>
@@ -109,24 +101,7 @@ function Sources() {
       {section('m3u', 'M3U playlists', 'Your IPTV provider accounts. Set the connection limit to what your plan allows; BingeBandit shares one connection per channel between viewers and skips a provider when it is full.')}
       {section('epg', 'Guides (XMLTV)', 'Program guide data. Channels match guide entries by their tvg-id; you can change the match per channel.')}
       <h2 className="section-title">Use these channels in other apps</h2>
-      <div className="panel facts">
-        <dt>M3U playlist</dt>
-        <dd className="mono" style={{ wordBreak: 'break-all' }}>{origin}/api/live/playlist.m3u?token={appKey ?? '…'}</dd>
-        <dt>XMLTV guide</dt>
-        <dd className="mono" style={{ wordBreak: 'break-all' }}>{origin}/api/live/epg.xml?token={appKey ?? '…'}</dd>
-        <dd className="muted small" style={{ gridColumn: '1 / -1' }}>
-          {appKey
-            ? "Copy these into TiviMate, VLC or another IPTV app now; the key won't be shown again. Delete it under Account → API keys to cut the app off."
-            : 'Apps like TiviMate or VLC get the shared, fail-over streams. Create an API key for the app so it never needs your password.'}
-        </dd>
-        {!appKey && (
-          <dd style={{ gridColumn: '1 / -1' }}>
-            <button className="btn btn-glass btn-sm" onClick={createAppKey}>
-              <Icon name="key" size={16} /> Create a key for an IPTV app
-            </button>
-          </dd>
-        )}
-      </div>
+      <IPTVLinks />
       {editing && <SourceEditor source={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
       {filtering && <GroupFilter source={filtering} onClose={() => setFiltering(null)} onSaved={() => { setFiltering(null); reload() }} />}
     </>
@@ -564,52 +539,60 @@ function Activity() {
     await api.del(`/api/admin/live/viewers/${id}`)
     reload()
   }
-  if (data && data.length === 0) return <div className="empty">No live channels are being watched right now.</div>
+  const logs = (
+    <p className="muted small">
+      Starts, stream switches and errors are in the <Link to="/admin/logs?only=live">Live TV logs</Link>.
+    </p>
+  )
+  if (data && data.length === 0) return <>{logs}<div className="empty">No live channels are being watched right now.</div></>
   return (
-    <div className="relay-grid">
-      {data?.map((r) => (
-        <div key={r.channelId} className="panel relay-card">
-          <div className="relay-head">
-            <ChannelLogo channel={r} size={44} />
-            <div className="grow">
-              <div className="relay-name"><span className="ch-num">{channelNo(r.number)}</span> {r.name}</div>
-              {r.now && <div className="np-state"><Icon name="activity" size={14} /> Now playing: {r.now.title}</div>}
+    <>
+      {logs}
+      <div className="relay-grid">
+        {data?.map((r) => (
+          <div key={r.channelId} className="panel relay-card">
+            <div className="relay-head">
+              <ChannelLogo channel={r} size={44} />
+              <div className="grow">
+                <div className="relay-name"><span className="ch-num">{channelNo(r.number)}</span> {r.name}</div>
+                {r.now && <div className="np-state"><Icon name="activity" size={14} /> Now playing: {r.now.title}</div>}
+              </div>
+              <span className="muted small">{formatClock(now - r.started)}</span>
+              <button className="icon-btn danger" onClick={() => stop(r)} title="Stop this channel for everyone"><Icon name="x" size={18} /></button>
             </div>
-            <span className="muted small">{formatClock(now - r.started)}</span>
-            <button className="icon-btn danger" onClick={() => stop(r)} title="Stop this channel for everyone"><Icon name="x" size={18} /></button>
+            <dl className="np-facts">
+              <dt>Stream</dt>
+              <dd>{r.stream} <span className="muted small">({r.source})</span>{r.failovers > 0 && <span className="pill warn">{r.failovers} fail-over{r.failovers > 1 ? 's' : ''}</span>}</dd>
+              {r.video && (<><dt>Web video</dt><dd><span className={`pill ${r.video === 'copy' ? 'ok' : 'warn'}`}>{r.video === 'copy' ? 'Passed through' : `Converted · ${encoderName(r.encoder)}`}</span>{r.video === 'copy' && <span className="muted small"> (already H.264, so no hardware encoder is needed)</span>}</dd></>)}
+              {r.hwError && (<><dt>Hardware encoder</dt><dd className="muted small">Failed, so this channel is converted on the CPU: {r.hwError}</dd></>)}
+              {r.lastError && (<><dt>Last error</dt><dd className="muted small">{r.lastError}</dd></>)}
+            </dl>
+            <div className="relay-stats">
+              <span><Icon name="activity" size={14} /> {mbps(r.currentBps)}</span>
+              <span>Avg {mbps(r.avgBps)}</span>
+              <span><Icon name="download" size={14} /> {formatBytes(r.bytes)}</span>
+              <span><Icon name="users" size={14} /> {r.viewers.length}</span>
+            </div>
+            <table className="viewer-table">
+              <thead>
+                <tr><th>IP address</th><th>User</th><th>Player</th><th>Connected</th><th></th></tr>
+              </thead>
+              <tbody>
+                {r.viewers.map((v) => (
+                  <tr key={v.id}>
+                    <td className="mono">{v.ip}</td>
+                    <td>{v.username}</td>
+                    <td>{v.kind === 'hls' ? 'Web' : 'App (TS)'}</td>
+                    <td>{formatClock(now - v.connected)}</td>
+                    <td><button className="icon-btn danger" onClick={() => kick(v.id)} aria-label="Disconnect viewer"><Icon name="x" size={14} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <dl className="np-facts">
-            <dt>Stream</dt>
-            <dd>{r.stream} <span className="muted small">({r.source})</span>{r.failovers > 0 && <span className="pill warn">{r.failovers} fail-over{r.failovers > 1 ? 's' : ''}</span>}</dd>
-            {r.video && (<><dt>Web video</dt><dd><span className={`pill ${r.video === 'copy' ? 'ok' : 'warn'}`}>{r.video === 'copy' ? 'Passed through' : `Converted · ${encoderName(r.encoder)}`}</span>{r.video === 'copy' && <span className="muted small"> (already H.264, so no hardware encoder is needed)</span>}</dd></>)}
-            {r.hwError && (<><dt>Hardware encoder</dt><dd className="muted small">Failed, so this channel is converted on the CPU: {r.hwError}</dd></>)}
-            {r.lastError && (<><dt>Last error</dt><dd className="muted small">{r.lastError}</dd></>)}
-          </dl>
-          <div className="relay-stats">
-            <span><Icon name="activity" size={14} /> {mbps(r.currentBps)}</span>
-            <span>Avg {mbps(r.avgBps)}</span>
-            <span><Icon name="download" size={14} /> {formatBytes(r.bytes)}</span>
-            <span><Icon name="users" size={14} /> {r.viewers.length}</span>
-          </div>
-          <table className="viewer-table">
-            <thead>
-              <tr><th>IP address</th><th>User</th><th>Player</th><th>Connected</th><th></th></tr>
-            </thead>
-            <tbody>
-              {r.viewers.map((v) => (
-                <tr key={v.id}>
-                  <td className="mono">{v.ip}</td>
-                  <td>{v.username}</td>
-                  <td>{v.kind === 'hls' ? 'Web' : 'App (TS)'}</td>
-                  <td>{formatClock(now - v.connected)}</td>
-                  <td><button className="icon-btn danger" onClick={() => kick(v.id)} aria-label="Disconnect viewer"><Icon name="x" size={14} /></button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </>
   )
 }
 

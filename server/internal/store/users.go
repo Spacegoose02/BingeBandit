@@ -19,8 +19,22 @@ type User struct {
 	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
 	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
+	HasPasscode   bool    `json:"hasPasscode"`          // settings are locked until the passcode is entered
 	PasswordHash  string  `json:"-"`
+	PasscodeHash  string  `json:"-"`
 	TOTPSecret    string  `json:"-"`
+}
+
+// SetPasscode stores a bcrypt hash of the user's settings passcode; "" removes it.
+func (s *Store) SetPasscode(userID int64, hash string) error {
+	res, err := s.db.Exec(`UPDATE users SET passcode_hash = ? WHERE id = ?`, hash, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) CountUsers() (int, error) {
@@ -40,18 +54,19 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
 	u.HasPassword = u.PasswordHash != ""
+	u.HasPasscode = u.PasscodeHash != ""
 	return &u, nil
 }
 

@@ -22,7 +22,7 @@ const (
 	guideAhead  = 8 * 24 * time.Hour
 )
 
-var fetchClient = &http.Client{Timeout: 5 * time.Minute}
+var fetchClient = &http.Client{Timeout: 5 * time.Minute, Transport: providerTransport()}
 
 // open reads a source from an http(s) URL or a local file, transparently
 // un-gzipping (many XMLTV guides are .xml.gz).

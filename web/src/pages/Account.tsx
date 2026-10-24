@@ -2,7 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { IPTVLinks } from '../components/IPTVLinks'
 import { Icon } from '../components/Icon'
+import { PasscodeSettings } from '../components/Passcode'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
 import type { APIKey, DeviceSession, Identity, Prefs } from '../types'
@@ -430,6 +432,7 @@ function Devices() {
 
 function APIKeys() {
   const { data: keys, reload } = useApi<APIKey[]>('/api/me/keys')
+  const { data: channels } = useApi<unknown[]>('/api/live/channels')
   const [name, setName] = useState('')
   const [created, setCreated] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -489,6 +492,13 @@ function APIKeys() {
         <button className="btn btn-primary">Create key</button>
       </form>
       {error && <div className="form-error">{error}</div>}
+      {!!channels?.length && (
+        <>
+          <h3 style={{ marginTop: 20 }}>Live TV in other apps</h3>
+          <p className="muted small">Your own playlist and guide, with the channels you can watch.</p>
+          <IPTVLinks onCreated={reload} />
+        </>
+      )}
     </div>
   )
 }
@@ -622,6 +632,7 @@ export default function Account() {
       <LinkedAccounts />
       {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}
       {hasPassword && <TwoFactor />}
+      <PasscodeSettings />
       <Devices />
       <APIKeys />
       <form className="panel form" onSubmit={submit}>

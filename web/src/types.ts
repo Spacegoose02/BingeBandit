@@ -11,6 +11,7 @@ export interface User {
   totpEnabled: boolean
   shareActivity: boolean
   hasPassword: boolean
+  hasPasscode: boolean
 }
 
 export interface OIDCProvider {

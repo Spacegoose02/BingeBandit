@@ -17,7 +17,7 @@ import (
 
 const maxLogoBytes = 2 << 20
 
-var logoClient = &http.Client{Timeout: 15 * time.Second}
+var logoClient = &http.Client{Timeout: 15 * time.Second, Transport: providerTransport()}
 
 // LogoCache keeps provider channel logos on disk so the guide loads quickly,
 // works over HTTPS when the provider's logos are HTTP-only, and survives the

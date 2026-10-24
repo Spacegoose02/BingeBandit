@@ -102,7 +102,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/live/channels` | Channels with what's on now and next. |
 | POST / DELETE | `/live/channels/{id}/favorite` | Favorite a channel. |
 | GET | `/live/guide?from=&to=` | Channels, programs and your recordings for a window (default: from 30 min ago, 6 h, at most 24 h). |
-| POST | `/live/channels/{id}/watch` | Start watching → `{viewerId, playlist}` (HLS). Answers once the first segments exist (up to ~25 s), or 503 with the reason. |
+| POST | `/live/channels/{id}/watch` | Start watching → `{viewerId, playlist, bufferSecs}` (HLS; `bufferSecs` is how far behind live to play). Answers once the first segments exist (up to ~25 s), or 503 with the reason. |
 | GET | `/live/channels/{id}/stream.ts` | Raw MPEG-TS for IPTV players. |
 | DELETE | `/live/viewers/{viewer}` | Stop watching. |
 | POST | `/live/viewers/{viewer}/ping` | Keep a paused viewer counted (every 10 s). 410 once the viewer is gone. |
