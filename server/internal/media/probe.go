@@ -64,6 +64,8 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 			Height:   s.Height,
 			Default:  s.Disposition["default"] == 1,
 			Forced:   s.Disposition["forced"] == 1,
+
+			HearingImpaired: s.Disposition["hearing_impaired"] == 1,
 		}
 		switch s.CodecType {
 		case "video":

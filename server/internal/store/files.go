@@ -8,17 +8,25 @@ import (
 )
 
 type Stream struct {
-	Index    int    `json:"index"`
-	Type     string `json:"type"` // video | audio | subtitle
-	Codec    string `json:"codec"`
-	Language string `json:"language,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Channels int    `json:"channels,omitempty"`
-	Width    int    `json:"width,omitempty"`
-	Height   int    `json:"height,omitempty"`
-	Default  bool   `json:"default,omitempty"`
-	Forced   bool   `json:"forced,omitempty"`
+	Index           int    `json:"index"`
+	Type            string `json:"type"` // video | audio | subtitle
+	Codec           string `json:"codec"`
+	Language        string `json:"language,omitempty"`
+	Title           string `json:"title,omitempty"`
+	Channels        int    `json:"channels,omitempty"`
+	Width           int    `json:"width,omitempty"`
+	Height          int    `json:"height,omitempty"`
+	Default         bool   `json:"default,omitempty"`
+	Forced          bool   `json:"forced,omitempty"`
+	HearingImpaired bool   `json:"hearingImpaired,omitempty"`
+	// External is the file name of a subtitle stored next to the video
+	// (e.g. "Movie.en.srt"); empty for streams inside the file. External
+	// streams get indexes from ExternalIndexBase up.
+	External string `json:"external,omitempty"`
 }
+
+// ExternalIndexBase keeps sidecar subtitle indexes clear of embedded ones.
+const ExternalIndexBase = 1000
 
 type MediaFile struct {
 	ID            int64    `json:"id"`

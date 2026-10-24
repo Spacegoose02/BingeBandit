@@ -21,9 +21,9 @@ var (
 // ImageCache keeps a disk copy of every TMDB image a client has asked for, so
 // artwork keeps loading when TMDB is slow or the server is offline.
 type ImageCache struct {
-	dir string
-	hc  *http.Client
-	mu  sync.Mutex
+	dir      string
+	hc       *http.Client
+	mu       sync.Mutex
 	inflight map[string]*sync.WaitGroup
 }
 

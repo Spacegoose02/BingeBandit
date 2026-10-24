@@ -1,7 +1,85 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { useAuth } from '../auth'
-import { useDocumentTitle } from '../hooks'
+import { useApi, useDocumentTitle } from '../hooks'
+import { commonLanguages, languageName } from '../format'
+import type { Prefs } from '../types'
+
+function PlaybackPrefs() {
+  const { data } = useApi<Prefs>('/api/me/prefs')
+  const [p, setP] = useState<Prefs | null>(null)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  useEffect(() => setP(data), [data])
+  if (!p) return null
+
+  const set = <K extends keyof Prefs>(k: K, v: Prefs[K]) => setP({ ...p, [k]: v })
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      setP(await api.put<Prefs>('/api/me/prefs', p))
+      setMsg({ ok: true, text: 'Playback settings saved.' })
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message })
+    }
+  }
+  const langSelect = (value: string, onChange: (v: string) => void, emptyLabel: string) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{emptyLabel}</option>
+      {commonLanguages.map((l) => (
+        <option key={l} value={l}>{languageName(l)}</option>
+      ))}
+    </select>
+  )
+
+  return (
+    <form className="panel form" onSubmit={save} style={{ marginBottom: 20 }}>
+      <h3>Playback</h3>
+      <div className="field-grid">
+        <label>
+          Preferred audio language
+          {langSelect(p.audioLanguage, (v) => set('audioLanguage', v), "File's default track")}
+        </label>
+        <label>
+          Subtitle language
+          {langSelect(p.subtitleLanguage, (v) => set('subtitleLanguage', v), 'None')}
+        </label>
+        <label className="span-2">
+          Show subtitles
+          <select value={p.subtitleMode} onChange={(e) => set('subtitleMode', e.target.value as Prefs['subtitleMode'])}>
+            <option value="auto">When the audio is in another language (plus forced subtitles)</option>
+            <option value="always">Always</option>
+            <option value="forced">Only forced subtitles (foreign dialogue, signs)</option>
+            <option value="off">Never</option>
+          </select>
+        </label>
+        <label>
+          Subtitle size
+          <select value={p.subtitleSize} onChange={(e) => set('subtitleSize', e.target.value as Prefs['subtitleSize'])}>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </label>
+        <label className="check" style={{ alignSelf: 'end' }}>
+          <input type="checkbox" checked={p.subtitleBackground} onChange={(e) => set('subtitleBackground', e.target.checked)} />
+          Dark box behind subtitles
+        </label>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={p.autoQuality} onChange={(e) => set('autoQuality', e.target.checked)} />
+        Lower the quality automatically when playback keeps buffering
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.autoPlayNext} onChange={(e) => set('autoPlayNext', e.target.checked)} />
+        Play the next episode automatically
+      </label>
+      {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
+      <div className="actions">
+        <button className="btn btn-primary">Save playback settings</button>
+      </div>
+    </form>
+  )
+}
 
 export default function Account() {
   useDocumentTitle('Account')
@@ -29,6 +107,7 @@ export default function Account() {
         Signed in as <strong>{user?.username}</strong>
         {user?.isAdmin && ' (admin)'}
       </p>
+      <PlaybackPrefs />
       <form className="panel form" onSubmit={submit}>
         <h3>Change password</h3>
         <label>

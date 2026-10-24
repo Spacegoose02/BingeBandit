@@ -4,7 +4,16 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-23, first half of Milestone 2._
 
-## Latest: server maintenance (M2)
+## Latest: playback polish (M2)
+
+- **Sidecar subtitles:** `Movie.en.srt`, `Movie.eng.forced.srt`, `Movie.English.SDH.srt` and similar are found during scans and by folder watching. Only `Movie.<tags>.ext` matches, like Plex.
+- **Image subtitles** (PGS/VobSub/DVB) are burned in by the transcoder when picked. ffmpeg can't create bitmap subtitles, so this is only unit-tested against the generated command line; **check it with a real Blu-ray rip.**
+- **Account → Playback:** audio language, subtitle mode/language/size/box, auto quality, auto-play next. The player applies them; English audio is the default.
+- Playback retries twice on failure; direct play falls back to transcoding; repeated buffering steps quality down with a notice.
+- Transcodes are throttled (Settings → Transcoding toggle) when ffmpeg supports `-readrate_initial_burst`.
+- Migration 4 adds `users.prefs`.
+
+## Server maintenance (M2)
 
 - **Folder watching:** new or deleted files show up about 30s after the copy finishes, and only that folder is rescanned. Toggle it in Settings → Library.
 - **Scheduled Tasks page** (`/admin/tasks`): scan, metadata refresh, DB backup (folder and retention configurable), optimize, cache cleanup, media analysis. Each task has an enable switch, an interval and Run now. Maintenance tasks wait for the window (default 2–5 AM).

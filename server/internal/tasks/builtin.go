@@ -34,32 +34,32 @@ func Builtin(d Deps) []*Task {
 		},
 		{
 			ID: "refresh_metadata", Name: "Refresh metadata",
-			Description:    "Re-download titles, artwork, ratings and cast from TMDB for everything (locked fields are kept).",
-			Maintenance:    true, DefaultEnabled: true, DefaultHours: 24 * 7,
+			Description: "Re-download titles, artwork, ratings and cast from TMDB for everything (locked fields are kept).",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24 * 7,
 			Run: d.refreshMetadata,
 		},
 		{
 			ID: "backup_database", Name: "Back up database",
-			Description:    "Copy the database (users, watch history, edits) to the backup folder and keep the newest copies.",
-			Maintenance:    true, DefaultEnabled: true, DefaultHours: 24,
+			Description: "Copy the database (users, watch history, edits) to the backup folder and keep the newest copies.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.backupDatabase,
 		},
 		{
 			ID: "optimize_database", Name: "Optimize database",
-			Description:    "Update query statistics and reclaim unused space.",
-			Maintenance:    true, DefaultEnabled: true, DefaultHours: 24 * 7,
+			Description: "Update query statistics and reclaim unused space.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24 * 7,
 			Run: d.optimizeDatabase,
 		},
 		{
 			ID: "clean_cache", Name: "Clean up cache",
-			Description:    "Delete cached artwork and subtitles that nothing uses any more.",
-			Maintenance:    true, DefaultEnabled: true, DefaultHours: 24,
+			Description: "Delete cached artwork and subtitles that nothing uses any more.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.cleanCache,
 		},
 		{
 			ID: "analyze_media", Name: "Analyze media",
-			Description:    "Retry codec and stream analysis for files that couldn't be read during a scan.",
-			Maintenance:    true, DefaultEnabled: true, DefaultHours: 24,
+			Description: "Retry codec and stream analysis for files that couldn't be read during a scan.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.analyzeMedia,
 		},
 	}
@@ -168,7 +168,9 @@ func (d Deps) cleanCache(ctx context.Context) (string, error) {
 		}
 		return nil
 	})
-	// Subtitles: <fileID>-<stream>-<size>.vtt, stale when the file changed or is gone.
+	// Subtitles: <fileID>-<stream>-<size>.vtt (embedded) or
+	// <fileID>-<stream>-<size>-<namehash>.vtt (sidecar); stale when the
+	// video changed or is gone.
 	sizes, err := d.Store.FileSizes()
 	if err != nil {
 		return "", err
@@ -178,13 +180,16 @@ func (d Deps) cleanCache(ctx context.Context) (string, error) {
 			return nil
 		}
 		parts := strings.Split(strings.TrimSuffix(info.Name(), ".vtt"), "-")
-		if len(parts) != 3 {
+		if len(parts) != 3 && len(parts) != 4 {
 			drop(p, info)
 			return nil
 		}
 		id, _ := strconv.ParseInt(parts[0], 10, 64)
+		index, _ := strconv.Atoi(parts[1])
 		size, _ := strconv.ParseInt(parts[2], 10, 64)
-		if sizes[id] != size {
+		mediaSize, exists := sizes[id]
+		// Sidecar caches carry the subtitle file's size, not the video's.
+		if !exists || (index < store.ExternalIndexBase && mediaSize != size) {
 			drop(p, info)
 		}
 		return nil

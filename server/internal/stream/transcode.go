@@ -34,7 +34,10 @@ type Options struct {
 	MaxHeight   int     `json:"maxHeight"`   // 0 = source
 	BitrateKbps int     `json:"bitrateKbps"` // 0 = quality-based
 	AudioStream int     `json:"audioStream"` // ffprobe stream index, -1 = default
-	Replace     string  `json:"replace"`     // session to stop first (the player is seeking)
+	// BurnSubtitle is an image subtitle stream index to draw into the
+	// video (-1 = none). Text subtitles are rendered by the player instead.
+	BurnSubtitle int    `json:"burnSubtitle"`
+	Replace      string `json:"replace"` // session to stop first (the player is seeking)
 }
 
 type Session struct {
@@ -46,7 +49,10 @@ type Session struct {
 	Encoder   string  `json:"encoder"`
 	Height    int     `json:"height"`
 	Tonemap   bool    `json:"tonemap"`
-	Created   int64   `json:"created"`
+	// BurnSubtitle is the burned-in subtitle stream, or -1.
+	BurnSubtitle int   `json:"burnSubtitle"`
+	Throttled    bool  `json:"throttled"`
+	Created      int64 `json:"created"`
 
 	dir        string
 	cmd        *exec.Cmd
@@ -61,13 +67,15 @@ type Manager struct {
 	ffmpeg  string
 	dataDir string
 
+	caps     ffmpegCaps
 	mu       sync.Mutex
 	sessions map[string]*Session
 	stop     chan struct{}
 }
 
 func NewManager(st *store.Store, ffmpeg, dataDir string) *Manager {
-	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{})}
+	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{}),
+		caps: probeCaps(ffmpeg)}
 	m.cleanStale()
 	go m.janitor()
 	return m
@@ -120,7 +128,8 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
-	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d", s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height)
+	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v",
+		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled)
 
 	go func() {
 		err := s.cmd.Wait()
@@ -135,26 +144,109 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	return s, nil
 }
 
+// imageSubtitleCodecs are bitmap subtitles browsers can't render; they are
+// burned into the video instead.
+var imageSubtitleCodecs = map[string]bool{"hdmv_pgs_subtitle": true, "dvd_subtitle": true, "dvb_subtitle": true, "xsub": true}
+
+// IsImageSubtitle reports whether a subtitle codec has to be burned in.
+func IsImageSubtitle(codec string) bool { return imageSubtitleCodecs[codec] }
+
 func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string {
 	encoder := m.st.Setting(store.SettingHWEncoder)
 	tonemap := m.st.Setting(store.SettingTonemap) == "true" && f.HDR
+
+	burn := -1
+	for _, st := range f.Streams {
+		if o.BurnSubtitle >= 0 && st.Index == o.BurnSubtitle && st.Type == "subtitle" && st.External == "" && IsImageSubtitle(st.Codec) {
+			burn = st.Index
+		}
+	}
 
 	targetH := f.Height
 	if o.MaxHeight > 0 && (targetH == 0 || targetH > o.MaxHeight) {
 		targetH = o.MaxHeight
 	}
 	s.Height = targetH
-	s.VideoCopy = f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0
+	s.VideoCopy = f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
 	s.Tonemap = tonemap && !s.VideoCopy
+	s.BurnSubtitle = burn
 
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
 	if encoder == "vaapi" && !s.VideoCopy {
 		args = append(args, "-vaapi_device", "/dev/dri/renderD128")
 	}
+	if m.st.Setting(store.SettingTranscodeThrottle) == "true" && m.caps.readrateBurst {
+		// Encode the first minute flat out so playback starts fast, then
+		// stay about 2x ahead of real time instead of burning CPU on the
+		// whole film.
+		args = append(args, "-readrate", "2", "-readrate_initial_burst", "60")
+		s.Throttled = true
+	}
 	if o.Start > 0 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", o.Start))
 	}
-	args = append(args, "-i", f.Path, "-map", "0:v:0")
+	args = append(args, "-i", f.Path)
+
+	var videoArgs []string
+	videoMap := "0:v:0"
+	if s.VideoCopy {
+		s.Encoder = "copy"
+		videoArgs = []string{"-c:v", "copy"}
+	} else {
+		// pre runs on the source frames (before subtitles are overlaid),
+		// post prepares the result for the encoder.
+		var pre, post []string
+		if s.Tonemap {
+			pre = append(pre, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
+				"tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv")
+		}
+		if targetH > 0 && targetH < f.Height {
+			post = append(post, fmt.Sprintf("scale=-2:%d", targetH))
+		}
+		var codec []string
+		switch encoder {
+		case "nvenc":
+			post = append(post, "format=yuv420p")
+			codec = []string{"-c:v", "h264_nvenc", "-preset", "p4", "-profile:v", "high"}
+		case "qsv":
+			post = append(post, "format=nv12")
+			codec = []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-profile:v", "high"}
+		case "amf":
+			post = append(post, "format=yuv420p")
+			codec = []string{"-c:v", "h264_amf", "-quality", "speed"}
+		case "vaapi":
+			post = append(post, "format=nv12", "hwupload")
+			codec = []string{"-c:v", "h264_vaapi"}
+		case "videotoolbox":
+			post = append(post, "format=yuv420p")
+			codec = []string{"-c:v", "h264_videotoolbox", "-realtime", "1"}
+		default:
+			encoder = "libx264"
+			post = append(post, "format=yuv420p")
+			codec = []string{"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-crf", "21"}
+		}
+		s.Encoder = encoder
+		if burn >= 0 {
+			graph := fmt.Sprintf("[0:v:0]%s[base];[base][0:%d]overlay=eof_action=pass[ov];[ov]%s[vout]",
+				chain(pre), burn, chain(post))
+			videoArgs = append(videoArgs, "-filter_complex", graph)
+			videoMap = "[vout]"
+		} else {
+			videoArgs = append(videoArgs, "-vf", strings.Join(append(pre, post...), ","))
+		}
+		videoArgs = append(videoArgs, codec...)
+		kbps := o.BitrateKbps
+		if kbps == 0 {
+			kbps = defaultBitrate(targetH)
+		}
+		videoArgs = append(videoArgs, "-maxrate", fmt.Sprintf("%dk", kbps), "-bufsize", fmt.Sprintf("%dk", kbps*2))
+		if encoder != "libx264" {
+			videoArgs = append(videoArgs, "-b:v", fmt.Sprintf("%dk", kbps*3/4))
+		}
+		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
+	}
+
+	args = append(args, "-map", videoMap)
 	if o.AudioStream >= 0 {
 		args = append(args, "-map", fmt.Sprintf("0:%d", o.AudioStream))
 	} else if a := media.DefaultAudio(f.Streams); a != nil {
@@ -163,61 +255,34 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		args = append(args, "-map", "0:a:0?")
 	}
 	args = append(args, "-sn", "-map_metadata", "-1", "-map_chapters", "-1")
-
-	if s.VideoCopy {
-		s.Encoder = "copy"
-		args = append(args, "-c:v", "copy")
-	} else {
-		var filters []string
-		if s.Tonemap {
-			filters = append(filters, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
-				"tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv")
-		}
-		if targetH > 0 && targetH < f.Height {
-			filters = append(filters, fmt.Sprintf("scale=-2:%d", targetH))
-		}
-		var codec []string
-		switch encoder {
-		case "nvenc":
-			filters = append(filters, "format=yuv420p")
-			codec = []string{"-c:v", "h264_nvenc", "-preset", "p4", "-profile:v", "high"}
-		case "qsv":
-			filters = append(filters, "format=nv12")
-			codec = []string{"-c:v", "h264_qsv", "-preset", "veryfast", "-profile:v", "high"}
-		case "amf":
-			filters = append(filters, "format=yuv420p")
-			codec = []string{"-c:v", "h264_amf", "-quality", "speed"}
-		case "vaapi":
-			filters = append(filters, "format=nv12", "hwupload")
-			codec = []string{"-c:v", "h264_vaapi"}
-		case "videotoolbox":
-			filters = append(filters, "format=yuv420p")
-			codec = []string{"-c:v", "h264_videotoolbox", "-realtime", "1"}
-		default:
-			encoder = "libx264"
-			filters = append(filters, "format=yuv420p")
-			codec = []string{"-c:v", "libx264", "-preset", "veryfast", "-profile:v", "high", "-crf", "21"}
-		}
-		s.Encoder = encoder
-		args = append(args, "-vf", strings.Join(filters, ","))
-		args = append(args, codec...)
-		kbps := o.BitrateKbps
-		if kbps == 0 {
-			kbps = defaultBitrate(targetH)
-		}
-		args = append(args, "-maxrate", fmt.Sprintf("%dk", kbps), "-bufsize", fmt.Sprintf("%dk", kbps*2))
-		if encoder != "libx264" {
-			args = append(args, "-b:v", fmt.Sprintf("%dk", kbps*3/4))
-		}
-		args = append(args, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
-	}
-
+	args = append(args, videoArgs...)
 	args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "192k",
 		"-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
 		"-hls_playlist_type", "event", "-hls_flags", "independent_segments",
 		"-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"),
 		"-start_number", "0", filepath.Join(s.dir, "index.m3u8"))
 	return args
+}
+
+// chain joins filters, using the pass-through "null" filter when empty.
+func chain(filters []string) string {
+	if len(filters) == 0 {
+		return "null"
+	}
+	return strings.Join(filters, ",")
+}
+
+type ffmpegCaps struct {
+	readrateBurst bool // -readrate_initial_burst (ffmpeg 6.1+)
+}
+
+// probeCaps asks ffmpeg which optional features it has, so older builds
+// (e.g. distro packages) keep working without them.
+func probeCaps(ffmpeg string) ffmpegCaps {
+	cmd := exec.Command(ffmpeg, "-hide_banner", "-h", "full")
+	media.HideWindow(cmd)
+	out, _ := cmd.Output()
+	return ffmpegCaps{readrateBurst: bytes.Contains(out, []byte("readrate_initial_burst"))}
 }
 
 func defaultBitrate(height int) int {

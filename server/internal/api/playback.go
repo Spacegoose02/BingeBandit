@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"mime"
 	"net/http"
@@ -89,25 +90,41 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 	if mf == nil {
 		return
 	}
-	found := false
-	for _, st := range mf.Streams {
+	var sub *store.Stream
+	for i, st := range mf.Streams {
 		if st.Index == index && st.Type == "subtitle" && textSubtitleCodecs[st.Codec] {
-			found = true
+			sub = &mf.Streams[i]
 		}
 	}
-	if !found {
+	if sub == nil {
 		writeErr(w, http.StatusNotFound, "no text subtitle stream with that index")
 		return
 	}
-	cache := filepath.Join(s.DataDir, "cache", "subtitles", fmt.Sprintf("%d-%d-%d.vtt", mf.ID, index, mf.Size))
+	// Embedded streams come out of the video; sidecars are converted from
+	// their own file. The size in the cache name invalidates stale copies.
+	input, mapping := mf.Path, fmt.Sprintf("0:%d", index)
+	name := fmt.Sprintf("%d-%d-%d.vtt", mf.ID, index, mf.Size)
+	if sub.External != "" {
+		input, mapping = filepath.Join(filepath.Dir(mf.Path), sub.External), "0:s:0"
+		info, err := os.Stat(input)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, "subtitle file is missing")
+			return
+		}
+		// Sidecar indexes shift when files are added, so key by name too.
+		h := fnv.New32a()
+		h.Write([]byte(sub.External))
+		name = fmt.Sprintf("%d-%d-%d-%08x.vtt", mf.ID, index, info.Size(), h.Sum32())
+	}
+	cache := filepath.Join(s.DataDir, "cache", "subtitles", name)
 	if _, err := os.Stat(cache); err != nil {
 		if err := os.MkdirAll(filepath.Dir(cache), 0o755); err != nil {
 			writeErr(w, http.StatusInternalServerError, "cache folder not writable")
 			return
 		}
 		tmp := cache + ".tmp.vtt"
-		cmd := exec.CommandContext(r.Context(), s.FFmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", mf.Path,
-			"-map", fmt.Sprintf("0:%d", index), "-f", "webvtt", tmp)
+		cmd := exec.CommandContext(r.Context(), s.FFmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", input,
+			"-map", mapping, "-f", "webvtt", tmp)
 		media.HideWindow(cmd)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			os.Remove(tmp)
@@ -129,7 +146,7 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	if mf == nil {
 		return
 	}
-	opts := stream.Options{AudioStream: -1}
+	opts := stream.Options{AudioStream: -1, BurnSubtitle: -1}
 	if err := readJSON(r, &opts); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
@@ -260,6 +277,9 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 				np.Target = fmt.Sprintf("%s H264 (%s) · AAC stereo", resolutionLabel(t.Height), t.Encoder)
 				if t.Tonemap {
 					np.Target += " · tone mapped"
+				}
+				if t.BurnSubtitle >= 0 {
+					np.Target += " · subtitles burned in"
 				}
 			}
 		}

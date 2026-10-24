@@ -64,12 +64,37 @@ export function fileSummary(f: MediaFile): string {
   return parts.join(' · ')
 }
 
-const languageNames = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'language' }) : null
+// ISO 639-1 codes and names → the 639-2 codes ffprobe reports (mirrors server/internal/library/subtitles.go).
+const langAliases: Record<string, string> = {}
+for (const row of [
+  ['eng', 'en', 'english'], ['spa', 'es', 'spanish'], ['fre', 'fr', 'fra', 'french'], ['ger', 'de', 'deu', 'german'],
+  ['ita', 'it', 'italian'], ['por', 'pt', 'portuguese'], ['dut', 'nl', 'nld', 'dutch'], ['swe', 'sv', 'swedish'],
+  ['nor', 'no', 'nb', 'nob', 'norwegian'], ['dan', 'da', 'danish'], ['fin', 'fi', 'finnish'], ['pol', 'pl', 'polish'],
+  ['rus', 'ru', 'russian'], ['ukr', 'uk', 'ukrainian'], ['cze', 'cs', 'ces', 'czech'], ['gre', 'el', 'ell', 'greek'],
+  ['tur', 'tr', 'turkish'], ['ara', 'ar', 'arabic'], ['heb', 'he', 'hebrew'], ['hin', 'hi', 'hindi'],
+  ['jpn', 'ja', 'japanese'], ['kor', 'ko', 'korean'], ['chi', 'zh', 'zho', 'chinese'], ['tha', 'th', 'thai'],
+  ['vie', 'vi', 'vietnamese'], ['ind', 'id', 'indonesian'], ['hun', 'hu', 'hungarian'], ['rum', 'ro', 'ron', 'romanian'],
+]) {
+  for (const alias of row) langAliases[alias] = row[0]
+}
+
+export function normLang(code?: string): string {
+  if (!code) return ''
+  const c = code.toLowerCase()
+  return langAliases[c] ?? c
+}
+
+/** Languages offered in playback preferences (639-2 codes). */
+export const commonLanguages = ['eng', 'spa', 'fre', 'ger', 'ita', 'por', 'dut', 'swe', 'nor', 'dan', 'fin', 'pol', 'rus', 'jpn', 'kor', 'chi', 'hin', 'ara']
+
+const languageNames =typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'language' }) : null
 
 export function languageName(code?: string): string {
   if (!code || code === 'und') return 'Unknown'
+  // Intl knows 639-1 better than 639-2/B codes like "ger" or "fre".
+  const short = Object.entries(langAliases).find(([alias, canon]) => canon === normLang(code) && alias.length === 2)?.[0]
   try {
-    return languageNames?.of(code) ?? code
+    return languageNames?.of(short ?? code) ?? code
   } catch {
     return code
   }

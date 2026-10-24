@@ -649,6 +649,24 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   pointer-events: none;
 }
 .show-controls .subtitle-cue { bottom: calc(12% + 50px); }
+.subtitle-cue.size-small { font-size: clamp(14px, 1.9vw, 26px); }
+.subtitle-cue.size-large { font-size: clamp(22px, 3.4vw, 46px); }
+.subtitle-cue.boxed { text-shadow: none; }
+.subtitle-cue.boxed span { background: rgba(0, 0, 0, 0.72); padding: 2px 10px; border-radius: 6px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.player-toast {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(560px, 90%);
+  background: rgba(23, 27, 33, 0.94);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 14px;
+  animation: rise 0.3s ease;
+  z-index: 5;
+}
 .up-next {
   position: absolute;
   right: 36px;

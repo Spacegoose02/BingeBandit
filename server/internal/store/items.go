@@ -480,14 +480,14 @@ func SortTitle(title string) string {
 }
 
 type Stats struct {
-	Movies    int     `json:"movies"`
-	Shows     int     `json:"shows"`
-	Seasons   int     `json:"seasons"`
-	Episodes  int     `json:"episodes"`
-	Files     int     `json:"files"`
-	TotalSize int64   `json:"totalSize"`
+	Movies     int     `json:"movies"`
+	Shows      int     `json:"shows"`
+	Seasons    int     `json:"seasons"`
+	Episodes   int     `json:"episodes"`
+	Files      int     `json:"files"`
+	TotalSize  int64   `json:"totalSize"`
 	TotalHours float64 `json:"totalHours"`
-	Users     int     `json:"users"`
+	Users      int     `json:"users"`
 }
 
 func (s *Store) Stats() (*Stats, error) {

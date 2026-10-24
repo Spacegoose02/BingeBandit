@@ -36,6 +36,12 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Scheduled tasks with a maintenance window: database backup (to any folder, e.g. a NAS, with retention), optimize database, clean up cache, refresh metadata, media analysis |
 | ✅ | Logging and detailed info: Logs page with live tail, filters and download; rotating log file |
 | ✅ | Parallel probing for faster first scans |
+| ✅ | Subtitles: external `.srt/.ass/.vtt` sidecars (language, forced, SDH from the file name), image subtitles (PGS/VobSub) burned in, per-user size and background |
+| ✅ | Per-user playback preferences: auto-pick audio language (English by default) and subtitles (off / auto for foreign audio / forced only / always), auto-play next episode |
+| ✅ | Retry failed playback automatically; fall back from direct play to transcoding |
+| ✅ | Lower quality automatically when playback keeps buffering (user setting) |
+| ✅ | Transcode throttling (stays ~2× ahead of playback after a 60s head start) |
+| | True adaptive bitrate (multi-rendition HLS ladder) |
 | | ThePosterDB built-in search (no public API; needs a scraper) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
 | | Smart collections by genre, studio or year (today they work by label) |
@@ -45,9 +51,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
 - Remote backup targets beyond a folder path (S3/Backblaze), and restoring a backup from the UI.
 - Tone mapping algorithm choice and hardware decoding device selection.
-- Image-based subtitles (PGS/VobSub) burned in, external `.srt` sidecar files, subtitle settings (size/style), auto-pick English audio track.
-- Retry failed playback automatically. Auto quality when bandwidth drops (adaptive bitrate ladder).
-- Transcode throttling (don't run far ahead of the player).
+- Subtitles in a `Subs/` folder (common in release downloads).
 
 ## M3: User features
 

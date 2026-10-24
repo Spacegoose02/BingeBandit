@@ -8,6 +8,7 @@ const (
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
+	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAllowDownloads    = "allow_downloads"
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
@@ -17,18 +18,19 @@ const (
 )
 
 var SettingDefaults = map[string]string{
-	SettingServerName:       "BingeBandit",
-	SettingTMDBKey:          "",
-	SettingMetadataLanguage: "en-US",
-	SettingHWEncoder:        "none",
-	SettingTranscodeDir:     "",
-	SettingTonemap:          "true",
-	SettingAllowDownloads:   "false",
-	SettingWatchFolders:     "true",
-	SettingMaintenanceStart: "2",
-	SettingMaintenanceEnd:   "5",
-	SettingBackupDir:        "",
-	SettingBackupKeep:       "7",
+	SettingServerName:        "BingeBandit",
+	SettingTMDBKey:           "",
+	SettingMetadataLanguage:  "en-US",
+	SettingHWEncoder:         "none",
+	SettingTranscodeDir:      "",
+	SettingTonemap:           "true",
+	SettingTranscodeThrottle: "true",
+	SettingAllowDownloads:    "false",
+	SettingWatchFolders:      "true",
+	SettingMaintenanceStart:  "2",
+	SettingMaintenanceEnd:    "5",
+	SettingBackupDir:         "",
+	SettingBackupKeep:        "7",
 }
 
 func (s *Store) Setting(key string) string {

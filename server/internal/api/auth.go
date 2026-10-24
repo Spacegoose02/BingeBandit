@@ -181,6 +181,32 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, currentUser(r))
 }
 
+func (s *Server) getPrefs(w http.ResponseWriter, r *http.Request) {
+	p, err := s.Store.UserPrefs(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
+func (s *Server) putPrefs(w http.ResponseWriter, r *http.Request) {
+	p := store.DefaultPrefs
+	if err := readJSON(r, &p); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := p.Validate(); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.Store.SetUserPrefs(currentUser(r).ID, p); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+
 func (s *Server) changePassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Current string `json:"current"`

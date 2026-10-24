@@ -164,4 +164,6 @@ INSERT INTO tasks (id, enabled, interval_hours)
 	FROM settings WHERE key = 'scan_interval_hours';
 DELETE FROM settings WHERE key = 'scan_interval_hours';
 `,
+	// 4: per-user playback preferences (JSON, see store.Prefs).
+	`ALTER TABLE users ADD COLUMN prefs TEXT NOT NULL DEFAULT '{}';`,
 }

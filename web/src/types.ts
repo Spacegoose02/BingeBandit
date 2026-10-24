@@ -77,6 +77,18 @@ export interface MediaStream {
   height?: number
   default?: boolean
   forced?: boolean
+  hearingImpaired?: boolean
+  external?: string // sidecar file name
+}
+
+export interface Prefs {
+  audioLanguage: string
+  subtitleMode: 'off' | 'auto' | 'forced' | 'always'
+  subtitleLanguage: string
+  subtitleSize: 'small' | 'medium' | 'large'
+  subtitleBackground: boolean
+  autoQuality: boolean
+  autoPlayNext: boolean
 }
 
 export interface MediaFile {

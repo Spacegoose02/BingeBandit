@@ -132,6 +132,13 @@ func (s *Store) UnprobedFiles(limit int) ([]*MediaFile, error) {
 	return out, rows.Err()
 }
 
+// UpdateStreams replaces a file's stream list (used when sidecar subtitles change).
+func (s *Store) UpdateStreams(id int64, streams []Stream) error {
+	b, _ := json.Marshal(streams)
+	_, err := s.db.Exec(`UPDATE media_files SET streams = ? WHERE id = ?`, string(b), id)
+	return err
+}
+
 // UpdateProbe saves fresh ffprobe results without touching scan bookkeeping.
 func (s *Store) UpdateProbe(f *MediaFile) error {
 	streams, _ := json.Marshal(f.Streams)

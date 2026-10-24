@@ -93,6 +93,10 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.tonemap_enabled === 'true'} onChange={set('tonemap_enabled')} />
             Tone map HDR to SDR when transcoding
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.transcode_throttle === 'true'} onChange={set('transcode_throttle')} />
+            Throttle transcodes (stay about 2× ahead of playback instead of converting the whole file at full speed)
+          </label>
         </section>
 
         <section className="panel form">

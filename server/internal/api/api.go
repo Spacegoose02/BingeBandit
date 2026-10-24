@@ -62,6 +62,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/auth/logout", s.logout)
 			r.Get("/me", s.me)
 			r.Put("/me/password", s.changePassword)
+			r.Get("/me/prefs", s.getPrefs)
+			r.Put("/me/prefs", s.putPrefs)
 
 			r.Get("/home", s.home)
 			r.Get("/libraries", s.libraries)

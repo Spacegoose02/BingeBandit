@@ -164,11 +164,12 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 	// Removed paths can't be stat'ed; a name without a video extension may
 	// have been a folder, so rescan its parent either way.
 	gone := errors.Is(statErr, os.ErrNotExist)
-	if !isDir && !gone && !isVideo(ev.Name) {
+	relevant := isVideo(ev.Name) || isSubtitleFile(ev.Name)
+	if !isDir && !gone && !relevant {
 		return
 	}
-	if gone && !isVideo(ev.Name) && filepath.Ext(ev.Name) != "" {
-		return // e.g. a deleted .nfo or .srt
+	if gone && !relevant && filepath.Ext(ev.Name) != "" {
+		return // e.g. a deleted .nfo
 	}
 	dir := filepath.Dir(ev.Name)
 	if isDir {

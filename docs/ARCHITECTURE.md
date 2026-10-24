@@ -62,6 +62,10 @@
    - HDR is tone mapped with zscale + hable when enabled.
    - Audio is always AAC stereo for now.
 4. Seeking inside the transcoded range is a normal seek. Seeking past it starts a new session at that offset (`replace` kills the old one). The player tracks `offset + video.currentTime` as file time.
+   - Image subtitles (`burnSubtitle`) switch the video chain to a `-filter_complex` graph: `[0:v:0]<tonemap>[base];[base][0:N]overlay[ov];[ov]<scale,format>[vout]`.
+   - With ffmpeg ≥ 6.1 (`readrate_initial_burst`, detected at startup) and the throttle setting on, input is read at 2× real time after a 60-second burst.
+   - Text subtitles (embedded or sidecar files, which get stream indexes ≥ 1000 with an `external` file name) are never burned in. The player fetches them as WebVTT from `/api/files/{id}/subtitles/{index}.vtt` and draws them itself.
+   - The player chooses audio and subtitle tracks from `/api/me/prefs` (`pickTracks` in `Player.tsx`). Three non-seek stalls within 60s step the quality down one rung when the user allows it.
 5. Sessions with no segment or playlist request for 90s are killed by a janitor. The player also deletes its session when it unmounts or on `pagehide`.
 6. The player posts `/api/progress` every 10s and on pause. That saves the resume point and keeps `stream.Activity` (Now Playing) alive; entries expire after 45s without a ping.
 

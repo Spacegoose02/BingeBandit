@@ -59,7 +59,9 @@ func (s *Scanner) Scan(libraryID int64) error { return s.start(libraryID, false,
 func (s *Scanner) ScanWait(libraryID int64) error { return s.start(libraryID, true, s.fullScan) }
 
 // RefreshMetadata re-fetches metadata for every item in a library, in the background.
-func (s *Scanner) RefreshMetadata(libraryID int64) error { return s.start(libraryID, false, s.refreshAll) }
+func (s *Scanner) RefreshMetadata(libraryID int64) error {
+	return s.start(libraryID, false, s.refreshAll)
+}
 
 // RefreshMetadataWait is RefreshMetadata but blocks until it finishes.
 func (s *Scanner) RefreshMetadataWait(libraryID int64) error {
@@ -299,8 +301,15 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 		return err
 	}
 
+	side := sidecars(f.path)
 	existing, err := s.st.FileByPath(f.path)
 	if err == nil && existing.Size == info.Size() && existing.MTime == info.ModTime().Unix() && existing.ProbedAt > 0 {
+		// The video is unchanged, but subtitle files next to it may not be.
+		if !sameSidecars(existing.Streams, side) {
+			if err := s.st.UpdateStreams(existing.ID, withSidecars(existing.Streams, side)); err != nil {
+				return err
+			}
+		}
 		return s.st.TouchFile(existing.ID, itemID, gen)
 	}
 	mf := &store.MediaFile{ItemID: itemID, Path: f.path, Size: info.Size(), MTime: info.ModTime().Unix()}
@@ -308,6 +317,7 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 		log.Printf("probe: %v", err)
 		mf.Container = strings.TrimPrefix(strings.ToLower(filepath.Ext(f.path)), ".")
 	}
+	mf.Streams = withSidecars(mf.Streams, side)
 	return s.st.UpsertFile(mf, gen)
 }
 

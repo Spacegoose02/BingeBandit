@@ -4,19 +4,22 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
-import { channelLabel, episodeLabel, formatClock, languageName, resolutionLabel } from '../format'
-import type { Item, ItemDetail, MediaFile, MediaStream } from '../types'
+import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
+import type { Item, ItemDetail, MediaFile, MediaStream, Prefs } from '../types'
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
+const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub'])
+const LADDER = [2160, 1080, 720, 480]
 
 export default function Player() {
   const { id } = useParams()
   const [params] = useSearchParams()
   const { data, error } = useApi<ItemDetail>(`/api/items/${id}`)
+  const { data: prefs } = useApi<Prefs>('/api/me/prefs')
   useDocumentTitle(data ? (data.item.kind === 'episode' ? `${data.item.showTitle} ${episodeLabel(data.item)}` : data.item.title) : 'Player')
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
-  if (!data) return <div className="player"><div className="spinner" /></div>
-  return <PlayerView key={id} detail={data} startAt={Number(params.get('t')) || 0} fileId={Number(params.get('file')) || 0} />
+  if (!data || !prefs) return <div className="player"><div className="spinner" /></div>
+  return <PlayerView key={id} detail={data} prefs={prefs} startAt={Number(params.get('t')) || 0} fileId={Number(params.get('file')) || 0} />
 }
 
 /** Whether this browser can play the file as-is (no server work at all). */
@@ -27,6 +30,49 @@ function canDirectPlay(f: MediaFile, video: HTMLVideoElement): boolean {
   const a = ({ aac: 'mp4a.40.2', mp3: 'mp3', opus: 'opus', flac: 'flac', vorbis: 'vorbis' } as Record<string, string>)[f.audioCodec]
   if (!mime || !v || (f.audioCodec && !a)) return false
   return video.canPlayType(`${mime}; codecs="${v}${a ? `,${a}` : ''}"`) !== ''
+}
+
+interface Choice {
+  quality: number // max height; 0 = original
+  audio: number // stream index; -1 = file default
+  burn: number // image subtitle stream burned in by the server; -1 = none
+}
+
+/**
+ * Picks audio and subtitles from the user's preferences. Returns the audio
+ * stream (-1 when it's the file default, so direct play stays possible) and
+ * the subtitle stream, which is either rendered by us or burned in.
+ */
+function pickTracks(f: MediaFile, p: Prefs): { audio: number; sub?: MediaStream } {
+  const audios = f.streams.filter((s) => s.type === 'audio')
+  const fileDefault = audios.find((s) => s.default) ?? audios[0]
+  let chosen = fileDefault
+  if (p.audioLanguage) chosen = audios.find((s) => normLang(s.language) === normLang(p.audioLanguage)) ?? fileDefault
+  const audio = chosen && chosen !== fileDefault ? chosen.index : -1
+
+  const subs = f.streams.filter((s) => s.type === 'subtitle' && (TEXT_SUBS.has(s.codec) || IMAGE_SUBS.has(s.codec)))
+  const want = normLang(p.subtitleLanguage)
+  const inLang = subs.filter((s) => normLang(s.language) === want)
+  // Prefer text over image subtitles and plain over SDH.
+  const rank = (s: MediaStream) => (IMAGE_SUBS.has(s.codec) ? 2 : 0) + (s.hearingImpaired ? 1 : 0)
+  const best = (list: MediaStream[]) => [...list].sort((a, b) => rank(a) - rank(b))[0]
+  const full = best(inLang.filter((s) => !s.forced)) ?? best(subs.filter((s) => !s.language && !s.forced))
+  const forced = best(inLang.filter((s) => s.forced))
+
+  const foreignAudio = !!chosen?.language && normLang(chosen.language) !== want
+  let sub: MediaStream | undefined
+  switch (p.subtitleMode) {
+    case 'always':
+      sub = full ?? forced
+      break
+    case 'auto':
+      sub = foreignAudio ? full ?? forced : forced
+      break
+    case 'forced':
+      sub = forced
+      break
+  }
+  return { audio, sub }
 }
 
 interface Cue {
@@ -57,13 +103,17 @@ function streamLabel(s: MediaStream): string {
   if (s.type === 'audio') bits.push(`${s.codec.toUpperCase()} ${channelLabel(s.channels ?? 2)}`)
   if (s.title) bits.push(s.title)
   if (s.forced) bits.push('Forced')
+  if (s.hearingImpaired) bits.push('SDH')
+  if (s.external) bits.push('External')
+  if (IMAGE_SUBS.has(s.codec)) bits.push('Burned in')
   return bits.join(' · ')
 }
 
-function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: number; fileId: number }) {
+function PlayerView({ detail, prefs, startAt, fileId }: { detail: ItemDetail; prefs: Prefs; startAt: number; fileId: number }) {
   const { item, files = [] } = detail
   const file = files.find((f) => f.id === fileId) ?? files[0]
   const nav = useNavigate()
+  const initial = useRef(file ? pickTracks(file, prefs) : { audio: -1 })
 
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -71,13 +121,23 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
   const offsetRef = useRef(0) // file time at video time 0 (transcodes start mid-file)
   const transcodeRef = useRef<string | null>(null)
   const startedRef = useRef(false)
+  const forceTranscode = useRef(false) // direct play failed once; don't try again
+  const settlingRef = useRef(true) // a load or seek is in progress, so waiting isn't a stall
+  const stalls = useRef<number[]>([])
+  const retries = useRef(0)
   const playSession = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36))
   const hideTimer = useRef<number>()
 
+  const initialSub = initial.current.sub
+  const [choice, setChoice] = useState<Choice>({
+    quality: 0,
+    audio: initial.current.audio,
+    burn: initialSub && IMAGE_SUBS.has(initialSub.codec) ? initialSub.index : -1,
+  })
+  const choiceRef = useRef(choice)
+  choiceRef.current = choice
   const [mode, setMode] = useState<'direct' | 'transcode'>('direct')
-  const [quality, setQuality] = useState(0) // max height; 0 = original
-  const [audio, setAudio] = useState(-1) // stream index; -1 = file default
-  const [subIndex, setSubIndex] = useState(-1)
+  const [subIndex, setSubIndex] = useState(initialSub && TEXT_SUBS.has(initialSub.codec) ? initialSub.index : -1)
   const [cues, setCues] = useState<Cue[]>([])
   const [time, setTime] = useState(startAt)
   const [paused, setPaused] = useState(true)
@@ -88,13 +148,14 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
   const [controls, setControls] = useState(true)
   const [menu, setMenu] = useState<null | 'settings'>(null)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
   const [upNext, setUpNext] = useState<Item | null>(null)
   const [countdown, setCountdown] = useState(10)
 
   const duration = file?.duration || (item.runtime ?? 0) * 60
   const position = () => offsetRef.current + (videoRef.current?.currentTime ?? 0)
   const audioStreams = file?.streams.filter((s) => s.type === 'audio') ?? []
-  const subStreams = file?.streams.filter((s) => s.type === 'subtitle' && TEXT_SUBS.has(s.codec)) ?? []
+  const subStreams = file?.streams.filter((s) => s.type === 'subtitle' && (TEXT_SUBS.has(s.codec) || IMAGE_SUBS.has(s.codec))) ?? []
 
   const stopTranscode = useCallback(() => {
     const id = transcodeRef.current
@@ -130,14 +191,23 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
   )
 
   const load = useCallback(
-    async (at: number, q: number, a: number) => {
+    async (at: number, c: Choice) => {
       const video = videoRef.current
       if (!video || !file) return
       setError('')
       setBuffering(true)
+      settlingRef.current = true
       hlsRef.current?.destroy()
       hlsRef.current = null
-      if (q === 0 && a < 0 && canDirectPlay(file, video)) {
+      const retry = (why: string) => {
+        if (retries.current < 2) {
+          retries.current++
+          // Resume from where the viewer is, not where this load began.
+          const resumeAt = startedRef.current ? offsetRef.current + (video.currentTime || 0) : at
+          window.setTimeout(() => load(resumeAt, choiceRef.current), 1500)
+        } else setError(why)
+      }
+      if (c.quality === 0 && c.audio < 0 && c.burn < 0 && !forceTranscode.current && canDirectPlay(file, video)) {
         stopTranscode()
         offsetRef.current = 0
         setMode('direct')
@@ -147,8 +217,9 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
         try {
           const res = await api.post<{ session: { id: string }; playlist: string }>(`/api/files/${file.id}/transcode`, {
             start: at,
-            maxHeight: q,
-            audioStream: a,
+            maxHeight: c.quality,
+            audioStream: c.audio,
+            burnSubtitle: c.burn,
             replace: transcodeRef.current ?? '',
           })
           transcodeRef.current = res.session.id
@@ -160,7 +231,7 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
               if (!d.fatal) return
               if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad()
               else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError()
-              else setError('Playback failed. The server could not convert this file.')
+              else retry('Playback failed. The server could not convert this file.')
             })
             hls.loadSource(res.playlist)
             hls.attachMedia(video)
@@ -169,7 +240,7 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
             video.src = res.playlist // Safari plays HLS natively
           }
         } catch (e) {
-          setError((e as Error).message)
+          retry((e as Error).message)
           return
         }
       }
@@ -178,10 +249,16 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
     [file, stopTranscode],
   )
 
+  const apply = (c: Choice) => {
+    setChoice(c)
+    setMenu(null)
+    load(position(), c)
+  }
+
   // First load, and cleanup when leaving the player.
   useEffect(() => {
     if (!file) return
-    load(startAt, 0, -1)
+    load(startAt, choiceRef.current)
     // Closing the tab or reloading skips React cleanup; pagehide still fires.
     const onHide = () => {
       report(true)
@@ -211,12 +288,18 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
   }, [volume, muted])
 
   useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(''), 6000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  useEffect(() => {
     if (subIndex < 0 || !file) return setCues([])
     let cancelled = false
     fetch(`/api/files/${file.id}/subtitles/${subIndex}.vtt`, { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.statusText))))
       .then((t) => !cancelled && setCues(parseVtt(t)))
-      .catch(() => !cancelled && setError('Could not load subtitles'))
+      .catch(() => !cancelled && setToast('Could not load those subtitles'))
     return () => {
       cancelled = true
     }
@@ -227,6 +310,7 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
     if (!video) return
     t = Math.max(0, Math.min(t, Math.max(duration - 1, 0)))
     setTime(t)
+    settlingRef.current = true
     if (mode === 'direct') {
       video.currentTime = t
       return
@@ -234,7 +318,23 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
     const local = t - offsetRef.current
     const s = video.seekable
     if (local >= 0 && s.length && local <= s.end(s.length - 1)) video.currentTime = local
-    else load(t, quality, audio) // outside what has been transcoded: restart there
+    else load(t, choiceRef.current) // outside what has been transcoded: restart there
+  }
+
+  // Three stalls within a minute (not caused by seeking) means the
+  // connection can't keep up: drop one quality step.
+  const onStall = () => {
+    setBuffering(true)
+    if (!prefs.autoQuality || settlingRef.current || !startedRef.current || !file) return
+    const now = Date.now()
+    stalls.current = [...stalls.current.filter((t) => now - t < 60000), now]
+    if (stalls.current.length < 3) return
+    stalls.current = []
+    const current = choiceRef.current.quality || file.height
+    const lower = LADDER.find((q) => q < current && q < file.height)
+    if (!lower) return
+    setToast(`Playback kept pausing to buffer, so quality was lowered to ${resolutionLabel(lower)}.`)
+    apply({ ...choiceRef.current, quality: lower })
   }
 
   const togglePlay = () => {
@@ -306,35 +406,39 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
   }
 
   useEffect(() => {
-    if (!upNext) return
+    if (!upNext || !prefs.autoPlayNext) return
     if (countdown <= 0) {
       nav(`/play/${upNext.id}`, { replace: true })
       return
     }
     const t = window.setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => window.clearTimeout(t)
-  }, [upNext, countdown, nav])
+  }, [upNext, countdown, nav, prefs.autoPlayNext])
 
-  const changeQuality = (q: number) => {
-    setQuality(q)
-    setMenu(null)
-    load(position(), q, audio)
-  }
   const changeAudio = (a: number) => {
     const def = audioStreams.find((s) => s.default) ?? audioStreams[0]
-    const next = def && def.index === a ? -1 : a
-    setAudio(next)
+    apply({ ...choice, audio: def && def.index === a ? -1 : a })
+  }
+
+  const changeSubtitle = (s: MediaStream | null) => {
     setMenu(null)
-    load(position(), quality, next)
+    if (s && IMAGE_SUBS.has(s.codec)) {
+      setSubIndex(-1)
+      if (choice.burn !== s.index) apply({ ...choice, burn: s.index })
+      return
+    }
+    setSubIndex(s ? s.index : -1)
+    if (choice.burn >= 0) apply({ ...choice, burn: -1 })
   }
 
   if (!file) return <div className="player"><div className="player-error">This item has no playable file.</div></div>
 
-  const qualities = [0, 2160, 1080, 720, 480].filter((q) => q === 0 || q < file.height)
+  const qualities = [0, ...LADDER.filter((q) => q < file.height)]
   const activeCue = cues.find((c) => time >= c.start && time <= c.end)
   const pct = duration ? (time / duration) * 100 : 0
   const title = item.kind === 'episode' ? item.showTitle : item.title
   const subtitle = item.kind === 'episode' ? `${episodeLabel(item)} · ${item.title}` : item.year ? String(item.year) : ''
+  const effectiveAudio = choice.audio >= 0 ? choice.audio : (audioStreams.find((x) => x.default) ?? audioStreams[0])?.index
 
   return (
     <div
@@ -356,17 +460,29 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
         }}
         onPlaying={() => {
           startedRef.current = true
+          settlingRef.current = false
+          retries.current = 0
           setBuffering(false)
         }}
-        onWaiting={() => setBuffering(true)}
+        onWaiting={onStall}
         onTimeUpdate={() => setTime(position())}
         onEnded={onEnded}
-        onError={() => mode === 'direct' && load(position(), quality, audio === -1 ? (audioStreams[0]?.index ?? -1) : audio)}
+        onError={() => {
+          // The browser couldn't decode the file after all: let the server convert it.
+          if (mode !== 'direct') return
+          forceTranscode.current = true
+          load(position(), choiceRef.current)
+        }}
       />
 
-      {activeCue && <div className="subtitle-cue">{activeCue.text}</div>}
+      {activeCue && (
+        <div className={`subtitle-cue size-${prefs.subtitleSize} ${prefs.subtitleBackground ? 'boxed' : ''}`}>
+          <span>{activeCue.text}</span>
+        </div>
+      )}
       {buffering && !error && <div className="spinner" />}
       {error && <div className="player-error">{error}</div>}
+      {toast && <div className="player-toast">{toast}</div>}
 
       <div className="player-top">
         <button className="icon-btn" onClick={() => nav(-1)} aria-label="Back">
@@ -423,7 +539,9 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
             {formatClock(time)} / {formatClock(duration)}
           </div>
           <div className="spacer" />
-          <span className={`mode-pill ${mode}`}>{mode === 'direct' ? 'Direct Play' : quality ? `${resolutionLabel(quality)} Transcode` : 'Transcode'}</span>
+          <span className={`mode-pill ${mode}`}>
+            {mode === 'direct' ? 'Direct Play' : choice.quality ? `${resolutionLabel(choice.quality)} Transcode` : 'Transcode'}
+          </span>
           <div className="menu-anchor">
             <button className="icon-btn" onClick={() => setMenu(menu ? null : 'settings')} aria-label="Playback settings">
               <Icon name="sliders" size={22} />
@@ -432,28 +550,29 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
               <div className="menu player-menu">
                 <div className="menu-section">Quality</div>
                 {qualities.map((q) => (
-                  <button key={q} className={q === quality ? 'active' : ''} onClick={() => changeQuality(q)}>
+                  <button key={q} className={q === choice.quality ? 'active' : ''} onClick={() => apply({ ...choice, quality: q })}>
                     {q === 0 ? `Original (${resolutionLabel(file.height)})` : resolutionLabel(q)}
                   </button>
                 ))}
                 {audioStreams.length > 1 && <div className="menu-section">Audio</div>}
                 {audioStreams.length > 1 &&
-                  audioStreams.map((s) => {
-                    const active = audio === s.index || (audio === -1 && s === (audioStreams.find((x) => x.default) ?? audioStreams[0]))
-                    return (
-                      <button key={s.index} className={active ? 'active' : ''} onClick={() => changeAudio(s.index)}>
-                        {streamLabel(s)}
-                      </button>
-                    )
-                  })}
+                  audioStreams.map((s) => (
+                    <button key={s.index} className={s.index === effectiveAudio ? 'active' : ''} onClick={() => changeAudio(s.index)}>
+                      {streamLabel(s)}
+                    </button>
+                  ))}
                 {subStreams.length > 0 && <div className="menu-section">Subtitles</div>}
                 {subStreams.length > 0 && (
-                  <button className={subIndex === -1 ? 'active' : ''} onClick={() => { setSubIndex(-1); setMenu(null) }}>
+                  <button className={subIndex === -1 && choice.burn === -1 ? 'active' : ''} onClick={() => changeSubtitle(null)}>
                     Off
                   </button>
                 )}
                 {subStreams.map((s) => (
-                  <button key={s.index} className={subIndex === s.index ? 'active' : ''} onClick={() => { setSubIndex(s.index); setMenu(null) }}>
+                  <button
+                    key={s.index}
+                    className={subIndex === s.index || choice.burn === s.index ? 'active' : ''}
+                    onClick={() => changeSubtitle(s)}
+                  >
                     {streamLabel(s)}
                   </button>
                 ))}
@@ -470,7 +589,7 @@ function PlayerView({ detail, startAt, fileId }: { detail: ItemDetail; startAt: 
         <div className="up-next">
           {img(upNext.backdrop, 'w500') && <img src={img(upNext.backdrop, 'w500')} alt="" />}
           <div>
-            <div className="muted small">Up next in {countdown}s</div>
+            <div className="muted small">{prefs.autoPlayNext ? `Up next in ${countdown}s` : 'Up next'}</div>
             <div className="up-next-title">{episodeLabel(upNext)} · {upNext.title}</div>
             <div className="actions">
               <button className="btn btn-primary" onClick={() => nav(`/play/${upNext.id}`, { replace: true })}>
