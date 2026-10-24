@@ -4,6 +4,15 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-24, live TV playback reliability._
 
+## Settings passcode (after v0.6.0)
+
+- **Account → Settings passcode** sets a 4–8 digit passcode (bcrypt in `users.passcode_hash`, migration 15).
+- **What it locks:** `settingsLock` middleware (`api/passcode.go`). For a user with a passcode, a session answers 423 on `/api/admin/*`, non-GET `/api/me/*` and `/api/link/approve` until unlocked. Watching, reading prefs, progress and the watchlist are never locked, so the TV app is unaffected. API keys are never locked.
+- **Unlocking:** `POST /api/me/passcode/unlock` with the passcode, or the account password as a fallback. It's rate limited like logins, and a wrong one answers 403, not 401, so the web UI doesn't sign out. The unlock is per session, in memory, and slides to 15 minutes after the last guarded request. A restart or "Lock now" locks it again.
+- **Web:** `PasscodeGate` wraps `/account`, `/link` and every `/admin` page. `PasscodePrompt` (in `Layout`) pops up when a locked action happens elsewhere, such as editing an item. `api.ts` fires `bb:locked` on any 423.
+- **Admin → Users → Clear passcode** is for someone who forgot theirs.
+- **Next:** profiles under one account, with this passcode as the profile PIN.
+
 ## Live TV playback reliability (after v0.6.0)
 
 - **Flipping channels on a provider with a connection limit:** a relay with no viewers left (someone flipped away, or a guide preview moved on) used to hold its upstream for 15 s, so the next channel on that provider failed with "all providers busy". `reclaimIdle` now stops such a relay when another channel needs the slot, and an all-busy channel waits two passes (~6 s) before giving up.

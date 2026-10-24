@@ -22,6 +22,7 @@ async function request<T>(method: string, path: string, body?: unknown, init?: R
   const data = await res.json().catch(() => null)
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/api/auth')) window.dispatchEvent(new Event('bb:unauthorized'))
+    if (res.status === 423) window.dispatchEvent(new Event('bb:locked'))
     throw new ApiError(res.status, data?.error ?? res.statusText, data ?? undefined)
   }
   return data as T
