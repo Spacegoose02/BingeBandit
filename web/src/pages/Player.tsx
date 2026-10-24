@@ -41,6 +41,38 @@ function canDirectPlay(f: MediaFile, video: HTMLVideoElement): boolean {
   return video.canPlayType(`${mime}; codecs="${v}${a ? `,${a}` : ''}"`) !== ''
 }
 
+let outputChannels: number | undefined
+
+/** Speaker channels this device outputs (2 unless a surround system is connected). */
+function speakerChannels(): number {
+  if (outputChannels === undefined) {
+    outputChannels = 2
+    try {
+      const ctx = new AudioContext()
+      outputChannels = Math.max(2, ctx.destination.maxChannelCount)
+      ctx.close().catch(() => undefined)
+    } catch {
+      // No Web Audio: assume stereo.
+    }
+  }
+  return outputChannels
+}
+
+/**
+ * Audio this browser can take inside the server's HLS stream, so surround
+ * tracks are copied or kept 5.1 instead of mixed down to stereo. hls.js can
+ * pass AC-3 through from MPEG-TS (not E-AC-3); Safari's own player takes both.
+ */
+function audioCaps(video: HTMLVideoElement, stereoOnly: boolean): { audioCodecs: string[]; maxAudioChannels: number } {
+  if (stereoOnly) return { audioCodecs: ['aac'], maxAudioChannels: 2 }
+  const codecs = ['aac']
+  const ok = (type: string) =>
+    Hls.isSupported() ? (window.MediaSource?.isTypeSupported(type) ?? false) : video.canPlayType(type) !== ''
+  if (ok('audio/mp4; codecs="ac-3"')) codecs.push('ac3')
+  if (!Hls.isSupported() && ok('audio/mp4; codecs="ec-3"')) codecs.push('eac3')
+  return { audioCodecs: codecs, maxAudioChannels: Math.min(speakerChannels(), 8) }
+}
+
 interface Choice {
   quality: number // max height; 0 = original
   audio: number // stream index; -1 = file default
@@ -143,6 +175,7 @@ function PlayerView({
   const transcodeRef = useRef<string | null>(null)
   const startedRef = useRef(false)
   const forceTranscode = useRef(false) // direct play failed once; don't try again
+  const stereoOnly = useRef(false) // surround audio failed once; ask for stereo
   const settlingRef = useRef(true) // a load or seek is in progress, so waiting isn't a stall
   const stalls = useRef<number[]>([])
   const retries = useRef(0)
@@ -229,6 +262,7 @@ function PlayerView({
       const retry = (why: string) => {
         if (retries.current < 2) {
           retries.current++
+          stereoOnly.current = true // in case surround audio was the problem
           // Resume from where the viewer is, not where this load began.
           const resumeAt = startedRef.current ? offsetRef.current + (video.currentTime || 0) : at
           window.setTimeout(() => load(resumeAt, choiceRef.current), 1500)
@@ -248,16 +282,19 @@ function PlayerView({
             audioStream: c.audio,
             burnSubtitle: c.burn,
             replace: transcodeRef.current ?? '',
+            ...audioCaps(video, stereoOnly.current),
           })
           transcodeRef.current = res.session.id
           offsetRef.current = at
           setMode('transcode')
           if (Hls.isSupported()) {
             const hls = new Hls({ startPosition: 0, maxBufferLength: 60, backBufferLength: 120 })
+            let mediaErrors = 0
             hls.on(Hls.Events.ERROR, (_e, d) => {
               if (!d.fatal) return
               if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad()
-              else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError()
+              // A second decode failure starts over (with stereo audio, in case surround was the problem).
+              else if (d.type === Hls.ErrorTypes.MEDIA_ERROR && mediaErrors++ === 0) hls.recoverMediaError()
               else retry('Playback failed. The server could not convert this file.')
             })
             hls.loadSource(res.playlist)
@@ -541,8 +578,10 @@ function PlayerView({
         onEnded={onEnded}
         onError={() => {
           // The browser couldn't decode the file after all: let the server convert it.
-          if (mode !== 'direct') return
-          forceTranscode.current = true
+          // A converted stream that fails once gets another go with stereo audio.
+          if (mode === 'direct') forceTranscode.current = true
+          else if (!stereoOnly.current && !Hls.isSupported()) stereoOnly.current = true
+          else return
           load(position(), choiceRef.current)
         }}
       />

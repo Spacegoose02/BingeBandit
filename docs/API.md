@@ -103,7 +103,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/files/{id}/direct` | The original file, with range requests. Use when the client can play the codec. |
-| POST | `/files/{id}/transcode` | `{start, maxHeight, bitrateKbps, audioStream, burnSubtitle, replace}` (all optional; `-1` = default track / none) → `{session, playlist}`: open `playlist` as HLS. Pass the old `session.id` as `replace` when seeking. |
+| POST | `/files/{id}/transcode` | `{start, maxHeight, bitrateKbps, audioStream, burnSubtitle, replace, audioCodecs, maxAudioChannels}` (all optional; `-1` = default track / none) → `{session, playlist}`: open `playlist` as HLS. Pass the old `session.id` as `replace` when seeking. `audioCodecs` lists what the client plays inside HLS (`aac`, `ac3`, `eac3`, `mp3`) and `maxAudioChannels` how many channels it outputs: a matching source track is copied untouched, other surround tracks become AAC 5.1 when `maxAudioChannels` ≥ 6, and everything else (or a client that sends neither) gets AAC stereo. `session.audioCodec`, `audioChannels` and `audioCopy` say what was chosen. |
 | GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |

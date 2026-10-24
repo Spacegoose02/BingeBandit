@@ -38,6 +38,12 @@ type Options struct {
 	// video (-1 = none). Text subtitles are rendered by the player instead.
 	BurnSubtitle int    `json:"burnSubtitle"`
 	Replace      string `json:"replace"` // session to stop first (the player is seeking)
+	// AudioCodecs are the codecs the client can play inside HLS (e.g. "aac",
+	// "ac3", "eac3"); a matching source track is copied instead of converted.
+	// MaxAudioChannels is how many channels it can output (0 = stereo).
+	// Older clients send neither and get AAC stereo.
+	AudioCodecs      []string `json:"audioCodecs"`
+	MaxAudioChannels int      `json:"maxAudioChannels"`
 }
 
 type Session struct {
@@ -53,6 +59,11 @@ type Session struct {
 	BurnSubtitle int   `json:"burnSubtitle"`
 	Throttled    bool  `json:"throttled"`
 	Created      int64 `json:"created"`
+	// AudioCodec and AudioChannels describe the audio sent to the client;
+	// AudioCopy is set when it's the source track untouched.
+	AudioCodec    string `json:"audioCodec"`
+	AudioChannels int    `json:"audioChannels"`
+	AudioCopy     bool   `json:"audioCopy"`
 
 	dir        string
 	cmd        *exec.Cmd
@@ -133,8 +144,8 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
-	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v",
-		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled)
+	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v audio=%s/%dch copy=%v",
+		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled, s.AudioCodec, s.AudioChannels, s.AudioCopy)
 
 	go func() {
 		err := s.cmd.Wait()
@@ -252,21 +263,61 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	}
 
 	args = append(args, "-map", videoMap)
-	if o.AudioStream >= 0 {
-		args = append(args, "-map", fmt.Sprintf("0:%d", o.AudioStream))
-	} else if a := media.DefaultAudio(f.Streams); a != nil {
-		args = append(args, "-map", fmt.Sprintf("0:%d", a.Index))
+	audio := pickAudio(f.Streams, o.AudioStream)
+	if audio != nil {
+		args = append(args, "-map", fmt.Sprintf("0:%d", audio.Index))
 	} else {
 		args = append(args, "-map", "0:a:0?")
 	}
 	args = append(args, "-sn", "-map_metadata", "-1", "-map_chapters", "-1")
 	args = append(args, videoArgs...)
-	args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "192k",
-		"-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
+	args = append(args, audioArgs(s, audio, o)...)
+	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
 		"-hls_playlist_type", "event", "-hls_flags", "independent_segments",
 		"-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"),
 		"-start_number", "0", filepath.Join(s.dir, "index.m3u8"))
 	return args
+}
+
+// pickAudio returns the audio stream to send: the requested index, else the
+// file's default track. Nil when the file has no (known) audio streams.
+func pickAudio(streams []store.Stream, index int) *store.Stream {
+	if index >= 0 {
+		for i, st := range streams {
+			if st.Index == index && st.Type == "audio" {
+				return &streams[i]
+			}
+		}
+		return &store.Stream{Index: index, Type: "audio"} // unknown: convert to be safe
+	}
+	return media.DefaultAudio(streams)
+}
+
+// copyableAudio are the codecs that HLS in MPEG-TS can carry as they are.
+var copyableAudio = map[string]bool{"aac": true, "ac3": true, "eac3": true, "mp3": true}
+
+// audioArgs picks how to send the audio track: copy it when the client can
+// play it as is, convert to AAC 5.1 for surround clients, else AAC stereo.
+// It records the choice on s.
+func audioArgs(s *Session, a *store.Stream, o Options) []string {
+	maxCh := o.MaxAudioChannels
+	if maxCh < 2 {
+		maxCh = 2
+	}
+	if a != nil && a.Codec != "" && copyableAudio[a.Codec] && a.Channels > 0 && a.Channels <= maxCh {
+		for _, c := range o.AudioCodecs {
+			if c == a.Codec {
+				s.AudioCodec, s.AudioChannels, s.AudioCopy = a.Codec, a.Channels, true
+				return []string{"-c:a", "copy"}
+			}
+		}
+	}
+	if a != nil && a.Channels >= 6 && maxCh >= 6 {
+		s.AudioCodec, s.AudioChannels = "aac", 6
+		return []string{"-c:a", "aac", "-ac", "6", "-b:a", "384k"}
+	}
+	s.AudioCodec, s.AudioChannels = "aac", 2
+	return []string{"-c:a", "aac", "-ac", "2", "-b:a", "192k"}
 }
 
 // chain joins filters, using the pass-through "null" filter when empty.
