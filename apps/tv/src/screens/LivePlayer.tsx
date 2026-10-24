@@ -11,6 +11,9 @@ import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import type { LiveChannel } from '../types'
 import { NO_LIVE_BADGE } from './Player'
 
+/** The channel last watched full screen, so the guide's preview can stay on it. */
+export const lastChannel = { id: 0 }
+
 /** Watches a live channel. Up/Down changes channel; the info bar shows what's on. */
 export default function LivePlayer({ channelId }: { channelId: number }) {
   const [channels, setChannels] = useState<LiveChannel[]>([])
@@ -39,6 +42,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
 
   // Join the channel's shared stream; leave it when switching or exiting.
   useEffect(() => {
+    lastChannel.id = id
     let cancelled = false
     setSrc(null)
     setError('')
