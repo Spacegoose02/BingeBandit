@@ -296,20 +296,7 @@ func (s *Server) createSSOUser(prov *store.OIDCProvider, subject string, c oidcC
 	if base == "" {
 		base = c.Name
 	}
-	base = strings.Trim(reUsernameJunk.ReplaceAllString(base, "."), ".")
-	if len(base) < 2 {
-		base = "user"
-	}
-	if len(base) > 48 {
-		base = base[:48]
-	}
-	name := base
-	for i := 2; ; i++ {
-		if _, err := s.Store.UserByUsername(name); errors.Is(err, store.ErrNotFound) {
-			break
-		}
-		name = fmt.Sprintf("%s%d", base, i)
-	}
+	name := s.uniqueUsername(base)
 	u, err := s.Store.CreateUser(name, "", false)
 	if err != nil {
 		return nil, err

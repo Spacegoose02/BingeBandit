@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"bingebandit/internal/importer"
 	"bingebandit/internal/library"
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/logs"
@@ -38,6 +39,7 @@ type Server struct {
 	Live       *livetv.Manager
 	Logos      *livetv.LogoCache
 	DVR        *livetv.Recorder
+	Importer   *importer.Runner
 	Logs       *logs.Buffer
 	Version    string
 	DataDir    string
@@ -225,6 +227,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/webhooks/{id}", s.saveWebhook)
 				r.Delete("/webhooks/{id}", s.deleteWebhook)
 				r.Post("/webhooks/{id}/test", s.testWebhook)
+				r.Post("/import/connect", s.importConnect)
+				r.Post("/import/start", s.importStart)
+				r.Get("/import/status", s.importStatus)
+				r.Post("/import/cancel", s.importCancel)
 				r.Get("/oidc", s.adminOIDC)
 				r.Post("/oidc", s.saveOIDC)
 				r.Put("/oidc/{id}", s.saveOIDC)

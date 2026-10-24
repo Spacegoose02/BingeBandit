@@ -424,4 +424,9 @@ CREATE TABLE user_identities (
 );
 CREATE INDEX user_identities_user ON user_identities(user_id);
 `,
+	// 12: imported plays (Plex, Tautulli) carry a source key so re-running an import adds nothing twice.
+	`
+ALTER TABLE plays ADD COLUMN import_key TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX plays_import ON plays(user_id, import_key) WHERE import_key != '';
+`,
 }

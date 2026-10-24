@@ -78,6 +78,12 @@ To try single sign-on, run the fake OpenID Connect provider and add it under Ser
 cd server; go run ./cmd/fakeoidc
 ```
 
+To try importing, run the fake Plex + Tautulli server and use Server → Import with `http://localhost:32400` and token `fake-plex-token`, or `http://localhost:8181` and API key `fake-tautulli-key`:
+
+```powershell
+cd server; go run ./cmd/fakeplex
+```
+
 Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand. The HTTP API for scripts and apps is described in [docs/API.md](docs/API.md).
 
 ## Releasing

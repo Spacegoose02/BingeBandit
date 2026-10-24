@@ -773,6 +773,14 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .link-btn { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 .or-divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
 .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.import-progress { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.progress-track { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.progress-track > div { height: 100%; border-radius: 99px; background: var(--accent); transition: width 0.4s; }
+.progress-track > div.indeterminate { animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.unmatched { margin-top: 14px; }
+.unmatched summary { cursor: pointer; font-weight: 600; }
+.unmatched ul { margin: 6px 0 0; padding-left: 20px; columns: 2 240px; font-size: 14px; }
 .webhook-events { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .friend-card { position: relative; }
 .friend-badge { position: absolute; top: 6px; left: 6px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; background: rgba(11, 13, 16, 0.82); backdrop-filter: blur(6px); border-radius: 99px; padding: 3px 10px 3px 3px; font-size: 12px; font-weight: 650; }

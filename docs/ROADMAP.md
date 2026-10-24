@@ -120,11 +120,17 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Passkeys |
 | | Plex/Tautulli account linking (with M7 import) |
 
-## M7: Import
+## M7: Import 🟡 (phase 1 done)
 
-- Import users' Plex watch history (Plex API / Tautulli DB).
-- Import/export progress for trackers such as Yamtrack and Trakt.
-- Collections from Plex by library.
+| | Item |
+|---|---|
+| ✅ | Plex watch history for every account (Plex API), the owner's watched marks and resume points |
+| ✅ | Tautulli history through its API, or straight from a copy of `tautulli.db` (works after Plex is gone) |
+| ✅ | Map source users to BingeBandit users, or create them |
+| ✅ | Collections from Plex, by library |
+| ✅ | Preview (dry run), a list of what didn't match, and safe re-runs (no duplicates, even across Plex and Tautulli) |
+| | Import/export progress for trackers such as Yamtrack and Trakt |
+| | Watched state for managed/shared Plex users (needs each user's token, via plex.tv) |
 
 ## M8: Apps
 

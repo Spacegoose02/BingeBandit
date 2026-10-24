@@ -68,6 +68,10 @@
 - **Folder watching** (`library/watch.go`, fsnotify): watches every folder under each library root and re-reads the library list every 2 minutes. An event queues its folder for that library. After 30 quiet seconds (copies in progress keep resetting the timer), `ScanFolders` walks just those folders and `PruneUnder` prunes only below them. Network shares may not emit events, so the scheduled full scan is the backstop.
 - Only one scan job runs per library at a time (`ErrRunning`). The watcher re-queues if it hits a running scan.
 
+## Import
+
+`internal/importer` turns a source (Plex API, Tautulli API, Tautulli DB file) into `Record`s. `Matcher` maps each one to a library item (file name → TMDB id → title + year; episodes via their show), and `Runner` writes plays (`plays.import_key`), watched marks, resume points and collections through the store's `Import*` methods. These never remove or un-watch anything and skip duplicates, so any import can be re-run. The API (`api/importing.go`) creates mapped users and starts the runner in the background; the admin page polls `/api/admin/import/status`.
+
 ## Auth
 
 - The first run (no users) exposes `POST /api/setup` to create the admin; after that it returns 409.

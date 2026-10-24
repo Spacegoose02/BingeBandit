@@ -2,9 +2,37 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-23, M6 phase 2 (single sign-on, network)._
+_Last updated: 2026-10-24, M7 phase 1 (Plex and Tautulli import)._
 
-## Latest: single sign-on, network settings, API docs (M6 phase 2)
+## Latest: importing from Plex and Tautulli (M7 phase 1)
+
+- **Server → Import** (`/admin/import`) has three steps:
+  1. Pick a source: Plex (address + token), Tautulli (address + API key) or a Tautulli database file path. Credentials are used for the run only, never saved.
+  2. Map each source user to a BingeBandit user, "Create a new user" (passwordless; link a TV for them or set a password), or Skip. Same-name users are suggested.
+  3. Choose history / watched marks (+ resume points for Plex) / collections (Plex), then **Preview** (dry run) or **Import**.
+  - It runs in the background with progress, Cancel, result tiles, and the most-watched titles that didn't match.
+- **`internal/importer`:**
+  - **Sources:** `Plex` reads `/status/sessions/history/all` (all accounts), item details for TMDB guids and file names (cached per rating key), `/library/sections/*/all` for the owner's viewCount and viewOffset, and collections. `TautulliAPI` uses `get_users` and `get_history` (grouping off). `TautulliDB` reads `session_history` + `_metadata` + `users` read-only after checking the columns exist.
+  - **Matcher:** file base name, then TMDB id, then title + year (±1, accents and articles folded, trailing "(US)" dropped). Episodes match by show, then season/episode.
+  - **Runner:** one import at a time.
+- **No duplicates:**
+  - Plays carry `import_key` (migration 12, unique per user).
+  - `ImportPlay` also skips a play of the same item by the same user that ended within 15 minutes, so Plex + Tautulli + BingeBandit's own history don't double up.
+  - Watched marks never un-watch. Resume points only replace older local progress.
+  - Collections are found or created by name (case-insensitive) and only gain items.
+  - History rows use this library's titles, with mode "imported".
+- **`cmd/fakeplex`:** a fake Plex (`:32400`, token `fake-plex-token`) and Tautulli (`:8181`, key `fake-tautulli-key`) with history matching the test media. `-makedb path` writes a `tautulli.db`.
+- **Tested in the browser:**
+  - Preview, then a Plex import creating a user, collections and a resume point.
+  - Re-running Plex added nothing new.
+  - Tautulli API added only its one extra (partly watched) play and skipped a music track.
+  - The database file added nothing new.
+  - Errors for a bad token, bad key and missing file.
+  - Unit tests cover the matcher and the store's duplicate and state rules.
+- **Not tested** against a real Plex or Tautulli. Watch for: Plex servers that need `https://…plex.direct` addresses; very large histories (Plex history is paged at 200, and items are looked up one at a time, so expect minutes); Tautulli database schema differences in older versions. Plex only reports watched marks for the token's owner; other users' marks come only from their history.
+- Migration 12.
+
+## Single sign-on, network settings, API docs (M6 phase 2)
 
 - **Single sign-on (OIDC):** Settings → Single sign-on adds providers (name, issuer, client ID/secret, extra scopes). Saving checks the issuer's discovery document. The panel shows the redirect URL to register (`<public URL>/api/auth/oidc/callback`). The login page gets a "Continue with …" button per provider. Account → Linked accounts links and unlinks.
   - Auth code flow with PKCE and nonce. Pending sign-ins are kept in memory for 10 minutes and each state works once. Discovery is cached for an hour.

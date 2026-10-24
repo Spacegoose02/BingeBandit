@@ -23,6 +23,7 @@ import AdminUsers from './pages/admin/Users'
 import AdminSettings from './pages/admin/Settings'
 import AdminTasks from './pages/admin/Tasks'
 import AdminLogs from './pages/admin/Logs'
+import AdminImport from './pages/admin/Import'
 
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="live" element={<AdminLiveTV />} />
             <Route path="tasks" element={<AdminTasks />} />
             <Route path="logs" element={<AdminLogs />} />
+            <Route path="import" element={<AdminImport />} />
           </Route>
         </Route>
       </Route>

@@ -14,6 +14,7 @@ import (
 
 	"bingebandit/internal/api"
 	"bingebandit/internal/config"
+	"bingebandit/internal/importer"
 	"bingebandit/internal/library"
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/logs"
@@ -76,6 +77,7 @@ func main() {
 		Live:       live,
 		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
 		DVR:        recorder,
+		Importer:   importer.NewRunner(st),
 		Logs:       logBuf,
 		Version:    version,
 		DataDir:    cfg.DataDir,
