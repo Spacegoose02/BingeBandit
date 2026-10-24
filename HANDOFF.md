@@ -402,5 +402,5 @@ Code gaps:
 
 6. Audio is always transcoded to AAC stereo. Add 5.1 passthrough for clients that can play it.
 7. ~~Transcode sessions don't re-check library access after they start.~~ Done: running transcodes stop as soon as an admin takes the library away or deletes the user, profile or library, and re-check every 30 s otherwise.
-8. True adaptive bitrate (a multi-rendition HLS ladder).
+8. ~~True adaptive bitrate.~~ Done as an opt-in admin setting (Settings → Transcoding → Adaptive streaming). It only applies when the video is converted anyway; a copied stream stays single quality. Not yet tried with hardware encoders on real GPUs, where three encodes per viewer may hit NVENC session limits.
 9. Backups only go to a folder (no remote targets such as S3). Backups can be downloaded and restored from an uploaded file, including on a new server's setup screen.

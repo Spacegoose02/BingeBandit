@@ -103,7 +103,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/files/{id}/direct` | The original file, with range requests. Use when the client can play the codec. |
-| POST | `/files/{id}/transcode` | `{start, maxHeight, bitrateKbps, audioStream, burnSubtitle, replace}` (all optional; `-1` = default track / none) → `{session, playlist}`: open `playlist` as HLS. Pass the old `session.id` as `replace` when seeking. |
+| POST | `/files/{id}/transcode` | `{start, maxHeight, bitrateKbps, audioStream, burnSubtitle, replace, adaptive}` (all optional; `-1` = default track / none) → `{session, playlist}`: open `playlist` as HLS. Pass the old `session.id` as `replace` when seeking. With `adaptive: true`, when the admin has turned on adaptive streaming and the video has to be converted anyway, `playlist` is a master playlist with up to three qualities (`session.variants`, best first). |
 | GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |

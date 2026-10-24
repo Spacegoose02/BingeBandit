@@ -161,6 +161,7 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
           audioStream: audioRef.current,
           burnSubtitle: burnRef.current,
           replace: transcodeId.current,
+          adaptive: true, // ExoPlayer switches qualities itself when the server offers several
         })
         transcodeId.current = res.session.id
         offset.current = at
