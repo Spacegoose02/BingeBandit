@@ -41,6 +41,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Retry failed playback automatically; fall back from direct play to transcoding |
 | ✅ | Lower quality automatically when playback keeps buffering (user setting) |
 | ✅ | Transcode throttling (stays ~2× ahead of playback after a 60s head start) |
+| ✅ | Restore a database backup from Admin → Tasks (the current database is backed up first) |
 | | True adaptive bitrate (multi-rendition HLS ladder) |
 | | ThePosterDB built-in search (no public API; needs a scraper) |
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
@@ -49,7 +50,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
-- Remote backup targets beyond a folder path (S3/Backblaze), and restoring a backup from the UI.
+- Remote backup targets beyond a folder path (S3/Backblaze), and uploading a backup file to restore on a new server.
 - Tone mapping algorithm choice and hardware decoding device selection.
 - Subtitles in a `Subs/` folder (common in release downloads).
 

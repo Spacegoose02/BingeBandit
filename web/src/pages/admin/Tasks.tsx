@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import { Icon } from '../../components/Icon'
 import { useApi, useDocumentTitle } from '../../hooks'
-import { timeAgo } from '../../format'
+import { formatBytes, timeAgo } from '../../format'
 
 interface Task {
   id: string
@@ -17,6 +17,12 @@ interface Task {
   lastDurationMs: number
   lastResult?: string
   lastError?: string
+}
+
+interface Backup {
+  name: string
+  size: number
+  modified: number
 }
 
 const intervals: [number, string][] = [
@@ -160,6 +166,58 @@ export default function AdminTasks() {
           <button className="btn btn-primary" onClick={saveSettings}>Save</button>
         </div>
       </div>
+
+      <Restore />
     </div>
+  )
+}
+
+function Restore() {
+  const { data, reload } = useApi<{ dir: string; backups: Backup[] }>('/api/admin/backups')
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const restore = async (b: Backup) => {
+    const when = new Date(b.modified * 1000).toLocaleString()
+    if (!confirm(`Restore the backup from ${when}? Users, watch history, settings and edits go back to how they were then. The current database is backed up first.`)) return
+    setBusy(b.name)
+    setMsg(null)
+    try {
+      const res = await api.post<{ restored: string; previous: string }>(`/api/admin/backups/${b.name}/restore`)
+      setMsg({
+        ok: true,
+        text: `Restored. The data from before is saved as ${res.previous}. Restart the server so folder watching and Live TV pick up the restored settings.`,
+      })
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message })
+    }
+    setBusy('')
+    reload()
+  }
+
+  return (
+    <>
+      <h2 className="section-title">Restore a backup</h2>
+      <div className="panel list" style={{ maxWidth: 760 }}>
+        {data && data.backups.length === 0 && (
+          <div className="task-row muted">No backups yet. Run "Back up database" above to make one.</div>
+        )}
+        {data?.backups.map((b) => (
+          <div key={b.name} className="task-row">
+            <div className="grow">
+              <div className="task-name">{new Date(b.modified * 1000).toLocaleString()}</div>
+              <div className="muted small">
+                {b.name} · {formatBytes(b.size)} · {timeAgo(b.modified)}
+              </div>
+            </div>
+            <button className="btn btn-glass btn-sm danger" disabled={!!busy} onClick={() => restore(b)}>
+              <Icon name="refresh" size={14} className={busy === b.name ? 'spin' : ''} /> Restore
+            </button>
+          </div>
+        ))}
+      </div>
+      {data && <p className="muted small">Backups in <span className="mono">{data.dir}</span></p>}
+      {msg && <div className={msg.ok ? 'form-ok' : 'form-error'} style={{ maxWidth: 760 }}>{msg.text}</div>}
+    </>
   )
 }

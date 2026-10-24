@@ -114,25 +114,38 @@ func (d Deps) refreshMetadata(ctx context.Context) (string, error) {
 	return d.eachLibrary(d.Scanner.RefreshMetadataWait)
 }
 
+// BackupDir is the backup folder for these deps.
+func (d Deps) BackupDir() string { return BackupDir(d.Store, d.DataDir) }
+
 // BackupDir is where database backups go: the setting, else <data>/backups.
-func (d Deps) BackupDir() string {
-	if dir := strings.TrimSpace(d.Store.Setting(store.SettingBackupDir)); dir != "" {
+func BackupDir(st *store.Store, dataDir string) string {
+	if dir := strings.TrimSpace(st.Setting(store.SettingBackupDir)); dir != "" {
 		return dir
 	}
-	return filepath.Join(d.DataDir, "backups")
+	return filepath.Join(dataDir, "backups")
+}
+
+// SaveBackup writes a new timestamped backup into dir and returns its path.
+// It does not remove old backups.
+func SaveBackup(st *store.Store, dir string) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("backup folder: %w", err)
+	}
+	path := filepath.Join(dir, "bingebandit-"+time.Now().Format("20060102-150405")+".db")
+	if err := st.Backup(path); err != nil {
+		os.Remove(path)
+		return "", err
+	}
+	return path, nil
 }
 
 func (d Deps) backupDatabase(ctx context.Context) (string, error) {
 	dir := d.BackupDir()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("backup folder: %w", err)
-	}
-	name := "bingebandit-" + time.Now().Format("20060102-150405") + ".db"
-	path := filepath.Join(dir, name)
-	if err := d.Store.Backup(path); err != nil {
-		os.Remove(path)
+	path, err := SaveBackup(d.Store, dir)
+	if err != nil {
 		return "", err
 	}
+	name := filepath.Base(path)
 	keep, _ := strconv.Atoi(d.Store.Setting(store.SettingBackupKeep))
 	if keep < 1 {
 		keep = 1
