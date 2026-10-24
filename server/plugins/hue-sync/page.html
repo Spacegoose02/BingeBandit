@@ -84,7 +84,12 @@
     return data
   }
   const $ = (id) => document.getElementById(id)
-  const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter((k) => k != null)); return n }
+  // Attributes with a dash (aria-label) aren't properties, so they're set as attributes.
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) k.includes('-') ? n.setAttribute(k, v) : (n[k] = v)
+    n.append(...kids.filter((k) => k != null)); return n
+  }
   const say = (text, cls = '') => { $('msg').textContent = text; $('msg').className = 'small ' + cls }
   const zoneNames = { '': 'Not used', all: 'Whole screen', left: 'Left edge', centre: 'Centre', right: 'Right edge', top: 'Top', bottom: 'Bottom' }
   const zoneCells = { all: [0,1,2,3,4,5,6,7,8], left: [0,3,6], centre: [4], right: [2,5,8], top: [0,1,2], bottom: [6,7,8] }

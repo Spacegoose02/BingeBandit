@@ -175,3 +175,68 @@ func deleteOrphans(tx *sql.Tx, libraryID int64) error {
 	}
 	return nil
 }
+
+// FileSummary is a video file with the movie or episode it belongs to, for
+// plugins that look over the whole library (such as upgrade finders).
+type FileSummary struct {
+	FileID     int64   `json:"fileId"`
+	ItemID     int64   `json:"itemId"`
+	LibraryID  int64   `json:"libraryId"`
+	Kind       string  `json:"kind"` // movie | episode
+	Title      string  `json:"title"`
+	Year       int     `json:"year,omitempty"`
+	TMDBID     int64   `json:"tmdbId,omitempty"`
+	ShowID     int64   `json:"showId,omitempty"`
+	ShowTitle  string  `json:"showTitle,omitempty"`
+	ShowTMDBID int64   `json:"showTmdbId,omitempty"`
+	Season     *int    `json:"season,omitempty"`
+	Episode    *int    `json:"episode,omitempty"`
+	Path       string  `json:"path"`
+	Size       int64   `json:"size"`
+	Duration   float64 `json:"duration"`
+	Bitrate    int64   `json:"bitrate"`
+	VideoCodec string  `json:"videoCodec"`
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	BitDepth   int     `json:"bitDepth"`
+	HDR        bool    `json:"hdr"`
+	AudioCodec string  `json:"audioCodec"`
+}
+
+// FileSummaries pages through every movie and episode file, by file id.
+func (s *Store) FileSummaries(offset, limit int) ([]FileSummary, int, error) {
+	const from = ` FROM media_files f JOIN items i ON i.id = f.item_id LEFT JOIN items sh ON sh.id = i.show_id
+		WHERE i.kind IN ('movie', 'episode')`
+	var total int
+	if err := s.db.QueryRow(`SELECT COUNT(*)` + from).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	rows, err := s.db.Query(`SELECT f.id, i.id, i.library_id, i.kind, i.title, i.year, i.tmdb_id,
+		COALESCE(i.show_id, 0), COALESCE(sh.title, ''), COALESCE(sh.tmdb_id, 0), i.season_number, i.episode_number,
+		f.path, f.size, f.duration, f.bitrate, f.video_codec, f.width, f.height, f.bit_depth, f.hdr, f.audio_codec`+from+`
+		ORDER BY f.id LIMIT ? OFFSET ?`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []FileSummary{}
+	for rows.Next() {
+		var f FileSummary
+		var season, episode sql.NullInt64
+		if err := rows.Scan(&f.FileID, &f.ItemID, &f.LibraryID, &f.Kind, &f.Title, &f.Year, &f.TMDBID,
+			&f.ShowID, &f.ShowTitle, &f.ShowTMDBID, &season, &episode,
+			&f.Path, &f.Size, &f.Duration, &f.Bitrate, &f.VideoCodec, &f.Width, &f.Height, &f.BitDepth, &f.HDR, &f.AudioCodec); err != nil {
+			return nil, 0, err
+		}
+		if season.Valid {
+			n := int(season.Int64)
+			f.Season = &n
+		}
+		if episode.Valid {
+			n := int(episode.Int64)
+			f.Episode = &n
+		}
+		out = append(out, f)
+	}
+	return out, total, rows.Err()
+}

@@ -188,6 +188,18 @@ func TestPluginRoundTrip(t *testing.T) {
 	if err := p.Call(ctx, "GET", "/users", nil, &users); err != nil || len(users) != 2 {
 		t.Errorf("users: %v %v", err, users)
 	}
+	// Files with their quality, for upgrade finders.
+	if err := st.UpsertFile(&store.MediaFile{ItemID: movie, Path: filepath.Join(dir, "Parasite.mkv"), Size: 9, VideoCodec: "h264", Width: 1280, Height: 720}, 1); err != nil {
+		t.Fatal(err)
+	}
+	var files struct {
+		Files []store.FileSummary `json:"files"`
+		Total int                 `json:"total"`
+	}
+	if err := p.Call(ctx, "GET", "/files?limit=10", nil, &files); err != nil || files.Total != 1 || len(files.Files) != 1 ||
+		files.Files[0].TMDBID != 496243 || files.Files[0].Height != 720 || files.Files[0].Kind != "movie" {
+		t.Errorf("files: %v %+v", err, files)
+	}
 	// A plugin key isn't a user token, and a user token isn't a plugin key.
 	if code, _ := call("GET", "/api/plugin/v1/users", "ann-token", nil); code != http.StatusUnauthorized {
 		t.Errorf("user token on plugin API: %d", code)
