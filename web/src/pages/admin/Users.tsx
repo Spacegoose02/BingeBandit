@@ -4,7 +4,7 @@ import { useAuth } from '../../auth'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
-import type { User } from '../../types'
+import type { Library, User } from '../../types'
 
 export default function AdminUsers() {
   useDocumentTitle('Users')
@@ -12,6 +12,7 @@ export default function AdminUsers() {
   const { data: users, reload } = useApi<User[]>('/api/admin/users')
   const [adding, setAdding] = useState(false)
   const [resetting, setResetting] = useState<User | null>(null)
+  const [access, setAccess] = useState<User | null>(null)
 
   const remove = async (u: User) => {
     if (!confirm(`Delete ${u.username}? Their watch history is removed too.`)) return
@@ -37,7 +38,13 @@ export default function AdminUsers() {
               </div>
               <div className="muted small">Joined {new Date(u.createdAt * 1000).toLocaleDateString()}</div>
             </div>
-            {u.isAdmin && <span className="pill ok">Admin</span>}
+            {u.isAdmin ? (
+              <span className="pill ok">Admin · all libraries</span>
+            ) : (
+              <button className="btn btn-glass btn-sm" onClick={() => setAccess(u)}>
+                <Icon name="library" size={16} /> {u.allLibraries ? 'All libraries' : `${u.libraryIds?.length ?? 0} libraries`}
+              </button>
+            )}
             <button className="btn btn-glass btn-sm" onClick={() => setResetting(u)}>
               <Icon name="key" size={16} /> Reset password
             </button>
@@ -51,7 +58,54 @@ export default function AdminUsers() {
       </div>
       {adding && <AddUser onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload() }} />}
       {resetting && <ResetPassword user={resetting} onClose={() => setResetting(null)} />}
+      {access && <LibraryAccess user={access} onClose={() => setAccess(null)} onSaved={() => { setAccess(null); reload() }} />}
     </div>
+  )
+}
+
+function LibraryAccess({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
+  const { data: libraries } = useApi<Library[]>('/api/admin/libraries')
+  const [all, setAll] = useState(user.allLibraries)
+  const [ids, setIds] = useState<Set<number>>(new Set(user.libraryIds ?? []))
+  const [error, setError] = useState('')
+  const toggle = (id: number) =>
+    setIds((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await api.put(`/api/admin/users/${user.id}/libraries`, { all, libraryIds: [...ids] })
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={`Libraries for ${user.username}`} onClose={onClose}>
+      <form className="form" onSubmit={save}>
+        <label className="check">
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+          All libraries, including ones added later
+        </label>
+        <div className={`check-list ${all ? 'disabled' : ''}`}>
+          {libraries?.map((l) => (
+            <label key={l.id} className="check">
+              <input type="checkbox" disabled={all} checked={all || ids.has(l.id)} onChange={() => toggle(l.id)} />
+              <Icon name={l.kind === 'movies' ? 'film' : 'tv'} size={16} /> {l.name}
+            </label>
+          ))}
+        </div>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

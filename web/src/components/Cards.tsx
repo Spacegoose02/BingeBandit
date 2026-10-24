@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { img } from '../api'
 import { episodeLabel, progressFraction } from '../format'
-import type { Item } from '../types'
+import type { Collection, Item } from '../types'
 import { Icon } from './Icon'
 
 function Badge({ item }: { item: Item }) {
@@ -60,6 +60,25 @@ export function WideCard({ item }: { item: Item }) {
       </Link>
       <div className="card-sub">{isEp ? `${episodeLabel(item)} · ${item.title}` : item.year || ''}</div>
     </div>
+  )
+}
+
+export function CollectionCard({ collection }: { collection: Collection }) {
+  const poster = img(collection.poster, 'w342')
+  return (
+    <Link to={`/collection/${collection.id}`} className="poster-card">
+      <div className="poster-frame collection-frame">
+        {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{collection.name}</div>}
+        <span className="badge-count">{collection.itemCount}</span>
+        {collection.labelRule && (
+          <span className="badge-smart" title={`Everything labelled “${collection.labelRule}”`}>
+            <Icon name="stack" size={12} /> Smart
+          </span>
+        )}
+      </div>
+      <div className="card-title" title={collection.name}>{collection.name}</div>
+      <div className="card-sub">{collection.itemCount} {collection.itemCount === 1 ? 'item' : 'items'}</div>
+    </Link>
   )
 }
 

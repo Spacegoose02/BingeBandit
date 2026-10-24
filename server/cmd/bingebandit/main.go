@@ -51,6 +51,7 @@ func main() {
 		Scanner:    scanner,
 		Metadata:   meta,
 		Images:     metadata.NewImageCache(filepath.Join(cfg.DataDir, "cache", "images")),
+		Artwork:    metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork")),
 		Transcoder: transcoder,
 		Activity:   stream.NewActivity(),
 		Version:    version,

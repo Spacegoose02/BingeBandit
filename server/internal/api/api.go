@@ -25,6 +25,7 @@ type Server struct {
 	Scanner    *library.Scanner
 	Metadata   *metadata.Service
 	Images     *metadata.ImageCache
+	Artwork    *metadata.Artwork
 	Transcoder *stream.Manager
 	Activity   *stream.Activity
 	Version    string
@@ -64,6 +65,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/items/{id}/unwatched", s.setWatched(false))
 			r.Get("/search", s.search)
 			r.Get("/images/tmdb/{file}", s.tmdbImage)
+			r.Get("/images/local/{file}", s.localImage)
+			r.Get("/libraries/{id}/collections", s.libraryCollections)
+			r.Get("/collections/{id}", s.collection)
 
 			r.Post("/progress", s.progress)
 			r.Get("/files/{id}/direct", s.directPlay)
@@ -91,7 +95,19 @@ func (s *Server) Router() http.Handler {
 				r.Post("/scan", s.scanAll)
 				r.Get("/scan", s.scanStatus)
 				r.Post("/items/{id}/refresh", s.refreshItem)
+				r.Put("/items/{id}", s.editItem)
+				r.Get("/items/{id}/artwork", s.artworkOptions)
+				r.Put("/items/{id}/artwork", s.setArtwork)
+				r.Post("/items/{id}/artwork/upload", s.uploadArtwork)
+				r.Post("/items/{id}/match", s.matchItem)
+				r.Get("/match", s.matchSearch)
 
+				r.Get("/libraries/{id}/labels", s.libraryLabels)
+				r.Post("/libraries/{id}/collections", s.createCollection)
+				r.Put("/collections/{id}", s.updateCollection)
+				r.Delete("/collections/{id}", s.deleteCollection)
+
+				r.Put("/users/{id}/libraries", s.setUserLibraries)
 				r.Get("/users", s.users)
 				r.Post("/users", s.createUser)
 				r.Delete("/users/{id}", s.deleteUser)

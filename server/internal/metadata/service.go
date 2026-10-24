@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"context"
+	"errors"
 	"log"
 	"strings"
 
@@ -68,6 +69,55 @@ func (s *Service) RefreshItem(ctx context.Context, id int64) error {
 	return s.refresh(ctx, c, it)
 }
 
+var ErrNoKey = errors.New("add a TMDB API key in Settings first")
+
+// Search finds Fix Match candidates. kind is "movie" or "show".
+func (s *Service) Search(ctx context.Context, kind, query string, year int) ([]SearchResult, error) {
+	c := s.client()
+	if c == nil {
+		return nil, ErrNoKey
+	}
+	res, err := c.Search(ctx, kind, query, year)
+	for i := range res {
+		res[i].Poster = store.ImageURL(res[i].Poster)
+	}
+	return res, err
+}
+
+// Match points an item (movie or show) at a TMDB id and refreshes it.
+func (s *Service) Match(ctx context.Context, id, tmdbID int64) error {
+	if s.client() == nil {
+		return ErrNoKey
+	}
+	if err := s.st.SetMatch(id, tmdbID); err != nil {
+		return err
+	}
+	return s.RefreshItem(ctx, id)
+}
+
+// ArtworkOptions lists TMDB images of imageType for an item. Episodes have
+// no alternatives on TMDB, so they return an empty list.
+func (s *Service) ArtworkOptions(ctx context.Context, it *store.Item, imageType string) ([]ImageOption, error) {
+	c := s.client()
+	if c == nil {
+		return nil, ErrNoKey
+	}
+	switch it.Kind {
+	case "movie", "show":
+		if it.TMDBID == 0 {
+			return []ImageOption{}, nil
+		}
+		return c.Images(ctx, it.Kind, it.TMDBID, 0, imageType)
+	case "season":
+		show, err := s.st.Item(0, it.ShowID)
+		if err != nil || show.TMDBID == 0 || it.SeasonNumber == nil || imageType != "poster" {
+			return []ImageOption{}, err
+		}
+		return c.Images(ctx, "season", show.TMDBID, *it.SeasonNumber, imageType)
+	}
+	return []ImageOption{}, nil
+}
+
 func (s *Service) refresh(ctx context.Context, c *TMDB, it *store.Item) error {
 	switch it.Kind {
 	case "movie":
@@ -121,8 +171,11 @@ func (s *Service) refreshMovie(ctx context.Context, c *TMDB, it *store.Item) err
 	if len(m.ProductionCompanies) > 0 {
 		u.Studio = m.ProductionCompanies[0].Name
 	}
-	if m.BelongsToCollection != nil {
-		u.CollectionID, u.CollectionName = m.BelongsToCollection.ID, m.BelongsToCollection.Name
+	if bc := m.BelongsToCollection; bc != nil {
+		u.CollectionID, u.CollectionName = bc.ID, bc.Name
+		if err := s.st.LinkTMDBCollection(it.ID, it.LibraryID, bc.ID, bc.Name, img(bc.PosterPath), img(bc.BackdropPath)); err != nil {
+			log.Printf("metadata: collection %q: %v", bc.Name, err)
+		}
 	}
 	for _, r := range m.ReleaseDates.Results {
 		if r.Country == "US" {

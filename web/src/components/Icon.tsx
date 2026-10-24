@@ -36,6 +36,13 @@ const paths: Record<string, string> = {
   menu: 'M4 7h16M4 12h16M4 17h16',
   cc: 'M3 5h18v14H3zM10 10.5a2.5 2.5 0 1 0 0 3M17 10.5a2.5 2.5 0 1 0 0 3',
   library: 'M4 4h4v16H4zM10 4h4v16h-4zM16 5l3.8-1 3.2 15.5-3.8 1z',
+  lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  unlock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 6.8-1.2',
+  image: 'M4 5h16v14H4zM4 16l5-5 4 4 2-2 5 5M15.5 9.5h.01',
+  upload: 'M12 16V5M7 10l5-5 5 5M5 20h14',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  stack: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
 }
 
 export type IconName = keyof typeof paths

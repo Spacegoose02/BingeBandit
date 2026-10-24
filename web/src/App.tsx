@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Home from './pages/Home'
 import LibraryPage from './pages/Library'
 import ItemPage from './pages/Item'
+import CollectionPage from './pages/Collection'
 import Search from './pages/Search'
 import Account from './pages/Account'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -50,6 +51,7 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
+          <Route path="/collection/:id" element={<CollectionPage />} />
           <Route path="/search" element={<Search />} />
           <Route path="/account" element={<Account />} />
           <Route path="/admin" element={<RequireAdmin />}>

@@ -124,8 +124,10 @@ type tmdbMovie struct {
 	Genres              []named `json:"genres"`
 	ProductionCompanies []named `json:"production_companies"`
 	BelongsToCollection *struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
+		ID           int64  `json:"id"`
+		Name         string `json:"name"`
+		PosterPath   string `json:"poster_path"`
+		BackdropPath string `json:"backdrop_path"`
 	} `json:"belongs_to_collection"`
 	Credits      tmdbCredits `json:"credits"`
 	Images       tmdbImages  `json:"images"`
@@ -277,6 +279,100 @@ func (t *TMDB) Show(ctx context.Context, id int64) (*tmdbShow, error) {
 func (t *TMDB) Season(ctx context.Context, showID int64, season int) (*tmdbSeason, error) {
 	var s tmdbSeason
 	return &s, t.get(ctx, fmt.Sprintf("/tv/%d/season/%d", showID, season), nil, &s)
+}
+
+// SearchResult is one candidate for Fix Match.
+type SearchResult struct {
+	TMDBID   int64  `json:"tmdbId"`
+	Title    string `json:"title"`
+	Year     int    `json:"year,omitempty"`
+	Overview string `json:"overview,omitempty"`
+	Poster   string `json:"poster,omitempty"` // image ref, e.g. tmdb:/x.jpg
+}
+
+// Search lists candidates for a movie ("movie") or show ("show").
+func (t *TMDB) Search(ctx context.Context, kind, query string, year int) ([]SearchResult, error) {
+	path, yearParam := "/search/movie", "year"
+	if kind == "show" {
+		path, yearParam = "/search/tv", "first_air_date_year"
+	}
+	q := url.Values{"query": {query}, "include_adult": {"false"}}
+	if year != 0 {
+		q.Set(yearParam, strconv.Itoa(year))
+	}
+	var res struct {
+		Results []struct {
+			ID           int64  `json:"id"`
+			Title        string `json:"title"`
+			Name         string `json:"name"`
+			ReleaseDate  string `json:"release_date"`
+			FirstAirDate string `json:"first_air_date"`
+			Overview     string `json:"overview"`
+			PosterPath   string `json:"poster_path"`
+		} `json:"results"`
+	}
+	if err := t.get(ctx, path, q, &res); err != nil {
+		return nil, err
+	}
+	out := []SearchResult{}
+	for _, r := range res.Results {
+		title, date := r.Title, r.ReleaseDate
+		if kind == "show" {
+			title, date = r.Name, r.FirstAirDate
+		}
+		out = append(out, SearchResult{TMDBID: r.ID, Title: title, Year: yearOf(date, 0), Overview: r.Overview, Poster: img(r.PosterPath)})
+	}
+	return out, nil
+}
+
+// ImageOption is one artwork choice offered in the artwork picker.
+type ImageOption struct {
+	Ref    string  `json:"ref"`
+	Width  int     `json:"width"`
+	Height int     `json:"height"`
+	Lang   string  `json:"lang,omitempty"`
+	Votes  float64 `json:"votes"`
+}
+
+// Images lists posters, backdrops or logos for a "movie", "show" or
+// "season" (seasons only have posters).
+func (t *TMDB) Images(ctx context.Context, kind string, id int64, season int, imageType string) ([]ImageOption, error) {
+	path := fmt.Sprintf("/movie/%d/images", id)
+	switch kind {
+	case "show":
+		path = fmt.Sprintf("/tv/%d/images", id)
+	case "season":
+		path = fmt.Sprintf("/tv/%d/season/%d/images", id, season)
+	}
+	type tmdbImage struct {
+		FilePath    string  `json:"file_path"`
+		Width       int     `json:"width"`
+		Height      int     `json:"height"`
+		Lang        string  `json:"iso_639_1"`
+		VoteAverage float64 `json:"vote_average"`
+	}
+	var res struct {
+		Posters   []tmdbImage `json:"posters"`
+		Backdrops []tmdbImage `json:"backdrops"`
+		Logos     []tmdbImage `json:"logos"`
+	}
+	// language=null would hide textless art; ask for ours plus language-free images.
+	q := url.Values{"include_image_language": {t.imageLang() + ",null"}}
+	if err := t.get(ctx, path, q, &res); err != nil {
+		return nil, err
+	}
+	list := res.Posters
+	switch imageType {
+	case "backdrop":
+		list = res.Backdrops
+	case "logo":
+		list = res.Logos
+	}
+	out := []ImageOption{}
+	for _, i := range list {
+		out = append(out, ImageOption{Ref: "tmdb:" + i.FilePath, Width: i.Width, Height: i.Height, Lang: i.Lang, Votes: i.VoteAverage})
+	}
+	return out, nil
 }
 
 func (t *TMDB) imageLang() string {

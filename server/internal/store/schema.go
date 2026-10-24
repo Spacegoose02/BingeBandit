@@ -107,4 +107,45 @@ CREATE TABLE watch_state (
 );
 CREATE INDEX watch_state_recent ON watch_state(user_id, updated_at);
 `,
+	// 2: admin editing (locked fields, labels, edition, episode order),
+	// collections, and per-user library access.
+	`
+ALTER TABLE items ADD COLUMN locked TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE items ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE items ADD COLUMN edition TEXT NOT NULL DEFAULT '';
+ALTER TABLE items ADD COLUMN episode_order TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE users ADD COLUMN all_libraries INTEGER NOT NULL DEFAULT 1;
+CREATE TABLE user_libraries (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+	PRIMARY KEY (user_id, library_id)
+);
+
+CREATE TABLE collections (
+	id         INTEGER PRIMARY KEY,
+	library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+	name       TEXT NOT NULL,
+	overview   TEXT NOT NULL DEFAULT '',
+	poster     TEXT NOT NULL DEFAULT '',
+	backdrop   TEXT NOT NULL DEFAULT '',
+	tmdb_id    INTEGER NOT NULL DEFAULT 0,
+	label_rule TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX collections_name ON collections(library_id, name COLLATE NOCASE);
+CREATE TABLE collection_items (
+	collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+	item_id       INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	PRIMARY KEY (collection_id, item_id)
+);
+CREATE INDEX collection_items_item ON collection_items(item_id);
+
+INSERT OR IGNORE INTO collections (library_id, name, tmdb_id, created_at)
+	SELECT library_id, collection_name, collection_id, CAST(strftime('%s', 'now') AS INTEGER)
+	FROM items WHERE collection_id > 0 AND collection_name != '' GROUP BY library_id, collection_id;
+INSERT OR IGNORE INTO collection_items (collection_id, item_id)
+	SELECT c.id, i.id FROM items i JOIN collections c ON c.library_id = i.library_id AND c.tmdb_id = i.collection_id
+	WHERE i.collection_id > 0;
+`,
 }

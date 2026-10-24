@@ -62,10 +62,14 @@ func (s *Store) migrate() error {
 func now() int64 { return time.Now().Unix() }
 
 // ImageURL turns a stored image reference into a URL the clients can load.
-// TMDB images are stored as "tmdb:/<file>" and served through the local cache.
+// TMDB images are stored as "tmdb:/<file>" and served through the local cache;
+// uploaded or downloaded artwork is "local:/<file>" in the data folder.
 func ImageURL(ref string) string {
 	if strings.HasPrefix(ref, "tmdb:/") {
 		return "/api/images/tmdb/" + ref[len("tmdb:/"):]
+	}
+	if strings.HasPrefix(ref, "local:/") {
+		return "/api/images/local/" + ref[len("local:/"):]
 	}
 	return ref
 }

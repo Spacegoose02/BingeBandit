@@ -106,10 +106,16 @@ func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	if !currentUser(r).IsAdmin {
+	u := currentUser(r)
+	if !u.IsAdmin {
+		visible := libs[:0]
 		for _, l := range libs {
-			l.Paths = nil
+			if s.Store.CanSeeLibrary(u, l.ID) {
+				l.Paths = nil
+				visible = append(visible, l)
+			}
 		}
+		libs = visible
 	}
 	writeJSON(w, http.StatusOK, libs)
 }
@@ -121,6 +127,9 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lib, err := s.Store.Library(id)
+	if err == nil && !s.Store.CanSeeLibrary(currentUser(r), id) {
+		err = store.ErrNotFound
+	}
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -191,9 +200,21 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			resp["season"] = season
 		}
 	}
-	if it.CollectionID != 0 {
-		if coll, err := s.Store.CollectionItems(u.ID, it.CollectionID); err == nil && len(coll) > 1 {
-			resp["collection"] = coll
+	if it.Kind == "movie" || it.Kind == "show" {
+		type shelf struct {
+			Collection *store.Collection `json:"collection"`
+			Items      []*store.Item     `json:"items"`
+		}
+		shelves := []shelf{}
+		cols, _ := s.Store.ItemCollections(it.ID)
+		for _, c := range cols {
+			if members, err := s.Store.CollectionMembers(u.ID, c.ID); err == nil && len(members) > 1 {
+				shelves = append(shelves, shelf{c, members})
+			}
+		}
+		resp["collections"] = shelves
+		if u.IsAdmin {
+			resp["collectionNames"], _ = s.Store.ItemCollectionNames(it.ID)
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -267,6 +288,10 @@ func (s *Server) setWatched(watched bool) http.HandlerFunc {
 		id, ok := idParam(r, "id")
 		if !ok {
 			writeErr(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		if _, err := s.Store.Item(currentUser(r).ID, id); err != nil {
+			writeStoreErr(w, err)
 			return
 		}
 		ids, err := s.Store.LeafIDs(id)

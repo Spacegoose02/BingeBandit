@@ -23,14 +23,21 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Users and admins, password login, rate-limited sign-in |
 | 🟡 | Ability to download files — admin toggle and endpoint exist; no download button yet |
 
-## M2: Library polish and admin tools
+## M2: Library polish and admin tools 🟡 (in progress)
 
-- Admin UI: **Edit details** with tabs (Title, Sort title, Original title, Edition, Originally available, Content rating, Rating, Studio, Tagline, Summary), Genres, Collections, Labels, Artwork (poster/background/logo), Advanced (episode sort order, metadata provider TMDB/TheTVDB, credits detection on/off). Locked fields that survive refreshes.
-- Change poster: TMDB alternatives, ThePosterDB scraper, by URL, upload a file. Change banners/backgrounds the same way.
-- Tags/labels used for collections ("Lion King Collection") and automatic smart collections ("Original Disney films").
-- Fix match / unmatch (search TMDB and pick).
+| | Item |
+|---|---|
+| ✅ | **Edit details** dialog: Title, Sort title, Original title, Edition, Originally available, Content rating, Rating, Studio/Network, Tagline, Summary; Tags tab (Genres, Labels, Collections); Artwork tab; Advanced tab (episode order). Edited fields lock and survive refreshes |
+| ✅ | Change poster, background and logo: TMDB alternatives, by URL (paste from ThePosterDB, Fanart.tv…), upload a file |
+| ✅ | Collections: TMDB collections automatically, hand-picked collections, and **smart collections** that include everything with a label ("Original Disney films") |
+| ✅ | Fix match (search TMDB and pick) |
+| ✅ | Admin picks which libraries each user can see |
+| | ThePosterDB built-in search (no public API; needs a scraper) |
+| | Metadata provider choice per show (TheTVDB), credits detection toggle |
+| | Smart collections by genre, studio or year (today they work by label) |
+
 - Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
-- Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube. Admin picks which libraries each user can see.
+- Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
 - Scan settings: watch folders for changes (partial scan), scan on a schedule, empty trash toggle.
 - Scheduled tasks (with run window): DB backup (+ remote backup), optimize DB, clear old cache, refresh metadata periodically, media analysis, extensive analysis during maintenance.

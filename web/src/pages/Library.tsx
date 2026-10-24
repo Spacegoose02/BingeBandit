@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
-import { PosterCard } from '../components/Cards'
-import { useDocumentTitle } from '../hooks'
-import type { Item, Library } from '../types'
+import { useAuth } from '../auth'
+import { CollectionCard, PosterCard } from '../components/Cards'
+import { CollectionEditor } from '../components/CollectionEditor'
+import { Icon } from '../components/Icon'
+import { useApi, useDocumentTitle } from '../hooks'
+import type { Collection, Item, Library } from '../types'
 
 const PAGE = 120
 const sorts = [
@@ -27,6 +30,8 @@ export default function LibraryPage() {
 }
 
 function LibraryView({ id }: { id: string }) {
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'collections' ? 'collections' : 'library'
   const [sort, setSort] = useState(() => localStorage.getItem(`bb.sort.${id}`) ?? 'title')
   const [library, setLibrary] = useState<Library | null>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -79,24 +84,74 @@ function LibraryView({ id }: { id: string }) {
       <header className="page-head">
         <div>
           <h1>{library?.name ?? ' '}</h1>
-          <div className="muted">{total} {library?.kind === 'shows' ? 'shows' : 'movies'}</div>
+          <div className="muted">
+            {total} {library?.kind === 'shows' ? (total === 1 ? 'show' : 'shows') : total === 1 ? 'movie' : 'movies'}
+          </div>
         </div>
-        <label className="select-label">
-          Sort
-          <select value={sort} onChange={(e) => changeSort(e.target.value)}>
-            {sorts.map(([v, label]) => (
-              <option key={v} value={v}>{label}</option>
-            ))}
-          </select>
-        </label>
+        <div className="segmented">
+          <button className={tab === 'library' ? 'active' : ''} onClick={() => setParams({}, { replace: true })}>Library</button>
+          <button className={tab === 'collections' ? 'active' : ''} onClick={() => setParams({ tab: 'collections' }, { replace: true })}>
+            Collections
+          </button>
+        </div>
+        {tab === 'library' && (
+          <label className="select-label">
+            Sort
+            <select value={sort} onChange={(e) => changeSort(e.target.value)}>
+              {sorts.map(([v, label]) => (
+                <option key={v} value={v}>{label}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </header>
-      {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
+      {tab === 'collections' ? (
+        <CollectionsTab libraryId={Number(id)} />
+      ) : (
+        <>
+          {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
+          <div className="poster-grid">
+            {items.map((it) => (
+              <PosterCard key={it.id} item={it} />
+            ))}
+          </div>
+          <div ref={sentinel} style={{ height: 1 }} />
+        </>
+      )}
+    </div>
+  )
+}
+
+function CollectionsTab({ libraryId }: { libraryId: number }) {
+  const { user } = useAuth()
+  const { data, reload } = useApi<Collection[]>(`/api/libraries/${libraryId}/collections`)
+  const [creating, setCreating] = useState(false)
+  return (
+    <>
+      {user?.isAdmin && (
+        <div className="actions" style={{ marginBottom: 20 }}>
+          <button className="btn btn-glass btn-sm" onClick={() => setCreating(true)}>
+            <Icon name="plus" size={16} /> New collection
+          </button>
+          <span className="muted small">Add movies from their Edit dialog, or give a collection a label to fill it automatically.</span>
+        </div>
+      )}
+      {data?.length === 0 && <div className="empty">No collections yet. TMDB collections appear here once metadata is fetched.</div>}
       <div className="poster-grid">
-        {items.map((it) => (
-          <PosterCard key={it.id} item={it} />
+        {data?.map((c) => (
+          <CollectionCard key={c.id} collection={c} />
         ))}
       </div>
-      <div ref={sentinel} style={{ height: 1 }} />
-    </div>
+      {creating && (
+        <CollectionEditor
+          libraryId={libraryId}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false)
+            reload()
+          }}
+        />
+      )}
+    </>
   )
 }

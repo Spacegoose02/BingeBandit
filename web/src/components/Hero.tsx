@@ -15,6 +15,7 @@ export function MetaLine({ item }: { item: Item }) {
     <div className="meta-line">
       {parts.join(' · ')}
       {item.contentRating && <span className="rating-pill">{item.contentRating}</span>}
+      {item.edition && <span className="rating-pill">{item.edition}</span>}
       {!!item.rating && (
         <span className="score">
           <Icon name="star" fill size={14} /> {item.rating.toFixed(1)}

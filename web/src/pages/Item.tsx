@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { PersonCard, PosterCard } from '../components/Cards'
+import { EditItem } from '../components/EditItem'
+import { MatchDialog } from '../components/MatchDialog'
 import { MetaLine } from '../components/Hero'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
@@ -21,12 +23,13 @@ export default function ItemPage() {
 }
 
 function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }) {
-  const { item, files = [], children = [], show, season, upNext, collection } = detail
+  const { item, files = [], children = [], show, season, upNext, collections = [] } = detail
   const { user } = useAuth()
   const nav = useNavigate()
   const [fileIdx, setFileIdx] = useState(0)
   const [trailer, setTrailer] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [dialog, setDialog] = useState<null | 'edit' | 'match'>(null)
   const file: MediaFile | undefined = files[fileIdx]
 
   const backdrop = img(item.backdrop || show?.backdrop || item.showBackdrop, 'original')
@@ -126,6 +129,16 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               <button className="btn btn-glass icon-only" onClick={toggleWatched} title={watchedNow ? 'Mark unwatched' : 'Mark watched'}>
                 <Icon name="check" size={18} className={watchedNow ? 'accent' : ''} />
               </button>
+              {user?.isAdmin && (
+                <button className="btn btn-glass icon-only" onClick={() => setDialog('edit')} title="Edit details and artwork">
+                  <Icon name="edit" size={18} />
+                </button>
+              )}
+              {user?.isAdmin && (item.kind === 'movie' || item.kind === 'show') && (
+                <button className="btn btn-glass icon-only" onClick={() => setDialog('match')} title="Fix match">
+                  <Icon name="search" size={18} />
+                </button>
+              )}
               {user?.isAdmin && item.kind !== 'season' && (
                 <button className="btn btn-glass icon-only" onClick={refresh} disabled={busy} title="Refresh metadata">
                   <Icon name="refresh" size={18} className={busy ? 'spin' : ''} />
@@ -183,14 +196,41 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
           </Row>
         )}
 
-        {collection && collection.length > 1 && (
-          <Row title={item.collectionName ?? 'Collection'}>
-            {collection.map((m) => (
+        {collections.map(({ collection, items }) => (
+          <Row
+            key={collection.id}
+            title={collection.name}
+            action={<Link to={`/collection/${collection.id}`} className="muted small">View collection</Link>}
+          >
+            {items.map((m) => (
               <PosterCard key={m.id} item={m} />
             ))}
           </Row>
-        )}
+        ))}
       </div>
+
+      {dialog === 'edit' && (
+        <EditItem
+          item={item}
+          collectionNames={detail.collectionNames ?? []}
+          onClose={() => setDialog(null)}
+          onChanged={reload}
+          onSaved={() => {
+            setDialog(null)
+            reload()
+          }}
+        />
+      )}
+      {dialog === 'match' && (
+        <MatchDialog
+          item={item}
+          onClose={() => setDialog(null)}
+          onMatched={() => {
+            setDialog(null)
+            reload()
+          }}
+        />
+      )}
 
       {trailer && item.trailer && (
         <Modal title={`${item.title} — Trailer`} onClose={() => setTrailer(false)} wide>

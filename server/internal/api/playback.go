@@ -25,15 +25,28 @@ var videoMime = map[string]string{
 	".mov": "video/quicktime", ".avi": "video/x-msvideo", ".ts": "video/mp2t", ".m2ts": "video/mp2t",
 }
 
-func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
+// playableFile loads the {id} media file if the current user can see its
+// library, writing the error response otherwise.
+func (s *Server) playableFile(w http.ResponseWriter, r *http.Request) *store.MediaFile {
 	id, ok := idParam(r, "id")
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad id")
-		return
+		return nil
 	}
 	mf, err := s.Store.File(id)
+	if err == nil {
+		_, err = s.Store.Item(currentUser(r).ID, mf.ItemID)
+	}
 	if err != nil {
 		writeStoreErr(w, err)
+		return nil
+	}
+	return mf
+}
+
+func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
+	mf := s.playableFile(w, r)
+	if mf == nil {
 		return
 	}
 	download := r.URL.Query().Get("download") == "1"
@@ -67,19 +80,13 @@ var textSubtitleCodecs = map[string]bool{"subrip": true, "srt": true, "ass": tru
 // subtitle extracts an embedded text subtitle stream as WebVTT and caches it.
 // Cue times are file time, which is what the player tracks even mid-transcode.
 func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
-	id, ok := idParam(r, "id")
-	if !ok {
-		writeErr(w, http.StatusBadRequest, "bad id")
-		return
-	}
 	index, err := strconv.Atoi(strings.TrimSuffix(chi.URLParam(r, "stream"), ".vtt"))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "bad stream")
 		return
 	}
-	mf, err := s.Store.File(id)
-	if err != nil {
-		writeStoreErr(w, err)
+	mf := s.playableFile(w, r)
+	if mf == nil {
 		return
 	}
 	found := false
@@ -118,14 +125,8 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
-	id, ok := idParam(r, "id")
-	if !ok {
-		writeErr(w, http.StatusBadRequest, "bad id")
-		return
-	}
-	mf, err := s.Store.File(id)
-	if err != nil {
-		writeStoreErr(w, err)
+	mf := s.playableFile(w, r)
+	if mf == nil {
 		return
 	}
 	opts := stream.Options{AudioStream: -1}

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,6 +52,10 @@ type Item struct {
 	CollectionName string     `json:"collectionName,omitempty"`
 	Trailer        string     `json:"trailer,omitempty"` // YouTube video key
 	Credits        []Credit   `json:"credits,omitempty"`
+	Edition        string     `json:"edition,omitempty"`
+	Labels         []string   `json:"labels,omitempty"`
+	Locked         []string   `json:"locked,omitempty"`       // fields metadata refreshes must not overwrite
+	EpisodeOrder   string     `json:"episodeOrder,omitempty"` // shows: "" (aired) or "desc"
 	SeasonNumber   *int       `json:"seasonNumber,omitempty"`
 	EpisodeNumber  *int       `json:"episodeNumber,omitempty"`
 	AddedAt        int64      `json:"addedAt"`
@@ -64,10 +70,17 @@ type Item struct {
 	MetadataAt int64  `json:"-"`
 }
 
+// visible restricts items to libraries the @uid user may see. @uid = 0 is
+// the server itself (scanner, metadata), which sees everything.
+const visible = `(@uid = 0
+	OR EXISTS (SELECT 1 FROM users u WHERE u.id = @uid AND (u.all_libraries = 1 OR u.is_admin = 1))
+	OR i.library_id IN (SELECT ul.library_id FROM user_libraries ul WHERE ul.user_id = @uid))`
+
 // Every item query binds @uid so watch state and unwatched counts are per user.
 const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i.title, i.sort_title, i.original_title, i.year,
 	i.overview, i.tagline, i.poster, i.backdrop, i.logo, i.rating, i.content_rating, i.genres, i.studio, i.runtime,
-	i.release_date, i.tmdb_id, i.collection_id, i.collection_name, i.trailer, i.credits, i.season_number, i.episode_number,
+	i.release_date, i.tmdb_id, i.collection_id, i.collection_name, i.trailer, i.credits,
+	i.edition, i.labels, i.locked, i.episode_order, i.season_number, i.episode_number,
 	i.added_at, i.match_key, i.metadata_at,
 	COALESCE(w.position, 0.0), COALESCE(w.duration, 0.0), COALESCE(w.watched, 0), COALESCE(w.updated_at, 0),
 	CASE i.kind
@@ -88,11 +101,12 @@ LEFT JOIN items sh ON sh.id = i.show_id`
 func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var parent, show, season, episode sql.NullInt64
-	var genres, credits string
+	var genres, credits, labels, locked string
 	var watched int
 	err := r.Scan(&it.ID, &it.LibraryID, &it.Kind, &parent, &show, &it.Title, &it.SortTitle, &it.OriginalTitle, &it.Year,
 		&it.Overview, &it.Tagline, &it.Poster, &it.Backdrop, &it.Logo, &it.Rating, &it.ContentRating, &genres, &it.Studio, &it.Runtime,
-		&it.ReleaseDate, &it.TMDBID, &it.CollectionID, &it.CollectionName, &it.Trailer, &credits, &season, &episode,
+		&it.ReleaseDate, &it.TMDBID, &it.CollectionID, &it.CollectionName, &it.Trailer, &credits,
+		&it.Edition, &labels, &locked, &it.EpisodeOrder, &season, &episode,
 		&it.AddedAt, &it.MatchKey, &it.MetadataAt,
 		&it.Watch.Position, &it.Watch.Duration, &watched, &it.Watch.UpdatedAt,
 		&it.ChildCount, &it.UnwatchedCount,
@@ -116,6 +130,8 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	it.Watch.Watched = watched == 1
 	json.Unmarshal([]byte(genres), &it.Genres)
 	json.Unmarshal([]byte(credits), &it.Credits)
+	json.Unmarshal([]byte(labels), &it.Labels)
+	json.Unmarshal([]byte(locked), &it.Locked)
 	it.Poster = ImageURL(it.Poster)
 	it.Backdrop = ImageURL(it.Backdrop)
 	it.Logo = ImageURL(it.Logo)
@@ -146,18 +162,23 @@ func (s *Store) queryItems(query string, args ...any) ([]*Item, error) {
 
 func uidArg(uid int64) sql.NamedArg { return sql.Named("uid", uid) }
 
+// Item returns ErrNotFound for items in libraries the user cannot see.
 func (s *Store) Item(uid, id int64) (*Item, error) {
-	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.id = @id`, uidArg(uid), sql.Named("id", id)))
+	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.id = @id AND `+visible, uidArg(uid), sql.Named("id", id)))
 }
 
+// Children lists seasons of a show or episodes of a season, honouring the
+// show's episode order setting.
 func (s *Store) Children(uid, parentID int64) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE i.parent_id = @p
-		ORDER BY COALESCE(i.season_number, 0), COALESCE(i.episode_number, 0), i.sort_title COLLATE NOCASE`,
+	return s.queryItems(itemSelect+` WHERE i.parent_id = @p AND `+visible+`
+		ORDER BY COALESCE(i.season_number, 0),
+			CASE WHEN COALESCE(sh.episode_order, '') = 'desc' THEN -COALESCE(i.episode_number, 0) ELSE COALESCE(i.episode_number, 0) END,
+			i.sort_title COLLATE NOCASE`,
 		uidArg(uid), sql.Named("p", parentID))
 }
 
 func (s *Store) ShowEpisodes(uid, showID int64) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode'
+	return s.queryItems(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND `+visible+`
 		ORDER BY i.season_number = 0, i.season_number, i.episode_number`,
 		uidArg(uid), sql.Named("show", showID))
 }
@@ -179,7 +200,7 @@ func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit in
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM items WHERE library_id = ? AND kind IN ('movie','show')`, libraryID).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	items, err := s.queryItems(itemSelect+` WHERE i.library_id = @lib AND i.kind IN ('movie','show')
+	items, err := s.queryItems(itemSelect+` WHERE i.library_id = @lib AND i.kind IN ('movie','show') AND `+visible+`
 		ORDER BY `+order+` LIMIT @limit OFFSET @offset`,
 		uidArg(uid), sql.Named("lib", libraryID), sql.Named("limit", limit), sql.Named("offset", offset))
 	return items, total, err
@@ -191,20 +212,20 @@ func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error
 	if kind == "show" {
 		order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
 	}
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind ORDER BY `+order+` LIMIT @limit`,
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` ORDER BY `+order+` LIMIT @limit`,
 		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
 }
 
 func (s *Store) RecentlyReleased(uid int64, kind string, limit int) ([]*Item, error) {
 	today := time.Now().Format("2006-01-02")
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND i.release_date != '' AND i.release_date <= @today
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND i.release_date != '' AND i.release_date <= @today AND `+visible+`
 		ORDER BY i.release_date DESC LIMIT @limit`,
 		uidArg(uid), sql.Named("kind", kind), sql.Named("today", today), sql.Named("limit", limit))
 }
 
 // InProgress is everything the user started and has not finished.
 func (s *Store) InProgress(uid int64, limit int) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode')
+	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode') AND `+visible+`
 		ORDER BY w.updated_at DESC LIMIT @limit`, uidArg(uid), sql.Named("limit", limit))
 }
 
@@ -238,20 +259,16 @@ func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, err
 
 // NextEpisode is the first regular-season episode after the given one.
 func (s *Store) NextEpisode(uid, showID int64, season, episode int) (*Item, error) {
-	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0
+	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0 AND `+visible+`
 		AND (i.season_number > @s OR (i.season_number = @s AND i.episode_number > @e))
 		ORDER BY i.season_number, i.episode_number LIMIT 1`,
 		uidArg(uid), sql.Named("show", showID), sql.Named("s", season), sql.Named("e", episode)))
 }
 
-func (s *Store) CollectionItems(uid, collectionID int64) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE i.collection_id = @c AND i.kind = 'movie' ORDER BY i.release_date`,
-		uidArg(uid), sql.Named("c", collectionID))
-}
-
 func (s *Store) Search(uid int64, q string, limit int) ([]*Item, error) {
 	like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
-	return s.queryItems(itemSelect+` WHERE i.kind IN ('movie','show') AND (i.title LIKE @q ESCAPE '\' OR i.original_title LIKE @q ESCAPE '\')
+	return s.queryItems(itemSelect+` WHERE i.kind IN ('movie','show') AND `+visible+`
+		AND (i.title LIKE @q ESCAPE '\' OR i.original_title LIKE @q ESCAPE '\')
 		ORDER BY i.sort_title COLLATE NOCASE LIMIT @limit`, uidArg(uid), sql.Named("q", like), sql.Named("limit", limit))
 }
 
@@ -312,20 +329,123 @@ func (s *Store) ItemsNeedingMetadata(uid, libraryID int64, force bool) ([]*Item,
 		ORDER BY i.added_at DESC`, uidArg(uid), sql.Named("lib", libraryID))
 }
 
-// UpdateMetadata writes provider metadata onto an item. Image fields hold
-// raw references (e.g. "tmdb:/abc.jpg"), not URLs.
+// LockableFields are the field names an admin can lock (JSON names, as the
+// web UI uses them). Locked fields survive metadata refreshes.
+var LockableFields = map[string]bool{
+	"title": true, "sortTitle": true, "originalTitle": true, "releaseDate": true, "overview": true, "tagline": true,
+	"poster": true, "backdrop": true, "logo": true, "rating": true, "contentRating": true, "genres": true,
+	"studio": true, "collections": true,
+}
+
+// unlessLocked keeps a column's current value when any of fields is locked.
+func unlessLocked(col string, fields ...string) string {
+	return fmt.Sprintf(`%s = CASE WHEN EXISTS (SELECT 1 FROM json_each(locked) WHERE value IN ('%s')) THEN %s ELSE ? END`,
+		col, strings.Join(fields, "','"), col)
+}
+
+var updateMetadataSQL = `UPDATE items SET ` + strings.Join([]string{
+	unlessLocked("title", "title"),
+	unlessLocked("sort_title", "title", "sortTitle"),
+	unlessLocked("original_title", "originalTitle"),
+	unlessLocked("year", "releaseDate"),
+	unlessLocked("overview", "overview"),
+	unlessLocked("tagline", "tagline"),
+	unlessLocked("poster", "poster"),
+	unlessLocked("backdrop", "backdrop"),
+	unlessLocked("logo", "logo"),
+	unlessLocked("rating", "rating"),
+	unlessLocked("content_rating", "contentRating"),
+	unlessLocked("genres", "genres"),
+	unlessLocked("studio", "studio"),
+	unlessLocked("release_date", "releaseDate"),
+	"runtime = ?", "tmdb_id = ?", "collection_id = ?", "collection_name = ?", "trailer = ?", "credits = ?",
+	"metadata_at = ?", "updated_at = ?",
+}, ", ") + ` WHERE id = ?`
+
+// UpdateMetadata writes provider metadata onto an item, skipping locked
+// fields. Image fields hold raw references (e.g. "tmdb:/abc.jpg"), not URLs.
 func (s *Store) UpdateMetadata(id int64, m *Item) error {
 	genres, _ := json.Marshal(nonNil(m.Genres))
 	credits, _ := json.Marshal(nonNilCredits(m.Credits))
-	_, err := s.db.Exec(`UPDATE items SET title = ?, sort_title = ?, original_title = ?, year = ?, overview = ?, tagline = ?,
-		poster = ?, backdrop = ?, logo = ?, rating = ?, content_rating = ?, genres = ?, studio = ?, runtime = ?,
-		release_date = ?, tmdb_id = ?, collection_id = ?, collection_name = ?, trailer = ?, credits = ?,
-		metadata_at = ?, updated_at = ? WHERE id = ?`,
+	_, err := s.db.Exec(updateMetadataSQL,
 		m.Title, SortTitle(m.Title), m.OriginalTitle, m.Year, m.Overview, m.Tagline,
-		m.Poster, m.Backdrop, m.Logo, m.Rating, m.ContentRating, string(genres), m.Studio, m.Runtime,
-		m.ReleaseDate, m.TMDBID, m.CollectionID, m.CollectionName, m.Trailer, string(credits),
+		m.Poster, m.Backdrop, m.Logo, m.Rating, m.ContentRating, string(genres), m.Studio, m.ReleaseDate,
+		m.Runtime, m.TMDBID, m.CollectionID, m.CollectionName, m.Trailer, string(credits),
 		now(), now(), id)
 	return err
+}
+
+// Details are the admin-editable text fields of an item.
+type Details struct {
+	Title         string   `json:"title"`
+	SortTitle     string   `json:"sortTitle"`
+	OriginalTitle string   `json:"originalTitle"`
+	Edition       string   `json:"edition"`
+	ReleaseDate   string   `json:"releaseDate"`
+	ContentRating string   `json:"contentRating"`
+	Rating        float64  `json:"rating"`
+	Studio        string   `json:"studio"`
+	Tagline       string   `json:"tagline"`
+	Overview      string   `json:"overview"`
+	Genres        []string `json:"genres"`
+	Labels        []string `json:"labels"`
+	EpisodeOrder  string   `json:"episodeOrder"`
+	Locked        []string `json:"locked"`
+}
+
+// UpdateDetails saves an admin edit, replacing the item's lock list.
+func (s *Store) UpdateDetails(id int64, d *Details) error {
+	if d.SortTitle == "" {
+		d.SortTitle = SortTitle(d.Title)
+	}
+	year := 0
+	if len(d.ReleaseDate) >= 4 {
+		year, _ = strconv.Atoi(d.ReleaseDate[:4])
+	}
+	locks := []string{}
+	for _, f := range d.Locked {
+		if LockableFields[f] {
+			locks = append(locks, f)
+		}
+	}
+	genres, _ := json.Marshal(nonNil(d.Genres))
+	labels, _ := json.Marshal(nonNil(d.Labels))
+	lockJSON, _ := json.Marshal(locks)
+	_, err := s.db.Exec(`UPDATE items SET title = ?, sort_title = ?, original_title = ?, edition = ?, release_date = ?, year = ?,
+		content_rating = ?, rating = ?, studio = ?, tagline = ?, overview = ?, genres = ?, labels = ?, episode_order = ?,
+		locked = ?, updated_at = ? WHERE id = ?`,
+		d.Title, d.SortTitle, d.OriginalTitle, d.Edition, d.ReleaseDate, year,
+		d.ContentRating, d.Rating, d.Studio, d.Tagline, d.Overview, string(genres), string(labels), d.EpisodeOrder,
+		string(lockJSON), now(), id)
+	return err
+}
+
+// SetArtwork replaces poster, backdrop or logo and locks it.
+func (s *Store) SetArtwork(id int64, kind, ref string) error {
+	if kind != "poster" && kind != "backdrop" && kind != "logo" {
+		return fmt.Errorf("unknown artwork type %q", kind)
+	}
+	_, err := s.db.Exec(`UPDATE items SET `+kind+` = ?, updated_at = ?,
+		locked = CASE WHEN EXISTS (SELECT 1 FROM json_each(locked) WHERE value = ?) THEN locked ELSE json_insert(locked, '$[#]', ?) END
+		WHERE id = ?`, ref, now(), kind, kind, id)
+	return err
+}
+
+// SetMatch points an item at a different TMDB id; the next refresh uses it.
+func (s *Store) SetMatch(id, tmdbID int64) error {
+	_, err := s.db.Exec(`UPDATE items SET tmdb_id = ?, metadata_at = 0, updated_at = ? WHERE id = ?`, tmdbID, now(), id)
+	return err
+}
+
+// RawArtwork returns the stored (not URL-mapped) image reference, used to
+// clean up uploaded files when they are replaced.
+func (s *Store) RawArtwork(id int64, kind string) (string, error) {
+	if kind != "poster" && kind != "backdrop" && kind != "logo" {
+		return "", fmt.Errorf("unknown artwork type %q", kind)
+	}
+	var ref string
+	err := s.db.QueryRow(`SELECT `+kind+` FROM items WHERE id = ?`, id).Scan(&ref)
+	return ref, err
 }
 
 // MarkMetadataChecked records a lookup that found nothing so it is not retried every scan.

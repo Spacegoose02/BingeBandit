@@ -5,6 +5,8 @@ export interface User {
   username: string
   isAdmin: boolean
   createdAt: number
+  allLibraries: boolean
+  libraryIds?: number[]
 }
 
 export interface WatchState {
@@ -49,6 +51,10 @@ export interface Item {
   collectionName?: string
   trailer?: string
   credits?: Credit[]
+  edition?: string
+  labels?: string[]
+  locked?: string[]
+  episodeOrder?: '' | 'desc'
   seasonNumber?: number
   episodeNumber?: number
   addedAt: number
@@ -108,7 +114,20 @@ export interface ItemDetail {
   show?: Item
   season?: Item
   upNext?: Item
-  collection?: Item[]
+  collections?: { collection: Collection; items: Item[] }[]
+  collectionNames?: string[] // admin only: explicit collection links
+}
+
+export interface Collection {
+  id: number
+  libraryId: number
+  name: string
+  overview?: string
+  poster?: string
+  backdrop?: string
+  tmdbId?: number
+  labelRule?: string
+  itemCount: number
 }
 
 export interface HomeData {

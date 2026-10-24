@@ -8,11 +8,13 @@ import (
 )
 
 type User struct {
-	ID           int64  `json:"id"`
-	Username     string `json:"username"`
-	IsAdmin      bool   `json:"isAdmin"`
-	CreatedAt    int64  `json:"createdAt"`
-	PasswordHash string `json:"-"`
+	ID           int64   `json:"id"`
+	Username     string  `json:"username"`
+	IsAdmin      bool    `json:"isAdmin"`
+	CreatedAt    int64   `json:"createdAt"`
+	AllLibraries bool    `json:"allLibraries"`
+	LibraryIDs   []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
+	PasswordHash string  `json:"-"`
 }
 
 func (s *Store) CountUsers() (int, error) {
@@ -22,7 +24,7 @@ func (s *Store) CountUsers() (int, error) {
 }
 
 func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, error) {
-	u := &User{Username: username, PasswordHash: passwordHash, IsAdmin: admin, CreatedAt: now()}
+	u := &User{Username: username, PasswordHash: passwordHash, IsAdmin: admin, CreatedAt: now(), AllLibraries: true}
 	res, err := s.db.Exec(`INSERT INTO users (username, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?)`,
 		username, passwordHash, boolInt(admin), u.CreatedAt)
 	if err != nil {
@@ -32,11 +34,11 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, password_hash`
+const userCols = `id, username, is_admin, created_at, all_libraries, password_hash`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.PasswordHash); err != nil {
+	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.PasswordHash); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -67,7 +69,64 @@ func (s *Store) ListUsers() ([]*User, error) {
 		}
 		out = append(out, u)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, u := range out {
+		if u.LibraryIDs, err = s.UserLibraryIDs(u.ID); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) UserLibraryIDs(userID int64) ([]int64, error) {
+	rows, err := s.db.Query(`SELECT library_id FROM user_libraries WHERE user_id = ? ORDER BY library_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// SetUserLibraries sets which libraries a user sees. all=true also covers
+// libraries added later.
+func (s *Store) SetUserLibraries(userID int64, all bool, libraryIDs []int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE users SET all_libraries = ? WHERE id = ?`, boolInt(all), userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM user_libraries WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	for _, id := range libraryIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO user_libraries (user_id, library_id) VALUES (?, ?)`, userID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// CanSeeLibrary reports whether u may browse the library.
+func (s *Store) CanSeeLibrary(u *User, libraryID int64) bool {
+	if u.IsAdmin || u.AllLibraries {
+		return true
+	}
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM user_libraries WHERE user_id = ? AND library_id = ?`, u.ID, libraryID).Scan(&n)
+	return n > 0
 }
 
 func (s *Store) DeleteUser(id int64) error {
@@ -101,9 +160,9 @@ func (s *Store) UserBySession(token string) (*User, error) {
 	h := hashToken(token)
 	var lastSeen int64
 	var u User
-	err := s.db.QueryRow(`SELECT u.id, u.username, u.is_admin, u.created_at, u.password_hash, s.last_seen
+	err := s.db.QueryRow(`SELECT u.id, u.username, u.is_admin, u.created_at, u.all_libraries, u.password_hash, s.last_seen
 		FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`, h).
-		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.PasswordHash, &lastSeen)
+		Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.PasswordHash, &lastSeen)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

@@ -33,7 +33,10 @@
 - **match_key** (unique per library) is how a rescan finds the same item again: `movie:<normalised title>:<year>`, `show:<title>:<year>`, `…:s1`, `…:s1:e2`. Multiple files with the same key become *versions* of one item (e.g. 4K + 1080p).
 - **media_files** hold ffprobe results, including all streams as JSON. `scan_gen` marks which scan last saw a file; after a scan where every root folder was reachable, unseen files are pruned. A missing drive never wipes a library.
 - **watch_state** is per user and item. Crossing 90% marks the item watched and resets the position.
-- Images are stored as references (`tmdb:/abc.jpg`) and turned into `/api/images/tmdb/abc.jpg?w=w500` URLs on the way out, served from a disk cache.
+- Images are stored as references and turned into URLs on the way out. `tmdb:/abc.jpg` becomes `/api/images/tmdb/abc.jpg?w=w500`, served from a disk cache. `local:/<sha>.png` is admin-uploaded or URL-downloaded art in `<data>/artwork/`, content-addressed.
+- **Locked fields:** `items.locked` is a JSON array of field names (`title`, `poster`, `collections`…; see `store.LockableFields`). `UpdateMetadata` wraps every lockable column in `CASE WHEN <locked> THEN <current> ELSE ? END`, so provider refreshes skip locked fields without a read-modify-write. Admin edits replace the lock list; choosing artwork adds its lock.
+- **Collections** (`collections`, `collection_items`) belong to one library. Members are explicit links (TMDB `belongs_to_collection`, or the admin's Edit → Tags) **plus**, for smart collections, every item whose `labels` contains `label_rule` (case-insensitive). The membership test is one SQL fragment, `store.memberOf`.
+- **Library access:** `users.all_libraries` (default on), or the `user_libraries` rows. Every user-facing item query includes `store.visible`, which binds `@uid`. `uid 0` means the server itself and sees everything. Handlers that start from a library or file id check `CanSeeLibrary`, or load the item as the user, and answer 404 so hidden content isn't revealed.
 
 ## Auth
 
