@@ -9,6 +9,7 @@ const (
 	SettingTVDBPin           = "tvdb_pin"         // subscriber PIN, needed with a user-supported key
 	SettingRatingsProvider   = "ratings_provider" // "" (off) | mdblist | omdb: IMDb and Rotten Tomatoes scores
 	SettingRatingsKey        = "ratings_api_key"
+	SettingMDBListKey        = "mdblist_api_key" // for collections that follow MDBList lists
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
@@ -60,6 +61,7 @@ var SettingDefaults = map[string]string{
 	SettingTVDBPin:           "",
 	SettingRatingsProvider:   "",
 	SettingRatingsKey:        "",
+	SettingMDBListKey:        "",
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",

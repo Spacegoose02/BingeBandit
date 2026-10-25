@@ -504,6 +504,9 @@ export interface Collection {
   backdrop?: string
   tmdbId?: number
   mode?: CollectionMode | ''
+  listUrl?: string // MDBList list or RSS feed it follows
+  listSyncedAt?: number
+  listError?: string
   labelRule?: string
   genreRule?: string
   studioRule?: string

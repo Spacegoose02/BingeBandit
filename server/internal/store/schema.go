@@ -670,4 +670,13 @@ CREATE TABLE show_aliases (
 	// 33: a collection's own Collection Mode (Plex's Advanced tab), which
 	// overrides the library's: '' (library default), show, hide or collapse.
 	`ALTER TABLE collections ADD COLUMN mode TEXT NOT NULL DEFAULT '';`,
+	// 34: collections kept in step with an MDBList list or an RSS feed
+	// (Kometa's list builders). Members the list added are marked, so a sync
+	// replaces them and leaves hand-picked ones alone.
+	`
+ALTER TABLE collections ADD COLUMN list_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE collections ADD COLUMN list_synced_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE collections ADD COLUMN list_error TEXT NOT NULL DEFAULT '';
+ALTER TABLE collection_items ADD COLUMN from_list INTEGER NOT NULL DEFAULT 0;
+`,
 }

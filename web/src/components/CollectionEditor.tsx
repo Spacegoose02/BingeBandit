@@ -34,6 +34,7 @@ export function CollectionEditor({
 }) {
   const [name, setName] = useState(collection?.name ?? '')
   const [overview, setOverview] = useState(collection?.overview ?? '')
+  const [listUrl, setListUrl] = useState(collection?.listUrl ?? '')
   const [mode, setMode] = useState<CollectionMode | ''>(collection?.mode ?? '')
   const [labelRule, setLabelRule] = useState(collection?.labelRule ?? '')
   const [genreRule, setGenreRule] = useState(collection?.genreRule ?? '')
@@ -46,7 +47,7 @@ export function CollectionEditor({
   const save = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    const rules = { labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
+    const rules = { listUrl, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
     try {
       if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, ...rules })
       else await api.post(`/api/admin/libraries/${libraryId}/collections`, { name, ...rules })
@@ -82,6 +83,29 @@ export function CollectionEditor({
             <span className="muted small">How this collection and its titles show on the library's Library tab.</span>
           </label>
         )}
+        <label>
+          Follow a list
+          <input
+            type="url"
+            value={listUrl}
+            onChange={(e) => setListUrl(e.target.value)}
+            placeholder="https://mdblist.com/lists/… or an RSS feed"
+            spellCheck={false}
+          />
+          <span className="muted small">
+            An MDBList list or an RSS feed (Letterboxd lists have one). Its titles in this library join the collection, and the “Sync list
+            collections” task keeps them up to date. Private MDBList lists need your key in Settings → Metadata.
+          </span>
+          {collection?.listUrl && collection.listUrl === listUrl && (
+            <span className={collection.listError ? 'form-error' : 'muted small'}>
+              {collection.listError
+                ? `Last sync failed: ${collection.listError}`
+                : collection.listSyncedAt
+                  ? `Synced ${new Date(collection.listSyncedAt * 1000).toLocaleString()}`
+                  : 'Not synced yet'}
+            </span>
+          )}
+        </label>
         <div className="label">Smart rules: include everything that matches all of these</div>
         <div className="field-grid">
           <label>

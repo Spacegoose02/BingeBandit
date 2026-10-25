@@ -21,6 +21,10 @@ type Collection struct {
 	// Mode overrides the library's Collection Mode for this collection:
 	// "" (library default), "show", "hide" or "collapse".
 	Mode string `json:"mode"`
+	// ListURL is an MDBList list or RSS feed the collection follows.
+	ListURL      string `json:"listUrl,omitempty"`
+	ListSyncedAt int64  `json:"listSyncedAt,omitempty"`
+	ListError    string `json:"listError,omitempty"`
 	SmartRules
 	ItemCount int `json:"itemCount"`
 	// Visible is where the collection shows as a row; only sent to admins.
@@ -52,7 +56,7 @@ const memberOf = `(i.library_id = c.library_id AND i.kind IN ('movie','show') AN
 		AND (c.year_from = 0 OR i.year >= c.year_from)
 		AND (c.year_to = 0 OR (i.year > 0 AND i.year <= c.year_to)))))`
 
-const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to,
+const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to,
 	(SELECT COUNT(*) FROM items i WHERE ` + memberOf + `),
 	COALESCE((SELECT i.poster FROM items i WHERE ` + memberOf + ` AND i.poster != '' ORDER BY i.release_date LIMIT 1), '')
 FROM collections c`
@@ -60,7 +64,7 @@ FROM collections c`
 func scanCollection(r interface{ Scan(...any) error }) (*Collection, error) {
 	var c Collection
 	var fallback string
-	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.Mode, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.ItemCount, &fallback)
+	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.Mode, &c.ListURL, &c.ListSyncedAt, &c.ListError, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.ItemCount, &fallback)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -120,7 +124,7 @@ func (s *Store) LibraryCollectionsHiding(libraryID int64, collapse func(*Collect
 
 func (s *Store) libraryCollectionMembers(libraryID int64, collapse func(*Collection) bool) ([]*Collection, map[int64]bool, error) {
 	collected := map[int64]bool{}
-	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
+	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
 		FROM collections c WHERE c.library_id = ? ORDER BY c.name COLLATE NOCASE`, libraryID)
 	if err != nil || len(cols) == 0 {
 		return cols, collected, err
@@ -387,4 +391,46 @@ func (s *Store) LibraryLabels(libraryID int64) ([]string, error) {
 		out = append(out, l)
 	}
 	return out, rows.Err()
+}
+
+// SetCollectionList makes a collection follow a list ("" stops following it,
+// keeping the members it has).
+func (s *Store) SetCollectionList(id int64, url string) error {
+	_, err := s.db.Exec(`UPDATE collections SET list_url = ?, list_error = '' WHERE id = ?`, url, id)
+	if err == nil && url == "" {
+		_, err = s.db.Exec(`UPDATE collection_items SET from_list = 0 WHERE collection_id = ?`, id)
+	}
+	return err
+}
+
+// ListCollections are the collections that follow a list.
+func (s *Store) ListCollections() ([]*Collection, error) {
+	return s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error,
+		c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, '' FROM collections c WHERE c.list_url != '' ORDER BY c.id`)
+}
+
+// SyncCollectionList replaces the members a list added with itemIDs. Titles
+// added by hand stay. With failed set, members are kept and the error saved.
+func (s *Store) SyncCollectionList(id int64, itemIDs []int64, failed string) error {
+	if failed != "" {
+		_, err := s.db.Exec(`UPDATE collections SET list_error = ? WHERE id = ?`, failed, id)
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM collection_items WHERE collection_id = ? AND from_list = 1`, id); err != nil {
+		return err
+	}
+	for _, it := range itemIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id, from_list) VALUES (?, ?, 1)`, id, it); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE collections SET list_synced_at = ?, list_error = '' WHERE id = ?`, now(), id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

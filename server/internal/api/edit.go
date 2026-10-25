@@ -1,14 +1,17 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"bingebandit/internal/importer"
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
@@ -486,11 +489,17 @@ type collectionReq struct {
 	Name     string `json:"name"`
 	Overview string `json:"overview"`
 	Mode     string `json:"mode"` // "" follows the library
+	// ListURL is an MDBList list or RSS feed to follow; "" follows none.
+	ListURL string `json:"listUrl"`
 	store.SmartRules
 }
 
 func (c *collectionReq) clean() error {
 	c.Name, c.LabelRule = strings.TrimSpace(c.Name), strings.TrimSpace(c.LabelRule)
+	c.ListURL = strings.TrimSpace(c.ListURL)
+	if c.ListURL != "" && !strings.HasPrefix(c.ListURL, "https://") && !strings.HasPrefix(c.ListURL, "http://") {
+		return errors.New("the list must be an http:// or https:// link")
+	}
 	c.GenreRule, c.StudioRule = strings.TrimSpace(c.GenreRule), strings.TrimSpace(c.StudioRule)
 	if c.Name == "" {
 		return errors.New("name is required")
@@ -535,6 +544,12 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	if req.ListURL != "" {
+		if c, err = s.followList(r, c.ID, req.ListURL); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -561,7 +576,27 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	if _, err := s.followList(r, id, req.ListURL); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// followList points a collection at a list and syncs it straight away. A
+// list that can't be read is saved with its error, which the editor shows.
+func (s *Server) followList(r *http.Request, id int64, listURL string) (*store.Collection, error) {
+	if err := s.Store.SetCollectionList(id, listURL); err != nil {
+		return nil, err
+	}
+	c, err := s.Store.Collection(id)
+	if err != nil || listURL == "" {
+		return c, err
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	importer.NewLists(s.Store).Sync(ctx, c)
+	return s.Store.Collection(id)
 }
 
 func (s *Server) deleteCollection(w http.ResponseWriter, r *http.Request) {
