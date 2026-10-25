@@ -1,7 +1,8 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { img } from '../api'
+import { api, img } from '../api'
 import { episodeLabel, progressFraction, smartRuleText } from '../format'
-import type { Collection, Item } from '../types'
+import type { Collection, Item, Visibility } from '../types'
 import { Icon } from './Icon'
 
 function Badge({ item }: { item: Item }) {
@@ -63,9 +64,9 @@ export function WideCard({ item }: { item: Item }) {
   )
 }
 
-export function CollectionCard({ collection }: { collection: Collection }) {
+export function CollectionCard({ collection, onChanged }: { collection: Collection; onChanged?: () => void }) {
   const poster = img(collection.poster, 'w342')
-  return (
+  const card = (
     <Link to={`/collection/${collection.id}`} className="poster-card">
       <div className="poster-frame collection-frame">
         {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{collection.name}</div>}
@@ -79,6 +80,66 @@ export function CollectionCard({ collection }: { collection: Collection }) {
       <div className="card-title" title={collection.name}>{collection.name}</div>
       <div className="card-sub">{collection.itemCount} {collection.itemCount === 1 ? 'item' : 'items'}</div>
     </Link>
+  )
+  // Admins get a "Visible on" menu, like Plex's collection menu.
+  if (!collection.visible) return card
+  return (
+    <div className="collection-card">
+      {card}
+      <VisibleOnMenu collection={collection} onChanged={onChanged} />
+    </div>
+  )
+}
+
+const places: [keyof Visibility, string][] = [
+  ['library', 'Library'],
+  ['home', 'Home'],
+  ['friends', "Friends' Home"],
+]
+
+function VisibleOnMenu({ collection, onChanged }: { collection: Collection; onChanged?: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [visible, setVisible] = useState<Visibility>(collection.visible!)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+  const toggle = async (place: keyof Visibility) => {
+    const next = { ...visible, [place]: !visible[place] }
+    setVisible(next)
+    try {
+      await api.put(`/api/admin/collections/${collection.id}/visibility`, next)
+      onChanged?.()
+    } catch {
+      setVisible(visible)
+    }
+  }
+  const shown = places.filter(([p]) => visible[p]).map(([, label]) => label)
+  return (
+    <div className="visible-on" ref={ref}>
+      <button
+        className="visible-on-btn"
+        aria-label={`Where ${collection.name} shows`}
+        aria-expanded={open}
+        title={shown.length ? `Visible on ${shown.join(', ')}` : 'Not shown as a row'}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Icon name="more" size={18} />
+      </button>
+      {open && (
+        <div className="menu visible-on-menu" role="menu">
+          <div className="menu-section">Visible on</div>
+          {places.map(([p, label]) => (
+            <button key={p} role="menuitemcheckbox" aria-checked={visible[p]} className={visible[p] ? 'active' : ''} onClick={() => toggle(p)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

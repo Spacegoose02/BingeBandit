@@ -120,7 +120,11 @@ export default function Home() {
           row.id === 'recommended' ? (
             <RecommendedRow key={row.id} title={row.title} items={row.items} by={data.recommendedBy ?? {}} />
           ) : (
-            <Row key={row.id} title={row.title}>
+            <Row
+              key={row.id}
+              title={row.title}
+              action={row.collectionId ? <Link to={`/collection/${row.collectionId}`} className="muted small">See all</Link> : undefined}
+            >
               {row.items.map((it) => (
                 <PosterCard key={it.id} item={it} />
               ))}

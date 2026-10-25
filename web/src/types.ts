@@ -505,12 +505,37 @@ export interface Collection {
   yearFrom?: number
   yearTo?: number
   itemCount: number
+  visible?: Visibility // admins only: where it shows as a row
+}
+
+/** Where a library row shows (Plex's "Visible on"). */
+export interface Visibility {
+  library: boolean // the library's Recommended tab
+  home: boolean
+  friends: boolean // Home for people outside the admin's household
+}
+
+/** One row in a library's Manage Recommendations table. */
+export interface LibraryRow extends Visibility {
+  key: string
+  title: string
+  libraryOnly?: boolean
+  collectionId?: number
+}
+
+/** A row of titles on Home or a library's Recommended tab. */
+export interface HubRow {
+  id: string
+  title: string
+  items: Item[]
+  collectionId?: number
+  libraryId?: number
 }
 
 export interface HomeData {
   hero: Item[]
   continueWatching: Item[]
-  rows: { id: string; title: string; items: Item[] }[]
+  rows: HubRow[]
   recommendedBy?: Record<string, Recommendation> // item id → who recommended it
 }
 

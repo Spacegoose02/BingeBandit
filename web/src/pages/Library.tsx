@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { CollectionCard, PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
+import { RecommendationsEditor } from '../components/RecommendationsEditor'
+import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
-import type { Collection, Item, Library } from '../types'
+import type { Collection, HubRow, Item, Library } from '../types'
 
 const PAGE = 120
 const sorts = [
@@ -31,7 +33,8 @@ export default function LibraryPage() {
 
 function LibraryView({ id }: { id: string }) {
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'collections' ? 'collections' : 'library'
+  // Recommended is the library's front page (Plex's default tab).
+  const tab = params.get('tab') === 'collections' ? 'collections' : params.get('tab') === 'library' ? 'library' : 'recommended'
   const [sort, setSort] = useState(() => localStorage.getItem(`bb.sort.${id}`) ?? 'title')
   const [library, setLibrary] = useState<Library | null>(null)
   const [items, setItems] = useState<Item[]>([])
@@ -72,7 +75,7 @@ function LibraryView({ id }: { id: string }) {
     }, { rootMargin: '800px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [items.length, total, load])
+  }, [items.length, total, load, tab])
 
   const changeSort = (s: string) => {
     localStorage.setItem(`bb.sort.${id}`, s)
@@ -89,7 +92,8 @@ function LibraryView({ id }: { id: string }) {
           </div>
         </div>
         <div className="segmented">
-          <button className={tab === 'library' ? 'active' : ''} onClick={() => setParams({}, { replace: true })}>Library</button>
+          <button className={tab === 'recommended' ? 'active' : ''} onClick={() => setParams({}, { replace: true })}>Recommended</button>
+          <button className={tab === 'library' ? 'active' : ''} onClick={() => setParams({ tab: 'library' }, { replace: true })}>Library</button>
           <button className={tab === 'collections' ? 'active' : ''} onClick={() => setParams({ tab: 'collections' }, { replace: true })}>
             Collections
           </button>
@@ -105,9 +109,9 @@ function LibraryView({ id }: { id: string }) {
           </label>
         )}
       </header>
-      {tab === 'collections' ? (
-        <CollectionsTab libraryId={Number(id)} />
-      ) : (
+      {tab === 'recommended' && library && <RecommendedTab library={library} />}
+      {tab === 'collections' && <CollectionsTab libraryId={Number(id)} />}
+      {tab === 'library' && (
         <>
           {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
           <div className="poster-grid">
@@ -139,7 +143,7 @@ function CollectionsTab({ libraryId }: { libraryId: number }) {
       {data?.length === 0 && <div className="empty">No collections yet. TMDB collections appear here once metadata is fetched.</div>}
       <div className="poster-grid">
         {data?.map((c) => (
-          <CollectionCard key={c.id} collection={c} />
+          <CollectionCard key={c.id} collection={c} onChanged={reload} />
         ))}
       </div>
       {creating && (
@@ -152,6 +156,41 @@ function CollectionsTab({ libraryId }: { libraryId: number }) {
           }}
         />
       )}
+    </>
+  )
+}
+
+/** The library's front page: its rows, in the order an admin set. */
+function RecommendedTab({ library }: { library: Library }) {
+  const { user } = useAuth()
+  const { data, loading, reload } = useApi<HubRow[]>(`/api/libraries/${library.id}/hubs`)
+  const [managing, setManaging] = useState(false)
+  return (
+    <>
+      {user?.isAdmin && (
+        <div className="actions" style={{ marginBottom: 20 }}>
+          <button className="btn btn-glass btn-sm" onClick={() => setManaging(true)}>
+            <Icon name="sliders" size={16} /> Manage recommendations
+          </button>
+          <span className="muted small">Pick which rows and collections show here, on Home and on Friends' Home.</span>
+        </div>
+      )}
+      {loading && <div className="page-loading" />}
+      {data?.length === 0 && <div className="empty">Nothing to recommend yet. The Library tab has everything.</div>}
+      <div className="library-hubs">
+        {data?.map((row) => (
+          <Row
+            key={row.id}
+            title={row.title}
+            action={row.collectionId ? <Link to={`/collection/${row.collectionId}`} className="muted small">See all</Link> : undefined}
+          >
+            {row.items.map((it) => (
+              <PosterCard key={it.id} item={it} />
+            ))}
+          </Row>
+        ))}
+      </div>
+      {managing && <RecommendationsEditor library={library} onClose={() => setManaging(false)} onSaved={reload} />}
     </>
   )
 }
