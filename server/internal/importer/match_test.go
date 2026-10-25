@@ -18,6 +18,7 @@ func TestMatcher(t *testing.T) {
 		{ID: 20, Kind: "show", Title: "Doctor Who", Year: 1963},
 		{ID: 21, Kind: "show", Title: "Doctor Who", Year: 2005},
 		{ID: 22, Kind: "episode", ShowID: 21, Season: 1, Episode: 1},
+		{ID: 30, Kind: "season", ShowID: 10, Season: 2},
 	}
 	m := NewMatcher(items)
 	for _, c := range []struct {
@@ -39,6 +40,8 @@ func TestMatcher(t *testing.T) {
 		{"show ambiguous without year", Record{Kind: "episode", ShowTitle: "Doctor Who", Season: 1, Episode: 1}, 0},
 		{"missing episode", Record{Kind: "episode", ShowTitle: "The Office", Season: 9, Episode: 9}, 0},
 		{"collection show", Record{Kind: "show", Title: "the office"}, 10},
+		{"season by show tmdb", Record{Kind: "season", ShowTitle: "Whatever", TMDB: 2316, Season: 2}, 30},
+		{"season missing here", Record{Kind: "season", ShowTitle: "The Office", Season: 5}, 0},
 	} {
 		var got int64
 		if it := m.Match(&c.r); it != nil {

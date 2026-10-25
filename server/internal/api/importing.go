@@ -97,7 +97,7 @@ func (s *Server) importConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, row{u, sug})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex" || req.Source == "cinemask", "watchedState": req.Source == "plex"})
+	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex" || req.Source == "cinemask", "watchedState": req.Source == "plex", "artwork": req.Source == "plex"})
 }
 
 func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +115,7 @@ func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !req.History && !req.Watched && !req.Collections {
+	if !req.History && !req.Watched && !req.Collections && !req.Artwork {
 		writeErr(w, http.StatusBadRequest, "choose something to import")
 		return
 	}
