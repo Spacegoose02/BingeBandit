@@ -263,6 +263,8 @@ type progressReq struct {
 	TranscodeID   string  `json:"transcodeId"`
 	Client        string  `json:"client"`
 	Played        float64 `json:"played"` // seconds actually played this session
+	// Lights is the device's Hue Sync switch; apps that predate it leave it out (on).
+	Lights *bool `json:"lights"`
 }
 
 // progress saves the resume point and keeps the admin "Now Playing" list current.
@@ -344,7 +346,7 @@ func (s *Server) playerExpired(np stream.NowPlaying) {
 
 func (s *Server) playerEvent(np stream.NowPlaying, it *store.Item) map[string]any {
 	ev := s.playbackEvent(np, it)
-	ev["sessionId"], ev["fileId"], ev["paused"] = np.ID, np.FileID, np.Paused
+	ev["sessionId"], ev["fileId"], ev["paused"], ev["lights"] = np.ID, np.FileID, np.Paused, np.Lights
 	return ev
 }
 
@@ -401,6 +403,7 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 		ID: req.PlaySessionID, UserID: u.ID, Username: u.Username, ItemID: it.ID, Title: it.Title, Poster: it.Poster,
 		FileID: req.FileID, Mode: req.Mode, Position: req.Position, Duration: req.Duration, Paused: req.Paused,
 		IP: ip, Local: s.isLocal(ip), Client: req.Client, TranscodeID: req.TranscodeID, Watched: req.Played,
+		Lights: req.Lights == nil || *req.Lights,
 	}
 	if it.Kind == "episode" && it.SeasonNumber != nil && it.EpisodeNumber != nil {
 		np.Title = it.ShowTitle
