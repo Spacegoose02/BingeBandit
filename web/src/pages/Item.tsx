@@ -109,6 +109,11 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                 {item.title}
               </h1>
             )}
+            {user?.isAdmin && item.unmatched && (
+              <button className="pill warn unmatched-pill" onClick={() => setDialog('match')} title="Fix match">
+                Unmatched
+              </button>
+            )}
             <MetaLine item={item} />
             {detail.externalRatings && <ExternalScores r={detail.externalRatings} />}
             {item.tagline && <p className="tagline">{item.tagline}</p>}
@@ -250,9 +255,11 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
           item={item}
           tvdb={detail.tvdbId ? { id: detail.tvdbId, order: detail.tvdbOrder ?? '' } : undefined}
           onClose={() => setDialog(null)}
-          onMatched={() => {
+          onMatched={(kept) => {
             setDialog(null)
-            reload()
+            // Matching it to a title already in the library merged the two.
+            if (kept && kept !== item.id) nav(`/item/${kept}`, { replace: true })
+            else reload()
           }}
         />
       )}

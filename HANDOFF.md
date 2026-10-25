@@ -2,7 +2,15 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, audio-only playback, missing posters and duplicate shows._
+_Last updated: 2026-10-25, matching across TMDB, TheTVDB and IMDb, merging copies of movies and shows._
+
+## Matching across sources, merging copies (migration 35)
+
+- **Ids:** movies and shows keep `tmdb_id`, `imdb_id` (new) and, for shows, `tvdb_id` from whichever source matched them (TMDB `/movie` `imdb_id`, `/tv` `external_ids`, TheTVDB `remoteIds`). `UpdateMetadata` keeps an id a source didn't report. The migration copies IMDb ids already fetched for ratings.
+- **Where details come from:** `items.metadata_source`: `""` = TMDB, else TheTVDB; `"tvdb"` = TheTVDB (Fix Match, or picked automatically when TMDB has no match; `ShowTVDB` now reads this instead of `tvdb_id > 0`); `"none"` = left unmatched on purpose (Fix Match → *Leave unmatched*, `POST /api/admin/items/{id}/unmatch`), which refreshes skip.
+- **Match order** (`metadata.Service.refresh`, `findTMDB`): TMDB id (Fix Match, earlier match, `{tmdb-…}` hint) → `{tvdb-…}` / `{imdb-tt…}` folder hints looked up with TMDB `/find` → TMDB search → for shows, TheTVDB (hint or top search hit). No match: the title keeps its folder name and `Item.unmatched` is true (admins see an Unmatched pill that opens Fix Match).
+- **Merging** (`Store.MergeDuplicates`, after every metadata pass and after Fix Match): movies and shows of a library that share any id, with no id disagreeing (union-find), become one: movie files become versions, show episodes join (see the duplicate-shows section below). Movies merge only within one edition; unmatched titles never merge. `show_aliases` became `item_aliases`, and movie folders get aliases too. Fix Match answers `{id}` with the id that now holds the title, and the web app follows it.
+- **Tested:** store tests (cross-id merge, disagreeing ids, editions, unmatched, aliases), a metadata test against fake TMDB/TheTVDB (IMDb hint, TheTVDB fallback, TheTVDB hint found on TMDB, merge, left unmatched), hint parsing, and Leave unmatched in Chromium. **Not tried** against the real TMDB/TheTVDB APIs.
 
 ## Audio-only playback, missing posters, duplicate shows
 

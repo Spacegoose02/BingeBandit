@@ -23,6 +23,8 @@ var skipDirs = map[string]bool{
 var (
 	reSample   = regexp.MustCompile(`(?i)(^|[\W_])sample([\W_]|$)`)
 	reTMDBHint = regexp.MustCompile(`(?i)[\[{(]\s*tmdb(?:id)?[-=: ](\d+)\s*[\]})]`)
+	reTVDBHint = regexp.MustCompile(`(?i)[\[{(]\s*tvdb(?:id)?[-=: ](\d+)\s*[\]})]`)
+	reIMDbHint = regexp.MustCompile(`(?i)[\[{(]\s*imdb(?:id)?[-=: ](tt\d+)\s*[\]})]`)
 	reBrackets = regexp.MustCompile(`[\[{][^\]}]*[\]}]`)
 	reJunk     = regexp.MustCompile(`(?i)[\s._\-(\[](2160p|1080p|720p|576p|480p|4k|uhd|bluray|blu-ray|bdrip|brrip|web-?dl|webrip|web|hdtv|dvdrip|remux|x264|x265|h\.?264|h\.?265|hevc|avc|hdr10?|dv|atmos|truehd|dts|ddp?5\.1|aac|proper|repack|extended|unrated|imax|criterion)([\s._\-)\]]|$).*$`)
 	reDigits   = regexp.MustCompile(`\d+`)
@@ -51,6 +53,8 @@ func parseTitleYear(name string) (title string, year int, tmdbID int64) {
 		tmdbID, _ = strconv.ParseInt(m[1], 10, 64)
 		name = strings.Replace(name, m[0], " ", 1)
 	}
+	name = reTVDBHint.ReplaceAllString(name, " ")
+	name = reIMDbHint.ReplaceAllString(name, " ")
 	cut := -1
 	for _, loc := range reDigits.FindAllStringIndex(name, -1) {
 		tok := name[loc[0]:loc[1]]
@@ -70,6 +74,19 @@ func parseTitleYear(name string) (title string, year int, tmdbID int64) {
 		name = name[:cut]
 	}
 	return cleanTitle(name), year, tmdbID
+}
+
+// idHints reads TheTVDB and IMDb ids from a folder or file name, written the
+// way Plex, Sonarr and Radarr do: "Show (2019) {tvdb-12345}",
+// "Movie (2010) [imdbid-tt1375666]".
+func idHints(name string) (tvdbID int64, imdbID string) {
+	if m := reTVDBHint.FindStringSubmatch(name); m != nil {
+		tvdbID, _ = strconv.ParseInt(m[1], 10, 64)
+	}
+	if m := reIMDbHint.FindStringSubmatch(name); m != nil {
+		imdbID = strings.ToLower(m[1])
+	}
+	return tvdbID, imdbID
 }
 
 func isSep(r rune) bool {

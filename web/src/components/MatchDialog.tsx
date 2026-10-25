@@ -22,6 +22,9 @@ const orders = [
 /**
  * Search TMDB and re-point a movie or show at the chosen result. A show can
  * use TheTVDB instead, with its aired, DVD or absolute episode numbering.
+ * Or leave it unmatched (home videos, shows no source has yet). A match that
+ * makes it another copy of a title in the library merges the two; onMatched
+ * gets the id that now holds it.
  */
 export function MatchDialog({
   item,
@@ -32,7 +35,7 @@ export function MatchDialog({
   item: Item
   tvdb?: { id: number; order: string }
   onClose: () => void
-  onMatched: () => void
+  onMatched: (id?: number) => void
 }) {
   const [q, setQ] = useState(item.title)
   const [year, setYear] = useState(item.year ? String(item.year) : '')
@@ -74,7 +77,22 @@ export function MatchDialog({
     setBusy(idOf(r))
     setError('')
     try {
-      await api.post(`/api/admin/items/${item.id}/match`, provider === 'tvdb' ? { tvdbId: r.tvdbId, tvdbOrder: order } : { tmdbId: r.tmdbId })
+      const res = await api.post<{ id: number }>(
+        `/api/admin/items/${item.id}/match`,
+        provider === 'tvdb' ? { tvdbId: r.tvdbId, tvdbOrder: order } : { tmdbId: r.tmdbId },
+      )
+      onMatched(res?.id)
+    } catch (err) {
+      setError((err as Error).message)
+      setBusy(null)
+    }
+  }
+
+  const unmatch = async () => {
+    setBusy(-1)
+    setError('')
+    try {
+      await api.post(`/api/admin/items/${item.id}/unmatch`)
       onMatched()
     } catch (err) {
       setError((err as Error).message)
@@ -128,6 +146,18 @@ export function MatchDialog({
             {busy === idOf(r) && <Icon name="refresh" size={18} className="spin" />}
           </button>
         ))}
+      </div>
+      <div className="match-unmatch">
+        <span className="muted small">
+          {item.metadataSource === 'none'
+            ? 'Left unmatched: refreshes keep the details you entered.'
+            : 'Not on TMDB or TheTVDB yet, or a home video? Keep it unmatched and refreshes leave it alone.'}
+        </span>
+        {item.metadataSource !== 'none' && (
+          <button type="button" className="btn btn-sm" onClick={unmatch} disabled={busy !== null}>
+            {busy === -1 ? <Icon name="refresh" size={16} className="spin" /> : null} Leave unmatched
+          </button>
+        )}
       </div>
     </Modal>
   )

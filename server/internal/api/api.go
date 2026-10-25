@@ -285,6 +285,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/items/{id}/tpdb", s.tpdbSearch)
 				r.Get("/tpdb/{poster}/thumb", s.tpdbThumb)
 				r.Post("/items/{id}/match", s.matchItem)
+				r.Post("/items/{id}/unmatch", s.unmatchItem)
 				r.Put("/items/{id}/markers", s.setMarkers)
 				r.Post("/items/{id}/detect-markers", s.detectMarkers)
 				r.Get("/match", s.matchSearch)

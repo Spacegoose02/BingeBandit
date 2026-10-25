@@ -5,6 +5,7 @@ import (
 	"log"
 	"sort"
 	"strconv"
+	"strings"
 
 	"bingebandit/internal/store"
 )
@@ -51,9 +52,13 @@ func (s *Service) refreshTVDBShow(ctx context.Context, c *TMDB, tv *TVDB, it *st
 			u.ContentRating = r.Name
 		}
 	}
+	u.TVDBID = tvdbID
 	for _, r := range sh.RemoteIDs {
-		if r.SourceName == "TheMovieDB.com" && u.TMDBID == 0 {
+		switch {
+		case r.SourceName == "TheMovieDB.com" && u.TMDBID == 0:
 			u.TMDBID, _ = strconv.ParseInt(r.ID, 10, 64)
+		case r.SourceName == "IMDB" && strings.HasPrefix(r.ID, "tt"):
+			u.IMDbID = r.ID
 		}
 	}
 	chars := sh.Characters

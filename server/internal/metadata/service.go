@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -172,22 +173,102 @@ func (s *Service) ArtworkOptions(ctx context.Context, it *store.Item, imageType 
 }
 
 // refresh updates a movie or show. c or tv is nil when its key isn't set.
+//
+// A title is matched by the first of: its TMDB id (from Fix Match, an
+// earlier match or a {tmdb-…} folder hint); a TheTVDB or IMDb id from a
+// folder hint, looked up on TMDB; a TMDB search by title and year; and for
+// shows, TheTVDB (by hint or search) when TMDB doesn't know it. Titles none
+// of them know, and those left unmatched on purpose, keep their folder name.
 func (s *Service) refresh(ctx context.Context, c *TMDB, tv *TVDB, it *store.Item) error {
+	if it.MetadataSource == "none" {
+		s.markTree(it.ID)
+		return nil
+	}
 	if it.Kind == "show" {
 		if tvdbID, order, err := s.st.ShowTVDB(it.ID); err == nil && tvdbID > 0 && tv != nil {
 			return s.refreshTVDBShow(ctx, c, tv, it, tvdbID, order)
 		}
 	}
-	if c == nil {
-		return nil
-	}
 	switch it.Kind {
 	case "movie":
-		return s.refreshMovie(ctx, c, it)
+		if c == nil {
+			return nil
+		}
+		id, err := s.findTMDB(ctx, c, it)
+		if err != nil {
+			return err
+		}
+		if id == 0 {
+			log.Printf("metadata: no match for movie %q (%d)", it.Title, it.Year)
+			return s.st.MarkMetadataChecked(it.ID)
+		}
+		return s.refreshMovie(ctx, c, it, id)
 	case "show":
-		return s.refreshShow(ctx, c, it)
+		if c != nil {
+			id, err := s.findTMDB(ctx, c, it)
+			if err != nil {
+				return err
+			}
+			if id > 0 {
+				return s.refreshShow(ctx, c, it, id)
+			}
+		}
+		if tv != nil {
+			tvdbID := it.TVDBID
+			if tvdbID == 0 {
+				res, err := tv.Search(ctx, it.Title, it.Year)
+				if err != nil {
+					return err
+				}
+				if len(res) > 0 {
+					tvdbID = res[0].TVDBID
+				}
+			}
+			if tvdbID > 0 {
+				// From now on the show's details come from TheTVDB, in aired order.
+				if err := s.st.SetTVDBMatch(it.ID, tvdbID, ""); err != nil {
+					return err
+				}
+				return s.refreshTVDBShow(ctx, c, tv, it, tvdbID, "")
+			}
+		}
+		log.Printf("metadata: no match for show %q", it.Title)
+		s.markTree(it.ID)
 	}
 	return nil
+}
+
+// findTMDB returns the TMDB id of a movie or show: the one it has, else one
+// found by its TheTVDB or IMDb id, else the top search hit. 0 means TMDB
+// doesn't know it.
+func (s *Service) findTMDB(ctx context.Context, c *TMDB, it *store.Item) (int64, error) {
+	if it.TMDBID > 0 {
+		return it.TMDBID, nil
+	}
+	type ext struct{ id, source string }
+	var by []ext
+	if it.IMDbID != "" {
+		by = append(by, ext{it.IMDbID, "imdb_id"})
+	}
+	if it.Kind == "show" && it.TVDBID > 0 {
+		by = append(by, ext{strconv.FormatInt(it.TVDBID, 10), "tvdb_id"})
+	}
+	for _, e := range by {
+		movie, show, err := c.Find(ctx, e.id, e.source)
+		if err != nil {
+			return 0, err
+		}
+		if it.Kind == "movie" && movie > 0 {
+			return movie, nil
+		}
+		if it.Kind == "show" && show > 0 {
+			return show, nil
+		}
+	}
+	if it.Kind == "movie" {
+		return c.SearchMovie(ctx, it.Title, it.Year)
+	}
+	return c.SearchShow(ctx, it.Title, it.Year)
 }
 
 func img(path string) string {
@@ -197,18 +278,7 @@ func img(path string) string {
 	return "tmdb:" + path
 }
 
-func (s *Service) refreshMovie(ctx context.Context, c *TMDB, it *store.Item) error {
-	id := it.TMDBID
-	if id == 0 {
-		var err error
-		if id, err = c.SearchMovie(ctx, it.Title, it.Year); err != nil {
-			return err
-		}
-		if id == 0 {
-			log.Printf("metadata: no TMDB match for movie %q (%d)", it.Title, it.Year)
-			return s.st.MarkMetadataChecked(it.ID)
-		}
-	}
+func (s *Service) refreshMovie(ctx context.Context, c *TMDB, it *store.Item, id int64) error {
 	m, err := c.Movie(ctx, id)
 	if err != nil {
 		return err
@@ -227,6 +297,7 @@ func (s *Service) refreshMovie(ctx context.Context, c *TMDB, it *store.Item) err
 		Runtime:       m.Runtime,
 		ReleaseDate:   m.ReleaseDate,
 		TMDBID:        m.ID,
+		IMDbID:        m.IMDbID,
 		Trailer:       pickTrailer(m.Videos),
 		Credits:       credits(m.Credits),
 	}
@@ -252,19 +323,7 @@ func (s *Service) refreshMovie(ctx context.Context, c *TMDB, it *store.Item) err
 	return s.st.UpdateMetadata(it.ID, u)
 }
 
-func (s *Service) refreshShow(ctx context.Context, c *TMDB, it *store.Item) error {
-	id := it.TMDBID
-	if id == 0 {
-		var err error
-		if id, err = c.SearchShow(ctx, it.Title, it.Year); err != nil {
-			return err
-		}
-		if id == 0 {
-			log.Printf("metadata: no TMDB match for show %q", it.Title)
-			s.markTree(it.ID)
-			return nil
-		}
-	}
+func (s *Service) refreshShow(ctx context.Context, c *TMDB, it *store.Item, id int64) error {
 	sh, err := c.Show(ctx, id)
 	if err != nil {
 		return err
@@ -282,6 +341,8 @@ func (s *Service) refreshShow(ctx context.Context, c *TMDB, it *store.Item) erro
 		Genres:        names(sh.Genres),
 		ReleaseDate:   sh.FirstAirDate,
 		TMDBID:        sh.ID,
+		TVDBID:        sh.ExternalIDs.TVDBID,
+		IMDbID:        sh.ExternalIDs.IMDbID,
 		Trailer:       pickTrailer(sh.Videos),
 		Credits:       credits(sh.Credits),
 	}

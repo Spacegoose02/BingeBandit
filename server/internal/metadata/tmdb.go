@@ -113,6 +113,7 @@ type named struct {
 
 type tmdbMovie struct {
 	ID                  int64   `json:"id"`
+	IMDbID              string  `json:"imdb_id"`
 	Title               string  `json:"title"`
 	OriginalTitle       string  `json:"original_title"`
 	Overview            string  `json:"overview"`
@@ -165,6 +166,10 @@ type tmdbShow struct {
 			Rating  string `json:"rating"`
 		} `json:"results"`
 	} `json:"content_ratings"`
+	ExternalIDs struct {
+		IMDbID string `json:"imdb_id"`
+		TVDBID int64  `json:"tvdb_id"`
+	} `json:"external_ids"`
 }
 
 // aggregate_credits nests characters under "roles"; flatten it into tmdbCredits.
@@ -265,6 +270,29 @@ func (t *TMDB) search(ctx context.Context, path, yearParam, title string, year i
 	return 0, nil
 }
 
+// Find looks a title up by another source's id: source is "imdb_id" or
+// "tvdb_id". It returns the TMDB movie and show ids found (0 when none).
+func (t *TMDB) Find(ctx context.Context, id, source string) (movie, show int64, err error) {
+	var res struct {
+		Movies []struct {
+			ID int64 `json:"id"`
+		} `json:"movie_results"`
+		Shows []struct {
+			ID int64 `json:"id"`
+		} `json:"tv_results"`
+	}
+	if err := t.get(ctx, "/find/"+url.PathEscape(id), url.Values{"external_source": {source}}, &res); err != nil {
+		return 0, 0, err
+	}
+	if len(res.Movies) > 0 {
+		movie = res.Movies[0].ID
+	}
+	if len(res.Shows) > 0 {
+		show = res.Shows[0].ID
+	}
+	return movie, show, nil
+}
+
 func (t *TMDB) Movie(ctx context.Context, id int64) (*tmdbMovie, error) {
 	var m tmdbMovie
 	q := url.Values{"append_to_response": {"credits,images,videos,release_dates"}, "include_image_language": {t.imageLang() + ",null"}}
@@ -273,7 +301,7 @@ func (t *TMDB) Movie(ctx context.Context, id int64) (*tmdbMovie, error) {
 
 func (t *TMDB) Show(ctx context.Context, id int64) (*tmdbShow, error) {
 	var s tmdbShow
-	q := url.Values{"append_to_response": {"aggregate_credits,images,videos,content_ratings"}, "include_image_language": {t.imageLang() + ",null"}}
+	q := url.Values{"append_to_response": {"aggregate_credits,images,videos,content_ratings,external_ids"}, "include_image_language": {t.imageLang() + ",null"}}
 	return &s, t.get(ctx, fmt.Sprintf("/tv/%d", id), q, &s)
 }
 

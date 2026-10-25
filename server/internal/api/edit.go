@@ -311,6 +311,41 @@ func (s *Server) matchItem(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]int64{"id": s.mergeAfterMatch(it)})
+}
+
+// mergeAfterMatch folds a newly matched title together with any other copy
+// of it in the library, and returns the id that now holds it (the other
+// copy's when that one was kept).
+func (s *Server) mergeAfterMatch(it *store.Item) int64 {
+	merged, err := s.Store.MergeDuplicates(it.LibraryID)
+	if err != nil {
+		log.Printf("match %d: merge duplicates: %v", it.ID, err)
+		return it.ID
+	}
+	for _, m := range merged {
+		if m.ID == it.ID {
+			return m.KeptID
+		}
+	}
+	return it.ID
+}
+
+// unmatchItem leaves a movie or show unmatched on purpose (a home video, or
+// a show no source has yet), so refreshes stop matching it.
+func (s *Server) unmatchItem(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	if it.Kind != "movie" && it.Kind != "show" {
+		writeErr(w, http.StatusBadRequest, "only movies and shows can be matched")
+		return
+	}
+	if err := s.Store.SetUnmatched(it.ID); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
