@@ -29,6 +29,7 @@ const paths: Record<string, string> = {
   activity: 'M3 12h4l3-8 4 16 3-8h4',
   sliders: 'M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0M14 4v4M8 10v4M16 16v4',
   info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 11v6M12 7.5v.5',
+  compass: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm3.5 5.5-2 5-5 2 2-5z',
   star: 'M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z',
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',

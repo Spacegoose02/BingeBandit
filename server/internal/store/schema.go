@@ -569,4 +569,26 @@ CREATE TABLE IF NOT EXISTS passkeys (
 );
 CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id);
 `,
+	// 26: Discover: YouTube playlists and channels an admin picked, and their
+	// newest videos.
+	`
+CREATE TABLE discover_sources (
+	id         INTEGER PRIMARY KEY,
+	name       TEXT NOT NULL,
+	kind       TEXT NOT NULL, -- playlist | channel
+	youtube_id TEXT NOT NULL UNIQUE,
+	position   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	fetched_at INTEGER NOT NULL DEFAULT 0,
+	error      TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE discover_videos (
+	source_id    INTEGER NOT NULL REFERENCES discover_sources(id) ON DELETE CASCADE,
+	video_id     TEXT NOT NULL,
+	title        TEXT NOT NULL,
+	description  TEXT NOT NULL DEFAULT '',
+	published_at INTEGER NOT NULL,
+	PRIMARY KEY (source_id, video_id)
+);
+`,
 }

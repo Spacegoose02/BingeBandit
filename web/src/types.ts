@@ -610,3 +610,26 @@ export interface PluginLinks {
   name: string
   pages: PluginPage[]
 }
+
+export interface DiscoverVideo {
+  id: string // YouTube video id
+  title: string
+  description?: string
+  publishedAt: number
+}
+
+export interface DiscoverRow {
+  id: number
+  name: string
+  videos: DiscoverVideo[]
+}
+
+export interface DiscoverSource {
+  id: number
+  name: string
+  kind: 'playlist' | 'channel'
+  youtubeId: string
+  position: number
+  fetchedAt: number
+  error?: string
+}
