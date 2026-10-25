@@ -47,6 +47,15 @@ type Host struct {
 	Env []string
 	// ServerName and Version go into event payloads.
 	ServerName func() string
+	// InstallDir is the plugins folder that catalogue installs go into (one of Dirs).
+	InstallDir string
+	// Official is the catalogue always offered (OfficialCatalog unless a test changes it).
+	Official string
+	// Download fetches catalogues and plugin zips; nil uses a default client.
+	Download *http.Client
+
+	catalogs  catalogCache
+	installMu sync.Mutex // one catalogue install or uninstall at a time
 
 	client *http.Client
 	ctx    context.Context
@@ -84,11 +93,13 @@ type Status struct {
 	// SecretsSet lists password settings that have a value; their values are never sent back.
 	SecretsSet []string          `json:"secretsSet"`
 	Values     map[string]string `json:"values"`
+	// Installed is set for plugins installed from a catalogue, which can be uninstalled.
+	Installed bool `json:"installed,omitempty"`
 }
 
 func NewHost(st *store.Store, dirs []string, dataDir, serverURL string) *Host {
 	return &Host{
-		Store: st, Dirs: dirs, DataDir: dataDir, ServerURL: serverURL,
+		Store: st, Dirs: dirs, DataDir: dataDir, ServerURL: serverURL, Official: OfficialCatalog,
 		client: &http.Client{Timeout: 10 * time.Second},
 		found:  map[string]*bundle{},
 		inst:   map[string]*instance{},
@@ -560,6 +571,15 @@ func (h *Host) status(p *store.Plugin) *Status {
 		st.State, st.Error = in.state, in.err
 	} else if p.Kind == "managed" && h.found[p.ID] == nil {
 		st.State = StateMissing
+	}
+	if b := h.found[p.ID]; b != nil && p.Kind == "managed" {
+		st.Installed = h.inInstallDir(b.dir)
+		// The folder's version is the one catalogues compare against.
+		if b.manifest.Version != "" && b.manifest.Version != m.Version {
+			mm := *m
+			mm.Version = b.manifest.Version
+			st.Manifest = &mm
+		}
 	}
 	h.mu.Unlock()
 	values := m.Values(p.Settings)

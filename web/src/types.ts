@@ -247,6 +247,8 @@ export interface Prefs {
   preRollTrailers: number
   /** The server's intro video before a movie, when an admin has set one. */
   preRollIntro: boolean
+  notifyEpisodes: boolean
+  notifyRecordings: boolean
 }
 
 export interface PreRoll {
@@ -605,6 +607,32 @@ export interface Plugin {
   error?: string
   secretsSet: string[]
   values: Record<string, string>
+  /** Installed from a catalogue, so it can be uninstalled. */
+  installed?: boolean
+}
+
+/** A plugin in a catalogue (mirrors plugins.CatalogPlugin). */
+export interface CatalogPlugin {
+  id: string
+  name: string
+  version: string
+  description?: string
+  author?: string
+  homepage?: string
+  catalog: string
+  available: boolean
+  installed?: '' | 'bundled' | 'installed'
+  current?: string
+  update: boolean
+}
+
+export interface PluginCatalog {
+  plugins: CatalogPlugin[]
+  errors: { url: string; error: string }[]
+  catalogs: string[]
+  official: string
+  platform: string
+  installDir: string
 }
 
 /** Pages of running plugins a user can open (GET /api/plugins). */

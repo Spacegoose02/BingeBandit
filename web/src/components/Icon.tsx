@@ -53,6 +53,7 @@ const paths: Record<string, string> = {
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
   arrowUp: 'M12 19V5M5 12l7-7 7 7',
   arrowDown: 'M12 5v14M19 12l-7 7-7-7',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20.5a2 2 0 0 0 4 0',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3M12 15h5',
 }
 

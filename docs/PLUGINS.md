@@ -7,7 +7,7 @@ There are two ways to run one:
 | | Plugins folder ("managed") | Own service ("remote") |
 |---|---|---|
 | Where it runs | BingeBandit starts it, on the same machine | Anywhere it can reach BingeBandit, such as its own Docker container |
-| Install | Put its folder in a plugins folder, then turn it on in **Admin → Plugins** | Start it, then **Admin → Plugins → Add by address** |
+| Install | **Admin → Plugins → Catalogue → Install**, or put its folder in a plugins folder; then turn it on | Start it, then **Admin → Plugins → Add by address** |
 | How it's paired | BingeBandit passes its key in the environment | BingeBandit sends a key to `POST /bingebandit/pair` |
 | Restarts | BingeBandit restarts it if it exits (5 s, doubling up to 5 min) | Its own (Docker's restart policy) |
 
@@ -22,6 +22,36 @@ The plugins folders are `<data>/plugins` and the bundled folder (`-plugins` / `B
 | **Cinemask Upgrades** (`cinemask-upgrades`) | Lists movies and episodes below the quality you want, judged from the files (resolution, and optionally old codecs, low bitrate, 4K without HDR), on **Admin → Plugins → Upgrades**. For each, [Cinemask](https://github.com/Spacegoose02/cinemask) can search its indexers and grab a better copy, show the releases it found to pick one, move the title to a profile with a higher cutoff, or start monitoring it. **Search all** goes through the list one title at a time. Needs Cinemask's address and an API key with full access from a Cinemask manager or admin. |
 | **Hue Sync** (`hue-sync`) | Philips Hue lights follow the colours on screen. It reads the playing file's picture a little ahead with ffmpeg (4 frames a second, 48×27 pixels) and keeps in step through the `player.*` events. Each light follows a zone (whole screen, left, centre, right, top, bottom). Set up from **Admin → Plugins → Hue Sync setup** (pair the bridge, assign lights); filters for people and devices, brightness, delay and pause/stop behaviour are its settings. Movies and shows only, not Live TV. |
 | **Watchlist RSS** (`watchlist-rss`) | Each person's watchlist as an RSS feed (`feed.xml?token=<API key>`), and RSS feeds people subscribe to whose movies and shows go on their watchlist when they're in the library (matched by TMDB id, or by title and year). Optionally takes finished movies off the watchlist. People open it from **Account → Plugins**. |
+
+## Catalogues
+
+**Admin → Plugins → Catalogue** lists plugins that can be installed with one click. BingeBandit's own catalogue is always read: each release publishes `plugin-catalog.json` with the bundled plugins built for every platform, so a server without them (or with older copies) can install or update them. Admins can add other catalogues (one address per line under **Catalogues**; setting `plugin_catalogs`). When two catalogues list the same id, the first one wins.
+
+Installing downloads the zip for the server's platform, checks its SHA-256, unpacks it into `<data>/plugins/<id>` and leaves the plugin off. Updating replaces that folder (the plugin is stopped while it's swapped, and started again if it was on). Plugins installed this way can be uninstalled from their row; bundled ones can only be turned off. A catalogue is cached for 10 minutes (the refresh button reads it again).
+
+A catalogue is JSON:
+
+```json
+{
+  "name": "My plugins",
+  "plugins": [
+    {
+      "id": "my-plugin",
+      "name": "My Plugin",
+      "version": "1.2.0",
+      "description": "What it does.",
+      "author": "you",
+      "homepage": "https://…",
+      "downloads": {
+        "linux-amd64": { "url": "https://…/my-plugin-1.2.0-linux-amd64.zip", "sha256": "…" },
+        "windows-amd64": { "url": "https://…", "sha256": "…" }
+      }
+    }
+  ]
+}
+```
+
+Download keys are Go's `<os>-<arch>` (`linux-amd64`, `linux-arm64`, `windows-amd64`, `darwin-amd64`, `darwin-arm64`; the Docker image is `linux-amd64` or `linux-arm64`). `sha256` is required. Each zip holds the plugin's folder (or its files at the top level) with a `plugin.json` whose `id` matches the entry; links and paths outside the folder are refused. An update is offered when the catalogue's `version` is newer than the `version` in the installed `plugin.json`.
 
 ## The protocol
 

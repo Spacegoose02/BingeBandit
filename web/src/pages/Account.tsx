@@ -737,6 +737,14 @@ function PlaybackPrefs() {
         <input type="checkbox" checked={p.autoPlayNext} onChange={(e) => set('autoPlayNext', e.target.checked)} />
         Play the next episode automatically
       </label>
+      <label className="check">
+        <input type="checkbox" checked={p.notifyEpisodes} onChange={(e) => set('notifyEpisodes', e.target.checked)} />
+        Tell me when new episodes arrive for shows I watch or have on my watchlist
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.notifyRecordings} onChange={(e) => set('notifyRecordings', e.target.checked)} />
+        Tell me when my recordings finish or fail
+      </label>
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
       <div className="actions">
         <button className="btn btn-primary">Save playback settings</button>

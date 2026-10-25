@@ -22,7 +22,8 @@ const (
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
 	SettingBackupDir         = "backup_dir"
-	SettingPreRollPaths      = "preroll_paths" // intro videos before movies: files or folders, one per line
+	SettingPreRollPaths      = "preroll_paths"   // intro videos before movies: files or folders, one per line
+	SettingPluginCatalogs    = "plugin_catalogs" // more plugin catalogue URLs, one per line (the official one is always used)
 	SettingBackupKeep        = "backup_keep"
 	// S3-compatible storage that each backup is also uploaded to.
 	SettingBackupS3Endpoint  = "backup_s3_endpoint" // e.g. https://s3.us-west-002.backblazeb2.com; empty = off
@@ -72,6 +73,7 @@ var SettingDefaults = map[string]string{
 	SettingMaintenanceEnd:    "5",
 	SettingBackupDir:         "",
 	SettingPreRollPaths:      "",
+	SettingPluginCatalogs:    "",
 	SettingBackupKeep:        "7",
 	SettingBackupS3Endpoint:  "",
 	SettingBackupS3Region:    "",

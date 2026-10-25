@@ -73,7 +73,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Recommendations from other users on Home: a Recommend button on movies and shows (with a note), a "Recommended for You" row for people who opt in under Account → Sharing |
 | ✅ | **Discover**: new shows and movie trailers from YouTube playlists and channels the admin adds (no API key; refreshed every 3 hours), played in the page |
 | ✅ | Watch Together: start a watch party in the web player, invite people (or share the link); play, pause, seeking and the next episode stay in step for everyone |
-| | Notifications: new episodes, live sports starting, etc. |
+| ✅ | Notifications in the app: new episodes of shows you watch or have on your watchlist, and your recordings finishing or failing (a bell in the sidebar; each can be turned off under Account). Live sports alerts are with the sports tracker in M4 |
 
 ## M4: Live TV (Dispatcharr replacement) 🟡 (phase 1 done)
 
@@ -169,7 +169,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **Cinemask Upgrades** (bundled): lists movies and episodes below the quality you want (resolution, old codecs, low bitrate, 4K without HDR, judged from the files) and has [Cinemask](https://github.com/Spacegoose02/cinemask) search for better copies: search and grab, pick a release, move the title to a higher profile, add it to Cinemask, or search all |
 | ✅ | **Hue Sync** (bundled): Hue lights follow the colours on screen, per zone (left, right, centre…), in step with the player; pause and stop behaviour, filters for people and devices |
 | | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box) |
-| | Plugin catalogue: install plugins from a list instead of copying folders |
+| ✅ | Plugin catalogue: install, update and uninstall plugins from a list (BingeBandit's own, published with each release, plus catalogues the admin adds) instead of copying folders |
 
 ## Docs
 
