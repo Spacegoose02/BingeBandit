@@ -23,6 +23,7 @@ export async function loadSession(): Promise<Session | null> {
 
 export async function saveSession(s: Session | null) {
   session = s
+  cache.clear() // another server or profile sees different things
   if (s) await AsyncStorage.setItem(KEY, JSON.stringify(s))
   else await AsyncStorage.removeItem(KEY)
 }
@@ -66,8 +67,35 @@ export async function request<T>(method: string, path: string, body?: unknown, s
   return data as T
 }
 
+// The last answer to each GET, so a screen that comes back (Back from the
+// player or details remounts it) can draw at once while it refreshes.
+const cache = new Map<string, unknown>()
+
+/** What the server last said for this path, if anything. */
+export function cached<T>(path: string): T | undefined {
+  return cache.get(path) as T | undefined
+}
+
+// The player's last progress report, sent as it closes. Screens that show
+// progress wait for it so Continue Watching has the new position.
+let lastWrite: Promise<unknown> = Promise.resolve()
+
+/** Lets later loads wait for this write to land (see writesDone). */
+export function trackWrite<T>(p: Promise<T>): Promise<T> {
+  lastWrite = p.catch(() => undefined)
+  return p
+}
+
+export function writesDone(): Promise<unknown> {
+  return lastWrite
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>('GET', path),
+  get: <T>(path: string) =>
+    request<T>('GET', path).then((data) => {
+      cache.set(path, data)
+      return data
+    }),
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
   del: <T>(path: string) => request<T>('DELETE', path),
 }

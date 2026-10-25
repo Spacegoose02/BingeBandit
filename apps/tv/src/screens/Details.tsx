@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { api, image } from '../api'
+import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
@@ -15,11 +15,14 @@ function fmtDuration(min?: number) {
 /** A movie, show, season or episode, with Play and its seasons/episodes. */
 export default function Details({ id }: { id: number }) {
   const nav = useNav()
-  const [d, setD] = useState<ItemDetail | null>(null)
+  // Coming back from the player shows the last copy at once, then the new resume point.
+  const [d, setD] = useState<ItemDetail | null>(() => cached<ItemDetail>(`/api/items/${id}`) ?? null)
   const [error, setError] = useState('')
 
   const load = useCallback(() => {
-    api.get<ItemDetail>(`/api/items/${id}`).then(setD, (e) => setError(e.message))
+    writesDone()
+      .then(() => api.get<ItemDetail>(`/api/items/${id}`))
+      .then(setD, (e) => setError(e.message))
   }, [id])
   useEffect(load, [load])
 
@@ -30,7 +33,8 @@ export default function Details({ id }: { id: number }) {
   const playable = it.kind === 'movie' || it.kind === 'episode'
   // Shows and seasons play their next unwatched episode.
   const target: Item | undefined = playable ? it : d.upNext
-  const resume = target && !target.watch?.watched && target.watch?.position > 30 ? target.watch.position : 0
+  // A finished title being watched again resumes too; finishing resets the position.
+  const resume = target && target.watch?.position > 30 ? target.watch.position : 0
   const bg = image(it.backdrop || it.showBackdrop || d.show?.backdrop, 'w1280')
   const meta = [it.year, it.contentRating, fmtDuration(it.runtime), it.rating ? `★ ${it.rating.toFixed(1)}` : '', it.genres?.slice(0, 3).join(', ')]
     .filter(Boolean)
