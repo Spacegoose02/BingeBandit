@@ -48,6 +48,7 @@ const (
 	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
 	SettingLiveBufferSeconds = "live_buffer_seconds"    // how far behind live players sit
 	SettingLiveStallSeconds  = "live_stall_seconds"     // no data this long → switch to the next stream
+	SettingLiveSwitchSlow    = "live_switch_slow"       // false: only switch streams when one fails, not when it falls behind
 	SettingLiveProxy         = "live_proxy"             // proxy for provider traffic; empty = HTTP(S)_PROXY environment
 )
 
@@ -97,6 +98,7 @@ var SettingDefaults = map[string]string{
 	SettingLiveTimeshift:     "15",
 	SettingLiveBufferSeconds: "10",
 	SettingLiveStallSeconds:  "12",
+	SettingLiveSwitchSlow:    "true",
 	SettingLiveProxy:         "",
 }
 

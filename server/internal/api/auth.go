@@ -36,6 +36,17 @@ func currentUser(r *http.Request) *store.User {
 	return u
 }
 
+// requireLiveTV turns away users an admin has turned Live TV off for.
+func requireLiveTV(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if u := currentUser(r); u == nil || !u.LiveTV {
+			writeErr(w, http.StatusForbidden, "Live TV is turned off for your account")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireAuth accepts a bearer token (apps), the session cookie (web UI), or a
 // ?token= query parameter on GET (players that cannot set headers).
 // Cookie-authenticated writes must carry X-Requested-With to block CSRF.

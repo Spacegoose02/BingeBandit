@@ -30,6 +30,11 @@ export default function AdminUsers() {
     await api.del(`/api/admin/users/${u.id}/passkeys`).catch((e) => alert(e.message))
     reload()
   }
+  const setLiveTV = async (u: User, on: boolean) => {
+    if (!on && !confirm(`Turn off Live TV for ${u.username}${u.ownerId ? '' : ' and their profiles'}? Anything they're watching stops, and Live TV and Recordings disappear for them.`)) return
+    await api.put(`/api/admin/users/${u.id}/live-tv`, { on }).catch((e) => alert(e.message))
+    reload()
+  }
   const reset2FA = async (u: User) => {
     if (!confirm(`Turn off two-step sign-in for ${u.username}? They can sign in with just their password until they set it up again.`)) return
     await api.del(`/api/admin/users/${u.id}/2fa`).catch((e) => alert(e.message))
@@ -66,6 +71,15 @@ export default function AdminUsers() {
             ) : (
               <button className="btn btn-glass btn-sm" onClick={() => setAccess(u)}>
                 <Icon name="library" size={16} /> {u.allLibraries ? 'All libraries' : `${u.libraryIds?.length ?? 0} libraries`}
+              </button>
+            )}
+            {!u.isAdmin && (
+              <button
+                className={`btn btn-glass btn-sm${u.liveTV ? '' : ' danger'}`}
+                onClick={() => setLiveTV(u, !u.liveTV)}
+                title={u.liveTV ? 'Turn off Live TV and recordings for this user' : 'Let this user watch Live TV again'}
+              >
+                <Icon name="broadcast" size={16} /> {u.liveTV ? 'Live TV on' : 'Live TV off'}
               </button>
             )}
             {u.hasPasscode && (

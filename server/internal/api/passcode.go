@@ -202,3 +202,28 @@ func (s *Server) clearUserPasscode(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// setUserLiveTV turns Live TV and the DVR on or off for a user (and its
+// profiles). Turning it off also ends anything they're watching.
+func (s *Server) setUserLiveTV(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		On bool `json:"on"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.Store.SetLiveTV(id, req.On); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if !req.On {
+		s.Live.KickUser(id)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

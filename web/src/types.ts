@@ -19,6 +19,7 @@ export interface User {
   profilePublic: boolean
   totpEnabled: boolean
   shareActivity: boolean
+  liveTV: boolean // may watch Live TV and use the DVR
   hasPassword: boolean
   hasPasscode: boolean
   ownerId?: number // set for a profile: the account it belongs to

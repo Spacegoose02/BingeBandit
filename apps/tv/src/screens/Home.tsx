@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { api, image, saveSession } from '../api'
+import { api, current, image, saveSession } from '../api'
 import { Button, Center, Focusable, PosterCard, Row, WideCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
-import type { HomeData, Item, Library } from '../types'
+import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab from './Library'
 import LiveGuide from './LiveGuide'
@@ -36,9 +36,21 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       if (lastTab.startsWith('lib:') && !pinned.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
     }, () => undefined)
   }, [])
+  // An admin can turn Live TV off for someone; check on each launch, since
+  // the saved sign-in may predate the change.
+  const [liveTV, setLiveTV] = useState(current()?.user.liveTV !== false)
+  useEffect(() => {
+    api
+      .get<User>('/api/me')
+      .then((me) => {
+        setLiveTV(me.liveTV !== false)
+        if (me.liveTV === false && lastTab === 'live') setTab('home')
+      })
+      .catch(() => undefined)
+  }, [])
   const names: Record<string, string> = { ...fixedNames }
   for (const l of libraries) names[`lib:${l.id}`] = l.name
-  const order: Tab[] = ['home', 'search', ...libraries.map((l) => `lib:${l.id}` as Tab), 'live', 'settings']
+  const order: Tab[] = ['home', 'search', ...libraries.map((l) => `lib:${l.id}` as Tab), ...(liveTV ? (['live'] as Tab[]) : []), 'settings']
   const library = libraries.find((l) => `lib:${l.id}` === tab)
   const tabs = order.map((t) => {
     const label = (
@@ -71,7 +83,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'home' && <HomeRows />}
       {library && <LibraryTab key={library.id} library={library} />}
       {tab === 'search' && <Search />}
-      {tab === 'live' && <LiveGuide />}
+      {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
           update={update}
