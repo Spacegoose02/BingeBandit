@@ -59,6 +59,7 @@ type Server struct {
 	linkLimiter *loginLimiter
 	links       *linkManager
 	oidc        *oidcFlows
+	passkeys    passkeyFlows
 	netp        netHolder
 	unlocks     unlocks
 	restoreMu   sync.Mutex // one restore at a time
@@ -95,6 +96,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Post("/setup", s.setup)
 		r.Post("/setup/restore", s.setupRestore)
 		r.Post("/auth/login", s.login)
+		r.Post("/auth/passkey/begin", s.passkeyLoginBegin)
+		r.Post("/auth/passkey/finish", s.passkeyLoginFinish)
 		r.Post("/link/start", s.linkStart)
 		r.Get("/link/poll", s.linkPoll)
 		r.Get("/auth/oidc", s.oidcOptions)
@@ -131,6 +134,11 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/me/2fa/setup", s.setup2FA)
 			r.Post("/me/2fa/enable", s.enable2FA)
 			r.Post("/me/2fa/disable", s.disable2FA)
+			r.Get("/me/passkeys", s.myPasskeys)
+			r.Post("/me/passkeys/begin", s.passkeyRegisterBegin)
+			r.Post("/me/passkeys", s.passkeyRegisterFinish)
+			r.Put("/me/passkeys/{id}", s.renamePasskey)
+			r.Delete("/me/passkeys/{id}", s.deletePasskey)
 			r.Get("/me/sessions", s.sessions)
 			r.Delete("/me/sessions/{id}", s.revokeSession)
 			r.Get("/me/keys", s.apiKeys)
@@ -305,6 +313,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 				r.Put("/users/{id}/libraries", s.setUserLibraries)
 				r.Delete("/users/{id}/2fa", s.adminReset2FA)
+				r.Delete("/users/{id}/passkeys", s.adminDeletePasskeys)
 				r.Delete("/users/{id}/passcode", s.clearUserPasscode)
 				r.Get("/webhooks", s.webhooks)
 				r.Post("/webhooks", s.saveWebhook)

@@ -555,4 +555,18 @@ CREATE TABLE recommendations (
 );
 CREATE INDEX recommendations_to ON recommendations(to_user, dismissed, created_at);
 `,
+	// 23: passkeys (WebAuthn). credential is the library's JSON for the
+	// credential (public key, sign count, flags); user handles are the user id.
+	`
+CREATE TABLE IF NOT EXISTS passkeys (
+	id            INTEGER PRIMARY KEY,
+	user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	credential_id BLOB NOT NULL UNIQUE,
+	credential    TEXT NOT NULL,
+	name          TEXT NOT NULL,
+	created_at    INTEGER NOT NULL,
+	last_used_at  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id);
+`,
 }

@@ -8,7 +8,8 @@ import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
-import type { APIKey, DeviceSession, Identity, PluginLinks, Prefs } from '../types'
+import { createPasskey, passkeyErrorMessage, passkeysSupported } from '../passkeys'
+import type { APIKey, DeviceSession, Identity, Passkey, PluginLinks, Prefs } from '../types'
 
 function when(ts: number) {
   return ts ? new Date(ts * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never'
@@ -186,6 +187,90 @@ function TwoFactor() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+function Passkeys() {
+  const { user } = useAuth()
+  const { data: keys, reload } = useApi<Passkey[]>('/api/me/passkeys')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  if (!user || user.ownerId || !keys) return null
+  const supported = passkeysSupported()
+
+  const add = async () => {
+    setError('')
+    setBusy(true)
+    try {
+      const { flow, options } = await api.post<{ flow: string; options: unknown }>('/api/me/passkeys/begin')
+      let credential
+      try {
+        credential = await createPasskey(options)
+      } catch (err) {
+        setError(passkeyErrorMessage(err))
+        return
+      }
+      const name = prompt('Name this passkey (for example "MacBook" or "iPhone")', '') ?? ''
+      await api.post('/api/me/passkeys', { flow, credential, name })
+      reload()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const rename = async (k: Passkey) => {
+    const name = prompt('New name', k.name)
+    if (!name?.trim()) return
+    await api.put(`/api/me/passkeys/${k.id}`, { name }).catch((e) => setError(e.message))
+    reload()
+  }
+  const remove = async (k: Passkey) => {
+    if (!confirm(`Remove "${k.name}"? Also delete it from the device or password manager that holds it.`)) return
+    await api.del(`/api/me/passkeys/${k.id}`).catch((e) => setError(e.message))
+    reload()
+  }
+  const when = (unix: number) => new Date(unix * 1000).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Passkeys</h3>
+      <p className="muted">
+        Sign in with your fingerprint, face or device PIN instead of a password and code. A passkey lives on your phone, computer or
+        password manager and only works for this server.
+      </p>
+      {keys.length > 0 && (
+        <div className="list">
+          {keys.map((k) => (
+            <div key={k.id} className="list-row">
+              <Icon name="key" />
+              <div className="grow">
+                <div>{k.name}</div>
+                <div className="muted small">
+                  Added {when(k.createdAt)} · {k.lastUsedAt ? `last used ${when(k.lastUsedAt)}` : 'not used yet'}
+                </div>
+              </div>
+              <button type="button" className="btn btn-glass btn-sm" onClick={() => rename(k)}>Rename</button>
+              <button type="button" className="btn btn-glass btn-sm danger" onClick={() => remove(k)} aria-label={`Remove ${k.name}`}>
+                <Icon name="trash" size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!supported && (
+        <p className="muted small">
+          This browser can't make passkeys on this address. Passkeys need the server's https:// address (or localhost on the server
+          itself).
+        </p>
+      )}
+      {error && <div className="form-error">{error}</div>}
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={add} disabled={!supported || busy}>
+          <Icon name="plus" size={18} /> Add a passkey
+        </button>
+      </div>
     </div>
   )
 }
@@ -697,6 +782,7 @@ export default function Account() {
       <LinkedAccounts />
       {/* Two-step sign-in guards the password; single sign-on accounts rely on their provider's. */}
       {hasPassword && <TwoFactor />}
+      <Passkeys />
       <PasscodeSettings />
       <Devices />
       <APIKeys />
