@@ -65,7 +65,9 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
 
   const detectMarkers = async () => {
     await api.post(`/api/admin/items/${item.id}/detect-markers`).catch((e) => alert(e.message))
-    alert('Detecting intros and credits in the background. It takes a few seconds per episode; open an episode afterwards to see the results.')
+    alert(item.kind === 'movie'
+      ? 'Looking for the end credits in the background. It takes a few seconds; play the movie afterwards to see the Skip Credits button.'
+      : 'Detecting intros and credits in the background. It takes a few seconds per episode; open an episode afterwards to see the results.')
   }
 
   const watchedNow = playable ? item.watch.watched : !!item.childCount && item.unwatchedCount === 0
@@ -155,7 +157,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="search" size={18} />
                 </button>
               )}
-              {user?.isAdmin && (item.kind === 'show' || item.kind === 'season') && (
+              {user?.isAdmin && (item.kind === 'show' || item.kind === 'season' || item.kind === 'movie') && (
                 <button className="btn btn-glass icon-only" onClick={detectMarkers} title="Detect intros and credits now">
                   <Icon name="activity" size={18} />
                 </button>

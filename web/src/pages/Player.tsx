@@ -642,9 +642,12 @@ function PlayerView({
     introDone.current = true
     if (intro) seek(intro.end)
   }
+  // A movie with a scene after the credits jumps to that scene instead of ending.
+  const afterCredits = !hasNext && !!credits && credits.end < duration - 5
   const skipCredits = () => {
     creditsDone.current = true
-    onEnded()
+    if (afterCredits && credits) seek(credits.end)
+    else onEnded()
   }
   useEffect(() => {
     if (inIntro && prefs.skipIntro === 'auto' && !introDone.current) {
@@ -652,7 +655,10 @@ function PlayerView({
       setToast('Skipped the intro')
       skipIntro()
     }
-    if (inCredits && prefs.skipCredits === 'auto' && !creditsDone.current && hasNext) skipCredits()
+    if (inCredits && prefs.skipCredits === 'auto' && !creditsDone.current && (hasNext || afterCredits)) {
+      if (afterCredits) setToast('Skipped to the scene after the credits')
+      skipCredits()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inIntro, inCredits])
 
