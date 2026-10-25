@@ -1,12 +1,13 @@
-// After signing in, the profile picker comes first. The flag lives in
-// sessionStorage so a reload doesn't skip it, and a new tab doesn't ask again.
+// "Who's watching?" comes first whenever BingeBandit opens in a new tab and
+// after signing in, unless the account picked a member to open as. The flag
+// lives in sessionStorage so a reload doesn't ask again but a new tab does.
 
-const PICK_PROFILE_KEY = 'bb:pickProfile'
+const PICKED_KEY = 'bb:profilePicked'
 
 /** Marks that the next page should be the profile picker (after signing in). */
 export function askForProfile() {
   try {
-    sessionStorage.setItem(PICK_PROFILE_KEY, '1')
+    sessionStorage.removeItem(PICKED_KEY)
   } catch {
     // Private windows can refuse storage; the picker is still in the menu.
   }
@@ -14,7 +15,7 @@ export function askForProfile() {
 
 export function profilePickPending() {
   try {
-    return sessionStorage.getItem(PICK_PROFILE_KEY) === '1'
+    return sessionStorage.getItem(PICKED_KEY) !== '1'
   } catch {
     return false
   }
@@ -22,7 +23,7 @@ export function profilePickPending() {
 
 export function donePicking() {
   try {
-    sessionStorage.removeItem(PICK_PROFILE_KEY)
+    sessionStorage.setItem(PICKED_KEY, '1')
   } catch {
     // ignore
   }

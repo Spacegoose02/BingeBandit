@@ -23,6 +23,8 @@ export interface User {
   hasPasscode: boolean
   ownerId?: number // set for a profile: the account it belongs to
   profileName?: string
+  avatar?: string // URL of the profile picture
+  autoProfileId?: number // an account's member to open as without asking who's watching
 }
 
 /** A person in the signed-in account's household: the account or one of its profiles. */
@@ -32,6 +34,9 @@ export interface Member {
   isOwner: boolean
   hasPin: boolean
   current: boolean
+  avatar?: string
+  /** The account opens as this member without asking who's watching. */
+  auto?: boolean
   allLibraries: boolean
   libraryIds?: number[]
 }

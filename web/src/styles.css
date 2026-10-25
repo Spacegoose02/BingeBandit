@@ -217,6 +217,9 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
   background: linear-gradient(135deg, var(--accent), #6366f1);
   color: #fff;
 }
+.avatar-img { object-fit: cover; padding: 0; }
+.avatar-picker { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.avatar-picker .actions { margin: 0; }
 .menu {
   background: rgba(31, 36, 44, 0.97);
   backdrop-filter: blur(16px);

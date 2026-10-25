@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../../api'
 import { useAuth } from '../../auth'
+import { Avatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
@@ -46,7 +47,7 @@ export default function AdminUsers() {
       <div className="panel list">
         {users?.map((u) => (
           <div key={u.id} className="list-row">
-            <span className="avatar">{u.username.slice(0, 1).toUpperCase()}</span>
+            <Avatar name={u.username} src={u.avatar} />
             <div className="grow">
               <div>
                 {u.username} {u.id === me?.id && <span className="muted small">(you)</span>}{' '}
