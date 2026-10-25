@@ -377,6 +377,7 @@ export interface RelayStat {
   video?: string
   encoder?: string
   hwError?: string
+  behind?: number
   failovers: number
   lastError?: string
   now?: GuideProgram

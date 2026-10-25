@@ -20,6 +20,8 @@ export default function LivePlayer() {
   const hlsRef = useRef<Hls | null>(null)
   const hideTimer = useRef<number>()
   const failures = useRef(0)
+  const viewerRef = useRef('')
+  const stallSecs = useRef(12)
   const [attempt, setAttempt] = useState(0) // bumped to rejoin after a failure
   const [error, setError] = useState('')
   const [reconnecting, setReconnecting] = useState(false)
@@ -66,13 +68,15 @@ export default function LivePlayer() {
       retryTimer = window.setTimeout(() => setAttempt((n) => n + 1), failures.current > 3 ? 15000 : 1500 * failures.current)
     }
     api
-      .post<{ viewerId: string; playlist: string; bufferSecs?: number }>(`/api/live/channels/${id}/watch`)
+      .post<{ viewerId: string; playlist: string; bufferSecs?: number; stallSecs?: number }>(`/api/live/channels/${id}/watch`)
       .then((res) => {
         if (cancelled) {
           api.del(`/api/live/viewers/${res.viewerId}`).catch(() => undefined)
           return
         }
         viewer = res.viewerId
+        viewerRef.current = viewer
+        stallSecs.current = res.stallSecs ?? 12
         // Paused players stop fetching the playlist; this keeps the seat.
         ping = window.setInterval(() => {
           api.post(`/api/live/viewers/${viewer}/ping`).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
@@ -110,9 +114,26 @@ export default function LivePlayer() {
       window.removeEventListener('pagehide', leave)
       hls?.destroy()
       hlsRef.current = null
+      viewerRef.current = ''
       leave()
     }
   }, [id, attempt])
+
+  // Buffering for longer than the server's stall time: tell it, so it can
+  // move the channel to its next stream (it checks the stream really is the
+  // problem first). Repeats every stall period while it lasts.
+  useEffect(() => {
+    if (!buffering || paused || reconnecting) return
+    const started = Date.now()
+    let next = stallSecs.current
+    const t = window.setInterval(() => {
+      const secs = (Date.now() - started) / 1000
+      if (secs < next || !viewerRef.current) return
+      next += stallSecs.current
+      api.post(`/api/live/viewers/${viewerRef.current}/buffering`, { seconds: Math.round(secs) }).catch(() => undefined)
+    }, 1000)
+    return () => window.clearInterval(t)
+  }, [buffering, paused, reconnecting, attempt])
 
   const onPlaying = () => {
     setBuffering(false)

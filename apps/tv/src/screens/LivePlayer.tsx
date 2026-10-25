@@ -4,7 +4,7 @@ import Video, { type OnProgressData, type VideoRef } from 'react-native-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
 import { Button } from '../components'
-import { DEFAULT_BUFFER_SECS, fmtBehind, liveBuffer, joinChannel, leaveChannel, pingViewer } from '../live'
+import { DEFAULT_BUFFER_SECS, fmtBehind, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { useLock } from '../lock'
 import { backInterceptor } from '../nav'
 import { useLandscape } from '../screen'
@@ -38,6 +38,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [info, setInfo] = useState(true)
   const viewer = useRef('')
   const failures = useRef(0)
+  const stallSecs = useRef(12)
   const failRef = useRef<(msg: string) => void>(() => undefined)
   const video = useRef<VideoRef>(null)
   const progress = useRef({ pos: 0, window: 0 })
@@ -97,6 +98,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         }
         viewer.current = r.viewerId
         setOffset(r.bufferSecs)
+        stallSecs.current = r.stallSecs
         setSrc(r.playlist)
         ping = setInterval(() => {
           pingViewer(r.viewerId).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
@@ -204,6 +206,22 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         break
     }
   })
+
+  // Buffering for longer than the server's stall time: tell it, so it can
+  // move the channel to its next stream (it checks the stream really is the
+  // problem first). Repeats every stall period while it lasts.
+  useEffect(() => {
+    if (!buffering || paused || reconnecting || !src) return
+    const started = Date.now()
+    let next = stallSecs.current
+    const t = setInterval(() => {
+      const secs = (Date.now() - started) / 1000
+      if (secs < next) return
+      next += stallSecs.current
+      reportBuffering(viewer.current, secs)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [buffering, paused, reconnecting, src])
 
   const playing = () => {
     setBuffering(false)

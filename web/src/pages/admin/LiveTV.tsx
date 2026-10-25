@@ -565,7 +565,8 @@ function Activity() {
               <dd>{r.stream} <span className="muted small">({r.source})</span>{r.failovers > 0 && <span className="pill warn">{r.failovers} fail-over{r.failovers > 1 ? 's' : ''}</span>}</dd>
               {r.video && (<><dt>Web video</dt><dd><span className={`pill ${r.video === 'copy' ? 'ok' : 'warn'}`}>{r.video === 'copy' ? 'Passed through' : `Converted · ${encoderName(r.encoder)}`}</span>{r.video === 'copy' && <span className="muted small"> (already H.264, so no hardware encoder is needed)</span>}</dd></>)}
               {r.hwError && (<><dt>Hardware encoder</dt><dd className="muted small">Failed, so this channel is converted on the CPU: {r.hwError}</dd></>)}
-              {r.lastError && (<><dt>Last error</dt><dd className="muted small">{r.lastError}</dd></>)}
+              {!!r.behind && r.behind >= 2 && (<><dt>Pace</dt><dd><span className="pill warn">{Math.round(r.behind)} s behind real time</span></dd></>)}
+            {r.lastError && (<><dt>Last error</dt><dd className="muted small">{r.lastError}</dd></>)}
             </dl>
             <div className="relay-stats">
               <span><Icon name="activity" size={14} /> {mbps(r.currentBps)}</span>

@@ -252,13 +252,14 @@ export default function AdminSettings() {
               <input type="number" min={2} max={60} value={s.live_buffer_seconds ?? '10'} onChange={set('live_buffer_seconds')} />
             </label>
             <label>
-              Switch streams after no data for (seconds)
+              Switch streams after buffering for (seconds)
               <input type="number" min={3} max={120} value={s.live_stall_seconds ?? '12'} onChange={set('live_stall_seconds')} />
             </label>
           </div>
           <p className="muted small">
-            A bigger buffer rides out provider hiccups but starts each channel further behind live. When a stream sends nothing for the
-            switch time, the channel moves to its next stream.
+            A bigger buffer rides out provider hiccups but starts each channel further behind live. When a stream sends nothing, or
+            falls behind real time (so players would be buffering), for the switch time, a channel with fallback streams moves to
+            the next one. Players that buffer that long also ask the server to switch.
           </p>
           <label>
             Proxy for IPTV providers

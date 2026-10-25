@@ -201,6 +201,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Delete("/live/categories/{id}/channels/{channel}", s.setChannelCategory(false))
 			r.Delete("/live/viewers/{viewer}", s.leaveChannel)
 			r.Post("/live/viewers/{viewer}/ping", s.pingViewer)
+			r.Post("/live/viewers/{viewer}/buffering", s.viewerBuffering)
 			r.Get("/dvr", s.recordings)
 			r.Post("/dvr/recordings", s.scheduleRecording)
 			r.Delete("/dvr/recordings/{id}", s.deleteRecording)

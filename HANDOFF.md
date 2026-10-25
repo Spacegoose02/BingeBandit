@@ -109,6 +109,20 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 - **Web:** `pages/WhoIsWatching.tsx` at `/who` appears after a password sign-in (a `sessionStorage` flag in `profilePick.ts`) and from the user menu → Switch profile. Account → Profiles adds, edits (name, libraries, PIN) and deletes profiles. Admin → Users marks profiles and hides Reset password for them.
 - **TV app:** `screens/Profiles.tsx` with a remote-friendly PIN pad. It shows after sign-in when the account has profiles, and from Settings → Switch profile. **Not yet tried on a device**: the onn box and the S24+ still need a run-through. It type-checks and lints.
 
+## Live TV: switch streams when viewers would be buffering
+
+- The old stall timeout only caught a stream that sent **nothing**. A stream that trickles in slower than real time never tripped it, but every player drained its buffer.
+- `livetv/pace.go` reads the PCR clock in the upstream's MPEG-TS. It reports how far the stream has fallen behind the furthest ahead it has been, so a provider's initial burst doesn't count. It handles wraps of the 33-bit clock and splices.
+- `pull`'s watchdog moves to the next stream when the stream falls behind by more than the switch time (`live_stall_seconds`, default 12, now labelled "Switch streams after buffering for"). This only applies when the channel has a fallback stream; a channel with one stream keeps playing it.
+- Players (web and TV) that buffer for the switch time call `POST /live/viewers/{id}/buffering`. The relay switches only if the server sees the problem too:
+  - the stream is ≥3 s behind real time
+  - or the HLS output has made no segment for over 8 s
+  - or the stream can't be measured (no PCR)
+
+  Otherwise it logs that the viewer's own network is the likely cause. There's at most one switch per switch time.
+- `/watch` returns `stallSecs`. Activity shows "N s behind real time" for a stream that is falling behind.
+- Tests: `TestPace`, `TestSlowStreamFailsOver` (a 30%-speed stream fails over in about 6 s with a 3 s setting), `TestBufferingReport`.
+
 ## Live TV settings, logs and playlist links
 
 - **Settings → Live TV playback** also has:

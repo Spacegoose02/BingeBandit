@@ -6,9 +6,18 @@ import { absolute, api, request } from './api'
  * segments exist (up to ~25 s while the provider connects), so ExoPlayer
  * never waits on a slow playlist and times out.
  */
-export async function joinChannel(channelId: number): Promise<{ viewerId: string; playlist: string; bufferSecs: number }> {
-  const r = await request<{ viewerId: string; playlist: string; bufferSecs?: number }>('POST', `/api/live/channels/${channelId}/watch`, {}, undefined, 40000)
-  return { viewerId: r.viewerId, playlist: absolute(r.playlist), bufferSecs: r.bufferSecs ?? DEFAULT_BUFFER_SECS }
+export async function joinChannel(channelId: number): Promise<{ viewerId: string; playlist: string; bufferSecs: number; stallSecs: number }> {
+  const r = await request<{ viewerId: string; playlist: string; bufferSecs?: number; stallSecs?: number }>(
+    'POST', `/api/live/channels/${channelId}/watch`, {}, undefined, 40000)
+  return { viewerId: r.viewerId, playlist: absolute(r.playlist), bufferSecs: r.bufferSecs ?? DEFAULT_BUFFER_SECS, stallSecs: r.stallSecs ?? 12 }
+}
+
+/**
+ * Tells the server this viewer has been buffering for `seconds`; past the
+ * stall time it may move the channel to its next stream.
+ */
+export function reportBuffering(viewerId: string, seconds: number) {
+  if (viewerId) api.post(`/api/live/viewers/${viewerId}/buffering`, { seconds: Math.round(seconds) }).catch(() => undefined)
 }
 
 export function leaveChannel(viewerId: string) {
