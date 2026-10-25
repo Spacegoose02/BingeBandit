@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -351,7 +352,12 @@ func (p *Plex) Collections(ctx context.Context, emit func(Collection) error) err
 		for _, col := range cols.MediaContainer.Metadata {
 			kids, err := p.get(ctx, "/library/collections/"+col.RatingKey+"/children", url.Values{"includeGuids": {"1"}})
 			if err != nil {
-				return err
+				if ctx.Err() != nil {
+					return err
+				}
+				// One collection Plex can't list (smart ones sometimes fail) shouldn't stop the rest.
+				log.Printf("import (plex): collection %q: %v", col.Title, err)
+				continue
 			}
 			c := Collection{Name: col.Title, Summary: col.Summary}
 			for i := range kids.MediaContainer.Metadata {

@@ -23,6 +23,29 @@ interface Page {
   library: Library
   items: Item[]
   total: number
+  collections?: Collection[] // first page only, unless the library hides them
+}
+
+type Tile = { item: Item } | { collection: Collection }
+
+/**
+ * Mixes collections into the titles. Sorted by title they slot in by name,
+ * like Plex; any other sort puts them first. A collection that sorts after
+ * every loaded title waits until the last page is in.
+ */
+function tiles(items: Item[], collections: Collection[], sort: string, complete: boolean): Tile[] {
+  if (!collections.length) return items.map((item) => ({ item }))
+  if (sort !== 'title') return [...collections.map((collection) => ({ collection })), ...items.map((item) => ({ item }))]
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+  const cols = [...collections].sort((a, b) => byName(a.name, b.name))
+  const out: Tile[] = []
+  let c = 0
+  for (const item of items) {
+    while (c < cols.length && byName(cols[c].name, item.sortTitle || item.title) <= 0) out.push({ collection: cols[c++] })
+    out.push({ item })
+  }
+  if (complete) while (c < cols.length) out.push({ collection: cols[c++] })
+  return out
 }
 
 // Keyed by id so switching libraries resets paging and restores that library's sort.
@@ -38,6 +61,7 @@ function LibraryView({ id }: { id: string }) {
   const [sort, setSort] = useState(() => localStorage.getItem(`bb.sort.${id}`) ?? 'title')
   const [library, setLibrary] = useState<Library | null>(null)
   const [items, setItems] = useState<Item[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
@@ -54,6 +78,7 @@ function LibraryView({ id }: { id: string }) {
         setLibrary(page.library)
         setTotal(page.total)
         setItems((prev) => (offset === 0 ? page.items : [...prev, ...page.items]))
+        if (offset === 0) setCollections(page.collections ?? [])
       } finally {
         loadingRef.current = false
         setLoading(false)
@@ -115,9 +140,9 @@ function LibraryView({ id }: { id: string }) {
         <>
           {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
           <div className="poster-grid">
-            {items.map((it) => (
-              <PosterCard key={it.id} item={it} />
-            ))}
+            {tiles(items, collections, sort, items.length >= total).map((t) =>
+              'item' in t ? <PosterCard key={t.item.id} item={t.item} /> : <CollectionCard key={`c${t.collection.id}`} collection={t.collection} />,
+            )}
           </div>
           <div ref={sentinel} style={{ height: 1 }} />
         </>
