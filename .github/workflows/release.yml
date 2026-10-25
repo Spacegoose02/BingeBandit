@@ -41,10 +41,27 @@ jobs:
             for p in watchlist-rss hue-sync cinemask-upgrades; do
               rm -rf "/tmp/pl/$p" && mkdir -p "/tmp/pl/$p"
               GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "/tmp/pl/$p/$p${ext}" "./plugins/$p"
-              cp "plugins/$p/plugin.json" "/tmp/pl/$p/"
+              jq --arg v "${GITHUB_REF_NAME#v}" '.version = $v' "plugins/$p/plugin.json" > "/tmp/pl/$p/plugin.json"
               (cd /tmp/pl && zip -qr "$GITHUB_WORKSPACE/release/plugin-$p-${GITHUB_REF_NAME}-${os}-${arch}.zip" "$p")
             done
           done
+      - name: Plugin catalogue
+        # Admin → Plugins → Catalogue reads this from the latest release.
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          entries=()
+          for p in watchlist-rss hue-sync cinemask-upgrades; do
+            downloads='{}'
+            for zip in release/plugin-$p-${GITHUB_REF_NAME}-*.zip; do
+              platform="${zip#release/plugin-$p-${GITHUB_REF_NAME}-}"; platform="${platform%.zip}"
+              downloads=$(jq --arg k "$platform" --arg u "$base/${zip#release/}" --arg s "$(sha256sum "$zip" | cut -d' ' -f1)" \
+                '. + {($k): {url: $u, sha256: $s}}' <<<"$downloads")
+            done
+            entries+=("$(jq --arg v "${GITHUB_REF_NAME#v}" --argjson d "$downloads" \
+              '{id, name, description, version: $v, author: "BingeBandit", homepage: "https://github.com/'"${GITHUB_REPOSITORY}"'/blob/main/docs/PLUGINS.md", downloads: $d}' \
+              "server/plugins/$p/plugin.json")")
+          done
+          printf '%s\n' "${entries[@]}" | jq -s '{name: "BingeBandit", plugins: .}' > release/plugin-catalog.json
       - uses: softprops/action-gh-release@v2
         with:
           files: release/*

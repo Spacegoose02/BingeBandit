@@ -169,7 +169,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **Cinemask Upgrades** (bundled): lists movies and episodes below the quality you want (resolution, old codecs, low bitrate, 4K without HDR, judged from the files) and has [Cinemask](https://github.com/Spacegoose02/cinemask) search for better copies: search and grab, pick a release, move the title to a higher profile, add it to Cinemask, or search all |
 | ✅ | **Hue Sync** (bundled): Hue lights follow the colours on screen, per zone (left, right, centre…), in step with the player; pause and stop behaviour, filters for people and devices |
 | | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box) |
-| | Plugin catalogue: install plugins from a list instead of copying folders |
+| ✅ | Plugin catalogue: install, update and uninstall plugins from a list (BingeBandit's own, published with each release, plus catalogues the admin adds) instead of copying folders |
 
 ## Docs
 

@@ -105,6 +105,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "hardware device must be a render node like /dev/dri/renderD129 or a GPU number like 1")
 		return
 	}
+	if v, ok := in[store.SettingPluginCatalogs]; ok {
+		for _, line := range strings.Split(v, "\n") {
+			if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "https://") && !strings.HasPrefix(line, "http://") {
+				writeErr(w, http.StatusBadRequest, "plugin catalogues must be http:// or https:// addresses, one per line")
+				return
+			}
+		}
+	}
 	if v, ok := in[store.SettingDVRNaming]; ok && v != "library" && v != "folder" {
 		writeErr(w, http.StatusBadRequest, "recording naming must be library or folder")
 		return
