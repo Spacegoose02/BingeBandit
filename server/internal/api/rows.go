@@ -159,10 +159,7 @@ func (s *Server) fillRow(uid int64, row libRow, key, kind string, libs []int64) 
 	}
 	switch {
 	case row.CollectionID != 0:
-		items, err := s.Store.CollectionMembers(uid, row.CollectionID)
-		if len(items) > rowSize {
-			items = items[:rowSize]
-		}
+		items, err := s.Store.CollectionPage(uid, row.CollectionID, 0, rowSize)
 		add(row, items, err)
 	case key == "genres":
 		genres, _ := s.Store.TopGenres(libs, 3)

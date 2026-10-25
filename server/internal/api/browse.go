@@ -316,7 +316,8 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		shelves := []shelf{}
 		cols, _ := s.Store.ItemCollections(it.ID)
 		for _, c := range cols {
-			if members, err := s.Store.CollectionMembers(u.ID, c.ID); err == nil && len(members) > 1 {
+			// A shelf is a row, so a big collection sends only its first titles.
+			if members, err := s.Store.CollectionPage(u.ID, c.ID, 0, rowSize); err == nil && len(members) > 1 {
 				shelves = append(shelves, shelf{c, members})
 			}
 		}

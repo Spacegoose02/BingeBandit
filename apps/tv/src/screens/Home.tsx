@@ -6,7 +6,7 @@ import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
-import LibraryTab from './Library'
+import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import Settings from './Settings'
 
@@ -25,6 +25,9 @@ const pinnedOf = (libs: Library[] | undefined) => (libs ?? []).filter((l) => l.p
 export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: () => void; onSwitchProfile: () => void }) {
   const [tab, setTabState] = useState<Tab>(lastTab)
   const setTab = (t: Tab) => {
+    // Coming to a library from the menu opens its Recommended section; Back
+    // from details remounts on the same tab and keeps the section.
+    if (t !== lastTab && t.startsWith('lib:')) forgetSection(Number(t.slice(4)))
     lastTab = t
     setTabState(t)
   }

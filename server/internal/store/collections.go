@@ -223,9 +223,16 @@ func (s *Store) ItemCollections(itemID int64) ([]*Collection, error) {
 		ORDER BY c.name COLLATE NOCASE`, itemID)
 }
 
+// CollectionMembers lists every title in a collection, in release order.
 func (s *Store) CollectionMembers(uid, collectionID int64) ([]*Item, error) {
-	return s.queryItems(itemSelect+` JOIN collections c ON c.id = @c WHERE `+memberOf+` AND `+visible+`
-		ORDER BY i.release_date, i.sort_title COLLATE NOCASE`, uidArg(uid), sql.Named("c", collectionID))
+	return s.CollectionPage(uid, collectionID, 0, -1)
+}
+
+// CollectionPage is a page of a collection's titles; a limit of -1 is all of them.
+func (s *Store) CollectionPage(uid, collectionID int64, offset, limit int) ([]*Item, error) {
+	return s.pagedItems(`JOIN collections c ON c.id = @c`, memberOf+` AND `+visible,
+		`i.release_date, i.sort_title COLLATE NOCASE, i.id`,
+		uidArg(uid), sql.Named("c", collectionID), sql.Named("offset", offset), sql.Named("limit", limit))
 }
 
 // collectionByName finds or creates a collection in a library.

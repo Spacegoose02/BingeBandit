@@ -2,7 +2,15 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, matching across TMDB, TheTVDB and IMDb, merging copies of movies and shows._
+_Last updated: 2026-10-25, faster library and collection pages._
+
+## Faster libraries and collections
+
+- **Why:** each page of a library ran one query that worked out every column, including episode and unwatched counts per show, for every title in the library before sorting and cutting to the page (SQLite fills result columns before it sorts). Every poster also carried the full cast and crew.
+- **Server:** `Store.pagedItems` picks the page's ids first (filter, sort, `LIMIT/OFFSET` on bare rows, `ROW_NUMBER` keeps the order), then loads full rows for those ids only. `LibraryItems`, `RowItems` and the new `CollectionPage` use it, with `listSelect` (no `credits`; only `/api/items/{id}` sends them). `GET /api/collections/{id}` takes `offset`/`limit` and returns `total` (no limit: every title, for older apps). Collection rows on Recommended/Home and the collection shelves on a title's page load 24 titles instead of the whole collection. A page of a 1,500-show library went from ~115 ms to ~26 ms in a local benchmark.
+- **Web:** the collection page loads 120 titles and the rest as you scroll. Libraries already paged and opened on Recommended.
+- **TV app:** the library, collections and collection grids are `FlatList`s of fixed-height rows (`Grid` in `screens/Library.tsx`), so only rows near the screen are drawn; the A–Z bar scrolls with `scrollToIndex`. Opening a library from the menu always starts on Recommended (`forgetSection`; Back from details keeps the section), and the Recommended / Library / Collections chips switch on OK only, since moving down from the menu used to land on, and switch to, whichever chip was below. **Typechecked only; not tried on a device.**
+- **Tested:** store test (slim, ordered library and collection pages), all Go tests, web build, TV typecheck and lint, and in Chromium a 300-title collection loading 120 then all 300 on scroll, and a library opening on Recommended.
 
 ## Matching across sources, merging copies (migration 35)
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { useAuth } from '../auth'
@@ -9,17 +9,55 @@ import { useApi, useDocumentTitle } from '../hooks'
 import { smartRuleText } from '../format'
 import type { Collection, Item } from '../types'
 
+const PAGE = 120
+
+interface CollectionPageData {
+  collection: Collection
+  items: Item[]
+  total: number
+}
+
 export default function CollectionPage() {
   const { id } = useParams()
   const { user } = useAuth()
   const nav = useNavigate()
-  const { data, error, reload } = useApi<{ collection: Collection; items: Item[] }>(`/api/collections/${id}`)
+  // The first page comes with the collection; the rest load as you scroll.
+  const { data, error, reload } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${PAGE}`)
+  const [more, setMore] = useState<Item[]>([])
+  const [ended, setEnded] = useState(false)
   const [editing, setEditing] = useState(false)
+  const sentinel = useRef<HTMLDivElement>(null)
+  const busy = useRef(false)
   useDocumentTitle(data?.collection.name)
+  useEffect(() => {
+    setMore([])
+    setEnded(false)
+  }, [data])
+
+  const items = data ? [...data.items, ...more] : []
+  const total = data?.total ?? 0
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el || !data || ended || items.length >= total) return
+    const obs = new IntersectionObserver(async (entries) => {
+      if (!entries[0].isIntersecting || busy.current) return
+      busy.current = true
+      try {
+        const page = await api.get<CollectionPageData>(`/api/collections/${id}?offset=${items.length}&limit=${PAGE}`)
+        if (!page.items.length) setEnded(true)
+        const have = new Set(items.map((it) => it.id))
+        setMore((m) => [...m, ...page.items.filter((it) => !have.has(it.id))])
+      } finally {
+        busy.current = false
+      }
+    }, { rootMargin: '800px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [data, ended, id, items, total])
 
   if (error) return <div className="page"><div className="empty">{error}</div></div>
   if (!data) return <div className="page-loading" />
-  const { collection, items } = data
+  const { collection } = data
   const backdrop = img(collection.backdrop || items.find((i) => i.backdrop)?.backdrop, 'original')
 
   const remove = async () => {
@@ -40,7 +78,7 @@ export default function CollectionPage() {
                 <Icon name="stack" size={14} /> Collection{smartRuleText(collection) ? ` · smart: ${smartRuleText(collection)}` : ''}
               </div>
               <h1 className="detail-title">{collection.name}</h1>
-              <div className="muted">{items.length} {items.length === 1 ? 'item' : 'items'}</div>
+              <div className="muted">{total} {total === 1 ? 'item' : 'items'}</div>
               {collection.overview && <p className="overview">{collection.overview}</p>}
             </div>
             {user?.isAdmin && (
@@ -60,6 +98,7 @@ export default function CollectionPage() {
               <PosterCard key={it.id} item={it} />
             ))}
           </div>
+          <div ref={sentinel} style={{ height: 1 }} />
         </div>
       </div>
       {editing && (
