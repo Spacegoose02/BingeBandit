@@ -8,6 +8,7 @@ import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
+import { hueSyncOn, setHueSync } from '../devicePrefs'
 import { createPasskey, passkeyErrorMessage, passkeysSupported } from '../passkeys'
 import type { APIKey, DeviceSession, Identity, Passkey, PluginLinks, Prefs } from '../types'
 
@@ -27,23 +28,48 @@ function deviceName(d: string) {
 /** Pages that running plugins offer, such as the Watchlist RSS feeds page. */
 function PluginPages() {
   const { data } = useApi<PluginLinks[]>('/api/plugins')
-  if (!data?.length) return null
+  if (!data) return null
+  const hue = data.some((p) => p.id === 'hue-sync')
+  return (
+    <>
+      {data.some((p) => p.pages.length > 0) && (
+        <div className="panel form" style={{ marginBottom: 20 }}>
+          <h3>Plugins</h3>
+          <div className="list">
+            {data.flatMap((p) =>
+              p.pages.map((pg) => (
+                <a key={p.id + pg.path} className="list-row" href={`/api/plugins/${p.id}${pg.path.startsWith('/') ? '' : '/'}${pg.path}`} target="_blank" rel="noreferrer">
+                  <div className="grow">
+                    <div>{pg.title}</div>
+                    <div className="muted small">{p.name}</div>
+                  </div>
+                  <Icon name="next" size={16} />
+                </a>
+              )),
+            )}
+          </div>
+        </div>
+      )}
+      {hue && <HueSync />}
+    </>
+  )
+}
+
+/** Hue Sync's switch for this browser; the TV app has its own in Settings. */
+function HueSync() {
+  const [on, setOn] = useState(hueSyncOn)
+  const toggle = (v: boolean) => {
+    setHueSync(v)
+    setOn(v)
+  }
   return (
     <div className="panel form" style={{ marginBottom: 20 }}>
-      <h3>Plugins</h3>
-      <div className="list">
-        {data.flatMap((p) =>
-          p.pages.map((pg) => (
-            <a key={p.id + pg.path} className="list-row" href={`/api/plugins/${p.id}${pg.path.startsWith('/') ? '' : '/'}${pg.path}`} target="_blank" rel="noreferrer">
-              <div className="grow">
-                <div>{pg.title}</div>
-                <div className="muted small">{p.name}</div>
-              </div>
-              <Icon name="next" size={16} />
-            </a>
-          )),
-        )}
-      </div>
+      <h3>Hue Sync</h3>
+      <label className="check">
+        <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
+        Let the Hue lights follow what plays in this browser
+      </label>
+      <p className="muted small">This only changes this browser. Your other devices each have their own switch.</p>
     </div>
   )
 }

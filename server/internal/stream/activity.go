@@ -31,6 +31,8 @@ type NowPlaying struct {
 	TranscodeID string  `json:"transcodeId,omitempty"`
 	// Watched is how many seconds have actually played in this session.
 	Watched float64 `json:"watched"`
+	// Lights says whether the device lets plugins like Hue Sync follow it.
+	Lights bool `json:"-"`
 	// PlayID is the play-history row, once the session is long enough to record.
 	PlayID int64 `json:"-"`
 }

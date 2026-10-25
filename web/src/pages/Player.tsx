@@ -5,6 +5,7 @@ import { api, img } from '../api'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
+import { hueSyncOn } from '../devicePrefs'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
 import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
@@ -310,6 +311,7 @@ function PlayerView({
             mode,
             transcodeId: transcodeRef.current ?? '',
             client: 'Web',
+            lights: hueSyncOn(),
             played: Math.round(playedRef.current),
           },
           { keepalive: true },

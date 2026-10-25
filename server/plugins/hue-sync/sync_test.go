@@ -169,8 +169,10 @@ func TestEngineFollowsPlayer(t *testing.T) {
 	a.conf.set(Config{Bridge: hb.URL, Username: user, Lights: map[string]string{"1": "all"}})
 
 	ctx := context.Background()
+	off := false
+	var lights *bool // nil: a server that predates the app switch
 	send := func(event string, pos float64, client string) {
-		d, _ := json.Marshal(playerEvent{SessionID: "s1", User: "ann", Client: client, ItemID: 7, FileID: 3, Title: "RGB", Position: pos})
+		d, _ := json.Marshal(playerEvent{SessionID: "s1", User: "ann", Client: client, ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Lights: lights})
 		a.engine.onEvent(ctx, bbplugin.Event{Event: event, Data: d})
 	}
 
@@ -179,6 +181,14 @@ func TestEngineFollowsPlayer(t *testing.T) {
 	if _, active := a.engine.Status(); active {
 		t.Fatal("should only follow the Web client")
 	}
+
+	// Hue Sync switched off in the app: ignored too.
+	lights = &off
+	send("player.play", 0.2, "Web")
+	if _, active := a.engine.Status(); active {
+		t.Fatal("should not follow a device with Hue Sync off")
+	}
+	lights = nil
 
 	send("player.play", 0.2, "Web")
 	waitFor(t, "red", func() bool { c, ok := bridge.xy("1"); return ok && near(c, redXY[0], redXY[1]) })
@@ -199,4 +209,16 @@ func TestEngineFollowsPlayer(t *testing.T) {
 	if _, active := a.engine.Status(); active {
 		t.Error("should be idle after stop")
 	}
+
+	// Switched off mid-play: the lights let go at the next ping.
+	on := true
+	lights = &on
+	send("player.play", 0.2, "Web")
+	waitFor(t, "red again", func() bool { c, ok := bridge.xy("1"); return ok && near(c, redXY[0], redXY[1]) })
+	lights = &off
+	send("player.progress", 1, "Web")
+	if _, active := a.engine.Status(); active {
+		t.Error("should let go once Hue Sync is switched off")
+	}
+	waitFor(t, "restore again", func() bool { c, ok := bridge.xy("1"); return ok && math.Abs(c.X-0.45) < 0.001 })
 }

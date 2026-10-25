@@ -24,7 +24,12 @@ type playerEvent struct {
 	Title     string  `json:"title"`
 	Position  float64 `json:"position"`
 	Paused    bool    `json:"paused"`
+	// Lights is the device's Hue Sync switch; servers that predate it leave it out.
+	Lights *bool `json:"lights"`
 }
+
+// lightsOff reports a device whose user turned Hue Sync off in the app.
+func (p playerEvent) lightsOff() bool { return p.Lights != nil && !*p.Lights }
 
 // session is the one player the lights follow.
 type session struct {
@@ -74,6 +79,13 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 		return
 	case "player.play", "player.progress", "player.pause", "player.resume":
 	default:
+		return
+	}
+	if p.lightsOff() {
+		// Hue Sync is off on this device (perhaps just switched off mid-play).
+		if mine {
+			e.endLocked(ctx, "turned off on "+p.Client)
+		}
 		return
 	}
 	if !mine {

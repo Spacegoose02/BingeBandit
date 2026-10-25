@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import { current } from '../api'
+import { api, current } from '../api'
 import { Button, Focusable } from '../components'
+import { hueSyncOn, setHueSync } from '../devicePrefs'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
 import { fetchHousehold } from './Profiles'
@@ -12,6 +13,16 @@ export default function Settings({ onSignOut, onSwitchProfile, update }: { onSig
   useEffect(() => {
     fetchHousehold().then((m) => setHasProfiles(m.length > 1), () => undefined)
   }, [])
+  // The Hue Sync switch only shows when the server runs the plugin.
+  const [hue, setHue] = useState(false)
+  const [hueOn, setHueOn] = useState(hueSyncOn)
+  useEffect(() => {
+    api.get<{ id: string }[]>('/api/plugins').then((ps) => setHue(ps.some((p) => p.id === 'hue-sync')), () => undefined)
+  }, [])
+  const toggleHue = () => {
+    setHueSync(!hueOn)
+    setHueOn(!hueOn)
+  }
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
@@ -66,6 +77,14 @@ export default function Settings({ onSignOut, onSwitchProfile, update }: { onSig
         </View>
       )}
       {!!msg && <Text style={st.msg}>{msg}</Text>}
+      {hue && (
+        <Focusable onPress={toggleHue} style={st.option}>
+          <Text style={st.value}>Hue Sync: {hueOn ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {hueOn ? 'The Hue lights follow what plays on this device.' : 'The Hue lights leave this device alone.'} {isPhone ? 'Tap' : 'Press OK'} to turn it {hueOn ? 'off' : 'on'}.
+          </Text>
+        </Focusable>
+      )}
       <View style={st.signOut}>
         {hasProfiles && <Button label="Switch profile" onPress={onSwitchProfile} style={st.gap} />}
         <Button label="Sign out" onPress={onSignOut} />
@@ -81,6 +100,7 @@ const st = StyleSheet.create(scaled({
   label: { color: colors.muted, fontSize: font.small, marginTop: 14 },
   value: { color: colors.text, fontSize: font.heading, fontWeight: '700', marginTop: 4 },
   update: { backgroundColor: colors.surface2, borderRadius: 22, padding: 30, maxWidth: 1100, marginTop: 24, borderWidth: 2, borderColor: colors.accent },
+  option: { backgroundColor: colors.surface, borderRadius: 22, padding: 30, maxWidth: 1100, marginTop: 24 },
   buttons: { flexDirection: 'row', marginTop: 28 },
   signOut: { flexDirection: 'row', marginTop: 48 },
   gap: { marginRight: 24 },

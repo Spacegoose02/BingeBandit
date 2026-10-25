@@ -117,7 +117,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |
-| POST | `/progress` | `{playSessionId, itemId, fileId, position, duration, paused, stopped, mode, client, played}`. Send every ~10 s while playing and once with `stopped: true`. `played` is the total seconds actually played in this play session (the server caps it at wall-clock time). This drives resume points, watched state, Now Playing, history and webhooks. |
+| POST | `/progress` | `{playSessionId, itemId, fileId, position, duration, paused, stopped, mode, client, played}`. Send every ~10 s while playing and once with `stopped: true`. `played` is the total seconds actually played in this play session (the server caps it at wall-clock time). Optional `lights: false` keeps Hue Sync and other light plugins off this player (left out means on). This drives resume points, watched state, Now Playing, history and webhooks. |
 
 ## Live TV and DVR
 
@@ -175,7 +175,7 @@ Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editi
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/plugins` | Pages of running plugins you can open: `[{id, name, pages: [{title, path}]}]`. |
+| GET | `/plugins` | Running plugins and the pages of theirs you can open: `[{id, name, pages: [{title, path}]}]` (`pages` is empty when none are for you). Apps use it to tell whether, say, `hue-sync` runs. |
 | any | `/plugins/{id}/{path}` | Proxied to the plugin, with you as the user. |
 
 Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (`?refresh=1` skips the cache) lists catalogue plugins with `installed`, `current` and `update`; `POST /admin/plugins/catalog/install` `{catalog, id}` installs or updates one; `POST /admin/plugins/{id}/uninstall` removes one installed that way. Plugins themselves call `/api/plugin/v1` with their key; see [PLUGINS.md](PLUGINS.md).
@@ -198,7 +198,7 @@ Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (
 | `playback.start` | A play has lasted 30 s (the same rule as watch history, so accidental clicks don't count). |
 | `playback.stop` | A play that started stops. |
 | `playback.finished` | Something is marked watched by playing it. |
-| `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`. |
+| `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`, `lights` (false when Hue Sync is switched off on that device). |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `test` | The *Send test* button. |
 

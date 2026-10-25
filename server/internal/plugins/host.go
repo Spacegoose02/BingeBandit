@@ -696,6 +696,9 @@ type PageLinks struct {
 	Pages []Page `json:"pages"`
 }
 
+// Pages lists the running plugins and the pages each user may open. Plugins
+// with no pages for them are listed too (with none), so apps can tell which
+// plugins run, e.g. to offer the Hue Sync switch.
 func (h *Host) Pages(admin bool) []PageLinks {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -704,15 +707,13 @@ func (h *Host) Pages(admin bool) []PageLinks {
 		if in.state != StateRunning || in.manifest == nil {
 			continue
 		}
-		pl := PageLinks{ID: in.id, Name: in.manifest.Name}
+		pl := PageLinks{ID: in.id, Name: in.manifest.Name, Pages: []Page{}}
 		for _, p := range in.manifest.Pages {
 			if !p.Admin || admin {
 				pl.Pages = append(pl.Pages, p)
 			}
 		}
-		if len(pl.Pages) > 0 {
-			out = append(out, pl)
-		}
+		out = append(out, pl)
 	}
 	return out
 }
