@@ -28,7 +28,8 @@ type Recording struct {
 	Size         int64  `json:"size"`
 	Error        string `json:"error,omitempty"`
 	CreatedAt    int64  `json:"createdAt"`
-	ItemID       int64  `json:"itemId,omitempty"` // set when a library has picked the file up
+	ItemID       int64  `json:"itemId,omitempty"`   // set when a library has picked the file up
+	Conflict     string `json:"conflict,omitempty"` // upcoming only: why a provider connection may not be free
 }
 
 const recordingCols = `r.id, r.user_id, COALESCE(u.username, ''), COALESCE(r.rule_id, 0), COALESCE(r.channel_id, 0), r.channel_name, r.epg_id,
@@ -162,6 +163,7 @@ type RecordingRule struct {
 	Status      string `json:"status"`
 	CreatedAt   int64  `json:"createdAt"`
 	Upcoming    int    `json:"upcoming"`
+	KeepLast    int    `json:"keepLast"` // 0 = keep every recording
 }
 
 func (s *Store) CreateRule(r *RecordingRule) (*RecordingRule, error) {
@@ -176,8 +178,8 @@ func (s *Store) CreateRule(r *RecordingRule) (*RecordingRule, error) {
 	if err == nil {
 		return s.Rule(existing)
 	}
-	res, err := s.db.Exec(`INSERT INTO recording_rules (user_id, channel_id, title, status, created_at) VALUES (?, ?, ?, ?, ?)`,
-		r.UserID, ch, r.Title, r.Status, now())
+	res, err := s.db.Exec(`INSERT INTO recording_rules (user_id, channel_id, title, status, keep_last, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		r.UserID, ch, r.Title, r.Status, max(r.KeepLast, 0), now())
 	if err != nil {
 		return nil, err
 	}
@@ -185,13 +187,13 @@ func (s *Store) CreateRule(r *RecordingRule) (*RecordingRule, error) {
 	return s.Rule(id)
 }
 
-const ruleSelect = `SELECT rr.id, rr.user_id, COALESCE(u.username, ''), COALESCE(rr.channel_id, 0), COALESCE(c.name, ''), rr.title, rr.status, rr.created_at,
+const ruleSelect = `SELECT rr.id, rr.user_id, COALESCE(u.username, ''), COALESCE(rr.channel_id, 0), COALESCE(c.name, ''), rr.title, rr.status, rr.created_at, rr.keep_last,
 	(SELECT COUNT(*) FROM recordings r WHERE r.rule_id = rr.id AND r.status IN ('pending','scheduled','recording'))
 	FROM recording_rules rr LEFT JOIN users u ON u.id = rr.user_id LEFT JOIN channels c ON c.id = rr.channel_id`
 
 func scanRule(row interface{ Scan(...any) error }) (*RecordingRule, error) {
 	var r RecordingRule
-	err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.ChannelID, &r.ChannelName, &r.Title, &r.Status, &r.CreatedAt, &r.Upcoming)
+	err := row.Scan(&r.ID, &r.UserID, &r.Username, &r.ChannelID, &r.ChannelName, &r.Title, &r.Status, &r.CreatedAt, &r.KeepLast, &r.Upcoming)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -224,6 +226,30 @@ func (s *Store) Rules(userID int64, status string) ([]*RecordingRule, error) {
 func (s *Store) SetRuleStatus(id int64, status string) error {
 	_, err := s.db.Exec(`UPDATE recording_rules SET status = ? WHERE id = ?`, status, id)
 	return err
+}
+
+// SetRuleKeep sets how many of a series' newest recordings to keep (0 = all).
+func (s *Store) SetRuleKeep(id int64, keep int) error {
+	_, err := s.db.Exec(`UPDATE recording_rules SET keep_last = ? WHERE id = ?`, max(keep, 0), id)
+	return err
+}
+
+// ExtraRecordings are a rule's completed recordings beyond the newest keep,
+// oldest airings first.
+func (s *Store) ExtraRecordings(ruleID int64, keep int) ([]*Recording, error) {
+	recs, err := s.queryRecordings(`WHERE r.rule_id = ? AND r.status = 'completed' ORDER BY r.program_start DESC LIMIT -1 OFFSET ?`, ruleID, keep)
+	if err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(recs)-1; i < j; i, j = i+1, j-1 {
+		recs[i], recs[j] = recs[j], recs[i]
+	}
+	return recs, nil
+}
+
+// UpcomingRecordings are pending, scheduled and running recordings.
+func (s *Store) UpcomingRecordings() ([]*Recording, error) {
+	return s.queryRecordings(`WHERE r.status IN ('pending','scheduled','recording') ORDER BY r.start_at, r.id`)
 }
 
 // DeleteRule removes a rule and cancels its recordings that haven't started.

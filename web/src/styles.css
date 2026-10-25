@@ -722,6 +722,9 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .schedule-row + .schedule-row { border-top: 1px solid var(--border); }
 .schedule-row .mono { width: 70px; flex: none; }
 .rec-when { width: 120px; flex: none; font-variant-numeric: tabular-nums; }
+.rec-conflict { color: var(--warn); margin-top: 2px; }
+.rec-keep { display: flex; align-items: center; gap: 6px; flex: none; }
+.rec-keep select { width: auto; }
 .stream-pick { max-height: 46vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
 .stream-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 10px !important; padding: 7px 10px; border-radius: 8px; color: var(--text) !important; font-size: 14px !important; cursor: pointer; }
 .stream-row:hover { background: var(--surface-2); }

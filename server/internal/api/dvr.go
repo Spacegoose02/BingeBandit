@@ -1,9 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	"bingebandit/internal/store"
 )
@@ -28,6 +28,7 @@ func (s *Server) scheduleRecording(w http.ResponseWriter, r *http.Request) {
 		ChannelID int64 `json:"channelId"`
 		ProgramID int64 `json:"programId"`
 		Series    bool  `json:"series"`
+		KeepLast  int   `json:"keepLast"` // series only: keep the newest N recordings (0 = all)
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -46,10 +47,17 @@ func (s *Server) scheduleRecording(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	rec, err := s.DVR.Schedule(p, ch, u.ID, req.Series, s.needsApproval(u))
+	if req.KeepLast < 0 || req.KeepLast > maxKeepLast {
+		writeErr(w, http.StatusBadRequest, fmt.Sprintf("keepLast must be from 0 to %d", maxKeepLast))
+		return
+	}
+	rec, err := s.DVR.Schedule(p, ch, u.ID, req.Series, req.KeepLast, s.needsApproval(u))
 	if err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if conflicts, err := s.DVR.Conflicts(); err == nil {
+		rec.Conflict = conflicts[rec.ID]
 	}
 	writeJSON(w, http.StatusCreated, rec)
 }
@@ -70,8 +78,10 @@ func (s *Server) recordings(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	if !u.IsAdmin {
-		for _, rec := range recs {
+	conflicts, _ := s.DVR.Conflicts() // across everyone's recordings: they share the providers
+	for _, rec := range recs {
+		rec.Conflict = conflicts[rec.ID]
+		if !u.IsAdmin {
 			rec.Path = ""
 		}
 	}
@@ -114,7 +124,7 @@ func (s *Server) deleteRecording(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	default:
-		if r.URL.Query().Get("file") == "1" && rec.Path != "" && strings.HasPrefix(rec.Path, s.DVR.Folder()) {
+		if r.URL.Query().Get("file") == "1" && rec.Path != "" && s.DVR.InFolder(rec.Path) {
 			if err := os.Remove(rec.Path); err != nil && !os.IsNotExist(err) {
 				writeErr(w, http.StatusInternalServerError, "could not delete the file: "+err.Error())
 				return
@@ -147,6 +157,49 @@ func (s *Server) deleteRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+const maxKeepLast = 100
+
+// updateRule changes a series rule's keep-last count and prunes right away.
+func (s *Server) updateRule(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	rule, err := s.Store.Rule(id)
+	if err == nil && rule.UserID != currentUser(r).ID && !currentUser(r).IsAdmin {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	var req struct {
+		KeepLast *int `json:"keepLast"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.KeepLast != nil {
+		if *req.KeepLast < 0 || *req.KeepLast > maxKeepLast {
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("keepLast must be from 0 to %d", maxKeepLast))
+			return
+		}
+		if err := s.Store.SetRuleKeep(id, *req.KeepLast); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		s.DVR.Prune(id)
+	}
+	rule, err = s.Store.Rule(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rule)
 }
 
 func (s *Server) approveRecording(w http.ResponseWriter, r *http.Request) {
