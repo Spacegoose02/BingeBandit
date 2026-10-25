@@ -187,6 +187,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         break
       case 'play':
         setPaused(false)
+        showInfo()
         break
       case 'pause':
         setPaused(true)
@@ -242,7 +243,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
           paused={paused}
-          onLoad={playing}
+          onLoad={() => {
+            playing()
+            showInfo(paused) // a new channel shows its info bar, then hides it
+          }}
           onBuffer={({ isBuffering }) => (isBuffering ? setBuffering(true) : playing())}
           onProgress={onProgress}
           progressUpdateInterval={1000}
