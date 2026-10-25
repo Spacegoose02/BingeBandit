@@ -14,7 +14,7 @@ import (
 type Record struct {
 	Key       string // unique within the source; becomes plays.import_key
 	User      string // source user name
-	Kind      string // movie | episode | show (collections only)
+	Kind      string // movie | episode | show (collections, artwork) | season (artwork)
 	Title     string // movie or episode title
 	Year      int
 	ShowTitle string
@@ -87,6 +87,7 @@ type Matcher struct {
 	movieTitle map[string][]*store.IndexItem
 	showTitle  map[string][]*store.IndexItem
 	episodes   map[epKey]*store.IndexItem
+	seasons    map[epKey]*store.IndexItem // episode 0
 	byID       map[int64]*store.IndexItem
 }
 
@@ -94,7 +95,7 @@ func NewMatcher(items []*store.IndexItem) *Matcher {
 	m := &Matcher{
 		files: map[string]*store.IndexItem{}, movieTMDB: map[int64][]*store.IndexItem{}, showTMDB: map[int64][]*store.IndexItem{},
 		movieTitle: map[string][]*store.IndexItem{}, showTitle: map[string][]*store.IndexItem{}, episodes: map[epKey]*store.IndexItem{},
-		byID: map[int64]*store.IndexItem{},
+		seasons: map[epKey]*store.IndexItem{}, byID: map[int64]*store.IndexItem{},
 	}
 	for _, it := range items {
 		m.byID[it.ID] = it
@@ -112,6 +113,10 @@ func NewMatcher(items []*store.IndexItem) *Matcher {
 				m.showTMDB[it.TMDBID] = append(m.showTMDB[it.TMDBID], it)
 			}
 			m.showTitle[normTitle(it.Title)] = append(m.showTitle[normTitle(it.Title)], it)
+		case "season":
+			if it.ShowID > 0 {
+				m.seasons[epKey{it.ShowID, it.Season, 0}] = it
+			}
 		case "episode":
 			if it.ShowID > 0 && it.Episode > 0 {
 				m.episodes[epKey{it.ShowID, it.Season, it.Episode}] = it
@@ -180,6 +185,10 @@ func (m *Matcher) Match(r *Record) *store.IndexItem {
 			return nil
 		}
 		return m.episodes[epKey{show.ID, r.Season, r.Episode}]
+	case "season":
+		if show := m.matchShow(r.TMDB, r.ShowTitle, r.ShowYear); show != nil {
+			return m.seasons[epKey{show.ID, r.Season, 0}]
+		}
 	}
 	return nil
 }

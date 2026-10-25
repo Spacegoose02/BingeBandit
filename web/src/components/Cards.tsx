@@ -5,6 +5,25 @@ import { episodeLabel, progressFraction, smartRuleText } from '../format'
 import type { Collection, Item, Visibility } from '../types'
 import { Icon } from './Icon'
 
+/**
+ * Card artwork. A poster that fails to load (the server couldn't reach TMDB
+ * in time, say) is asked for once more a little later, then shows the title.
+ */
+function Art({ src, label }: { src?: string; label: string }) {
+  const [tries, setTries] = useState(0)
+  useEffect(() => setTries(0), [src])
+  if (!src || tries > 1) return <div className="poster-fallback">{label}</div>
+  return (
+    <img
+      key={tries}
+      src={tries ? `${src}${src.includes('?') ? '&' : '?'}retry=1` : src}
+      alt=""
+      loading="lazy"
+      onError={() => window.setTimeout(() => setTries((t) => t + 1), tries ? 0 : 3000)}
+    />
+  )
+}
+
 function Badge({ item }: { item: Item }) {
   if (item.kind === 'show' || item.kind === 'season') {
     if (item.childCount && item.unwatchedCount === 0) return <span className="badge-watched"><Icon name="check" size={14} /></span>
@@ -25,12 +44,12 @@ function Progress({ item }: { item: Item }) {
   )
 }
 
-export function PosterCard({ item, subtitle }: { item: Item; subtitle?: string }) {
+export function PosterCard({ item, subtitle, domId }: { item: Item; subtitle?: string; domId?: string }) {
   const poster = img(item.poster || item.showPoster, 'w342')
   return (
-    <Link to={`/item/${item.id}`} className="poster-card">
+    <Link to={`/item/${item.id}`} className="poster-card" id={domId}>
       <div className="poster-frame">
-        {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{item.title}</div>}
+        <Art src={poster} label={item.title} />
         <Badge item={item} />
         <Progress item={item} />
         <div className="poster-hover">
@@ -50,7 +69,7 @@ export function WideCard({ item }: { item: Item }) {
   return (
     <div className="wide-card">
       <Link to={`/play/${item.id}${item.watch.position > 15 ? `?t=${Math.floor(item.watch.position)}` : ''}`} className="wide-frame">
-        {art ? <img src={art} alt="" loading="lazy" /> : <div className="poster-fallback">{item.title}</div>}
+        <Art src={art} label={item.title} />
         <Progress item={item} />
         <div className="poster-hover">
           <Icon name="play" fill size={34} />
@@ -69,7 +88,7 @@ export function CollectionCard({ collection, onChanged }: { collection: Collecti
   const card = (
     <Link to={`/collection/${collection.id}`} className="poster-card">
       <div className="poster-frame collection-frame">
-        {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{collection.name}</div>}
+        <Art src={poster} label={collection.name} />
         <span className="badge-count">{collection.itemCount}</span>
         {smartRuleText(collection) && (
           <span className="badge-smart" title={`Smart: ${smartRuleText(collection)}`}>

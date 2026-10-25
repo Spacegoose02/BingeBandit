@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -19,10 +20,10 @@ type IndexItem struct {
 	Files     []string // lower-case base names
 }
 
-// ImportIndex loads every movie, show and episode with its file names.
+// ImportIndex loads every movie, show, season and episode with its file names.
 func (s *Store) ImportIndex() ([]*IndexItem, error) {
 	rows, err := s.db.Query(`SELECT id, library_id, kind, title, year, tmdb_id, COALESCE(show_id, 0),
-		COALESCE(season_number, 0), COALESCE(episode_number, 0) FROM items WHERE kind != 'season'`)
+		COALESCE(season_number, 0), COALESCE(episode_number, 0) FROM items`)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +124,15 @@ func (s *Store) ImportResume(uid, itemID int64, position, duration float64, at i
 	return n > 0, nil
 }
 
+// SetCollectionArtwork replaces a collection's poster or backdrop.
+func (s *Store) SetCollectionArtwork(id int64, kind, ref string) error {
+	if kind != "poster" && kind != "backdrop" {
+		return fmt.Errorf("unknown collection artwork type %q", kind)
+	}
+	_, err := s.db.Exec(`UPDATE collections SET `+kind+` = ? WHERE id = ?`, ref, id)
+	return err
+}
+
 // EnsureCollection finds a collection by name in a library, creating it if needed,
 // and adds the items. It returns its id and how many items were new to it.
 func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (id int64, added int, err error) {
@@ -147,20 +157,6 @@ func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs
 		added += int(n)
 	}
 	return id, added, tx.Commit()
-}
-
-// CollectionHasPoster reports whether a collection has artwork of its own,
-// so imports don't fetch a poster the admin already set.
-func (s *Store) CollectionHasPoster(id int64) bool {
-	var poster string
-	s.db.QueryRow(`SELECT poster FROM collections WHERE id = ?`, id).Scan(&poster)
-	return poster != ""
-}
-
-// SetCollectionPoster sets a collection's poster unless it already has one.
-func (s *Store) SetCollectionPoster(id int64, ref string) error {
-	_, err := s.db.Exec(`UPDATE collections SET poster = ? WHERE id = ? AND poster = ''`, ref, id)
-	return err
 }
 
 // SetCollectionLabel makes a collection gather everything with label, unless

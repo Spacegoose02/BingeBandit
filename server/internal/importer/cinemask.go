@@ -61,6 +61,11 @@ func (c *Cinemask) get(ctx context.Context, path string, out any) error {
 	return json.NewDecoder(io.LimitReader(body, 64<<20)).Decode(out)
 }
 
+// Artwork: Cinemask only has collection posters, which come with Collections.
+func (c *Cinemask) Artwork(context.Context, func(Art) error, func(string, int, int)) error {
+	return nil
+}
+
 // Image fetches a collection poster. Cinemask keeps TMDB paths (turned into
 // tmdb:/ references before this), https links, and covers on Plex, Jellyfin
 // or its own disk, which it serves at /api/images.

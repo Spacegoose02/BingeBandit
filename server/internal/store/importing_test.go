@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestImportDedupeAndState(t *testing.T) {
 	s := openTest(t)
@@ -54,5 +57,26 @@ func TestImportDedupeAndState(t *testing.T) {
 	}
 	if _, n, _ := s.EnsureCollection(lib.ID, "faves", "", []int64{id}); n != 0 {
 		t.Error("collection names should match case-insensitively and items not be added twice")
+	}
+}
+
+func TestLibraryLetters(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	var hide int64
+	for _, title := range []string{"12 Monkeys", "Alien", "aliens", "The Batman", "Zodiac", "Casablanca"} {
+		id := addMovie(t, s, lib.ID, title)
+		if title == "Casablanca" {
+			hide = id
+		}
+	}
+	got, err := s.LibraryLetters(0, lib.ID, []int64{hide})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Letter{{"#", 0}, {"A", 1}, {"B", 3}, {"Z", 4}} // "The Batman" sorts as Batman
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("letters = %v, want %v", got, want)
 	}
 }

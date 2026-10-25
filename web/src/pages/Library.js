@@ -17,6 +17,7 @@ const sorts = [
     ['year', 'Year'],
     ['rating', 'Rating'],
 ];
+const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
 /**
  * Mixes collections into the titles. Sorted by title they slot in by name,
  * like Plex; any other sort puts them first. A collection that sorts after
@@ -55,26 +56,44 @@ function LibraryView({ id }) {
     const [items, setItems] = useState([]);
     const [collections, setCollections] = useState([]);
     const [total, setTotal] = useState(0);
+    const [letters, setLetters] = useState([]);
     const [loading, setLoading] = useState(false);
     const sentinel = useRef(null);
     const loadingRef = useRef(false);
     useDocumentTitle(library?.name);
+    const generation = useRef(0);
     const load = useCallback(async (offset) => {
-        if (loadingRef.current)
+        // A new first page (another library or sort) always goes ahead, and a
+        // page still on its way for the old one is dropped when it lands.
+        if (offset === 0)
+            generation.current++;
+        else if (loadingRef.current)
             return;
+        const gen = generation.current;
         loadingRef.current = true;
         setLoading(true);
         try {
             const page = await api.get(`/api/libraries/${id}/items?sort=${sort}&offset=${offset}&limit=${PAGE}`);
+            if (gen !== generation.current)
+                return;
             setLibrary(page.library);
             setTotal(page.total);
-            setItems((prev) => (offset === 0 ? page.items : [...prev, ...page.items]));
-            if (offset === 0)
+            setItems((prev) => {
+                if (offset === 0)
+                    return page.items;
+                const have = new Set(prev.map((it) => it.id));
+                return [...prev, ...page.items.filter((it) => !have.has(it.id))];
+            });
+            if (offset === 0) {
                 setCollections(page.collections ?? []);
+                setLetters(page.letters ?? []);
+            }
         }
         finally {
-            loadingRef.current = false;
-            setLoading(false);
+            if (gen === generation.current) {
+                loadingRef.current = false;
+                setLoading(false);
+            }
         }
     }, [id, sort]);
     useEffect(() => {
@@ -92,11 +111,41 @@ function LibraryView({ id }) {
         obs.observe(el);
         return () => obs.disconnect();
     }, [items.length, total, load, tab]);
+    // Jumping to a letter loads every page up to it first, then scrolls there.
+    const jumpTo = async (l) => {
+        let loaded = items;
+        if (loaded.length <= l.offset && !loadingRef.current) {
+            loadingRef.current = true;
+            setLoading(true);
+            try {
+                while (loaded.length <= l.offset && loaded.length < total) {
+                    const page = await api.get(`/api/libraries/${id}/items?sort=${sort}&offset=${loaded.length}&limit=500`);
+                    if (!page.items.length)
+                        break;
+                    loaded = [...loaded, ...page.items];
+                }
+                setItems(loaded);
+            }
+            finally {
+                loadingRef.current = false;
+                setLoading(false);
+            }
+        }
+        const target = loaded[l.offset];
+        if (!target)
+            return;
+        requestAnimationFrame(() => document.getElementById(`lib-item-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
     const changeSort = (s) => {
         localStorage.setItem(`bb.sort.${id}`, s);
         setSort(s);
     };
-    return (_jsxs("div", { className: "page", children: [_jsxs("header", { className: "page-head", children: [_jsxs("div", { children: [_jsx("h1", { children: library?.name ?? ' ' }), _jsxs("div", { className: "muted", children: [total, " ", library?.kind === 'shows' ? (total === 1 ? 'show' : 'shows') : total === 1 ? 'movie' : 'movies'] })] }), _jsxs("div", { className: "segmented", children: [_jsx("button", { className: tab === 'recommended' ? 'active' : '', onClick: () => setParams({}, { replace: true }), children: "Recommended" }), _jsx("button", { className: tab === 'library' ? 'active' : '', onClick: () => setParams({ tab: 'library' }, { replace: true }), children: "Library" }), _jsx("button", { className: tab === 'collections' ? 'active' : '', onClick: () => setParams({ tab: 'collections' }, { replace: true }), children: "Collections" })] }), tab === 'library' && (_jsxs("label", { className: "select-label", children: ["Sort", _jsx("select", { value: sort, onChange: (e) => changeSort(e.target.value), children: sorts.map(([v, label]) => (_jsx("option", { value: v, children: label }, v))) })] }))] }), tab === 'recommended' && library && _jsx(RecommendedTab, { library: library }), tab === 'collections' && _jsx(CollectionsTab, { libraryId: Number(id) }), tab === 'library' && (_jsxs(_Fragment, { children: [!loading && items.length === 0 && _jsx("div", { className: "empty", children: "This library is empty. Scans can take a few minutes for big folders." }), _jsx("div", { className: "poster-grid", children: tiles(items, collections, sort, items.length >= total).map((t) => 'item' in t ? _jsx(PosterCard, { item: t.item }, t.item.id) : _jsx(CollectionCard, { collection: t.collection }, `c${t.collection.id}`)) }), _jsx("div", { ref: sentinel, style: { height: 1 } })] }))] }));
+    // Plex-style A–Z bar on the Library tab when sorted by title.
+    const showAZ = tab === 'library' && sort === 'title' && letters.length > 1;
+    return (_jsxs("div", { className: "page", children: [_jsxs("header", { className: "page-head", children: [_jsxs("div", { children: [_jsx("h1", { children: library?.name ?? ' ' }), _jsxs("div", { className: "muted", children: [total, " ", library?.kind === 'shows' ? (total === 1 ? 'show' : 'shows') : total === 1 ? 'movie' : 'movies'] })] }), _jsxs("div", { className: "segmented", children: [_jsx("button", { className: tab === 'recommended' ? 'active' : '', onClick: () => setParams({}, { replace: true }), children: "Recommended" }), _jsx("button", { className: tab === 'library' ? 'active' : '', onClick: () => setParams({ tab: 'library' }, { replace: true }), children: "Library" }), _jsx("button", { className: tab === 'collections' ? 'active' : '', onClick: () => setParams({ tab: 'collections' }, { replace: true }), children: "Collections" })] }), tab === 'library' && (_jsxs("label", { className: "select-label", children: ["Sort", _jsx("select", { value: sort, onChange: (e) => changeSort(e.target.value), children: sorts.map(([v, label]) => (_jsx("option", { value: v, children: label }, v))) })] }))] }), tab === 'recommended' && library && _jsx(RecommendedTab, { library: library }), tab === 'collections' && _jsx(CollectionsTab, { libraryId: Number(id) }), tab === 'library' && (_jsxs(_Fragment, { children: [!loading && items.length === 0 && _jsx("div", { className: "empty", children: "This library is empty. Scans can take a few minutes for big folders." }), _jsx("div", { className: `poster-grid${showAZ ? ' has-az' : ''}`, children: tiles(items, collections, sort, items.length >= total).map((t) => 'item' in t ? (_jsx(PosterCard, { item: t.item, domId: showAZ ? `lib-item-${t.item.id}` : undefined }, t.item.id)) : (_jsx(CollectionCard, { collection: t.collection }, `c${t.collection.id}`))) }), showAZ && (_jsx("nav", { className: "az-bar", "aria-label": "Jump to letter", children: ALPHABET.map((ch) => {
+                            const l = letters.find((x) => x.letter === ch);
+                            return (_jsx("button", { type: "button", disabled: !l, onClick: () => l && jumpTo(l), "aria-label": ch === '#' ? 'Numbers and symbols' : ch, children: ch }, ch));
+                        }) })), _jsx("div", { ref: sentinel, style: { height: 1 } })] }))] }));
 }
 function CollectionsTab({ libraryId }) {
     const { user } = useAuth();

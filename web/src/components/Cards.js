@@ -4,6 +4,17 @@ import { Link } from 'react-router-dom';
 import { api, img } from '../api';
 import { episodeLabel, progressFraction, smartRuleText } from '../format';
 import { Icon } from './Icon';
+/**
+ * Card artwork. A poster that fails to load (the server couldn't reach TMDB
+ * in time, say) is asked for once more a little later, then shows the title.
+ */
+function Art({ src, label }) {
+    const [tries, setTries] = useState(0);
+    useEffect(() => setTries(0), [src]);
+    if (!src || tries > 1)
+        return _jsx("div", { className: "poster-fallback", children: label });
+    return (_jsx("img", { src: tries ? `${src}${src.includes('?') ? '&' : '?'}retry=1` : src, alt: "", loading: "lazy", onError: () => window.setTimeout(() => setTries((t) => t + 1), tries ? 0 : 3000) }, tries));
+}
 function Badge({ item }) {
     if (item.kind === 'show' || item.kind === 'season') {
         if (item.childCount && item.unwatchedCount === 0)
@@ -22,19 +33,19 @@ function Progress({ item }) {
         return null;
     return (_jsx("div", { className: "progress", children: _jsx("div", { style: { width: `${f * 100}%` } }) }));
 }
-export function PosterCard({ item, subtitle }) {
+export function PosterCard({ item, subtitle, domId }) {
     const poster = img(item.poster || item.showPoster, 'w342');
-    return (_jsxs(Link, { to: `/item/${item.id}`, className: "poster-card", children: [_jsxs("div", { className: "poster-frame", children: [poster ? _jsx("img", { src: poster, alt: "", loading: "lazy" }) : _jsx("div", { className: "poster-fallback", children: item.title }), _jsx(Badge, { item: item }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx("div", { className: "card-title", title: item.title, children: item.title }), _jsx("div", { className: "card-sub", children: subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '') })] }));
+    return (_jsxs(Link, { to: `/item/${item.id}`, className: "poster-card", id: domId, children: [_jsxs("div", { className: "poster-frame", children: [_jsx(Art, { src: poster, label: item.title }), _jsx(Badge, { item: item }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx("div", { className: "card-title", title: item.title, children: item.title }), _jsx("div", { className: "card-sub", children: subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '') })] }));
 }
 /** Landscape card for Continue Watching and episode lists. Clicking plays. */
 export function WideCard({ item }) {
     const art = img(item.backdrop || item.showBackdrop, 'w780');
     const isEp = item.kind === 'episode';
-    return (_jsxs("div", { className: "wide-card", children: [_jsxs(Link, { to: `/play/${item.id}${item.watch.position > 15 ? `?t=${Math.floor(item.watch.position)}` : ''}`, className: "wide-frame", children: [art ? _jsx("img", { src: art, alt: "", loading: "lazy" }) : _jsx("div", { className: "poster-fallback", children: item.title }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx(Link, { to: `/item/${isEp ? item.showId : item.id}`, className: "card-title", children: isEp ? item.showTitle : item.title }), _jsx("div", { className: "card-sub", children: isEp ? `${episodeLabel(item)} · ${item.title}` : item.year || '' })] }));
+    return (_jsxs("div", { className: "wide-card", children: [_jsxs(Link, { to: `/play/${item.id}${item.watch.position > 15 ? `?t=${Math.floor(item.watch.position)}` : ''}`, className: "wide-frame", children: [_jsx(Art, { src: art, label: item.title }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx(Link, { to: `/item/${isEp ? item.showId : item.id}`, className: "card-title", children: isEp ? item.showTitle : item.title }), _jsx("div", { className: "card-sub", children: isEp ? `${episodeLabel(item)} · ${item.title}` : item.year || '' })] }));
 }
 export function CollectionCard({ collection, onChanged }) {
     const poster = img(collection.poster, 'w342');
-    const card = (_jsxs(Link, { to: `/collection/${collection.id}`, className: "poster-card", children: [_jsxs("div", { className: "poster-frame collection-frame", children: [poster ? _jsx("img", { src: poster, alt: "", loading: "lazy" }) : _jsx("div", { className: "poster-fallback", children: collection.name }), _jsx("span", { className: "badge-count", children: collection.itemCount }), smartRuleText(collection) && (_jsxs("span", { className: "badge-smart", title: `Smart: ${smartRuleText(collection)}`, children: [_jsx(Icon, { name: "stack", size: 12 }), " Smart"] }))] }), _jsx("div", { className: "card-title", title: collection.name, children: collection.name }), _jsxs("div", { className: "card-sub", children: [collection.itemCount, " ", collection.itemCount === 1 ? 'item' : 'items'] })] }));
+    const card = (_jsxs(Link, { to: `/collection/${collection.id}`, className: "poster-card", children: [_jsxs("div", { className: "poster-frame collection-frame", children: [_jsx(Art, { src: poster, label: collection.name }), _jsx("span", { className: "badge-count", children: collection.itemCount }), smartRuleText(collection) && (_jsxs("span", { className: "badge-smart", title: `Smart: ${smartRuleText(collection)}`, children: [_jsx(Icon, { name: "stack", size: 12 }), " Smart"] }))] }), _jsx("div", { className: "card-title", title: collection.name, children: collection.name }), _jsxs("div", { className: "card-sub", children: [collection.itemCount, " ", collection.itemCount === 1 ? 'item' : 'items'] })] }));
     // Admins get a "Visible on" menu, like Plex's collection menu.
     if (!collection.visible)
         return card;

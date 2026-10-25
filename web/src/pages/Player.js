@@ -83,7 +83,14 @@ function canDirectPlay(f, video) {
     if (f.hdr)
         return false;
     const mime = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/mp4', webm: 'video/webm' }[f.container];
-    const v = { h264: 'avc1.640028', hevc: 'hvc1.1.6.L120.90', vp9: 'vp09.00.10.08', av1: 'av01.0.08M.08' }[f.videoCodec];
+    // Ask about the file's bit depth too: browsers that take 8-bit H.264 or
+    // HEVC often can't decode 10-bit, and then play the sound over a black picture.
+    const deep = f.bitDepth > 8;
+    if (deep && f.videoCodec === 'h264')
+        return false; // High 10 doesn't decode in browsers
+    const v = (deep
+        ? { hevc: 'hvc1.2.4.L120.90', vp9: 'vp09.02.10.10', av1: 'av01.0.08M.10' }
+        : { h264: 'avc1.640028', hevc: 'hvc1.1.6.L120.90', vp9: 'vp09.00.10.08', av1: 'av01.0.08M.08' })[f.videoCodec];
     const a = { aac: 'mp4a.40.2', mp3: 'mp3', opus: 'opus', flac: 'flac', vorbis: 'vorbis' }[f.audioCodec];
     if (!mime || !v || (f.audioCodec && !a))
         return false;
@@ -211,6 +218,7 @@ function PlayerView({ detail, prefs, startAt, fileId, playlistId, together, }) {
     // currentTime while playing; seeks and pauses add nothing.
     const playedRef = useRef(0);
     const lastTick = useRef(null);
+    const directSince = useRef(0); // where direct play started, to check that the picture shows too
     const playSession = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36));
     const hideTimer = useRef();
     const initialSub = initial.current.sub;
@@ -293,6 +301,7 @@ function PlayerView({ detail, prefs, startAt, fileId, playlistId, together, }) {
             stopTranscode();
             offsetRef.current = 0;
             setMode('direct');
+            directSince.current = at;
             adaptiveRef.current = false;
             video.src = `/api/files/${file.id}/direct`;
             video.addEventListener('loadedmetadata', () => (video.currentTime = at), { once: true });
@@ -703,6 +712,17 @@ function PlayerView({ detail, prefs, startAt, fileId, playlistId, together, }) {
                         if (step > 0 && step < 2)
                             playedRef.current += step;
                         lastTick.current = now;
+                    }
+                    // A browser that can't decode the picture often just plays the
+                    // sound over black, with no error. Two seconds in with no frame
+                    // decoded: let the server convert the video instead.
+                    if (v && mode === 'direct' && file?.videoCodec && !forceTranscode.current && v.currentTime - directSince.current > 2) {
+                        const frames = v.getVideoPlaybackQuality?.().totalVideoFrames;
+                        if (v.videoWidth === 0 || frames === 0) {
+                            forceTranscode.current = true;
+                            load(position(), choiceRef.current);
+                            return;
+                        }
                     }
                     setTime(position());
                 }, onSeeking: () => (lastTick.current = null), onEmptied: () => (lastTick.current = null), onEnded: onEnded, onError: () => {

@@ -185,11 +185,11 @@ func (s *Store) ShowEpisodes(uid, showID int64) ([]*Item, error) {
 }
 
 var librarySorts = map[string]string{
-	"title":   "i.sort_title COLLATE NOCASE",
-	"added":   "i.added_at DESC",
-	"year":    "i.year DESC, i.sort_title COLLATE NOCASE",
-	"release": "i.release_date DESC",
-	"rating":  "i.rating DESC",
+	"title":   "i.sort_title COLLATE NOCASE, i.id",
+	"added":   "i.added_at DESC, i.id",
+	"year":    "i.year DESC, i.sort_title COLLATE NOCASE, i.id",
+	"release": "i.release_date DESC, i.id",
+	"rating":  "i.rating DESC, i.id",
 }
 
 // LibraryItems pages through a library's movies or shows, leaving out the
@@ -212,6 +212,49 @@ func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit in
 	items, err := s.queryItems(itemSelect+` WHERE `+where+` AND `+visible+`
 		ORDER BY `+order+` LIMIT @limit OFFSET @offset`, args...)
 	return items, total, err
+}
+
+// Letter is where titles starting with a letter begin in a library sorted by
+// title ("#" is everything before A).
+type Letter struct {
+	Letter string `json:"letter"`
+	Offset int    `json:"offset"`
+}
+
+// LibraryLetters lists, for the A–Z jump bar, the offset of the first title
+// for each starting letter, in the same order and with the same items as
+// LibraryItems sorted by title.
+func (s *Store) LibraryLetters(uid, libraryID int64, hide []int64) ([]Letter, error) {
+	if hide == nil {
+		hide = []int64{}
+	}
+	hidden, _ := json.Marshal(hide)
+	rows, err := s.db.Query(`SELECT i.sort_title FROM items i
+		WHERE i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide)) AND `+visible+`
+		ORDER BY `+librarySorts["title"], uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden)))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Letter{}
+	seen := map[string]bool{}
+	for n := 0; rows.Next(); n++ {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		l := "#"
+		if t != "" {
+			if c := strings.ToUpper(t[:1]); c >= "A" && c <= "Z" {
+				l = c
+			}
+		}
+		if !seen[l] {
+			seen[l] = true
+			out = append(out, Letter{l, n})
+		}
+	}
+	return out, rows.Err()
 }
 
 // RecentlyAdded returns movies by add date, or shows ordered by their newest

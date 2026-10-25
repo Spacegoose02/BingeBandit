@@ -68,6 +68,11 @@ func (c *ImageCache) TMDB(ctx context.Context, size, file string) (string, error
 		wg.Done()
 	}()
 
+	// The download outlives the request that started it: a browser drops
+	// poster requests it scrolled past, and that must not fail the other
+	// requests waiting on the same image or leave it uncached.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://image.tmdb.org/t/p/"+size+"/"+file, nil)
 	if err != nil {
 		return "", err

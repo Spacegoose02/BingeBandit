@@ -68,6 +68,9 @@ func main() {
 	go recorder.Run(ctx)
 
 	artwork := metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork"))
+	importRunner := importer.NewRunner(st)
+	importRunner.Images = artwork
+
 	srv := &api.Server{
 		Store:      st,
 		Scanner:    scanner,
@@ -83,7 +86,7 @@ func main() {
 		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
 		LogoLib:    livetv.NewLogoLibrary(filepath.Join(cfg.DataDir, "logos")),
 		DVR:        recorder,
-		Importer:   importer.NewRunner(st, artwork),
+		Importer:   importRunner,
 		Trakt:      trakt.NewSyncer(st, cfg.TraktAPI),
 		Logs:       logBuf,
 		Version:    version,

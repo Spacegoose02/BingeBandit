@@ -454,6 +454,15 @@ a.ext-score:hover { text-decoration: underline; }
 .person-card { text-align: center; }
 
 .poster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 24px 18px; }
+.poster-grid.has-az { padding-right: 24px; }
+.poster-grid .poster-card[id] { scroll-margin-top: 90px; }
+
+/* Plex-style A–Z jump bar beside a library sorted by title. */
+.az-bar { position: fixed; right: 6px; top: 50%; transform: translateY(-50%); z-index: 20; display: flex; flex-direction: column; justify-content: space-between;
+  height: min(76vh, 560px); padding: 6px 2px; border-radius: 999px; background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(8px); }
+.az-bar button { background: none; border: 0; padding: 0 4px; font-size: 11px; font-weight: 700; line-height: 1; color: var(--muted); cursor: pointer; min-height: 0; }
+.az-bar button:hover:not(:disabled), .az-bar button:focus-visible { color: var(--accent); transform: scale(1.35); }
+.az-bar button:disabled { opacity: .3; cursor: default; }
 
 .search-box { display: flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 20px; margin-bottom: 28px; max-width: 640px; }
 .search-box input:not([type]) , .search-box input { border: 0 !important; background: none !important; box-shadow: none !important; font-size: 18px !important; padding: 10px 0 !important; }

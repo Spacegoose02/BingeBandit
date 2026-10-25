@@ -10,7 +10,8 @@ import (
 	"bingebandit/internal/store"
 )
 
-// fakeSource has one collection with a poster only it can serve, and a label.
+// fakeSource has a collection with a poster only it can serve, one with a
+// TMDB poster, and a label.
 type fakeSource struct{ fetched []string }
 
 func (f *fakeSource) Kind() string                                { return "fake" }
@@ -25,6 +26,10 @@ func (f *fakeSource) Collections(ctx context.Context, emit func(Collection) erro
 		return err
 	}
 	return emit(Collection{Name: "Space", Items: []Record{alien}, Poster: "tmdb:/space.jpg"})
+}
+
+func (f *fakeSource) Artwork(context.Context, func(Art) error, func(string, int, int)) error {
+	return nil
 }
 
 func (f *fakeSource) Image(_ context.Context, ref string) (io.ReadCloser, error) {
@@ -54,12 +59,13 @@ func TestImportCollectionPostersAndLabels(t *testing.T) {
 	id, _ := st.UpsertItem(&store.Item{LibraryID: lib.ID, Kind: "movie", Title: "Alien", Year: 1979, TMDBID: 348, MatchKey: "movie:alien"})
 
 	src := &fakeSource{}
-	r := NewRunner(st, fakeArt{})
-	opt := Options{Collections: true, Labels: true}
+	r := NewRunner(st)
+	r.Images = fakeArt{}
+	opt := Options{Collections: true, Labels: true, Artwork: true}
 	if err := r.run(context.Background(), src, opt); err != nil {
 		t.Fatal(err)
 	}
-	if s := r.Status(); s.Collections != 2 || s.Labels != 1 {
+	if s := r.Status(); s.Collections != 2 || s.Labels != 1 || s.Artwork != 2 {
 		t.Errorf("status %+v", s)
 	}
 	cols, _ := st.LibraryCollections(lib.ID)
@@ -77,12 +83,7 @@ func TestImportCollectionPostersAndLabels(t *testing.T) {
 	if strings.Join(it.Labels, ",") != "Cinemask,Spooky" {
 		t.Errorf("labels %v", it.Labels)
 	}
-
-	// A second run doesn't fetch posters the collections already have.
-	if err := r.run(context.Background(), src, opt); err != nil {
-		t.Fatal(err)
-	}
 	if len(src.fetched) != 1 {
-		t.Errorf("fetched %v", src.fetched)
+		t.Errorf("fetched %v; TMDB posters are kept by reference", src.fetched)
 	}
 }

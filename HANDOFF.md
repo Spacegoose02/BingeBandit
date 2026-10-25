@@ -2,7 +2,14 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, calmer Live TV failover and per-user Live TV._
+_Last updated: 2026-10-25, audio-only playback, missing posters and duplicate shows._
+
+## Audio-only playback, missing posters, duplicate shows
+
+- **Picture missing (sound only):** the web player's direct-play check now asks the browser about the file's bit depth (10-bit H.264 never direct plays; 10-bit HEVC/VP9/AV1 ask with Main10 codec strings). Both players also check after starting: web, 2 s of direct play with no decoded frame (`getVideoPlaybackQuality`) or no video size; TV app, `onLoad` with no video size (ExoPlayer drops a video track it can't decode and plays the sound alone). Either way the server converts instead.
+- **Posters:** TMDB image downloads (`metadata/images.go`) no longer use the request's context, so a browser cancelling a poster it scrolled past doesn't fail the others waiting on that image. Cards (`Art` in `Cards.tsx`) retry a failed image once after 3 s, then show the title.
+- **Duplicate shows:** migration 32 adds `show_aliases`. After each metadata pass on a TV library, `Store.MergeDuplicateShows` folds shows that matched the same TMDB (then TVDB) id into the one with the most episodes: episodes join its seasons (two copies of an episode become two versions), and watch state, watchlist, collections, playlists, markers and history follow (`UPDATE OR IGNORE`). The duplicate folder's match key becomes an alias, so `episodeItem` adds later scans of it to the kept show. Library pages also sort with `i.id` as a tie-break, and the web Library tab drops repeats and stale pages.
+- **Tested:** store tests for the merge (overlapping episodes, watch state, watchlist, alias, idempotent) and paging; in Chromium a 10-bit H.264 episode converts and an 8-bit one direct plays. The no-picture checks themselves weren't reproduced (Chromium here decodes what it says it can); the TV app change is typechecked only.
 
 ## Calmer Live TV failover, per-user Live TV (after v0.6.1)
 
