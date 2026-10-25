@@ -629,6 +629,8 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .match-search { display: flex; gap: 8px; margin-bottom: 14px; }
 .match-search .year { width: 90px !important; flex: none; }
 .match-results { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow-y: auto; }
+.match-unmatch { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.unmatched-pill { align-self: flex-start; border: 0; cursor: pointer; margin: 4px 0 8px; font: inherit; font-size: 12px; }
 .match-row { display: flex; gap: 14px; align-items: center; text-align: left; background: none; border: 1px solid transparent; border-radius: 10px; padding: 8px; }
 .match-row:hover { background: var(--surface-2); border-color: var(--border); }
 .match-row.current { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }

@@ -4,94 +4,214 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 )
 
-// ShowAlias returns the show a folder's match key was merged into, with that
-// show's own match key, or ok false when the key isn't an alias.
-func (s *Store) ShowAlias(libraryID int64, matchKey string) (showID int64, showKey string, ok bool) {
-	err := s.db.QueryRow(`SELECT a.show_id, i.match_key FROM show_aliases a JOIN items i ON i.id = a.show_id
-		WHERE a.library_id = ? AND a.match_key = ?`, libraryID, matchKey).Scan(&showID, &showKey)
-	return showID, showKey, err == nil
+// ItemAlias returns the movie or show a folder's match key was merged into,
+// with that item's own match key, or ok false when the key isn't an alias.
+func (s *Store) ItemAlias(libraryID int64, matchKey string) (itemID int64, itemKey string, ok bool) {
+	err := s.db.QueryRow(`SELECT a.item_id, i.match_key FROM item_aliases a JOIN items i ON i.id = a.item_id
+		WHERE a.library_id = ? AND a.match_key = ?`, libraryID, matchKey).Scan(&itemID, &itemKey)
+	return itemID, itemKey, err == nil
 }
 
-// MergedShow is one show folded into another by MergeDuplicateShows.
-type MergedShow struct {
-	Title  string
-	KeptID int64
+// Merged is one movie or show folded into another by MergeDuplicates.
+type Merged struct {
+	Kind, Title string
+	ID, KeptID  int64 // the duplicate (now gone) and the item it joined
 }
 
-// Tables whose rows follow a merged show or episode to the one kept. A row
-// the kept item already has (the same user's watch state, say) stays with
-// the duplicate and goes when it is deleted.
+// Tables whose rows follow a merged item to the one kept. A row the kept
+// item already has (the same user's watch state, say) stays with the
+// duplicate and goes when it is deleted.
 var mergeTables = []string{"watch_state", "watchlist", "collection_items", "playlist_items", "markers",
 	"plays", "playout_items", "external_ratings", "recommendations"}
 
-// MergeDuplicateShows folds shows of a library that matched the same TMDB or
-// TVDB show into one, as Plex does: seasons and episodes come together (two
-// copies of an episode become two versions of it) along with watch state,
-// watchlists, collections and playlists. The show with the most episodes is
-// kept.
-func (s *Store) MergeDuplicateShows(libraryID int64) ([]MergedShow, error) {
+type mergeCandidate struct {
+	id, tmdb, tvdb   int64
+	kind, key, title string
+	imdb, edition    string
+	size             int // episodes or files: the biggest is kept
+}
+
+// ids are what a candidate is known by, one per source.
+func (c *mergeCandidate) ids() map[string]string {
+	m := map[string]string{}
+	if c.tmdb > 0 {
+		m["tmdb"] = fmt.Sprint(c.tmdb)
+	}
+	if c.tvdb > 0 {
+		m["tvdb"] = fmt.Sprint(c.tvdb)
+	}
+	if c.imdb != "" {
+		m["imdb"] = c.imdb
+	}
+	return m
+}
+
+// MergeDuplicates folds movies and shows of a library that are the same
+// title into one, as Plex does. Two titles are the same when they share a
+// TMDB, TheTVDB or IMDb id and none of their ids disagree (so a show TMDB
+// splits in two that TheTVDB lists as one stays two). Movies must also be the
+// same edition. Unmatched titles have no ids and are never merged.
+//
+// A show's seasons and episodes come together (two copies of an episode
+// become two versions of it), a movie's files become versions of the kept
+// movie, and watch state, watchlists, collections and playlists follow. The
+// title with the most episodes or files is kept.
+func (s *Store) MergeDuplicates(libraryID int64) ([]Merged, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	type show struct {
-		id         int64
-		key, title string
+	rows, err := tx.Query(`SELECT i.id, i.kind, i.match_key, i.title, i.tmdb_id, i.tvdb_id, i.imdb_id, i.edition,
+			CASE i.kind WHEN 'show' THEN (SELECT COUNT(*) FROM items e WHERE e.show_id = i.id AND e.kind = 'episode')
+				ELSE (SELECT COUNT(*) FROM media_files f WHERE f.item_id = i.id) END
+		FROM items i WHERE i.library_id = ? AND i.kind IN ('movie','show') AND i.metadata_source != 'none'
+			AND (i.tmdb_id > 0 OR i.tvdb_id > 0 OR i.imdb_id != '')
+		ORDER BY i.id`, libraryID)
+	if err != nil {
+		return nil, err
 	}
-	var merged []MergedShow
-	for _, col := range []string{"tmdb_id", "tvdb_id"} {
-		rows, err := tx.Query(fmt.Sprintf(`SELECT s.id, s.match_key, s.title, s.%[1]s FROM items s
-			WHERE s.library_id = ? AND s.kind = 'show' AND s.%[1]s > 0 AND s.%[1]s IN (
-				SELECT %[1]s FROM items WHERE library_id = ? AND kind = 'show' AND %[1]s > 0 GROUP BY %[1]s HAVING COUNT(*) > 1)
-			ORDER BY s.%[1]s, (SELECT COUNT(*) FROM items e WHERE e.show_id = s.id AND e.kind = 'episode') DESC, s.id`, col),
-			libraryID, libraryID)
-		if err != nil {
+	var cands []*mergeCandidate
+	for rows.Next() {
+		c := &mergeCandidate{}
+		if err := rows.Scan(&c.id, &c.kind, &c.key, &c.title, &c.tmdb, &c.tvdb, &c.imdb, &c.edition, &c.size); err != nil {
+			rows.Close()
 			return nil, err
 		}
-		var groups [][]show
-		last := int64(-1)
-		for rows.Next() {
-			var sh show
-			var ext int64
-			if err := rows.Scan(&sh.id, &sh.key, &sh.title, &ext); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			if ext != last {
-				groups = append(groups, nil)
-				last = ext
-			}
-			groups[len(groups)-1] = append(groups[len(groups)-1], sh)
+		if c.kind == "movie" {
+			c.tvdb = 0 // only shows are matched on TheTVDB
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
+		cands = append(cands, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Union-find over candidates, joining two groups only when their ids
+	// agree for every source both know.
+	parent := make([]int, len(cands))
+	known := make([]map[string]string, len(cands))
+	for i, c := range cands {
+		parent[i], known[i] = i, c.ids()
+	}
+	var find func(int) int
+	find = func(i int) int {
+		if parent[i] != i {
+			parent[i] = find(parent[i])
 		}
-		for _, g := range groups {
-			keep := g[0]
-			for _, dup := range g[1:] {
-				if err := mergeShow(tx, libraryID, keep.id, keep.key, dup.id, dup.key); err != nil {
-					return nil, fmt.Errorf("merge %q: %w", dup.title, err)
+		return parent[i]
+	}
+	byID := map[string]int{}
+	for i, c := range cands {
+		ids := c.ids()
+		for _, src := range []string{"tmdb", "tvdb", "imdb"} {
+			v, ok := ids[src]
+			if !ok {
+				continue
+			}
+			k := c.kind + "|" + strings.ToLower(c.edition) + "|" + src + ":" + v
+			if c.kind == "show" {
+				k = "show|" + src + ":" + v
+			}
+			j, seen := byID[k]
+			if !seen {
+				byID[k] = i
+				continue
+			}
+			a, b := find(i), find(j)
+			if a == b {
+				continue
+			}
+			agree := true
+			for src, v := range known[a] {
+				if w, ok := known[b][src]; ok && w != v {
+					agree = false
 				}
-				merged = append(merged, MergedShow{Title: dup.title, KeptID: keep.id})
 			}
+			if !agree {
+				continue
+			}
+			parent[a] = b
+			for src, v := range known[a] {
+				known[b][src] = v
+			}
+		}
+	}
+	groups := map[int][]*mergeCandidate{}
+	var order []int
+	for i, c := range cands {
+		r := find(i)
+		if _, ok := groups[r]; !ok {
+			order = append(order, r)
+		}
+		groups[r] = append(groups[r], c)
+	}
+
+	var merged []Merged
+	for _, r := range order {
+		g := groups[r]
+		if len(g) < 2 {
+			continue
+		}
+		sort.SliceStable(g, func(i, j int) bool { return g[i].size > g[j].size })
+		keep := g[0]
+		for _, dup := range g[1:] {
+			var err error
+			if keep.kind == "show" {
+				err = mergeShow(tx, libraryID, keep.id, keep.key, dup.id, dup.key)
+			} else {
+				err = mergeMovie(tx, libraryID, keep.id, dup.id, dup.key)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("merge %q: %w", dup.title, err)
+			}
+			merged = append(merged, Merged{Kind: keep.kind, Title: dup.title, ID: dup.id, KeptID: keep.id})
+		}
+		// The kept title learns the ids its duplicates were known by.
+		ids := known[r]
+		tvdb, _ := strconv.ParseInt(ids["tvdb"], 10, 64)
+		if _, err := tx.Exec(`UPDATE items SET tvdb_id = CASE WHEN tvdb_id = 0 AND kind = 'show' THEN ? ELSE tvdb_id END,
+			imdb_id = CASE WHEN imdb_id = '' THEN ? ELSE imdb_id END WHERE id = ?`, tvdb, ids["imdb"], keep.id); err != nil {
+			return nil, err
 		}
 	}
 	return merged, tx.Commit()
 }
 
-func mergeShow(tx *sql.Tx, libraryID, keepID int64, keepKey string, dupID int64, dupKey string) error {
-	// Later scans of the duplicate's folder (and of folders merged into it
-	// before) add to the kept show.
-	if _, err := tx.Exec(`UPDATE show_aliases SET show_id = ? WHERE show_id = ?`, keepID, dupID); err != nil {
+// aliasTo makes a merged folder's match key (and keys already merged into
+// the duplicate) point at the kept item, so later scans add to it.
+func aliasTo(tx *sql.Tx, libraryID, keepID, dupID int64, dupKey string) error {
+	if _, err := tx.Exec(`UPDATE item_aliases SET item_id = ? WHERE item_id = ?`, keepID, dupID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO show_aliases (library_id, match_key, show_id) VALUES (?, ?, ?)
-		ON CONFLICT (library_id, match_key) DO UPDATE SET show_id = excluded.show_id`, libraryID, dupKey, keepID); err != nil {
+	_, err := tx.Exec(`INSERT INTO item_aliases (library_id, match_key, item_id) VALUES (?, ?, ?)
+		ON CONFLICT (library_id, match_key) DO UPDATE SET item_id = excluded.item_id`, libraryID, dupKey, keepID)
+	return err
+}
+
+func mergeMovie(tx *sql.Tx, libraryID, keepID, dupID int64, dupKey string) error {
+	if err := aliasTo(tx, libraryID, keepID, dupID, dupKey); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE media_files SET item_id = ? WHERE item_id = ?`, keepID, dupID); err != nil {
+		return err
+	}
+	if err := moveRows(tx, dupID, keepID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`DELETE FROM items WHERE id = ?`, dupID)
+	return err
+}
+
+func mergeShow(tx *sql.Tx, libraryID, keepID int64, keepKey string, dupID int64, dupKey string) error {
+	if err := aliasTo(tx, libraryID, keepID, dupID, dupKey); err != nil {
 		return err
 	}
 

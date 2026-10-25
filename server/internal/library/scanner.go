@@ -326,6 +326,7 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 	name := strings.TrimSuffix(filepath.Base(f.path), filepath.Ext(f.path))
 	title, year, tmdb := parseTitleYear(name)
+	_, imdb := idHints(name) // movies are matched on TMDB and IMDb
 	if dir := filepath.Dir(f.path); dir != f.root {
 		dt, dy, dtmdb := parseTitleYear(filepath.Base(dir))
 		// Without a year the folder may just be a grouping like "Action".
@@ -335,13 +336,20 @@ func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 		if tmdb == 0 {
 			tmdb = dtmdb
 		}
+		if _, di := idHints(filepath.Base(dir)); imdb == "" {
+			imdb = di
+		}
 	}
 	if title == "" {
 		title = name
 	}
+	key := fmt.Sprintf("movie:%s:%d", normKey(title), year)
+	// A folder merged into another copy of the same movie adds its file there.
+	if id, _, ok := s.st.ItemAlias(lib.ID, key); ok {
+		return id, nil
+	}
 	return s.st.UpsertItem(&store.Item{
-		LibraryID: lib.ID, Kind: "movie", Title: title, Year: year, TMDBID: tmdb,
-		MatchKey: fmt.Sprintf("movie:%s:%d", normKey(title), year),
+		LibraryID: lib.ID, Kind: "movie", Title: title, Year: year, TMDBID: tmdb, IMDbID: imdb, MatchKey: key,
 	})
 }
 
@@ -373,6 +381,7 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 		showName = prefix
 	}
 	showTitle, showYear, tmdb := parseTitleYear(showName)
+	tvdb, imdb := idHints(showName)
 	if showTitle == "" {
 		return 0, fmt.Errorf("cannot find show name for %s", f.path)
 	}
@@ -380,12 +389,12 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 
 	// A folder whose show was merged into another (same TMDB/TVDB show)
 	// adds its episodes there.
-	showID, aliasKey, merged := s.st.ShowAlias(lib.ID, showKey)
+	showID, aliasKey, merged := s.st.ItemAlias(lib.ID, showKey)
 	if merged {
 		showKey = aliasKey
 	} else {
 		showID, err = s.st.UpsertItem(&store.Item{
-			LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, MatchKey: showKey,
+			LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, TVDBID: tvdb, IMDbID: imdb, MatchKey: showKey,
 		})
 		if err != nil {
 			return 0, err
@@ -430,19 +439,16 @@ func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Sta
 	if err := s.meta.RefreshLibrary(ctx, lib.ID, force, progress); err != nil {
 		return err
 	}
-	if lib.Kind != "shows" {
-		return nil
-	}
-	merged, err := s.st.MergeDuplicateShows(lib.ID)
+	merged, err := s.st.MergeDuplicates(lib.ID)
 	if err != nil {
-		return fmt.Errorf("merge duplicate shows: %w", err)
+		return fmt.Errorf("merge duplicates: %w", err)
 	}
 	if len(merged) == 0 {
 		return nil
 	}
 	for _, m := range merged {
-		log.Printf("scan %q: merged a second folder of %q into show %d", lib.Name, m.Title, m.KeptID)
+		log.Printf("scan %q: merged another copy of %s %q into %d", lib.Name, m.Kind, m.Title, m.KeptID)
 	}
-	// Episodes new to the kept show still need their details.
+	// Episodes new to a kept show still need their details.
 	return s.meta.RefreshLibrary(ctx, lib.ID, false, progress)
 }

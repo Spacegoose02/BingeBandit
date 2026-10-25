@@ -18,11 +18,31 @@ func TestParseTitleYear(t *testing.T) {
 		{"Dune Part Two (2024) {tmdb-693134}", "Dune Part Two", 2024, 693134},
 		{"Some_Movie_2010_720p", "Some Movie", 2010, 0},
 		{"Arrival", "Arrival", 0, 0},
+		{"Inception (2010) [imdbid-tt1375666]", "Inception", 2010, 0},
+		{"The Office (US) (2005) {tvdb-73244}", "The Office (US)", 2005, 0},
 	}
 	for _, c := range cases {
 		title, year, tmdb := parseTitleYear(c.in)
 		if title != c.title || year != c.year || tmdb != c.tmdb {
 			t.Errorf("parseTitleYear(%q) = %q, %d, %d; want %q, %d, %d", c.in, title, year, tmdb, c.title, c.year, c.tmdb)
+		}
+	}
+}
+
+func TestIDHints(t *testing.T) {
+	cases := []struct {
+		in   string
+		tvdb int64
+		imdb string
+	}{
+		{"The Office (US) (2005) {tvdb-73244}", 73244, ""},
+		{"Inception (2010) [imdbid-tt1375666]", 0, "tt1375666"},
+		{"Show {tvdbid=81189} {imdb-TT0903747}", 81189, "tt0903747"},
+		{"Arrival (2016)", 0, ""},
+	}
+	for _, c := range cases {
+		if tvdb, imdb := idHints(c.in); tvdb != c.tvdb || imdb != c.imdb {
+			t.Errorf("idHints(%q) = %d, %q; want %d, %q", c.in, tvdb, imdb, c.tvdb, c.imdb)
 		}
 	}
 }

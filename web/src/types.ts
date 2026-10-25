@@ -141,6 +141,12 @@ export interface Item {
   runtime?: number
   releaseDate?: string
   tmdbId?: number
+  tvdbId?: number
+  imdbId?: string
+  /** "" (TMDB, else TheTVDB), "tvdb" (chosen in Fix Match) or "none" (left unmatched). */
+  metadataSource?: string
+  /** A movie or show no source knows, or left unmatched on purpose. */
+  unmatched?: boolean
   collectionId?: number
   collectionName?: string
   trailer?: string

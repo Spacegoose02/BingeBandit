@@ -26,27 +26,33 @@ type Credit struct {
 // Item is a movie, show, season or episode. User-specific fields (Watch,
 // UnwatchedCount) are filled for whichever user the query ran as.
 type Item struct {
-	ID             int64      `json:"id"`
-	LibraryID      int64      `json:"libraryId"`
-	Kind           string     `json:"kind"`
-	ParentID       int64      `json:"parentId,omitempty"`
-	ShowID         int64      `json:"showId,omitempty"`
-	Title          string     `json:"title"`
-	SortTitle      string     `json:"sortTitle"`
-	OriginalTitle  string     `json:"originalTitle,omitempty"`
-	Year           int        `json:"year,omitempty"`
-	Overview       string     `json:"overview,omitempty"`
-	Tagline        string     `json:"tagline,omitempty"`
-	Poster         string     `json:"poster,omitempty"`
-	Backdrop       string     `json:"backdrop,omitempty"`
-	Logo           string     `json:"logo,omitempty"`
-	Rating         float64    `json:"rating,omitempty"`
-	ContentRating  string     `json:"contentRating,omitempty"`
-	Genres         []string   `json:"genres,omitempty"`
-	Studio         string     `json:"studio,omitempty"`
-	Runtime        int        `json:"runtime,omitempty"` // minutes
-	ReleaseDate    string     `json:"releaseDate,omitempty"`
-	TMDBID         int64      `json:"tmdbId,omitempty"`
+	ID            int64    `json:"id"`
+	LibraryID     int64    `json:"libraryId"`
+	Kind          string   `json:"kind"`
+	ParentID      int64    `json:"parentId,omitempty"`
+	ShowID        int64    `json:"showId,omitempty"`
+	Title         string   `json:"title"`
+	SortTitle     string   `json:"sortTitle"`
+	OriginalTitle string   `json:"originalTitle,omitempty"`
+	Year          int      `json:"year,omitempty"`
+	Overview      string   `json:"overview,omitempty"`
+	Tagline       string   `json:"tagline,omitempty"`
+	Poster        string   `json:"poster,omitempty"`
+	Backdrop      string   `json:"backdrop,omitempty"`
+	Logo          string   `json:"logo,omitempty"`
+	Rating        float64  `json:"rating,omitempty"`
+	ContentRating string   `json:"contentRating,omitempty"`
+	Genres        []string `json:"genres,omitempty"`
+	Studio        string   `json:"studio,omitempty"`
+	Runtime       int      `json:"runtime,omitempty"` // minutes
+	ReleaseDate   string   `json:"releaseDate,omitempty"`
+	TMDBID        int64    `json:"tmdbId,omitempty"`
+	TVDBID        int64    `json:"tvdbId,omitempty"`
+	IMDbID        string   `json:"imdbId,omitempty"`
+	// MetadataSource is "" (TMDB, else TheTVDB), "tvdb" or "none" (kept unmatched).
+	MetadataSource string `json:"metadataSource,omitempty"`
+	// Unmatched: a movie or show no source knows (or left unmatched on purpose).
+	Unmatched      bool       `json:"unmatched,omitempty"`
 	CollectionID   int64      `json:"collectionId,omitempty"`
 	CollectionName string     `json:"collectionName,omitempty"`
 	Trailer        string     `json:"trailer,omitempty"` // YouTube video key
@@ -81,7 +87,7 @@ const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i
 	i.overview, i.tagline, i.poster, i.backdrop, i.logo, i.rating, i.content_rating, i.genres, i.studio, i.runtime,
 	i.release_date, i.tmdb_id, i.collection_id, i.collection_name, i.trailer, i.credits,
 	i.edition, i.labels, i.locked, i.episode_order, i.season_number, i.episode_number,
-	i.added_at, i.match_key, i.metadata_at,
+	i.added_at, i.match_key, i.metadata_at, i.tvdb_id, i.imdb_id, i.metadata_source,
 	COALESCE(w.position, 0.0), COALESCE(w.duration, 0.0), COALESCE(w.watched, 0), COALESCE(w.updated_at, 0),
 	CASE i.kind
 		WHEN 'show' THEN (SELECT COUNT(*) FROM items e WHERE e.show_id = i.id AND e.kind = 'episode')
@@ -108,7 +114,7 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 		&it.Overview, &it.Tagline, &it.Poster, &it.Backdrop, &it.Logo, &it.Rating, &it.ContentRating, &genres, &it.Studio, &it.Runtime,
 		&it.ReleaseDate, &it.TMDBID, &it.CollectionID, &it.CollectionName, &it.Trailer, &credits,
 		&it.Edition, &labels, &locked, &it.EpisodeOrder, &season, &episode,
-		&it.AddedAt, &it.MatchKey, &it.MetadataAt,
+		&it.AddedAt, &it.MatchKey, &it.MetadataAt, &it.TVDBID, &it.IMDbID, &it.MetadataSource,
 		&it.Watch.Position, &it.Watch.Duration, &watched, &it.Watch.UpdatedAt,
 		&it.ChildCount, &it.UnwatchedCount,
 		&it.ShowTitle, &it.ShowPoster, &it.ShowBackdrop, &it.OnWatchlist)
@@ -129,6 +135,8 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 		it.EpisodeNumber = &n
 	}
 	it.Watch.Watched = watched == 1
+	it.Unmatched = it.MetadataSource == "none" ||
+		((it.Kind == "movie" || it.Kind == "show") && it.MetadataAt > 0 && it.TMDBID == 0 && it.MetadataSource != "tvdb")
 	json.Unmarshal([]byte(genres), &it.Genres)
 	json.Unmarshal([]byte(credits), &it.Credits)
 	json.Unmarshal([]byte(labels), &it.Labels)
@@ -365,12 +373,12 @@ func (s *Store) UpsertItem(it *Item) (int64, error) {
 	}
 	var id int64
 	err := s.db.QueryRow(`INSERT INTO items (library_id, kind, parent_id, show_id, match_key, title, sort_title, year, tmdb_id,
-			season_number, episode_number, added_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			tvdb_id, imdb_id, season_number, episode_number, added_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (library_id, match_key) DO UPDATE SET parent_id = excluded.parent_id, show_id = excluded.show_id
 		RETURNING id`,
 		it.LibraryID, it.Kind, parent, show, it.MatchKey, it.Title, SortTitle(it.Title), it.Year, it.TMDBID,
-		season, episode, t, t).Scan(&id)
+		it.TVDBID, it.IMDbID, season, episode, t, t).Scan(&id)
 	return id, err
 }
 
@@ -413,7 +421,10 @@ var updateMetadataSQL = `UPDATE items SET ` + strings.Join([]string{
 	unlessLocked("genres", "genres"),
 	unlessLocked("studio", "studio"),
 	unlessLocked("release_date", "releaseDate"),
-	"runtime = ?", "tmdb_id = ?", "collection_id = ?", "collection_name = ?", "trailer = ?", "credits = ?",
+	"runtime = ?", "tmdb_id = ?",
+	// Ids a source didn't report are kept (TMDB knows no TheTVDB id for some shows).
+	"tvdb_id = CASE WHEN ? > 0 THEN ? ELSE tvdb_id END", "imdb_id = CASE WHEN ? != '' THEN ? ELSE imdb_id END",
+	"collection_id = ?", "collection_name = ?", "trailer = ?", "credits = ?",
 	"metadata_at = ?", "updated_at = ?",
 }, ", ") + ` WHERE id = ?`
 
@@ -425,7 +436,7 @@ func (s *Store) UpdateMetadata(id int64, m *Item) error {
 	_, err := s.db.Exec(updateMetadataSQL,
 		m.Title, SortTitle(m.Title), m.OriginalTitle, m.Year, m.Overview, m.Tagline,
 		m.Poster, m.Backdrop, m.Logo, m.Rating, m.ContentRating, string(genres), m.Studio, m.ReleaseDate,
-		m.Runtime, m.TMDBID, m.CollectionID, m.CollectionName, m.Trailer, string(credits),
+		m.Runtime, m.TMDBID, m.TVDBID, m.TVDBID, m.IMDbID, m.IMDbID, m.CollectionID, m.CollectionName, m.Trailer, string(credits),
 		now(), now(), id)
 	return err
 }
@@ -488,13 +499,29 @@ func (s *Store) SetArtwork(id int64, kind, ref string) error {
 
 // SetMatch points an item at a different TMDB id; the next refresh uses it.
 func (s *Store) SetMatch(id, tmdbID int64) error {
-	_, err := s.db.Exec(`UPDATE items SET tmdb_id = ?, metadata_at = 0, updated_at = ? WHERE id = ?`, tmdbID, now(), id)
+	// The other ids came with the old match; the new one brings its own.
+	_, err := s.db.Exec(`UPDATE items SET tmdb_id = ?, tvdb_id = 0, imdb_id = '', metadata_source = '', metadata_at = 0, updated_at = ?
+		WHERE id = ?`, tmdbID, now(), id)
+	return err
+}
+
+// SetUnmatched leaves a movie or show unmatched on purpose (a home video, or
+// a show no source has yet): its ids are cleared and refreshes don't search.
+func (s *Store) SetUnmatched(id int64) error {
+	_, err := s.db.Exec(`UPDATE items SET tmdb_id = 0, tvdb_id = 0, imdb_id = '', metadata_source = 'none', updated_at = ?
+		WHERE id = ? AND kind IN ('movie','show')`, now(), id)
+	return err
+}
+
+// SetMetadataSource records where a title's details now come from ("" or "tvdb").
+func (s *Store) SetMetadataSource(id int64, source string) error {
+	_, err := s.db.Exec(`UPDATE items SET metadata_source = ? WHERE id = ?`, source, id)
 	return err
 }
 
 // ShowTVDB returns a show's TheTVDB id (0 when it uses TMDB) and episode order.
 func (s *Store) ShowTVDB(id int64) (tvdbID int64, order string, err error) {
-	err = s.db.QueryRow(`SELECT tvdb_id, tvdb_order FROM items WHERE id = ?`, id).Scan(&tvdbID, &order)
+	err = s.db.QueryRow(`SELECT CASE WHEN metadata_source = 'tvdb' THEN tvdb_id ELSE 0 END, tvdb_order FROM items WHERE id = ?`, id).Scan(&tvdbID, &order)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -505,7 +532,9 @@ func (s *Store) ShowTVDB(id int64) (tvdbID int64, order string, err error) {
 // queues it, with its seasons and episodes, for a metadata refresh.
 func (s *Store) SetTVDBMatch(id, tvdbID int64, order string) error {
 	_, err := s.db.Exec(`UPDATE items SET tvdb_id = CASE WHEN id = ?1 THEN ?2 ELSE tvdb_id END,
-		tvdb_order = CASE WHEN id = ?1 THEN ?3 ELSE tvdb_order END, metadata_at = 0, updated_at = ?4
+		tvdb_order = CASE WHEN id = ?1 THEN ?3 ELSE tvdb_order END,
+		metadata_source = CASE WHEN id = ?1 THEN (CASE WHEN ?2 > 0 THEN 'tvdb' ELSE '' END) ELSE metadata_source END,
+		metadata_at = 0, updated_at = ?4
 		WHERE id = ?1 OR show_id = ?1`, id, tvdbID, order, now())
 	return err
 }

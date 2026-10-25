@@ -679,4 +679,20 @@ ALTER TABLE collections ADD COLUMN list_synced_at INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE collections ADD COLUMN list_error TEXT NOT NULL DEFAULT '';
 ALTER TABLE collection_items ADD COLUMN from_list INTEGER NOT NULL DEFAULT 0;
 `,
+	// 35: matching across sources. Movies and shows keep their IMDb id (and
+	// shows their TheTVDB id) from whichever source matched them, so titles
+	// that share any of them are merged. metadata_source says where a title's
+	// details come from: "" (TMDB, or TheTVDB when TMDB has no match), "tvdb"
+	// (chosen in Fix Match) or "none" (left unmatched on purpose). Merged
+	// folders of movies now get aliases too.
+	`
+ALTER TABLE items ADD COLUMN imdb_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE items ADD COLUMN metadata_source TEXT NOT NULL DEFAULT '';
+UPDATE items SET metadata_source = 'tvdb' WHERE kind = 'show' AND tvdb_id > 0;
+UPDATE items SET imdb_id = COALESCE((SELECT r.imdb_id FROM external_ratings r WHERE r.item_id = items.id), '')
+	WHERE kind IN ('movie', 'show');
+CREATE INDEX items_imdb ON items(library_id, imdb_id) WHERE imdb_id != '';
+ALTER TABLE show_aliases RENAME TO item_aliases;
+ALTER TABLE item_aliases RENAME COLUMN show_id TO item_id;
+`,
 }
