@@ -1,6 +1,7 @@
 package stream
 
 import (
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,6 +135,77 @@ func TestBuildArgsAdaptiveBurnIn(t *testing.T) {
 		}
 		if args := strings.Join(m.buildArgs(&g, s, o), " "); len(s.Variants) != 0 || strings.Contains(args, "var_stream_map") {
 			t.Errorf("should be single quality: %+v\n%s", o, args)
+		}
+	}
+}
+
+func TestBuildArgsHardwareDevice(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	m := &Manager{st: st, ffmpeg: "ffmpeg", dataDir: t.TempDir()}
+	hdr := &store.MediaFile{Path: "movie.mkv", VideoCodec: "hevc", BitDepth: 10, HDR: true, Height: 2160,
+		Streams: []store.Stream{{Index: 0, Type: "video", Codec: "hevc"}, {Index: 1, Type: "audio", Codec: "aac", Channels: 2}}}
+	sdr := &store.MediaFile{Path: "movie.mkv", VideoCodec: "h264", BitDepth: 8, Height: 1080,
+		Streams: []store.Stream{{Index: 0, Type: "video", Codec: "h264"}, {Index: 1, Type: "audio", Codec: "aac", Channels: 2}}}
+	opts := Options{AudioStream: -1, BurnSubtitle: -1}
+	for _, c := range []struct {
+		name     string
+		settings map[string]string
+		file     *store.MediaFile
+		want     []string
+		not      []string
+	}{
+		{"defaults", map[string]string{store.SettingHWEncoder: "vaapi"}, hdr,
+			[]string{"-vaapi_device /dev/dri/renderD128 -i", "tonemap=tonemap=hable:desat=0"}, []string{"-hwaccel"}},
+		{"vaapi on a second GPU, decoding too", map[string]string{store.SettingHWEncoder: "vaapi", store.SettingHWDevice: "/dev/dri/renderD129",
+			store.SettingHWDecode: "true", store.SettingTonemapAlgorithm: "mobius"}, hdr,
+			[]string{"-vaapi_device /dev/dri/renderD129 -hwaccel vaapi -hwaccel_device /dev/dri/renderD129 -i", "tonemap=tonemap=mobius:desat=0"}, nil},
+		{"nvenc GPU 1", map[string]string{store.SettingHWEncoder: "nvenc", store.SettingHWDevice: "1", store.SettingHWDecode: "true"}, hdr,
+			[]string{"-hwaccel cuda -hwaccel_device 1 -i", "-c:v h264_nvenc -preset p4 -profile:v high -gpu 1"}, []string{"vaapi"}},
+		{"qsv render node", map[string]string{store.SettingHWEncoder: "qsv", store.SettingHWDevice: "/dev/dri/renderD129", store.SettingHWDecode: "true"}, hdr,
+			[]string{"-qsv_device /dev/dri/renderD129 -hwaccel auto -i"}, nil},
+		{"copied video needs no GPU", map[string]string{store.SettingHWEncoder: "nvenc", store.SettingHWDecode: "true"}, sdr,
+			[]string{"-c:v copy"}, []string{"-hwaccel", "-gpu"}},
+		{"unknown algorithm falls back", map[string]string{store.SettingHWEncoder: "none", store.SettingTonemapAlgorithm: "bogus"}, hdr,
+			[]string{"tonemap=tonemap=hable"}, nil},
+	} {
+		defaults := map[string]string{store.SettingHWDevice: "", store.SettingHWDecode: "false", store.SettingTonemapAlgorithm: "hable"}
+		for k, v := range c.settings {
+			defaults[k] = v
+		}
+		st.SetSettings(defaults)
+		s := &Session{dir: "out"}
+		args := strings.Join(m.buildArgs(c.file, s, opts), " ")
+		for _, w := range c.want {
+			if !strings.Contains(args, w) {
+				t.Errorf("%s: missing %q:\n%s", c.name, w, args)
+			}
+		}
+		for _, w := range c.not {
+			if strings.Contains(args, w) {
+				t.Errorf("%s: unexpected %q:\n%s", c.name, w, args)
+			}
+		}
+	}
+}
+
+// Every algorithm an admin can pick is accepted by ffmpeg's tonemap filter.
+func TestTonemapAlgorithmsWithFFmpeg(t *testing.T) {
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not installed")
+	}
+	for alg := range TonemapAlgorithms {
+		chain := "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=" + alg +
+			":desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+		out, err := exec.Command(ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "lavfi",
+			"-i", "testsrc=size=320x240:rate=5:duration=1,format=yuv420p10le,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc",
+			"-vf", chain, "-f", "null", "-").CombinedOutput()
+		if err != nil {
+			t.Errorf("%s: %v %s", alg, err, out)
 		}
 	}
 }
