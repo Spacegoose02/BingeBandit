@@ -119,26 +119,30 @@ function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, listRef }: {
   header?: React.ReactElement
   listRef?: React.Ref<FlatList<T[]>>
 }) {
+  // In a row, as the Library section has it beside its A–Z bar: on the onn
+  // box the list drew nothing when it sat straight in a column.
   return (
-    <FlatList
-      ref={listRef}
-      style={st.flex}
-      data={rows}
-      keyExtractor={(row) => keyOf(row[0])}
-      renderItem={({ item: row }) => <View style={st.gridRow}>{row.map((t) => <React.Fragment key={keyOf(t)}>{renderTile(t)}</React.Fragment>)}</View>}
-      // Offsets only line up without a header above the rows.
-      getItemLayout={header ? undefined : (_, i) => ({ length: px(ROW_H), offset: px(ROW_H) * i, index: i })}
-      ListHeaderComponent={header}
-      ListFooterComponent={busy ? <ActivityIndicator color={colors.accent} style={st.footer} /> : null}
-      contentContainerStyle={st.grid}
-      initialNumToRender={4}
-      maxToRenderPerBatch={3}
-      windowSize={5}
-      // Clipped rows lose D-pad focus on Android TV.
-      removeClippedSubviews={false}
-      onEndReached={onEnd}
-      onEndReachedThreshold={1.5}
-    />
+    <View style={st.titles}>
+      <FlatList
+        ref={listRef}
+        style={st.flex}
+        data={rows}
+        keyExtractor={(row) => keyOf(row[0])}
+        renderItem={({ item: row }) => <View style={st.gridRow}>{row.map((t) => <React.Fragment key={keyOf(t)}>{renderTile(t)}</React.Fragment>)}</View>}
+        // Offsets only line up without a header above the rows.
+        getItemLayout={header ? undefined : (_, i) => ({ length: px(ROW_H), offset: px(ROW_H) * i, index: i })}
+        ListHeaderComponent={header}
+        ListFooterComponent={busy ? <ActivityIndicator color={colors.accent} style={st.footer} /> : null}
+        contentContainerStyle={st.grid}
+        initialNumToRender={4}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+        // Clipped rows lose D-pad focus on Android TV.
+        removeClippedSubviews={false}
+        onEndReached={onEnd}
+        onEndReachedThreshold={1.5}
+      />
+    </View>
   )
 }
 

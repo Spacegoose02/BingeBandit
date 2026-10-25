@@ -31,6 +31,22 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     lastTab = t
     setTabState(t)
   }
+  // Only the tab Home opened on asks for focus, so Back from details lands on
+  // it. Following the current tab instead made focus fight the menu: a render
+  // that came late gave focus back to the tab just left, which switched to it
+  // again, back and forth.
+  const [initialTab] = useState(lastTab)
+  // The menu switches as focus moves across it, but only once focus rests on
+  // a tab, so passing over one doesn't build its whole screen.
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const settle = () => {
+    if (focusTimer.current) clearTimeout(focusTimer.current)
+  }
+  const focusTab = (t: Tab) => {
+    settle()
+    focusTimer.current = setTimeout(() => setTab(t), 250)
+  }
+  useEffect(() => settle, [])
   const [update, setUpdate] = useState<AppRelease | null>(null)
   // The menu draws from the last list straight away, then refreshes.
   const [libraries, setLibraries] = useState<Library[]>(() => pinnedOf(cached<Library[]>('/api/libraries')))
@@ -74,7 +90,18 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
         {label}
       </Pressable>
     ) : (
-      <Focusable key={t} hasTVPreferredFocus={t === tab && t !== 'home'} onFocus={() => setTab(t)} onPress={() => setTab(t)} style={st.menuItem}>
+      <Focusable
+        key={t}
+        hasTVPreferredFocus={t === initialTab && t !== 'home'}
+        onFocus={() => focusTab(t)}
+        // Moving down into the screen before it switched keeps the screen shown.
+        onBlur={settle}
+        onPress={() => {
+          settle()
+          setTab(t)
+        }}
+        style={st.menuItem}
+      >
         {label}
       </Focusable>
     )
