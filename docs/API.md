@@ -172,7 +172,7 @@ Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editi
 | GET | `/plugins` | Pages of running plugins you can open: `[{id, name, pages: [{title, path}]}]`. |
 | any | `/plugins/{id}/{path}` | Proxied to the plugin, with you as the user. |
 
-Admins manage plugins under `/api/admin/plugins`. Plugins themselves call `/api/plugin/v1` with their key; see [PLUGINS.md](PLUGINS.md).
+Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (`?refresh=1` skips the cache) lists catalogue plugins with `installed`, `current` and `update`; `POST /admin/plugins/catalog/install` `{catalog, id}` installs or updates one; `POST /admin/plugins/{id}/uninstall` removes one installed that way. Plugins themselves call `/api/plugin/v1` with their key; see [PLUGINS.md](PLUGINS.md).
 
 ## Webhooks
 

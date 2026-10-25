@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 RUN for p in watchlist-rss hue-sync cinemask-upgrades; do \
       mkdir -p /plugins/$p \
       && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/$p/$p ./plugins/$p \
-      && cp plugins/$p/plugin.json /plugins/$p/ || exit 1; \
+      && { echo '{'; echo "  \"version\": \"${VERSION#v}\","; tail -n +2 plugins/$p/plugin.json; } > /plugins/$p/plugin.json || exit 1; \
     done
 
 FROM debian:bookworm-slim

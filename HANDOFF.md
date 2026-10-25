@@ -11,6 +11,13 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 - **Web player:** people icon → start a watch party / invite / copy link / leave. Joining fetches the room first and starts at the room's position (or follows it to what it plays now). Local play/pause/seek (buttons, keys, seek bar, skip intro) are sent; remote ones are applied with a toast ("Sam paused"). Every 5 s a playing viewer more than 3 s off the room jumps back in step. Next episode / playlist item moves everyone (`state: {togetherMove}` on the navigation, announced on arrival). Pre-roll is skipped in watch parties.
 - **Not in the TV app yet.** Tested: API test (access, invites, SSE updates, item change) and two Chromium browsers in one party (pause, seek while paused, the guest pressing play).
 
+## Plugin catalogue (M9)
+
+- **Server** (`plugins/catalog.go`): `Host.Catalogs` reads each catalogue URL (cached 10 min) and marks entries `installed` (in `<data>/plugins`, `Host.InstallDir`) or `bundled`, with `update` when the catalogue's version is newer than the folder's `plugin.json`. `Host.Install` downloads the zip for `GOOS-GOARCH`, requires and checks its SHA-256, unpacks it (no links, nothing outside the folder), checks the `plugin.json` id, then swaps it into `<data>/plugins/<id>` with the plugin stopped and calls `Sync`. `Host.Uninstall` only removes folders in `InstallDir`.
+- **Catalogues:** BingeBandit's own is `releases/latest/download/plugin-catalog.json`, which the release workflow now builds from the plugin zips (and it stamps the tag into each zip's `plugin.json` as `version`; the Docker image does the same for the bundled copies). Until the next release there is none, and the page says so. Admins add others in setting `plugin_catalogs` (one URL per line, validated); installs only come from listed catalogues.
+- **Web:** Admin → Plugins has a Catalogue section (Install / Update to x, Not built for this platform, Catalogues dialog, refresh) and Uninstall on installed rows.
+- **Tested:** host test (install, bad checksum, unsafe zip paths, wrong id, other platform, enable, update while running, uninstall, bundled not uninstallable), API test (admin only, listed catalogues only, address validation, missing official catalogue), the release script's catalogue step on fake zips, and install → turn on → uninstall of Watchlist RSS in Chromium. The workflow itself only runs on a tag, so it hasn't run in CI.
+
 ## Notifications (M3)
 
 - **Table** `notifications` (migration 25): one row per user, with `kind`, `title`, `body`, `link` (a web app path), `image` (poster), `read_at`. Pruned after 60 days. API: `GET /api/notifications`, `POST /api/notifications/read`, `DELETE /api/notifications`.
