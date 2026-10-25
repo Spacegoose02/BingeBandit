@@ -47,7 +47,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Download a backup, and restore from an uploaded file: in Admin → Tasks, or on a new server's first screen instead of creating an admin |
 | ✅ | True adaptive bitrate: an admin setting converts up to three qualities at once (master playlist), and the web and TV players switch between them |
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
-| | Metadata provider choice per show (TheTVDB), credits detection toggle |
+| ✅ | Metadata provider choice per show: TMDB or TheTVDB (aired, DVD or absolute episode order), from Fix match; a per-library switch for intro and credits detection |
 | ✅ | Smart collections by genre, studio, year range or label |
 | ✅ | Tone mapping algorithm choice (Hable, Möbius, Reinhard, clip, linear), GPU decoding, and which GPU to use (render node or NVIDIA GPU number) |
 | ✅ | IMDb, Rotten Tomatoes (critics and audience) and Metacritic scores on movie and show pages, from MDBList or OMDb, refreshed weekly by a task |

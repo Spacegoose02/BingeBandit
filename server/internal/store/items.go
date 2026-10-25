@@ -447,6 +447,24 @@ func (s *Store) SetMatch(id, tmdbID int64) error {
 	return err
 }
 
+// ShowTVDB returns a show's TheTVDB id (0 when it uses TMDB) and episode order.
+func (s *Store) ShowTVDB(id int64) (tvdbID int64, order string, err error) {
+	err = s.db.QueryRow(`SELECT tvdb_id, tvdb_order FROM items WHERE id = ?`, id).Scan(&tvdbID, &order)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return
+}
+
+// SetTVDBMatch points a show at TheTVDB (or back at TMDB with tvdbID 0) and
+// queues it, with its seasons and episodes, for a metadata refresh.
+func (s *Store) SetTVDBMatch(id, tvdbID int64, order string) error {
+	_, err := s.db.Exec(`UPDATE items SET tvdb_id = CASE WHEN id = ?1 THEN ?2 ELSE tvdb_id END,
+		tvdb_order = CASE WHEN id = ?1 THEN ?3 ELSE tvdb_order END, metadata_at = 0, updated_at = ?4
+		WHERE id = ?1 OR show_id = ?1`, id, tvdbID, order, now())
+	return err
+}
+
 // RawArtwork returns the stored (not URL-mapped) image reference, used to
 // clean up uploaded files when they are replaced.
 func (s *Store) RawArtwork(id int64, kind string) (string, error) {
