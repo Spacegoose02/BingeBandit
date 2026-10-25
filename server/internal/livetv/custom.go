@@ -201,7 +201,7 @@ func (r *Relay) pullCustom() error {
 		remaining := float64(it.Stop - now.Unix())
 		r.mu.Lock()
 		r.stream = store.ChannelStream{Name: strings.TrimSpace(it.Title + " " + it.Subtitle), SourceName: "Library"}
-		r.head.Reset()
+		r.resetHead()
 		r.mu.Unlock()
 
 		hw := r.m.hw.pick(r.m.st.Setting(store.SettingHWEncoder))

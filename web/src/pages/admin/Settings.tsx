@@ -256,10 +256,16 @@ export default function AdminSettings() {
               <input type="number" min={3} max={120} value={s.live_stall_seconds ?? '12'} onChange={set('live_stall_seconds')} />
             </label>
           </div>
+          <label className="check">
+            <input type="checkbox" checked={s.live_switch_slow !== 'false'} onChange={set('live_switch_slow')} />
+            Also switch when a stream falls behind (not only when it stops)
+          </label>
           <p className="muted small">
-            A bigger buffer rides out provider hiccups but starts each channel further behind live. When a stream sends nothing, or
-            falls behind real time (so players would be buffering), for the switch time, a channel with fallback streams moves to
-            the next one. Players that buffer that long also ask the server to switch.
+            A bigger buffer rides out provider hiccups but starts each channel further behind live. A channel with fallback streams
+            moves to the next one when its stream sends nothing for the switch time. With the box ticked, it also moves when the
+            stream falls so far behind real time that viewers would have been buffering that long, but it won't go back to a stream
+            it left for that within 10 minutes. Fallback streams are often a few seconds apart, so each switch can repeat or skip a
+            moment; untick it if switches happen more than the buffering did.
           </p>
           <label>
             Proxy for IPTV providers

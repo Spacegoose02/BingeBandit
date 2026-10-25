@@ -256,7 +256,12 @@ func (s *Server) liveHLS(w http.ResponseWriter, r *http.Request) {
 		// ?viewer=) is what keeps the viewer counted as watching.
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "no-cache")
-		io.Copy(w, f)
+		b, err := io.ReadAll(f)
+		if err != nil {
+			writeErr(w, http.StatusServiceUnavailable, err.Error())
+			return
+		}
+		w.Write(s.Live.Playlist(id, b))
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp2t")

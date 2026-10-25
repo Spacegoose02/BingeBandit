@@ -145,7 +145,8 @@ func TestSlowStreamFailsOver(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	if err := st.SetSettings(map[string]string{store.SettingLiveStallSeconds: "3"}); err != nil {
+	// Switch once a player with a 2 s cushion would have buffered for 3 s.
+	if err := st.SetSettings(map[string]string{store.SettingLiveStallSeconds: "3", store.SettingLiveBufferSeconds: "2"}); err != nil {
 		t.Fatal(err)
 	}
 	m := &Manager{st: st, ffmpeg: "ffmpeg", ffprobe: "ffprobe", dataDir: t.TempDir(), relays: map[int64]*Relay{}}
@@ -171,6 +172,56 @@ func TestSlowStreamFailsOver(t *testing.T) {
 	}
 	if s := m.Stats(); len(s) != 1 || !strings.Contains(s[0].LastError, "too slow") {
 		t.Errorf("last error should say the stream was too slow: %+v", s)
+	}
+	// The slow stream is set aside: it's tried last, and the channel won't
+	// leave the good one for it because of slowness.
+	r := m.relay(1)
+	if order := r.passOrder(); order[0].Name != "good" {
+		t.Errorf("the slow stream should be tried last, got %v first", order[0].Name)
+	}
+	r.mu.Lock()
+	leave := r.canLeaveSlow()
+	r.mu.Unlock()
+	if leave {
+		t.Error("would leave the good stream for the one just found too slow")
+	}
+}
+
+func TestSlowSwitchingOff(t *testing.T) {
+	var slowConns, goodConns atomic.Int32
+	slow := pcrServer(0.3, &slowConns)
+	defer slow.Close()
+	good := pcrServer(1, &goodConns)
+	defer good.Close()
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.SetSettings(map[string]string{store.SettingLiveStallSeconds: "3", store.SettingLiveBufferSeconds: "2",
+		store.SettingLiveSwitchSlow: "false"}); err != nil {
+		t.Fatal(err)
+	}
+	m := &Manager{st: st, ffmpeg: "ffmpeg", ffprobe: "ffprobe", dataDir: t.TempDir(), relays: map[int64]*Relay{}}
+	ch := &store.Channel{ID: 1, Number: 5, Name: "Test", Streams: []store.ChannelStream{
+		{StreamID: 1, Name: "slow", SourceID: 1, URL: slow.URL},
+		{StreamID: 2, Name: "good", SourceID: 2, URL: good.URL},
+	}}
+	v, err := m.Join(ch, &store.User{ID: 1, Username: "a"}, "127.0.0.1", "ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Stop(1)
+	go func() {
+		for range v.Chunks() {
+		}
+	}()
+	time.Sleep(10 * time.Second)
+	if goodConns.Load() != 0 {
+		t.Error("switched for slowness with switching on slowness turned off")
+	}
+	if ok, _ := m.ReportBuffering(v.ID, 30); ok {
+		t.Error("a buffering report switched with switching on slowness turned off")
 	}
 }
 
