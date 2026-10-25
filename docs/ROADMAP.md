@@ -120,7 +120,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | A documented public API ([API.md](API.md)) |
 | ✅ | Network settings: public URL, extra LAN networks, trusted reverse proxies, remote access on/off |
 | ✅ | **Profiles** under one account (Netflix / Plex Home style): "Who's watching?" after sign-in on the web and the TV app, separate history, Continue Watching, watchlist and preferences, a PIN per profile, and library limits for kids |
-| | Passkeys |
+| ✅ | Passkeys: add them under Account, sign in without a password or 2FA code (web, on the server's https:// address); admins can remove a user's passkeys |
 | | Plex/Tautulli account linking (with M7 import) |
 
 ## M7: Import ✅ (phases 1–2 done)

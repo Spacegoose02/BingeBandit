@@ -126,6 +126,19 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | PATCH | `/dvr/rules/{id}` | `{keepLast}`; older recordings and their files are deleted right away. |
 | DELETE | `/dvr/recordings/{id}`, `/dvr/rules/{id}` | Cancel or delete. |
 
+### Passkeys
+
+| | | |
+|---|---|---|
+| POST | `/auth/passkey/begin` | No sign-in needed. → `{flow, options}` (WebAuthn request options, base64url). |
+| POST | `/auth/passkey/finish` | `{flow, credential, device}` with the browser's credential as JSON → `{token, user}` like `/auth/login` (no 2FA code asked). |
+| GET | `/me/passkeys` | Your passkeys: `[{id, name, createdAt, lastUsedAt}]`. |
+| POST | `/me/passkeys/begin` | → `{flow, options}` (WebAuthn creation options). |
+| POST | `/me/passkeys` | `{flow, credential, name}` adds the passkey. |
+| PUT / DELETE | `/me/passkeys/{id}` | Rename (`{name}`) or remove. |
+
+Passkeys belong to the address they were added on (the page's host), so add them on the address people sign in with, over https://.
+
 ## Admin
 
 Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editing and matching, users and library access, settings, Live TV sources and channels, tasks, logs, statistics, webhooks and single sign-on. They change often, so read the web app's source (`web/src/pages/admin`) to see how they're used.

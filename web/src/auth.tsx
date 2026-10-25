@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
 import type { User } from './types'
+import { getPasskey, passkeyErrorMessage } from './passkeys'
 import { askForProfile } from './profilePick'
 
 interface AuthState {
@@ -10,6 +11,7 @@ interface AuthState {
   serverName: string
   refresh: () => Promise<void>
   login: (username: string, password: string, code?: string) => Promise<void>
+  loginWithPasskey: () => Promise<boolean>
   /** Signs in with a session the server already set as a cookie (linking with a code). */
   signedIn: (user: User) => void
   setup: (username: string, password: string) => Promise<void>
@@ -48,6 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user)
   }
 
+  /** Signs in with a passkey; false when the person cancelled the browser's prompt. */
+  const loginWithPasskey = async () => {
+    const { flow, options } = await api.post<{ flow: string; options: unknown }>('/api/auth/passkey/begin')
+    let credential
+    try {
+      credential = await getPasskey(options)
+    } catch (err) {
+      const msg = passkeyErrorMessage(err)
+      if (!msg) return false
+      throw new Error(msg)
+    }
+    const res = await api.post<{ user: User }>('/api/auth/passkey/finish', { flow, credential, device: 'Web' })
+    askForProfile()
+    setUser(res.user)
+    return true
+  }
+
   const setup = async (username: string, password: string) => {
     const res = await api.post<{ user: User }>('/api/setup', { username, password, device: 'Web' })
     setNeedsSetup(false)
@@ -60,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ loading, user, needsSetup, serverName, refresh, login, signedIn: setUser, setup, logout }}>
+    <AuthContext.Provider value={{ loading, user, needsSetup, serverName, refresh, login, loginWithPasskey, signedIn: setUser, setup, logout }}>
       {children}
     </AuthContext.Provider>
   )

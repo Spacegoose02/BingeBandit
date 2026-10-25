@@ -24,6 +24,11 @@ export default function AdminUsers() {
     await api.del(`/api/admin/users/${u.id}/passcode`).catch((e) => alert(e.message))
     reload()
   }
+  const removePasskeys = async (u: User) => {
+    if (!confirm(`Remove all of ${u.username}'s passkeys? They sign in with their password until they add new ones.`)) return
+    await api.del(`/api/admin/users/${u.id}/passkeys`).catch((e) => alert(e.message))
+    reload()
+  }
   const reset2FA = async (u: User) => {
     if (!confirm(`Turn off two-step sign-in for ${u.username}? They can sign in with just their password until they set it up again.`)) return
     await api.del(`/api/admin/users/${u.id}/2fa`).catch((e) => alert(e.message))
@@ -70,6 +75,11 @@ export default function AdminUsers() {
             {u.totpEnabled && (
               <button className="btn btn-glass btn-sm" onClick={() => reset2FA(u)} title="For someone who lost their phone and recovery codes">
                 Turn off 2-step
+              </button>
+            )}
+            {!!u.passkeys && (
+              <button className="btn btn-glass btn-sm" onClick={() => removePasskeys(u)} title="For a lost or shared device">
+                Remove {u.passkeys === 1 ? 'passkey' : `${u.passkeys} passkeys`}
               </button>
             )}
             {!u.ownerId && (

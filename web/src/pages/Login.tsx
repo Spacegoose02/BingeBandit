@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../auth'
+import { Icon } from '../components/Icon'
+import { passkeysSupported } from '../passkeys'
 import type { User } from '../types'
 import { AuthFrame } from './Setup'
 
 export default function Login() {
-  const { login, serverName } = useAuth()
+  const { login, loginWithPasskey, serverName } = useAuth()
   const nav = useNavigate()
   const loc = useLocation()
   const [username, setUsername] = useState('')
@@ -38,6 +40,18 @@ export default function Login() {
       } else {
         setError((err as Error).message)
       }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const passkey = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      if (await loginWithPasskey()) nav(next, { replace: true })
+    } catch (err) {
+      setError((err as Error).message)
     } finally {
       setBusy(false)
     }
@@ -90,6 +104,11 @@ export default function Login() {
           </button>
         ) : (
           <>
+            {passkeysSupported() && (
+              <button type="button" className="btn btn-glass btn-block" onClick={passkey} disabled={busy}>
+                <Icon name="key" size={18} /> Sign in with a passkey
+              </button>
+            )}
             <button type="button" className="btn btn-glass btn-block" onClick={() => setWithCode(true)}>
               Sign in with a code instead
             </button>

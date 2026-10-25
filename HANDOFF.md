@@ -2,7 +2,17 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, DVR keep-last-N and conflicts (M4)._
+_Last updated: 2026-10-25, passkeys (M6)._
+
+## Passkeys (M6)
+
+- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 21 on this branch; meant to be 22 after the ratings PR): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
+- **Flows** (`api/passkeys.go`): begin/finish pairs keep the challenge in memory (`passkeyFlows`, 5 min, single use). The RP ID comes from the page's `Origin` only when that is the request's Host or the public URL, else from the request address; a flow begun on one address can't be finished on another.
+- **Sign-in** is discoverable (no username): Login → *Sign in with a passkey*. It skips the 2FA code (the passkey already checks the device and the person) and counts failures in the login rate limiter. Profiles sign in through their account and can't add passkeys.
+- **Account → Passkeys:** add (named), rename, remove; guarded by the settings passcode like other account changes. **Admin → Users:** *Remove passkeys* for a lost device.
+- Browsers only offer passkeys on secure pages: the server's https:// address (or localhost). On plain http:// LAN addresses the button is hidden and the Account section says why.
+- **Tested:** endpoint test (RP ID choice, single-use flows, own-only delete, admin remove) and the full add → sign in → removed-passkey-fails flow in Chromium with a virtual authenticator. **Not tried** with a real phone or password manager.
+- **TV app:** unchanged (signs in by code).
 
 ## DVR keep-last-N and connection-limit conflicts (M4)
 
