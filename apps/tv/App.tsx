@@ -5,6 +5,7 @@ import { ApiError, api, loadSession, saveSession, type Session } from './src/api
 import { backInterceptor, NavContext, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
+import { CollectionScreen } from './src/screens/Library'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import Player from './src/screens/Player'
@@ -113,6 +114,9 @@ export default function App() {
           break
         case 'details':
           screen = <Details key={`d${top.id}`} id={top.id} />
+          break
+        case 'collection':
+          screen = <CollectionScreen key={`c${top.id}`} id={top.id} />
           break
         case 'player':
           screen = <Player key={`p${top.id}-${stack.length}`} id={top.id} start={top.start} />

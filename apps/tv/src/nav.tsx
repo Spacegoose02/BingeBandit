@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react'
 export type Route =
   | { name: 'home' }
   | { name: 'details'; id: number }
+  | { name: 'collection'; id: number }
   | { name: 'player'; id: number; start?: number }
   | { name: 'live'; channelId: number }
 

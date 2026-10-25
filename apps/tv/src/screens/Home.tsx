@@ -4,13 +4,15 @@ import { api, current, image, saveSession } from '../api'
 import { Button, Center, Focusable, PosterCard, Row, WideCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
-import type { HomeData, Item, User } from '../types'
+import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
+import LibraryTab from './Library'
 import LiveGuide from './LiveGuide'
 import Settings from './Settings'
 
-type Tab = 'home' | 'search' | 'live' | 'settings'
-const tabNames: Record<Tab, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings' }
+// Pinned libraries sit between Search and Live TV, as `lib:<id>`.
+type Tab = 'home' | 'search' | 'live' | 'settings' | `lib:${number}`
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings' }
 
 // Survives the remount when Back returns here from the player or details.
 let lastTab: Tab = 'home'
@@ -23,9 +25,16 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     setTabState(t)
   }
   const [update, setUpdate] = useState<AppRelease | null>(null)
+  const [libraries, setLibraries] = useState<Library[]>([])
   // Look for a newer app once per launch; the Settings tab then shows a dot.
   useEffect(() => {
     checkForUpdate().then(setUpdate, () => undefined)
+    api.get<Library[]>('/api/libraries').then((libs) => {
+      const pinned = libs.filter((l) => l.pinned)
+      setLibraries(pinned)
+      // The library this tab showed last time may have been unpinned since.
+      if (lastTab.startsWith('lib:') && !pinned.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
+    }, () => undefined)
   }, [])
   // An admin can turn Live TV off for someone; check on each launch, since
   // the saved sign-in may predate the change.
@@ -39,16 +48,20 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       })
       .catch(() => undefined)
   }, [])
-  const tabs = (Object.keys(tabNames) as Tab[]).filter((t) => t !== 'live' || liveTV).map((t) => {
+  const names: Record<string, string> = { ...fixedNames }
+  for (const l of libraries) names[`lib:${l.id}`] = l.name
+  const order: Tab[] = ['home', 'search', ...libraries.map((l) => `lib:${l.id}` as Tab), ...(liveTV ? (['live'] as Tab[]) : []), 'settings']
+  const library = libraries.find((l) => `lib:${l.id}` === tab)
+  const tabs = order.map((t) => {
     const label = (
-      <Text style={[isPhone ? st.tabText : st.menuText, tab === t && st.menuTextActive]}>
-        {tabNames[t]}
+      <Text style={[isPhone ? st.tabText : st.menuText, tab === t && st.menuTextActive]} numberOfLines={1}>
+        {names[t]}
         {t === 'settings' && update && <Text style={st.dot}> ●</Text>}
       </Text>
     )
     // Phones: a bottom tab bar you tap. TVs: a top menu that switches as focus moves across it.
     return isPhone ? (
-      <Pressable key={t} onPress={() => setTab(t)} style={[st.tab, tab === t && st.tabActive]}>
+      <Pressable key={t} onPress={() => setTab(t)} style={[st.tab, order.length > 5 && st.tabScroll, tab === t && st.tabActive]}>
         {label}
       </Pressable>
     ) : (
@@ -62,10 +75,13 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {!isPhone && (
         <View style={st.menu}>
           <Image source={require('../assets/mascot.png')} style={st.mascot} />
-          {tabs}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.menuItems}>
+            {tabs}
+          </ScrollView>
         </View>
       )}
       {tab === 'home' && <HomeRows />}
+      {library && <LibraryTab key={library.id} library={library} />}
       {tab === 'search' && <Search />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
@@ -80,7 +96,14 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           }}
         />
       )}
-      {isPhone && <View style={st.tabBar}>{tabs}</View>}
+      {isPhone &&
+        (order.length > 5 ? (
+          <View style={st.tabBar}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>{tabs}</ScrollView>
+          </View>
+        ) : (
+          <View style={st.tabBar}>{tabs}</View>
+        ))}
     </View>
   )
 }
@@ -212,12 +235,14 @@ const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   menu: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: gutter, paddingTop: 44, paddingBottom: 8, zIndex: 2 },
   mascot: { width: 76, height: 76, marginRight: 36 },
+  menuItems: { alignItems: 'center' },
   menuItem: { paddingHorizontal: 26, paddingVertical: 10, marginRight: 12 },
   menuText: { color: colors.muted, fontSize: font.heading, fontWeight: '700' },
   menuTextActive: { color: colors.text },
   tabBar: { flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 26, borderTopWidth: 4, borderTopColor: 'transparent' },
   tabActive: { borderTopColor: colors.accent },
+  tabScroll: { flex: 0, paddingHorizontal: 34 },
   tabText: { color: colors.muted, fontSize: font.small, fontWeight: '700' },
   heroImg: { opacity: 0.35 },
   shade: { flex: 1 },
