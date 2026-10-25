@@ -36,6 +36,9 @@ const (
 	hlsMinSegments = 8 // playlist length when time-shift is off
 )
 
+// dvrClient is the viewer address the recorder joins relays with.
+const dvrClient = "dvr"
+
 var (
 	ErrNoStreams = errors.New("this channel has no streams")
 	ErrAllBusy   = errors.New("all of this channel's providers are at their connection limit")
@@ -239,6 +242,42 @@ func (m *Manager) reclaimIdle(sourceID int64, except *Relay) bool {
 	return true
 }
 
+// preemptForRecording stops the relay on the source with the fewest viewers
+// that isn't recording, so a recording can have its connection. It only acts
+// when the admin lets recordings take priority over live viewers.
+func (m *Manager) preemptForRecording(sourceID int64, except *Relay) bool {
+	if m.st.Setting(store.SettingDVRPriority) != "true" || !except.recording() {
+		return false
+	}
+	var victim *Relay
+	fewest := 0
+	for _, r := range m.snapshot() {
+		if r == except || r.stopped.Load() || r.sourceID.Load() != sourceID || r.recording() {
+			continue
+		}
+		r.mu.Lock()
+		n := len(r.viewers)
+		r.mu.Unlock()
+		if victim == nil || n < fewest {
+			victim, fewest = r, n
+		}
+	}
+	if victim == nil {
+		return false
+	}
+	victim.stop(fmt.Sprintf("its connection was needed to record %q", except.channel.Name))
+	sleepCtx(except.ctx, 500*time.Millisecond)
+	return true
+}
+
+// ChannelError is the last upstream error of a channel's relay, or def.
+func (m *Manager) ChannelError(channelID int64, def string) string {
+	if r := m.relay(channelID); r != nil {
+		return r.lastErrorOr(def)
+	}
+	return def
+}
+
 func (m *Manager) janitor() {
 	for range time.Tick(5 * time.Second) {
 		now := time.Now().Unix()
@@ -304,6 +343,18 @@ func (m *Manager) newRelay(ch *store.Channel) *Relay {
 	return &Relay{m: m, channel: ch, ctx: ctx, cancel: cancel, started: time.Now(), viewers: map[string]*Viewer{}, rateAt: time.Now()}
 }
 
+// recording reports whether the DVR is one of the relay's viewers.
+func (r *Relay) recording() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, v := range r.viewers {
+		if v.IP == dvrClient {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Relay) add(v *Viewer) {
 	r.mu.Lock()
 	r.viewers[v.ID] = v
@@ -364,7 +415,8 @@ func (r *Relay) run() {
 			if r.ctx.Err() != nil {
 				return
 			}
-			if s.MaxStreams > 0 && r.m.sourceInUse(s.SourceID, r) >= s.MaxStreams && !r.m.reclaimIdle(s.SourceID, r) {
+			if s.MaxStreams > 0 && r.m.sourceInUse(s.SourceID, r) >= s.MaxStreams &&
+				!r.m.reclaimIdle(s.SourceID, r) && !r.m.preemptForRecording(s.SourceID, r) {
 				busy++
 				continue
 			}

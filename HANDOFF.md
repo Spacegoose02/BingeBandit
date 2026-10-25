@@ -2,7 +2,14 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, Cinemask Upgrades (M9 phase 3)._
+_Last updated: 2026-10-24, DVR keep-last-N and conflicts (M4)._
+
+## DVR keep-last-N and connection-limit conflicts (M4)
+
+- **Keep newest N** per series rule (`recording_rules.keep_last`, migration 20; 0 = keep all). Set from the Recordings page (Series → Keep) or `PATCH /api/dvr/rules/{id}`. `Recorder.Prune` deletes the oldest *completed* recordings beyond N (row and file, then empty Show/Season folders) after each recording completes, when the setting changes, and every 5 minutes with the rules. Files outside the recordings folder (`Recorder.InFolder`) are never deleted, only the row.
+- **Conflicts** (`livetv/conflicts.go`): upcoming recordings are walked in start order and each gets a connection from the first of its channel's providers with one free (same channel shares, custom channels need none). Ones that can't are returned with `conflict` in `/api/dvr` and the schedule response; the Recordings page shows a Conflict pill and the reason, the guide adds it to its note. Live viewers aren't counted.
+- **Recordings come first** (admin setting `dvr_priority`, off by default): when a relay that the DVR is watching finds every provider at its limit, `Manager.preemptForRecording` stops the live-only relay on that provider with the fewest viewers. Relays with a recording are never bumped. Recording failures now say why (the relay's last error, e.g. connection limit), and empty failed files are removed.
+- **Tested:** conflict rules, pruning (outside-folder files kept, keep 0), and preemption on and off against a fake provider. **Not tried** with a real provider.
 
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 

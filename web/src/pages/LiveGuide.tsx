@@ -77,13 +77,13 @@ export default function LiveGuide() {
   const [note, setNote] = useState('')
   const record = async (channel: LiveChannel, program: GuideProgram, series: boolean) => {
     try {
-      const rec = await api.post<{ status: string }>('/api/dvr/recordings', { channelId: channel.id, programId: program.id, series })
+      const rec = await api.post<{ status: string; conflict?: string }>('/api/dvr/recordings', { channelId: channel.id, programId: program.id, series })
       setNote(
-        rec.status === 'pending'
+        (rec.status === 'pending'
           ? 'Sent to an admin for approval.'
           : series
             ? `Recording every “${program.title}”.`
-            : `“${program.title}” will be recorded.`,
+            : `“${program.title}” will be recorded.`) + (rec.conflict ? ` It may not record: ${rec.conflict}.` : ''),
       )
       reload()
     } catch (e) {

@@ -136,6 +136,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if v, ok := in[store.SettingDVRPriority]; ok && v != "true" && v != "false" {
+		writeErr(w, http.StatusBadRequest, "dvr_priority must be true or false")
+		return
+	}
 	if v, ok := in[store.SettingRemoteAccess]; ok && v != "true" && v != "false" {
 		writeErr(w, http.StatusBadRequest, "remote_access must be true or false")
 		return

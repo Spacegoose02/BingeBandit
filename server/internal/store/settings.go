@@ -22,6 +22,7 @@ const (
 	SettingDVRAllowUsers     = "dvr_allow_users"
 	SettingDVRPadBefore      = "dvr_padding_before" // minutes
 	SettingDVRPadAfter       = "dvr_padding_after"  // minutes
+	SettingDVRPriority       = "dvr_priority"       // true: a recording may take a provider connection from live viewers
 	SettingPublicURL         = "public_url"         // how people reach the server from outside, e.g. https://tv.example.com
 	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
 	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
@@ -55,6 +56,7 @@ var SettingDefaults = map[string]string{
 	SettingDVRAllowUsers:     "true",
 	SettingDVRPadBefore:      "1",
 	SettingDVRPadAfter:       "3",
+	SettingDVRPriority:       "false",
 	SettingPublicURL:         "",
 	SettingTrustedProxies:    "",
 	SettingLANNetworks:       "",

@@ -187,6 +187,10 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.dvr_require_approval === 'true'} onChange={set('dvr_require_approval')} />
             Ask an admin to approve users' recordings first
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_priority === 'true'} onChange={set('dvr_priority')} />
+            Recordings come first: when a provider is at its connection limit, stop a live channel someone is watching to record
+          </label>
           <label>
             Recordings folder
             <input className="mono" value={s.dvr_folder ?? ''} onChange={set('dvr_folder')} placeholder="Default: recordings inside the data folder" />
