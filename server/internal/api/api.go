@@ -141,6 +141,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/notifications/read", s.readNotifications)
 			r.Delete("/notifications", s.clearNotifications)
 			r.Get("/me/prefs", s.getPrefs)
+			r.Get("/me/pins", s.pins)
+			r.Put("/me/pins", s.setPins)
 			r.Put("/me/prefs", s.putPrefs)
 			r.Get("/me/history", s.myHistory)
 			r.Post("/link/approve", s.linkApprove)

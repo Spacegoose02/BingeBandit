@@ -208,19 +208,20 @@ func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit in
 	return items, total, err
 }
 
-// RecentlyAdded returns movies by add date, or shows ordered by their newest episode.
+// RecentlyAdded returns movies by add date, or shows ordered by their newest
+// episode, from the libraries the user pinned.
 func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error) {
 	order := "i.added_at DESC"
 	if kind == "show" {
 		order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
 	}
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` ORDER BY `+order+` LIMIT @limit`,
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` ORDER BY `+order+` LIMIT @limit`,
 		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
 }
 
 func (s *Store) RecentlyReleased(uid int64, kind string, limit int) ([]*Item, error) {
 	today := time.Now().Format("2006-01-02")
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND i.release_date != '' AND i.release_date <= @today AND `+visible+`
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND i.release_date != '' AND i.release_date <= @today AND `+visible+` AND `+pinned+`
 		ORDER BY i.release_date DESC LIMIT @limit`,
 		uidArg(uid), sql.Named("kind", kind), sql.Named("today", today), sql.Named("limit", limit))
 }
@@ -232,9 +233,10 @@ func (s *Store) TrailerCandidates(uid, exceptID int64, limit int) ([]*Item, erro
 		ORDER BY i.added_at DESC LIMIT @limit`, uidArg(uid), sql.Named("except", exceptID), sql.Named("limit", limit))
 }
 
-// InProgress is everything the user started and has not finished.
+// InProgress is everything the user started and has not finished, in the
+// libraries they pinned.
 func (s *Store) InProgress(uid int64, limit int) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode') AND `+visible+`
+	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode') AND `+visible+` AND `+pinned+`
 		ORDER BY w.updated_at DESC LIMIT @limit`, uidArg(uid), sql.Named("limit", limit))
 }
 
@@ -250,6 +252,7 @@ func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, err
 	rows, err := s.db.Query(`SELECT e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
 		FROM watch_state w JOIN items e ON e.id = w.item_id
 		WHERE w.user_id = ? AND w.watched = 1 AND e.kind = 'episode'
+			AND NOT EXISTS (SELECT 1 FROM library_pins lp WHERE lp.user_id = w.user_id AND lp.library_id = e.library_id AND lp.pinned = 0)
 		GROUP BY e.show_id ORDER BY MAX(w.updated_at) DESC LIMIT ?`, uid, limit)
 	if err != nil {
 		return nil, err

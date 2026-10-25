@@ -47,6 +47,8 @@ const paths: Record<string, string> = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
   bookmark: 'M6 3h12v18l-6-4.5L6 21z',
+  pin: 'M9 3h6l-1 6 4 4H6l4-4zM12 13v8',
+  grip: 'M5 8h14M5 12h14M5 16h14',
   broadcast: 'M12 12h.01M8.5 15.5a5 5 0 0 1 0-7M15.5 8.5a5 5 0 0 1 0 7M5.6 18.4a9 9 0 0 1 0-12.8M18.4 5.6a9 9 0 0 1 0 12.8',
   list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',

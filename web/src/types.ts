@@ -457,6 +457,7 @@ export interface Library {
   lastScan: number
   itemCount: number
   skipMarkers: boolean // intro and credits detection is off
+  pinned: boolean // in this user's sidebar and on their Home
 }
 
 export interface ItemDetail {

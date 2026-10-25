@@ -615,4 +615,17 @@ CREATE TABLE discover_videos (
 	PRIMARY KEY (source_id, video_id)
 );
 `,
+	// 27: which libraries each user pinned, and in what order (Plex's pinned
+	// sidebar). A library without a row is pinned, so new libraries show up;
+	// pins_chosen is set once the user has been asked.
+	`
+CREATE TABLE library_pins (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+	pinned     INTEGER NOT NULL DEFAULT 1,
+	position   INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (user_id, library_id)
+);
+ALTER TABLE users ADD COLUMN pins_chosen INTEGER NOT NULL DEFAULT 0;
+`,
 }
