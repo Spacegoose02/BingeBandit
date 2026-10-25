@@ -246,8 +246,18 @@ func (s *Server) matchSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	year, _ := strconv.Atoi(q.Get("year"))
-	res, err := s.Metadata.Search(r.Context(), kind, strings.TrimSpace(q.Get("q")), year)
-	if errors.Is(err, metadata.ErrNoKey) {
+	var res []metadata.SearchResult
+	var err error
+	if q.Get("provider") == "tvdb" {
+		if kind != "show" {
+			writeErr(w, http.StatusBadRequest, "TheTVDB is for shows")
+			return
+		}
+		res, err = s.Metadata.SearchTVDB(r.Context(), strings.TrimSpace(q.Get("q")), year)
+	} else {
+		res, err = s.Metadata.Search(r.Context(), kind, strings.TrimSpace(q.Get("q")), year)
+	}
+	if errors.Is(err, metadata.ErrNoKey) || errors.Is(err, metadata.ErrNoTVDBKey) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -268,14 +278,33 @@ func (s *Server) matchItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		TMDBID int64 `json:"tmdbId"`
+		TMDBID    int64  `json:"tmdbId"`
+		TVDBID    int64  `json:"tvdbId"`    // shows: use TheTVDB instead of TMDB
+		TVDBOrder string `json:"tvdbOrder"` // "" (aired) | dvd | absolute
 	}
-	if err := readJSON(r, &req); err != nil || req.TMDBID <= 0 {
-		writeErr(w, http.StatusBadRequest, "tmdbId is required")
+	if err := readJSON(r, &req); err != nil || (req.TMDBID <= 0 && req.TVDBID <= 0) {
+		writeErr(w, http.StatusBadRequest, "tmdbId or tvdbId is required")
 		return
 	}
-	if err := s.Metadata.Match(r.Context(), it.ID, req.TMDBID); err != nil {
-		log.Printf("match %d → %d: %v", it.ID, req.TMDBID, err)
+	var err error
+	if req.TVDBID > 0 {
+		if it.Kind != "show" || !metadata.ValidTVDBOrder(req.TVDBOrder) {
+			writeErr(w, http.StatusBadRequest, "TheTVDB is for shows, in official, dvd or absolute order")
+			return
+		}
+		if req.TVDBOrder == "official" {
+			req.TVDBOrder = ""
+		}
+		err = s.Metadata.MatchTVDB(r.Context(), it.ID, req.TVDBID, req.TVDBOrder)
+	} else {
+		err = s.Metadata.Match(r.Context(), it.ID, req.TMDBID)
+	}
+	if errors.Is(err, metadata.ErrNoKey) || errors.Is(err, metadata.ErrNoTVDBKey) {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err != nil {
+		log.Printf("match %d → tmdb %d / tvdb %d: %v", it.ID, req.TMDBID, req.TVDBID, err)
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
