@@ -523,4 +523,21 @@ ALTER TABLE collections ADD COLUMN year_to INTEGER NOT NULL DEFAULT 0;
 	`
 ALTER TABLE recording_rules ADD COLUMN keep_last INTEGER NOT NULL DEFAULT 0;
 `,
+	// 23: people recommend movies and shows to each other. Only users who
+	// opted in (recommendation_optins) can receive them.
+	`
+CREATE TABLE recommendation_optins (
+	user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE recommendations (
+	from_user  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	to_user    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	note       TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	dismissed  INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (from_user, to_user, item_id)
+);
+CREATE INDEX recommendations_to ON recommendations(to_user, dismissed, created_at);
+`,
 }

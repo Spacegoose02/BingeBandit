@@ -41,6 +41,8 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		}
 		add("watchlist", "On Your Watchlist", toWatch, nil)
 	}
+	recommended, recommendedBy := s.recommendedRow(uid)
+	add("recommended", "Recommended for You", recommended, nil)
 	movies, err := s.Store.RecentlyAdded(uid, "movie", 24)
 	add("recent-movies", "Recently Added Movies", movies, err)
 	shows, err := s.Store.RecentlyAdded(uid, "show", 24)
@@ -57,7 +59,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.SliceStable(hero, func(i, j int) bool { return hero[i].AddedAt > hero[j].AddedAt })
 
-	writeJSON(w, http.StatusOK, map[string]any{"hero": hero, "continueWatching": cw, "rows": rows})
+	writeJSON(w, http.StatusOK, map[string]any{"hero": hero, "continueWatching": cw, "rows": rows, "recommendedBy": recommendedBy})
 }
 
 // continueWatching merges in-progress items with the next episode of shows

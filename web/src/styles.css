@@ -1000,3 +1000,9 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 @media (max-width: 560px) {
   .logo-library { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+.recommended-card { position: relative; }
+.rec-note { font-size: 0.75rem; color: var(--muted, #9aa3ad); margin-top: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
+.rec-dismiss { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 50%; border: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.6); color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.recommended-card:hover .rec-dismiss, .rec-dismiss:focus-visible { opacity: 1; }
+@media (hover: none) { .rec-dismiss { opacity: 1; } }
