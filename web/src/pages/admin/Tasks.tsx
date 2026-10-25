@@ -25,6 +25,16 @@ interface Backup {
   modified: number
 }
 
+// [setting, label, placeholder, full width]
+const remoteFields: [string, string, string, boolean][] = [
+  ['backup_s3_endpoint', 'Endpoint', 'https://s3.us-west-002.backblazeb2.com', true],
+  ['backup_s3_bucket', 'Bucket', 'my-backups', false],
+  ['backup_s3_region', 'Region', 'us-west-002 (blank = us-east-1)', false],
+  ['backup_s3_prefix', 'Folder in the bucket', 'bingebandit', false],
+  ['backup_s3_access_key', 'Access key ID (B2: key ID)', '', false],
+  ['backup_s3_secret_key', 'Secret access key (B2: application key)', '', true],
+]
+
 const intervals: [number, string][] = [
   [1, 'Every hour'],
   [3, 'Every 3 hours'],
@@ -60,10 +70,13 @@ export default function AdminTasks() {
   const { data: settings } = useApi<Record<string, string>>('/api/admin/settings')
   const [win, setWin] = useState({ start: '2', end: '5', dir: '', keep: '7' })
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [remote, setRemote] = useState<Record<string, string>>({})
+  const [testing, setTesting] = useState(false)
 
   useEffect(() => {
-    if (settings)
-      setWin({ start: settings.maintenance_start, end: settings.maintenance_end, dir: settings.backup_dir, keep: settings.backup_keep })
+    if (!settings) return
+    setWin({ start: settings.maintenance_start, end: settings.maintenance_end, dir: settings.backup_dir, keep: settings.backup_keep })
+    setRemote(Object.fromEntries(remoteFields.map(([k]) => [k, settings[k] ?? ''])))
   }, [settings])
 
   const configure = async (t: Task, enabled: boolean, intervalHours: number) => {
@@ -81,11 +94,24 @@ export default function AdminTasks() {
         maintenance_end: win.end,
         backup_dir: win.dir,
         backup_keep: win.keep,
+        ...remote,
       })
       setMsg({ ok: true, text: 'Saved.' })
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message })
     }
+  }
+
+  const testRemote = async () => {
+    setTesting(true)
+    setMsg(null)
+    try {
+      const res = await api.post<{ backups: number }>('/api/admin/backups/remote/test', remote)
+      setMsg({ ok: true, text: `Connected: BingeBandit can upload, list and delete there (${res.backups} backups found). Save to use it.` })
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message })
+    }
+    setTesting(false)
   }
 
   return (
@@ -161,9 +187,34 @@ export default function AdminTasks() {
           </label>
         </div>
         <p className="muted small">Maintenance tasks only start inside the window. Set the same start and end hour to allow any time.</p>
+        <h3>Also upload to cloud storage</h3>
+        <p className="muted small">
+          Any S3-compatible service: Amazon S3, Backblaze B2, Wasabi, Cloudflare R2 or your own MinIO. Each backup is uploaded after it's
+          saved, and the same number of backups is kept there. Leave the endpoint empty to turn this off.
+        </p>
+        <div className="field-grid">
+          {remoteFields.map(([key, label, placeholder, span]) => (
+            <label key={key} className={span ? 'span-2' : undefined}>
+              {label}
+              <input
+                className="mono"
+                type={key === 'backup_s3_secret_key' ? 'password' : 'text'}
+                autoComplete="off"
+                value={remote[key] ?? ''}
+                placeholder={placeholder}
+                onChange={(e) => setRemote({ ...remote, [key]: e.target.value })}
+              />
+            </label>
+          ))}
+        </div>
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
         <div className="actions">
           <button className="btn btn-primary" onClick={saveSettings}>Save</button>
+          {remote.backup_s3_endpoint && (
+            <button className="btn btn-glass" disabled={testing} onClick={testRemote}>
+              {testing ? 'Testing…' : 'Test cloud storage'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -173,7 +224,9 @@ export default function AdminTasks() {
 }
 
 function Restore() {
-  const { data, reload } = useApi<{ dir: string; backups: Backup[] }>('/api/admin/backups')
+  const { data, reload } = useApi<{ dir: string; backups: Backup[]; bucket?: string; remote?: Backup[]; remoteError?: string }>(
+    '/api/admin/backups',
+  )
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
@@ -188,6 +241,21 @@ function Restore() {
         ok: true,
         text: `Restored. The data from before is saved as ${res.previous}. Restart the server so folder watching and Live TV pick up the restored settings.`,
       })
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message })
+    }
+    setBusy('')
+    reload()
+  }
+
+  const restoreRemote = async (b: Backup) => {
+    const when = new Date(b.modified * 1000).toLocaleString()
+    if (!confirm(`Download and restore the cloud backup from ${when}? Users, watch history, settings and edits go back to how they were then. The current database is backed up first.`)) return
+    setBusy('remote:' + b.name)
+    setMsg(null)
+    try {
+      const res = await api.post<{ restored: string; previous: string }>(`/api/admin/backups/remote/${b.name}/restore`)
+      setMsg({ ok: true, text: `Restored ${res.restored}. The data from before is saved as ${res.previous}. Restart the server so folder watching and Live TV pick up the restored settings.` })
     } catch (e) {
       setMsg({ ok: false, text: (e as Error).message })
     }
@@ -257,6 +325,28 @@ function Restore() {
         </div>
       </div>
       {data && <p className="muted small">Backups in <span className="mono">{data.dir}</span></p>}
+      {data?.bucket && (
+        <>
+          <h3>In cloud storage ({data.bucket})</h3>
+          <div className="panel list" style={{ maxWidth: 760 }}>
+            {data.remoteError && <div className="task-row form-error">Couldn't list the bucket: {data.remoteError}</div>}
+            {!data.remoteError && data.remote?.length === 0 && <div className="task-row muted">Nothing uploaded yet.</div>}
+            {data.remote?.map((b) => (
+              <div key={b.name} className="task-row">
+                <div className="grow">
+                  <div className="task-name">{new Date(b.modified * 1000).toLocaleString()}</div>
+                  <div className="muted small">
+                    {b.name} · {formatBytes(b.size)} · {timeAgo(b.modified)}
+                  </div>
+                </div>
+                <button className="btn btn-glass btn-sm danger" disabled={!!busy} onClick={() => restoreRemote(b)}>
+                  <Icon name="refresh" size={14} className={busy === 'remote:' + b.name ? 'spin' : ''} /> Restore
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'} style={{ maxWidth: 760 }}>{msg.text}</div>}
     </>
   )

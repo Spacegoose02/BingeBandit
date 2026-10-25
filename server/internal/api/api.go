@@ -290,6 +290,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/backups/{name}/restore", s.restoreBackup)
 				r.Get("/backups/{name}/download", s.downloadBackup)
 				r.Post("/backups/upload", s.uploadRestore)
+				r.Post("/backups/remote/test", s.testRemoteBackups)
+				r.Post("/backups/remote/{name}/restore", s.restoreRemoteBackup)
 				r.Get("/logs", s.logLines)
 				r.Get("/logs/download", s.downloadLog)
 

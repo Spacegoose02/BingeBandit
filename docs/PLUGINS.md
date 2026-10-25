@@ -19,6 +19,7 @@ The plugins folders are `<data>/plugins` and the bundled folder (`-plugins` / `B
 
 | Plugin | What it does |
 |---|---|
+| **Cinemask Upgrades** (`cinemask-upgrades`) | Lists movies and episodes below the quality you want, judged from the files (resolution, and optionally old codecs, low bitrate, 4K without HDR), on **Admin → Plugins → Upgrades**. For each, [Cinemask](https://github.com/Spacegoose02/cinemask) can search its indexers and grab a better copy, show the releases it found to pick one, move the title to a profile with a higher cutoff, or start monitoring it. **Search all** goes through the list one title at a time. Needs Cinemask's address and an API key with full access from a Cinemask manager or admin. |
 | **Hue Sync** (`hue-sync`) | Philips Hue lights follow the colours on screen. It reads the playing file's picture a little ahead with ffmpeg (4 frames a second, 48×27 pixels) and keeps in step through the `player.*` events. Each light follows a zone (whole screen, left, centre, right, top, bottom). Set up from **Admin → Plugins → Hue Sync setup** (pair the bridge, assign lights); filters for people and devices, brightness, delay and pause/stop behaviour are its settings. Movies and shows only, not Live TV. |
 | **Watchlist RSS** (`watchlist-rss`) | Each person's watchlist as an RSS feed (`feed.xml?token=<API key>`), and RSS feeds people subscribe to whose movies and shows go on their watchlist when they're in the library (matched by TMDB id, or by title and year). Optionally takes finished movies off the watchlist. People open it from **Account → Plugins**. |
 
@@ -116,6 +117,7 @@ Paths under `/bingebandit/` can't be reached through the proxy, and `Set-Cookie`
 | GET | `/items/{id}` | Item, files (with paths and streams) or children. |
 | GET | `/lookup?tmdb=&kind=` or `?title=&year=&kind=` | Movies and shows by TMDB id, or by title (case-insensitive) and year (±1). `kind` is `movie` or `show`. |
 | GET | `/search?q=` | Title search. |
+| GET | `/files?offset=&limit=` | Every movie and episode file with its item (title, year, TMDB id; for episodes the show, its TMDB id, season and episode) and quality (resolution, codec, HDR, bitrate, size), by file id. `{files, total}`; up to 1000 a page. |
 | GET | `/files/{id}/direct` | The file itself, with range requests (for reading the picture or sound). |
 | GET | `/images/tmdb/{file}?w=`, `/images/local/{file}` | Artwork. Items' image URLs start with `/api/images/`; swap that for `/api/plugin/v1/images/`. |
 | GET | `/users/{uid}/items/{id}` | An item with that user's watch state and library access. |

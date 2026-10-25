@@ -1,0 +1,6 @@
+{
+  "id": "cinemask-upgrades",
+  "name": "Cinemask Upgrades",
+  "description": "Finds movies and episodes below the quality you want and searches Cinemask for better copies.",
+  "command": ["cinemask-upgrades"]
+}

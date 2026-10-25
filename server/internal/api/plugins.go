@@ -189,6 +189,7 @@ func (s *Server) pluginAPI(r chi.Router) {
 	r.Get("/items/{id}", s.item)
 	r.Get("/lookup", s.pluginLookup)
 	r.Get("/search", s.search)
+	r.Get("/files", s.pluginFiles)
 	r.Get("/files/{id}/direct", s.directPlay)
 	r.Get("/images/tmdb/{file}", s.tmdbImage)
 	r.Get("/images/local/{file}", s.localImage)
@@ -240,6 +241,22 @@ func (s *Server) pluginLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+// pluginFiles pages through every movie and episode file with its quality.
+func (s *Server) pluginFiles(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	files, total, err := s.Store.FileSummaries(max(offset, 0), limit)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": files, "total": total})
 }
 
 // pluginLog writes a line to the server log, for plugins that run elsewhere.

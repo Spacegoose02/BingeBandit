@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"bingebandit/internal/markers"
 	"bingebandit/internal/media"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/s3"
 	"bingebandit/internal/store"
 )
 
@@ -173,7 +175,15 @@ func (d Deps) backupDatabase(ctx context.Context) (string, error) {
 	if st != nil {
 		size = st.Size()
 	}
-	return fmt.Sprintf("saved %s (%.1f MB), removed %d old", name, float64(size)/(1<<20), removed), nil
+	result := fmt.Sprintf("saved %s (%.1f MB), removed %d old", name, float64(size)/(1<<20), removed)
+	if remote := RemoteBackups(d.Store); remote.Configured() {
+		n, err := UploadBackup(ctx, remote, path, keep)
+		if err != nil {
+			return "", fmt.Errorf("%s; uploading to %s failed: %w", result, remote.Bucket, err)
+		}
+		result += fmt.Sprintf("; uploaded to %s, removed %d old there", remote.Bucket, n)
+	}
+	return result, nil
 }
 
 func (d Deps) refreshRatings(ctx context.Context) (string, error) {
@@ -205,6 +215,49 @@ func (d Deps) refreshRatings(ctx context.Context) (string, error) {
 	}
 	return fmt.Sprintf("%d updated", done), nil
 }
+
+// RemoteBackups is the S3-compatible storage backups are copied to. Check
+// Configured before using it.
+func RemoteBackups(st *store.Store) *s3.Client {
+	return &s3.Client{
+		Endpoint:  strings.TrimSpace(st.Setting(store.SettingBackupS3Endpoint)),
+		Region:    strings.TrimSpace(st.Setting(store.SettingBackupS3Region)),
+		Bucket:    strings.TrimSpace(st.Setting(store.SettingBackupS3Bucket)),
+		Prefix:    strings.TrimSpace(st.Setting(store.SettingBackupS3Prefix)),
+		AccessKey: strings.TrimSpace(st.Setting(store.SettingBackupS3AccessKey)),
+		SecretKey: strings.TrimSpace(st.Setting(store.SettingBackupS3SecretKey)),
+	}
+}
+
+// UploadBackup copies the backup at path to remote, then deletes all but the
+// newest keep backups there. It returns how many it deleted.
+func UploadBackup(ctx context.Context, remote *s3.Client, path string, keep int) (int, error) {
+	if err := remote.Put(ctx, filepath.Base(path), path); err != nil {
+		return 0, err
+	}
+	objs, err := remote.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	var names []string
+	for _, o := range objs {
+		if BackupFileName.MatchString(o.Name) {
+			names = append(names, o.Name) // List sorts by name, which is by time
+		}
+	}
+	removed := 0
+	for len(names) > keep {
+		if err := remote.Delete(ctx, names[0]); err != nil {
+			return removed, err
+		}
+		removed++
+		names = names[1:]
+	}
+	return removed, nil
+}
+
+// BackupFileName matches the names SaveBackup gives backups.
+var BackupFileName = regexp.MustCompile(`^bingebandit-[0-9]{8}-[0-9]{6}\.db$`)
 
 func (d Deps) optimizeDatabase(ctx context.Context) (string, error) {
 	if err := d.Store.Optimize(); err != nil {
