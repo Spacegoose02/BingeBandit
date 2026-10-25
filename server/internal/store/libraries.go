@@ -16,6 +16,8 @@ type Library struct {
 	ItemCount int      `json:"itemCount"`
 	// SkipMarkers turns off intro and credits detection for this library.
 	SkipMarkers bool `json:"skipMarkers"`
+	// Pinned is per user: the library is in their sidebar and feeds Home.
+	Pinned bool `json:"pinned"`
 }
 
 const libraryCols = `l.id, l.name, l.kind, l.paths, l.created_at, l.last_scan,

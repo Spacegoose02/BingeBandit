@@ -131,7 +131,45 @@ func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {
 		}
 		libs = visible
 	}
+	if err := s.Store.PinLibraries(u.ID, libs); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, libs)
+}
+
+// pins says whether the user has picked what to pin yet, so apps can ask
+// once after the first sign-in.
+func (s *Server) pins(w http.ResponseWriter, r *http.Request) {
+	chosen, err := s.Store.PinsChosen(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"chosen": chosen})
+}
+
+// setPins saves the user's sidebar: every library in order, pinned or not.
+func (s *Server) setPins(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Libraries []store.LibraryPin `json:"libraries"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u := currentUser(r)
+	pins := body.Libraries[:0]
+	for _, p := range body.Libraries {
+		if s.Store.CanSeeLibrary(u, p.ID) {
+			pins = append(pins, p)
+		}
+	}
+	if err := s.Store.SetLibraryPins(u.ID, pins); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {

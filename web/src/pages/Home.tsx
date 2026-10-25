@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { PosterCard, WideCard } from '../components/Cards'
 import { Hero } from '../components/Hero'
 import { Icon } from '../components/Icon'
+import { pinsChanged } from '../components/Pins'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { api, img } from '../api'
@@ -71,7 +72,11 @@ function RecommendedRow({ title, items, by }: { title: string; items: Item[]; by
 export default function Home() {
   useDocumentTitle('Home')
   const { user } = useAuth()
-  const { data, loading, error } = useApi<HomeData>('/api/home')
+  const { data, loading, error, reload } = useApi<HomeData>('/api/home')
+  useEffect(() => {
+    window.addEventListener(pinsChanged, reload)
+    return () => window.removeEventListener(pinsChanged, reload)
+  }, [reload])
 
   if (loading) return <div className="page-loading" />
   if (error) return <div className="page"><div className="empty">Could not load home: {error}</div></div>

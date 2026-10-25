@@ -7,18 +7,33 @@ import { Avatar } from './Avatar'
 import { Icon } from './Icon'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
+import { PinsDialog, savePins } from './Pins'
 import { TogetherInvites } from './Together'
 
 export default function Layout() {
   const { user, logout } = useAuth()
   const { data: household } = useApi<Member[]>(user ? '/api/household' : null)
   const displayName = user?.profileName ?? user?.username ?? ''
-  const { data: libraries } = useApi<Library[]>('/api/libraries')
+  const { data: libraries, reload: reloadLibraries, setData: setLibraries } = useApi<Library[]>('/api/libraries')
+  const { data: pins, reload: reloadPins } = useApi<{ chosen: boolean }>(user ? '/api/me/pins' : null)
+  const [editingPins, setEditingPins] = useState(false)
+  const [showMore, setShowMore] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const loc = useLocation()
   const nav = useNavigate()
 
   useEffect(() => setMenuOpen(false), [loc.pathname])
+
+  const unpinned = libraries?.filter((l) => !l.pinned) ?? []
+  const togglePin = (l: Library) => {
+    if (!libraries) return
+    const next = libraries.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    const ordered = [...next.filter((x) => x.pinned), ...next.filter((x) => !x.pinned)]
+    setLibraries(ordered)
+    savePins(ordered).finally(reloadLibraries)
+  }
+  // Ask once, after the first sign-in, which libraries to pin.
+  const askPins = !!pins && !pins.chosen && !!libraries && libraries.length > 1
 
   return (
     <div className="shell">
@@ -56,13 +71,26 @@ export default function Layout() {
             <Icon name="list" />
             <span>Playlists</span>
           </NavLink>
-          {libraries && libraries.length > 0 && <div className="nav-section">Libraries</div>}
-          {libraries?.map((l) => (
-            <NavLink key={l.id} to={`/library/${l.id}`} className="nav-item">
-              <Icon name={l.kind === 'movies' ? 'film' : 'tv'} />
-              <span>{l.name}</span>
-            </NavLink>
+          {libraries && libraries.length > 0 && (
+            <div className="nav-section nav-section-row">
+              <span>Pinned</span>
+              <button className="nav-section-btn" onClick={() => setEditingPins(true)}>
+                Edit
+              </button>
+            </div>
+          )}
+          {libraries?.filter((l) => l.pinned).map((l) => (
+            <LibraryLink key={l.id} library={l} onTogglePin={() => togglePin(l)} />
           ))}
+          {unpinned.length > 0 && (
+            <>
+              <button className="nav-item nav-more" onClick={() => setShowMore((m) => !m)} aria-expanded={showMore}>
+                <Icon name="more" />
+                <span>{showMore ? 'Less' : `More (${unpinned.length})`}</span>
+              </button>
+              {showMore && unpinned.map((l) => <LibraryLink key={l.id} library={l} onTogglePin={() => togglePin(l)} />)}
+            </>
+          )}
           {user?.isAdmin && (
             <>
               <div className="nav-section">Server</div>
@@ -142,6 +170,42 @@ export default function Layout() {
         <Outlet />
       </main>
       <PasscodePrompt />
+      {(editingPins || askPins) && libraries && (
+        <PinsDialog
+          libraries={libraries}
+          first={askPins}
+          onClose={() => {
+            setEditingPins(false)
+            reloadPins()
+          }}
+          onSaved={() => {
+            setEditingPins(false)
+            reloadPins()
+            reloadLibraries()
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+function LibraryLink({ library: l, onTogglePin }: { library: Library; onTogglePin: () => void }) {
+  return (
+    <NavLink to={`/library/${l.id}`} className="nav-item nav-library">
+      <Icon name={l.kind === 'movies' ? 'film' : 'tv'} />
+      <span>{l.name}</span>
+      <button
+        className={`nav-pin ${l.pinned ? 'on' : ''}`}
+        title={l.pinned ? 'Unpin' : 'Pin'}
+        aria-label={l.pinned ? `Unpin ${l.name}` : `Pin ${l.name}`}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onTogglePin()
+        }}
+      >
+        <Icon name="pin" size={14} />
+      </button>
+    </NavLink>
   )
 }
