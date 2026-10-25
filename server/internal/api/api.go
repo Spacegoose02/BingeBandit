@@ -60,6 +60,7 @@ type Server struct {
 	links       *linkManager
 	oidc        *oidcFlows
 	passkeys    passkeyFlows
+	together    togetherRooms
 	netp        netHolder
 	unlocks     unlocks
 	restoreMu   sync.Mutex // one restore at a time
@@ -125,6 +126,14 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/me/recommendations", s.getRecommendOptIn)
 			r.Put("/me/recommendations", s.setRecommendOptIn)
 			r.Get("/items/{id}/recommend", s.recommendRecipients)
+			r.Post("/together", s.startTogether)
+			r.Get("/together/invites", s.myTogetherInvites)
+			r.Get("/together/{id}", s.getTogether)
+			r.Post("/together/{id}/state", s.updateTogether)
+			r.Get("/together/{id}/events", s.togetherEvents)
+			r.Get("/together/{id}/people", s.togetherPeople)
+			r.Post("/together/{id}/invite", s.inviteTogether)
+			r.Delete("/together/{id}/invite", s.declineTogether)
 			r.Post("/items/{id}/recommend", s.recommend)
 			r.Delete("/recommendations/{id}", s.dismissRecommendation)
 			r.Get("/me/prefs", s.getPrefs)

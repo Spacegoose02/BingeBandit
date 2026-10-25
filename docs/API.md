@@ -132,6 +132,19 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | PATCH | `/dvr/rules/{id}` | `{keepLast}`; older recordings and their files are deleted right away. |
 | DELETE | `/dvr/recordings/{id}`, `/dvr/rules/{id}` | Cancel or delete. |
 
+### Watch Together
+
+| | | |
+|---|---|---|
+| POST | `/together` | `{itemId, position, paused}` starts a room → `{id, host, state, members, now}`. |
+| GET | `/together/{id}` | The room (404 once it has ended, or when you can't see what it plays). |
+| GET | `/together/{id}/events` | Server-sent events: the room as above after every change and join or leave. |
+| POST | `/together/{id}/state` | `{paused, position, itemId?}` play, pause, seek or move everyone to another movie or episode. |
+| GET / POST | `/together/{id}/people`, `/together/{id}/invite` | Who can be invited (people who accept recommendations and can see it); `{userIds}` invites them. |
+| GET | `/together/invites` | Your open invitations. `DELETE /together/{id}/invite` declines one. |
+
+`state.position` is seconds at `state.at` (server ms); while playing, add the time since, using `now` to correct for clock differences.
+
 ### Passkeys
 
 | | | |

@@ -2,7 +2,14 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, passkeys (M6)._
+_Last updated: 2026-10-25, Watch Together (M3)._
+
+## Watch Together (M3)
+
+- **Server** (`api/together.go`): rooms live in memory (`togetherRooms`), keyed by a random id that doubles as the invite link (`/play/<item>?together=<id>`). State is item, paused, position at a server time, a revision and who changed it. Every change and every join/leave is pushed to everyone over SSE (`/together/{id}/events`, 20 s keep-alive, `X-Accel-Buffering: no`). Anyone in the room can control it. Rooms with nobody connected for 10 minutes are dropped; invites expire after 6 hours. Only people who can see what is playing can open a room.
+- **Invites:** to people who accept recommendations (the opt-in from the recommendations feature) and can see the item; they get a banner at the top of every page (`TogetherInvites`, polls every 20 s) with Join / Not now. Anyone else can be sent the link.
+- **Web player:** people icon → start a watch party / invite / copy link / leave. Joining fetches the room first and starts at the room's position (or follows it to what it plays now). Local play/pause/seek (buttons, keys, seek bar, skip intro) are sent; remote ones are applied with a toast ("Sam paused"). Every 5 s a playing viewer more than 3 s off the room jumps back in step. Next episode / playlist item moves everyone (`state: {togetherMove}` on the navigation, announced on arrival). Pre-roll is skipped in watch parties.
+- **Not in the TV app yet.** Tested: API test (access, invites, SSE updates, item change) and two Chromium browsers in one party (pause, seek while paused, the guest pressing play).
 
 ## Passkeys (M6)
 
