@@ -651,4 +651,8 @@ CREATE TABLE library_rows (
 	PRIMARY KEY (library_id, row_key)
 );
 `,
+	// 31: how a library's Library tab shows collections (Plex's setting):
+	// show (collections and their items), hide (items only) or collapse
+	// (collections instead of the items in them).
+	`ALTER TABLE libraries ADD COLUMN collection_mode TEXT NOT NULL DEFAULT 'show';`,
 }

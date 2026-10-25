@@ -199,13 +199,40 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	items, total, err := s.Store.LibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit)
+	// The first page also carries the library's collections, unless the
+	// library hides them; "collapse" shows them instead of their titles.
+	var cols []*store.Collection
+	var hide []int64
+	if lib.CollectionMode != "hide" && (offset == 0 || lib.CollectionMode == "collapse") {
+		if cols, err = s.Store.LibraryCollections(id); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		shown := cols[:0]
+		for _, c := range cols {
+			if c.ItemCount > 0 {
+				shown = append(shown, c)
+			}
+		}
+		cols = shown
+		if lib.CollectionMode == "collapse" {
+			if hide, err = s.Store.CollectedItems(id); err != nil {
+				writeStoreErr(w, err)
+				return
+			}
+		}
+	}
+	items, total, err := s.Store.LibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit, hide)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
 	}
 	lib.Paths = nil
-	writeJSON(w, http.StatusOK, map[string]any{"library": lib, "items": items, "total": total})
+	resp := map[string]any{"library": lib, "items": items, "total": total}
+	if offset == 0 && cols != nil {
+		resp["collections"] = cols
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) item(w http.ResponseWriter, r *http.Request) {

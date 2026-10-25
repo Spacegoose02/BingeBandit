@@ -180,6 +180,20 @@ func (r *Runner) run(ctx context.Context, src Source, opt Options) error {
 		r.update(func(s *Status) { s.Phase, s.Done, s.Total = phase, done, total })
 	}
 
+	// Collections first: they're quick, and a long history import that
+	// fails part way shouldn't take them with it.
+	if opt.Collections {
+		progress("Collections", 0, 0)
+		err := src.Collections(ctx, func(c Collection) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return r.applyCollection(m, c, opt)
+		})
+		if err != nil {
+			return err
+		}
+	}
 	if opt.History || opt.Watched {
 		err := src.Records(ctx, opt.Watched, func(rec Record) error {
 			if ctx.Err() != nil {
@@ -190,18 +204,6 @@ func (r *Runner) run(ctx context.Context, src Source, opt Options) error {
 			}
 			return r.apply(m, &rec, opt)
 		}, progress)
-		if err != nil {
-			return err
-		}
-	}
-	if opt.Collections {
-		progress("Collections", 0, 0)
-		err := src.Collections(ctx, func(c Collection) error {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			return r.applyCollection(m, c, opt)
-		})
 		if err != nil {
 			return err
 		}

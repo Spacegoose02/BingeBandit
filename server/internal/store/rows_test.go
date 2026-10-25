@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestLibraryRows(t *testing.T) {
 	s := openTest(t)
@@ -55,5 +58,46 @@ func TestLibraryRows(t *testing.T) {
 		if _, err := s.RowItems(0, []int64{lib.ID}, "movies", key, "Animation", 10); err != nil {
 			t.Errorf("%s: %v", key, err)
 		}
+	}
+}
+
+// LibraryCollections counts members in Go; it must agree with the SQL rules.
+func TestLibraryCollectionsMatchSQL(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	for i := 0; i < 60; i++ {
+		id := addMovie(t, s, lib.ID, fmt.Sprint("m", i))
+		s.db.Exec(`UPDATE items SET genres = ?, labels = ?, studio = ?, year = ?, poster = ?, release_date = ? WHERE id = ?`,
+			fmt.Sprintf(`["%s"]`, []string{"Drama", "comedy", "Action"}[i%3]), fmt.Sprintf(`["L%d"]`, i%4),
+			[]string{"Pixar", "pixar", "A24"}[i%3], 1990+i%30, fmt.Sprintf("tmdb:/p%d.jpg", i), fmt.Sprintf("%d-01-01", 1990+i%30), id)
+		if i%7 == 0 {
+			s.SetItemCollections(id, lib.ID, []string{"Picks"})
+		}
+	}
+	for _, r := range []SmartRules{{LabelRule: "l1"}, {GenreRule: "Comedy"}, {StudioRule: "PIXAR", YearFrom: 2000}, {YearTo: 1995}, {GenreRule: "Drama", LabelRule: "L0"}} {
+		if _, err := s.CreateCollection(lib.ID, fmt.Sprintf("%+v", r), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cols, err := s.LibraryCollections(lib.ID)
+	if err != nil || len(cols) != 6 {
+		t.Fatalf("%d collections, %v", len(cols), err)
+	}
+	for _, c := range cols {
+		want, _ := s.Collection(c.ID)
+		// Posters can differ between members released the same day, so only check one is picked.
+		if c.ItemCount != want.ItemCount || c.ItemCount == 0 || c.Poster == "" {
+			t.Errorf("%s: count %d poster %q, SQL says %d", c.Name, c.ItemCount, c.Poster, want.ItemCount)
+		}
+	}
+	// "Hide items which are in collections" drops every collected title.
+	in, err := s.CollectedItems(lib.ID)
+	if err != nil || len(in) == 0 {
+		t.Fatalf("collected %d, %v", len(in), err)
+	}
+	_, total, err := s.LibraryItems(0, lib.ID, "title", 0, 100, in)
+	if err != nil || total != 60-len(in) {
+		t.Errorf("with collected titles hidden: %d of 60, want %d (%v)", total, 60-len(in), err)
 	}
 }

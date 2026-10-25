@@ -15,7 +15,7 @@ import (
 // importReq says where to import from. Credentials are used for this import
 // only and never stored.
 type importReq struct {
-	Source string `json:"source"` // plex | tautulli | tautulli-db
+	Source string `json:"source"` // plex | tautulli | tautulli-db | cinemask
 	URL    string `json:"url"`
 	Token  string `json:"token"` // Plex token or Tautulli API key
 	Path   string `json:"path"`  // tautulli.db on this server
@@ -45,6 +45,12 @@ func (q importReq) build() (importer.Source, error) {
 			return nil, err
 		}
 		return importer.NewTautulliAPI(u, strings.TrimSpace(q.Token)), nil
+	case "cinemask":
+		u, err := needURL()
+		if err != nil {
+			return nil, err
+		}
+		return importer.NewCinemask(u, strings.TrimSpace(q.Token)), nil
 	case "tautulli-db":
 		if strings.TrimSpace(q.Path) == "" {
 			return nil, errors.New("enter the path to tautulli.db on this server")
@@ -91,7 +97,7 @@ func (s *Server) importConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, row{u, sug})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex", "watchedState": req.Source == "plex"})
+	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex" || req.Source == "cinemask", "watchedState": req.Source == "plex"})
 }
 
 func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {

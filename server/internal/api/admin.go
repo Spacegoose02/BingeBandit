@@ -247,6 +247,8 @@ type libraryReq struct {
 	Kind        string   `json:"kind"`
 	Paths       []string `json:"paths"`
 	SkipMarkers *bool    `json:"skipMarkers"` // left out: unchanged on an edit
+	// CollectionMode: show | hide | collapse; empty leaves it unchanged.
+	CollectionMode string `json:"collectionMode"`
 }
 
 func (l *libraryReq) validate() error {
@@ -263,6 +265,11 @@ func (l *libraryReq) validate() error {
 			return errors.New("folder not found: " + p)
 		}
 		l.Paths[i] = p
+	}
+	switch l.CollectionMode {
+	case "", "show", "hide", "collapse":
+	default:
+		return errors.New("collections must be show, hide or collapse")
 	}
 	return nil
 }
@@ -281,7 +288,7 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	lib := &store.Library{Name: req.Name, Kind: req.Kind, Paths: req.Paths, SkipMarkers: req.SkipMarkers != nil && *req.SkipMarkers}
+	lib := &store.Library{Name: req.Name, Kind: req.Kind, Paths: req.Paths, SkipMarkers: req.SkipMarkers != nil && *req.SkipMarkers, CollectionMode: req.CollectionMode}
 	if err := s.Store.CreateLibrary(lib); err != nil {
 		writeStoreErr(w, err)
 		return
@@ -313,6 +320,9 @@ func (s *Server) updateLibrary(w http.ResponseWriter, r *http.Request) {
 	lib.Name, lib.Paths = req.Name, req.Paths
 	if req.SkipMarkers != nil {
 		lib.SkipMarkers = *req.SkipMarkers
+	}
+	if req.CollectionMode != "" {
+		lib.CollectionMode = req.CollectionMode
 	}
 	if err := s.Store.UpdateLibrary(lib); err != nil {
 		writeStoreErr(w, err)

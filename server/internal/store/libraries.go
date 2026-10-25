@@ -16,17 +16,20 @@ type Library struct {
 	ItemCount int      `json:"itemCount"`
 	// SkipMarkers turns off intro and credits detection for this library.
 	SkipMarkers bool `json:"skipMarkers"`
+	// CollectionMode is how the Library tab shows collections: "show" them
+	// alongside all titles, "hide" them, or "collapse" titles into them.
+	CollectionMode string `json:"collectionMode"`
 	// Pinned is per user: the library is in their sidebar and feeds Home.
 	Pinned bool `json:"pinned"`
 }
 
 const libraryCols = `l.id, l.name, l.kind, l.paths, l.created_at, l.last_scan,
-	(SELECT COUNT(*) FROM items i WHERE i.library_id = l.id AND i.kind IN ('movie','show')), l.skip_markers`
+	(SELECT COUNT(*) FROM items i WHERE i.library_id = l.id AND i.kind IN ('movie','show')), l.skip_markers, l.collection_mode`
 
 func scanLibrary(r interface{ Scan(...any) error }) (*Library, error) {
 	var l Library
 	var paths string
-	if err := r.Scan(&l.ID, &l.Name, &l.Kind, &paths, &l.CreatedAt, &l.LastScan, &l.ItemCount, &l.SkipMarkers); err != nil {
+	if err := r.Scan(&l.ID, &l.Name, &l.Kind, &paths, &l.CreatedAt, &l.LastScan, &l.ItemCount, &l.SkipMarkers, &l.CollectionMode); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -63,8 +66,11 @@ func (s *Store) Library(id int64) (*Library, error) {
 func (s *Store) CreateLibrary(l *Library) error {
 	paths, _ := json.Marshal(l.Paths)
 	l.CreatedAt = now()
-	res, err := s.db.Exec(`INSERT INTO libraries (name, kind, paths, created_at, skip_markers) VALUES (?, ?, ?, ?, ?)`,
-		l.Name, l.Kind, string(paths), l.CreatedAt, l.SkipMarkers)
+	if l.CollectionMode == "" {
+		l.CollectionMode = "show"
+	}
+	res, err := s.db.Exec(`INSERT INTO libraries (name, kind, paths, created_at, skip_markers, collection_mode) VALUES (?, ?, ?, ?, ?, ?)`,
+		l.Name, l.Kind, string(paths), l.CreatedAt, l.SkipMarkers, l.CollectionMode)
 	if err != nil {
 		return err
 	}
@@ -74,7 +80,8 @@ func (s *Store) CreateLibrary(l *Library) error {
 
 func (s *Store) UpdateLibrary(l *Library) error {
 	paths, _ := json.Marshal(l.Paths)
-	_, err := s.db.Exec(`UPDATE libraries SET name = ?, paths = ?, skip_markers = ? WHERE id = ?`, l.Name, string(paths), l.SkipMarkers, l.ID)
+	_, err := s.db.Exec(`UPDATE libraries SET name = ?, paths = ?, skip_markers = ?, collection_mode = ? WHERE id = ?`,
+		l.Name, string(paths), l.SkipMarkers, l.CollectionMode, l.ID)
 	return err
 }
 

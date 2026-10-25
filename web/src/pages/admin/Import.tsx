@@ -3,7 +3,7 @@ import { api } from '../../api'
 import { useApi, useDocumentTitle } from '../../hooks'
 import type { User } from '../../types'
 
-type Source = 'plex' | 'tautulli' | 'tautulli-db'
+type Source = 'plex' | 'tautulli' | 'tautulli-db' | 'cinemask'
 
 interface SourceUser {
   name: string
@@ -34,7 +34,7 @@ interface ImportStatus {
   error?: string
 }
 
-const sourceNames: Record<Source, string> = { plex: 'Plex', tautulli: 'Tautulli', 'tautulli-db': 'Tautulli database file' }
+const sourceNames: Record<Source, string> = { plex: 'Plex', tautulli: 'Tautulli', 'tautulli-db': 'Tautulli database file', cinemask: 'Cinemask collections' }
 
 export default function AdminImport() {
   useDocumentTitle('Import')
@@ -94,8 +94,8 @@ export default function AdminImport() {
     try {
       const s = await api.post<ImportStatus>('/api/admin/import/start', {
         ...body(),
-        history: opts.history,
-        watched: opts.watched,
+        history: opts.history && !collectionsOnly,
+        watched: opts.watched && !collectionsOnly,
         collections: opts.collections && !!connected?.collections,
         dryRun,
         users: map,
@@ -118,6 +118,8 @@ export default function AdminImport() {
     setError('')
   }
   const mapped = Object.values(map).filter((v) => v !== 0).length
+  // Cinemask only has collections: no users to map, no history.
+  const collectionsOnly = source === 'cinemask'
   const running = !!status?.running
 
   return (
@@ -125,7 +127,7 @@ export default function AdminImport() {
       <header className="page-head">
         <div>
           <h1>Import</h1>
-          <div className="muted">Bring watch history, watched marks and collections over from Plex or Tautulli.</div>
+          <div className="muted">Bring watch history, watched marks and collections over from Plex or Tautulli, or collections from Cinemask.</div>
         </div>
       </header>
 
@@ -154,18 +156,18 @@ export default function AdminImport() {
         ) : (
           <>
             <label>
-              {source === 'plex' ? 'Plex server address' : 'Tautulli address'}
+              {{ plex: 'Plex server address', cinemask: 'Cinemask address' }[source as string] ?? 'Tautulli address'}
               <input
                 className="mono"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 required
-                placeholder={source === 'plex' ? 'http://192.168.1.10:32400' : 'http://192.168.1.10:8181'}
+                placeholder={{ plex: 'http://192.168.1.10:32400', cinemask: 'http://192.168.1.10:3000' }[source as string] ?? 'http://192.168.1.10:8181'}
                 spellCheck={false}
               />
             </label>
             <label>
-              {source === 'plex' ? 'Plex token' : 'Tautulli API key'}
+              {{ plex: 'Plex token', cinemask: 'Cinemask API key' }[source as string] ?? 'Tautulli API key'}
               <input className="mono" type="password" value={token} onChange={(e) => setToken(e.target.value)} required autoComplete="off" />
             </label>
             <p className="muted small">
@@ -173,6 +175,11 @@ export default function AdminImport() {
                 <>
                   Sign in to Plex Web as the server owner, open any movie, choose ⋯ → Get Info → View XML, and copy the{' '}
                   <code>X-Plex-Token=</code> value from the address bar. It's only used for this import and not saved.
+                </>
+              ) : source === 'cinemask' ? (
+                <>
+                  In Cinemask: your profile → API keys → New key. Collections are matched by TMDB id, so every title in your libraries is found. The key is
+                  only used for this import and not saved.
                 </>
               ) : (
                 <>In Tautulli: Settings → Web Interface → API. Turn the API on and copy the key. It's only used for this import and not saved.</>
@@ -188,47 +195,55 @@ export default function AdminImport() {
 
       {connected && (
         <div className="panel form">
-          <h3>2. Whose history goes where</h3>
-          {connected.users.length === 0 ? (
-            <p className="muted">No users with history were found.</p>
-          ) : (
-            <div className="list">
-              {connected.users.map((u) => (
-                <div key={u.name} className="list-row">
-                  <div className="grow">
-                    <div>{u.name}</div>
-                    {u.plays !== undefined && <div className="muted small">{u.plays} plays</div>}
-                  </div>
-                  <select
-                    value={map[u.name] ?? 0}
-                    onChange={(e) => setMap({ ...map, [u.name]: Number(e.target.value) })}
-                    aria-label={`BingeBandit user for ${u.name}`}
-                    style={{ width: 'auto', minWidth: 220 }}
-                  >
-                    <option value={0}>Skip</option>
-                    <option value={-1}>Create a new user</option>
-                    {users?.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.username}
-                      </option>
-                    ))}
-                  </select>
+          {!collectionsOnly && (
+            <>
+              <h3>2. Whose history goes where</h3>
+              {connected.users.length === 0 ? (
+                <p className="muted">No users with history were found.</p>
+              ) : (
+                <div className="list">
+                  {connected.users.map((u) => (
+                    <div key={u.name} className="list-row">
+                      <div className="grow">
+                        <div>{u.name}</div>
+                        {u.plays !== undefined && <div className="muted small">{u.plays} plays</div>}
+                      </div>
+                      <select
+                        value={map[u.name] ?? 0}
+                        onChange={(e) => setMap({ ...map, [u.name]: Number(e.target.value) })}
+                        aria-label={`BingeBandit user for ${u.name}`}
+                        style={{ width: 'auto', minWidth: 220 }}
+                      >
+                        <option value={0}>Skip</option>
+                        <option value={-1}>Create a new user</option>
+                        {users?.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.username}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+              <p className="muted small">
+                New users get no password: link a TV for them under Link a device, or set a password under Users.
+              </p>
+            </>
           )}
-          <p className="muted small">
-            New users get no password: link a TV for them under Link a device, or set a password under Users.
-          </p>
-          <h3>3. What to bring over</h3>
-          <label className="check">
-            <input type="checkbox" checked={opts.history} onChange={(e) => setOpts({ ...opts, history: e.target.checked })} />
-            Watch history (shows in profiles, statistics and history)
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={opts.watched} onChange={(e) => setOpts({ ...opts, watched: e.target.checked })} />
-            Watched marks{connected.watchedState && ' and resume points (Plex reports these for the server owner only)'}
-          </label>
+          <h3>{collectionsOnly ? '2.' : '3.'} What to bring over</h3>
+          {!collectionsOnly && (
+            <>
+              <label className="check">
+                <input type="checkbox" checked={opts.history} onChange={(e) => setOpts({ ...opts, history: e.target.checked })} />
+                Watch history (shows in profiles, statistics and history)
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={opts.watched} onChange={(e) => setOpts({ ...opts, watched: e.target.checked })} />
+                Watched marks{connected.watchedState && ' and resume points (Plex reports these for the server owner only)'}
+              </label>
+            </>
+          )}
           {connected.collections && (
             <label className="check">
               <input type="checkbox" checked={opts.collections} onChange={(e) => setOpts({ ...opts, collections: e.target.checked })} />
@@ -244,7 +259,7 @@ export default function AdminImport() {
             <button type="button" className="btn btn-glass" disabled={running} onClick={() => start(true)}>
               Preview
             </button>
-            <button type="button" className="btn btn-primary" disabled={running || mapped === 0} onClick={() => start(false)}>
+            <button type="button" className="btn btn-primary" disabled={running || (mapped === 0 && !(opts.collections && connected.collections))} onClick={() => start(false)}>
               Import
             </button>
           </div>

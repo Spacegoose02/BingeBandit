@@ -65,7 +65,9 @@ func RowTitle(key, libraryKind string) string {
 // then any built-in rows and collections they never placed, with defaults.
 // Collections start hidden everywhere until an admin turns them on.
 func (s *Store) LibraryRows(lib *Library) ([]LibraryRow, error) {
-	cols, err := s.LibraryCollections(lib.ID)
+	// Only names: counting every collection's members is slow on big
+	// libraries, and Home builds these rows for every pinned library.
+	cols, err := s.collectionNames(lib.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +82,8 @@ func (s *Store) LibraryRows(lib *Library) ([]LibraryRow, error) {
 		order = append(order, r.Key)
 	}
 	for _, c := range cols {
-		k := CollectionRowKey(c.ID)
-		all[k] = LibraryRow{Key: k, Title: c.Name, CollectionID: c.ID}
+		k := CollectionRowKey(c.id)
+		all[k] = LibraryRow{Key: k, Title: c.name, CollectionID: c.id}
 		order = append(order, k)
 	}
 
@@ -235,6 +237,28 @@ func (s *Store) TopGenres(libs []int64, n int) ([]string, error) {
 			return nil, err
 		}
 		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+type collectionName struct {
+	id   int64
+	name string
+}
+
+func (s *Store) collectionNames(libraryID int64) ([]collectionName, error) {
+	rows, err := s.db.Query(`SELECT id, name FROM collections WHERE library_id = ? ORDER BY name COLLATE NOCASE`, libraryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []collectionName
+	for rows.Next() {
+		var c collectionName
+		if err := rows.Scan(&c.id, &c.name); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
 	}
 	return out, rows.Err()
 }

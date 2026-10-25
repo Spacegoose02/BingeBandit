@@ -4,7 +4,7 @@ import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { timeAgo } from '../../format'
-import type { Library, ScanStatus } from '../../types'
+import type { CollectionMode, Library, ScanStatus } from '../../types'
 import { ScanBadge } from './Dashboard'
 
 export default function AdminLibraries() {
@@ -100,13 +100,14 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
   const [paths, setPaths] = useState<string[]>(library?.paths ?? [])
   const [picking, setPicking] = useState(paths.length === 0)
   const [detect, setDetect] = useState(!library?.skipMarkers)
+  const [collectionMode, setCollectionMode] = useState<CollectionMode>(library?.collectionMode ?? 'show')
   const [error, setError] = useState('')
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     try {
-      const body = { name, kind, paths, skipMarkers: !detect }
+      const body = { name, kind, paths, skipMarkers: !detect, collectionMode }
       if (library) await api.put(`/api/admin/libraries/${library.id}`, body)
       else await api.post('/api/admin/libraries', body)
       onSaved()
@@ -165,6 +166,14 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
         <label className="check">
           <input type="checkbox" checked={detect} onChange={(e) => setDetect(e.target.checked)} />
           {kind === 'movies' ? 'Detect end credits (for the Skip Credits button)' : 'Detect intros and end credits (for the Skip buttons)'}
+        </label>
+        <label>
+          Collections on the Library tab
+          <select value={collectionMode} onChange={(e) => setCollectionMode(e.target.value as CollectionMode)}>
+            <option value="show">Show collections and their items</option>
+            <option value="hide">Hide collections but show their items</option>
+            <option value="collapse">Hide items which are in collections</option>
+          </select>
         </label>
         {error && <div className="form-error">{error}</div>}
         <div className="actions end">

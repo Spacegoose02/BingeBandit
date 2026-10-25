@@ -192,18 +192,25 @@ var librarySorts = map[string]string{
 	"rating":  "i.rating DESC",
 }
 
-func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit int) ([]*Item, int, error) {
+// LibraryItems pages through a library's movies or shows, leaving out the
+// ids in hide (items shown through their collection instead).
+func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit int, hide []int64) ([]*Item, int, error) {
 	order, ok := librarySorts[sort]
 	if !ok {
 		order = librarySorts["title"]
 	}
+	if hide == nil {
+		hide = []int64{}
+	}
+	hidden, _ := json.Marshal(hide)
+	where := `i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide))`
+	args := []any{uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden)), sql.Named("limit", limit), sql.Named("offset", offset)}
 	var total int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM items WHERE library_id = ? AND kind IN ('movie','show')`, libraryID).Scan(&total); err != nil {
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM items i WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	items, err := s.queryItems(itemSelect+` WHERE i.library_id = @lib AND i.kind IN ('movie','show') AND `+visible+`
-		ORDER BY `+order+` LIMIT @limit OFFSET @offset`,
-		uidArg(uid), sql.Named("lib", libraryID), sql.Named("limit", limit), sql.Named("offset", offset))
+	items, err := s.queryItems(itemSelect+` WHERE `+where+` AND `+visible+`
+		ORDER BY `+order+` LIMIT @limit OFFSET @offset`, args...)
 	return items, total, err
 }
 

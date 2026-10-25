@@ -78,15 +78,18 @@ function Recommended({ library }: { library: Library }) {
 function AllTitles({ library }: { library: Library }) {
   const nav = useNav()
   const [items, setItems] = useState<Item[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
   const [total, setTotal] = useState(-1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const more = useCallback(
     (offset: number) => {
       setBusy(true)
-      api.get<{ items: Item[]; total: number }>(`/api/libraries/${library.id}/items?sort=title&offset=${offset}&limit=${PAGE}`).then(
+      api.get<{ items: Item[]; total: number; collections?: Collection[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${offset}&limit=${PAGE}`).then(
         (p) => {
           setItems((cur) => (offset === 0 ? p.items : [...cur, ...p.items]))
+          // The server sends collections unless the library hides them; they go first.
+          if (offset === 0) setCollections(p.collections ?? [])
           setTotal(p.total)
           setBusy(false)
         },
@@ -101,9 +104,12 @@ function AllTitles({ library }: { library: Library }) {
   useEffect(() => more(0), [more])
   if (error) return <Problem error={error} retry={() => more(items.length)} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
-  if (total === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
+  if (total === 0 && collections.length === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
   return (
     <ScrollView style={st.flex} contentContainerStyle={st.grid}>
+      {collections.map((c) => (
+        <CollectionCard key={`c${c.id}`} collection={c} onPress={() => nav.push({ name: 'collection', id: c.id })} />
+      ))}
       {items.map((it, i) => (
         <View key={it.id}>
           <PosterCard

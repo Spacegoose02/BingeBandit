@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 )
@@ -87,8 +88,112 @@ func (s *Store) queryCollections(q string, args ...any) ([]*Collection, error) {
 	return out, rows.Err()
 }
 
+// LibraryCollections lists a library's collections with their sizes. Members
+// are worked out here in one pass over the library rather than one SQL scan
+// per collection, which took seconds on libraries with many collections.
 func (s *Store) LibraryCollections(libraryID int64) ([]*Collection, error) {
-	return s.queryCollections(collectionSelect+` WHERE c.library_id = ? ORDER BY c.name COLLATE NOCASE`, libraryID)
+	cols, _, err := s.libraryCollectionMembers(libraryID)
+	return cols, err
+}
+
+// CollectedItems are the ids of a library's movies or shows that are in at
+// least one of its collections.
+func (s *Store) CollectedItems(libraryID int64) ([]int64, error) {
+	_, in, err := s.libraryCollectionMembers(libraryID)
+	ids := make([]int64, 0, len(in))
+	for id := range in {
+		ids = append(ids, id)
+	}
+	return ids, err
+}
+
+func (s *Store) libraryCollectionMembers(libraryID int64) ([]*Collection, map[int64]bool, error) {
+	collected := map[int64]bool{}
+	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
+		FROM collections c WHERE c.library_id = ? ORDER BY c.name COLLATE NOCASE`, libraryID)
+	if err != nil || len(cols) == 0 {
+		return cols, collected, err
+	}
+	type member struct {
+		labels, genres []string
+		studio, poster string
+		release        string
+		year           int
+	}
+	items := map[int64]*member{}
+	rows, err := s.db.Query(`SELECT id, labels, genres, studio, year, poster, release_date FROM items
+		WHERE library_id = ? AND kind IN ('movie','show')`, libraryID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var labels, genres string
+		m := &member{}
+		if err := rows.Scan(&id, &labels, &genres, &m.studio, &m.year, &m.poster, &m.release); err != nil {
+			return nil, nil, err
+		}
+		json.Unmarshal([]byte(labels), &m.labels)
+		json.Unmarshal([]byte(genres), &m.genres)
+		items[id] = m
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	explicit := map[int64]map[int64]bool{}
+	xr, err := s.db.Query(`SELECT x.collection_id, x.item_id FROM collection_items x JOIN collections c ON c.id = x.collection_id WHERE c.library_id = ?`, libraryID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer xr.Close()
+	for xr.Next() {
+		var c, i int64
+		if err := xr.Scan(&c, &i); err != nil {
+			return nil, nil, err
+		}
+		if explicit[c] == nil {
+			explicit[c] = map[int64]bool{}
+		}
+		explicit[c][i] = true
+	}
+	if err := xr.Err(); err != nil {
+		return nil, nil, err
+	}
+	has := func(list []string, v string) bool {
+		for _, x := range list {
+			if strings.EqualFold(x, v) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, c := range cols {
+		smart := c.Smart()
+		var first *member
+		for id, m := range items {
+			in := explicit[c.ID][id]
+			if !in && smart {
+				in = (c.LabelRule == "" || has(m.labels, c.LabelRule)) &&
+					(c.GenreRule == "" || has(m.genres, c.GenreRule)) &&
+					(c.StudioRule == "" || strings.EqualFold(m.studio, c.StudioRule)) &&
+					(c.YearFrom == 0 || m.year >= c.YearFrom) &&
+					(c.YearTo == 0 || (m.year > 0 && m.year <= c.YearTo))
+			}
+			if !in {
+				continue
+			}
+			c.ItemCount++
+			collected[id] = true
+			if m.poster != "" && (first == nil || m.release < first.release) {
+				first = m
+			}
+		}
+		if c.Poster == "" && first != nil {
+			c.Poster = ImageURL(first.poster)
+		}
+	}
+	return cols, collected, nil
 }
 
 func (s *Store) Collection(id int64) (*Collection, error) {

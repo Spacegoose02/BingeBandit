@@ -464,7 +464,11 @@ export interface Library {
   itemCount: number
   skipMarkers: boolean // intro and credits detection is off
   pinned: boolean // in this user's sidebar and on their Home
+  collectionMode?: CollectionMode
 }
+
+/** How a library's Library tab shows collections (Plex's setting). */
+export type CollectionMode = 'show' | 'hide' | 'collapse'
 
 export interface ItemDetail {
   item: Item

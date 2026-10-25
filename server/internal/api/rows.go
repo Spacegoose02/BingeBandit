@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 
 	"bingebandit/internal/store"
@@ -60,8 +61,9 @@ func (s *Server) pinnedLibraries(u *store.User) ([]*store.Library, error) {
 // homeLibraryRows merges the rows of every pinned library that are on Home
 // (or Friends' Home). The same built-in row from several libraries of one
 // kind becomes one row, so all pinned movie libraries share "Recently Added
-// Movies"; each collection is its own row. Rows keep the order of the first
-// library that has them.
+// Movies", and so do collections with the same name ("Halloween" in TV Shows
+// and Kids TV is one row). Rows keep the order of the first library that has
+// them.
 func (s *Server) homeLibraryRows(u *store.User) []libRow {
 	libs, err := s.pinnedLibraries(u)
 	if err != nil {
@@ -73,6 +75,7 @@ func (s *Server) homeLibraryRows(u *store.User) []libRow {
 		key  string
 		kind string
 		libs []int64
+		cols []int64
 	}
 	var slots []*slot
 	merged := map[string]*slot{}
@@ -86,7 +89,14 @@ func (s *Server) homeLibraryRows(u *store.User) []libRow {
 				continue
 			}
 			if r.CollectionID != 0 {
-				slots = append(slots, &slot{row: libRow{ID: r.Key, Title: r.Title, CollectionID: r.CollectionID, LibraryID: l.ID}})
+				mk := l.Kind + "/collection/" + strings.ToLower(r.Title)
+				if m, ok := merged[mk]; ok {
+					m.cols = append(m.cols, r.CollectionID)
+					continue
+				}
+				m := &slot{row: libRow{ID: r.Key, Title: r.Title, CollectionID: r.CollectionID, LibraryID: l.ID}, cols: []int64{r.CollectionID}}
+				merged[mk] = m
+				slots = append(slots, m)
 				continue
 			}
 			mk := l.Kind + "/" + r.Key
@@ -101,9 +111,41 @@ func (s *Server) homeLibraryRows(u *store.User) []libRow {
 	}
 	out := []libRow{}
 	for _, sl := range slots {
+		if len(sl.cols) > 1 {
+			out = append(out, s.mergedCollectionRow(u.ID, sl.row, sl.cols)...)
+			continue
+		}
 		out = append(out, s.fillRow(u.ID, sl.row, sl.key, sl.kind, sl.libs)...)
 	}
 	return out
+}
+
+// mergedCollectionRow is one row of the titles of same-named collections from
+// several libraries, in release order, each title once.
+func (s *Server) mergedCollectionRow(uid int64, row libRow, cols []int64) []libRow {
+	seen := map[int64]bool{}
+	var items []*store.Item
+	for _, id := range cols {
+		members, err := s.Store.CollectionMembers(uid, id)
+		if err != nil {
+			continue
+		}
+		for _, it := range members {
+			if !seen[it.ID] {
+				seen[it.ID] = true
+				items = append(items, it)
+			}
+		}
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].ReleaseDate < items[j].ReleaseDate })
+	if len(items) > rowSize {
+		items = items[:rowSize]
+	}
+	row.Items = items
+	return []libRow{row}
 }
 
 // fillRow loads a row's titles; "genres" turns into one row per top genre.
