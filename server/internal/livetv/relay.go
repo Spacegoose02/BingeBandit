@@ -32,6 +32,8 @@ const (
 	clientBuffer   = 512              // chunks a raw-TS viewer may lag before being dropped
 	headBytes      = 3 << 20          // start of the stream kept for codec probing
 	maxPasses      = 3                // times to cycle through a channel's streams before giving up
+	goodRun        = 2 * time.Minute  // a stream that played this long resets the pass count
+	benchFor       = 10 * time.Minute // a stream left for being slow is tried last for this long
 	hlsSegmentSecs = 2
 	hlsMinSegments = 8 // playlist length when time-shift is off
 )
@@ -136,6 +138,27 @@ func (m *Manager) Join(ch *store.Channel, user *store.User, ip, kind string) (*V
 		r.ensureHLS()
 	}
 	return v, nil
+}
+
+// KickUser disconnects every viewer belonging to a user or its profiles,
+// other than the DVR recording for them.
+func (m *Manager) KickUser(userID int64) {
+	users := map[int64]bool{userID: true}
+	if profiles, err := m.st.Household(userID); err == nil {
+		for _, p := range profiles {
+			users[p.ID] = true
+		}
+	}
+	for _, r := range m.snapshot() {
+		r.mu.Lock()
+		for id, v := range r.viewers {
+			if users[v.UserID] && v.IP != dvrClient {
+				delete(r.viewers, id)
+				v.close()
+			}
+		}
+		r.mu.Unlock()
+	}
 }
 
 // Leave removes a viewer by id from whichever relay has it.
@@ -325,7 +348,12 @@ type Relay struct {
 	stream    store.ChannelStream
 	lastError string
 	head      bytes.Buffer // first bytes of the current upstream, for probing
+	headFrom  int64        // where head starts in the relay's byte stream
+	off       int64        // bytes relayed so far
 	hls       *hlsOutput
+	hlsDir    string // kept across output restarts so players' playlist carries on
+	hlsBreaks []int  // segment numbers where a new upstream (new timestamps) begins
+	benched   map[string]time.Time
 	pace      *pace                   // how the current upstream keeps up with real time
 	skip      context.CancelCauseFunc // ends the current upstream so run moves to the next stream
 	switched  time.Time               // when the last slow-stream switch happened
@@ -384,11 +412,16 @@ func (r *Relay) stop(reason string) {
 		delete(r.viewers, id)
 		v.close()
 	}
-	h := r.hls
+	h, dir := r.hls, r.hlsDir
 	r.hls = nil
 	r.mu.Unlock()
 	if h != nil {
-		h.close()
+		h.close(true)
+	} else if dir != "" {
+		go func() {
+			time.Sleep(2 * time.Second) // an output being replaced may still be exiting
+			os.RemoveAll(dir)
+		}()
 	}
 }
 
@@ -411,9 +444,10 @@ func (r *Relay) run() {
 		}
 		return
 	}
-	streams := r.channel.Streams
+	pulls := 0
 	for pass := 0; pass < maxPasses && r.ctx.Err() == nil; pass++ {
 		busy := 0
+		streams := r.passOrder()
 		for _, s := range streams {
 			if r.ctx.Err() != nil {
 				return
@@ -425,14 +459,30 @@ func (r *Relay) run() {
 			}
 			r.mu.Lock()
 			r.stream = s
-			r.head.Reset()
+			r.resetHead()
 			r.mu.Unlock()
 			r.sourceID.Store(s.SourceID)
 			log.Printf("live tv: channel %v %q ← %q (%s)", r.channel.Number, r.channel.Name, s.Name, s.SourceName)
+			if pulls > 0 {
+				// The new stream has its own timestamps and may be seconds
+				// apart from the last in what it shows; a fresh HLS output
+				// marks the change so players carry on cleanly instead of
+				// stalling on timestamps that went backwards.
+				r.restartHLS()
+			}
+			pulls++
+			began := time.Now()
 			err := r.pull(s)
 			r.sourceID.Store(0)
 			if r.ctx.Err() != nil {
 				return
+			}
+			if time.Since(began) > goodRun {
+				pass = -1 // it played fine for a while: this isn't a channel that never works
+			}
+			var slow slowError
+			if errors.As(err, &slow) {
+				r.bench(s)
 			}
 			r.failures.Add(1)
 			r.mu.Lock()
@@ -456,6 +506,68 @@ func (r *Relay) run() {
 		case <-time.After(time.Duration(pass+1) * 2 * time.Second):
 		}
 	}
+}
+
+// slowError is a stream left because it couldn't keep up with real time,
+// as opposed to one that failed outright.
+type slowError struct{ why string }
+
+func (e slowError) Error() string { return e.why }
+
+// bench puts a stream that was too slow at the back of the queue for a while,
+// so the channel doesn't bounce back to it (and replay what viewers already
+// saw from the other stream).
+func (r *Relay) bench(s store.ChannelStream) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.benched == nil {
+		r.benched = map[string]time.Time{}
+	}
+	r.benched[s.URL] = time.Now()
+}
+
+func (r *Relay) isBenched(s store.ChannelStream) bool {
+	at, ok := r.benched[s.URL]
+	return ok && time.Since(at) < benchFor
+}
+
+// passOrder is the channel's streams in priority order, with benched ones last.
+func (r *Relay) passOrder() []store.ChannelStream {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]store.ChannelStream, 0, len(r.channel.Streams))
+	var later []store.ChannelStream
+	for _, s := range r.channel.Streams {
+		if r.isBenched(s) {
+			later = append(later, s)
+		} else {
+			out = append(out, s)
+		}
+	}
+	return append(out, later...)
+}
+
+// canLeaveSlow reports whether there's somewhere better to go than the
+// current, slow stream: another stream that hasn't itself just been left for
+// being slow. Without one, staying put beats cycling between streams that
+// are each behind the other. Called with r.mu held.
+func (r *Relay) canLeaveSlow() bool {
+	if r.m.st.Setting(store.SettingLiveSwitchSlow) == "false" {
+		return false
+	}
+	for _, s := range r.channel.Streams {
+		if s.URL != r.stream.URL && !r.isBenched(s) {
+			return true
+		}
+	}
+	return false
+}
+
+// slowLimit is how far an upstream may fall behind real time before the
+// relay leaves it: the players' cushion plus the switch time, so viewers
+// would really have been buffering for the switch time.
+func (m *Manager) slowLimit() float64 {
+	return float64(m.BufferSeconds()) + m.stallTimeout().Seconds()
 }
 
 // pull copies one upstream into the relay until it errors, stalls, falls
@@ -482,7 +594,7 @@ func (r *Relay) pull(s store.ChannelStream) error {
 	// the stream plays slower than real time for that long (players would
 	// be buffering) and the channel has another stream to try.
 	stall := r.m.stallTimeout()
-	slowOK := len(r.channel.Streams) < 2
+	limit := r.m.slowLimit()
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	go func() {
@@ -497,9 +609,17 @@ func (r *Relay) pull(s store.ChannelStream) error {
 					cancel(fmt.Errorf("no data for %s", stall))
 					return
 				}
-				if behind, ok := pc.behind(); ok && !slowOK && behind > stall.Seconds() {
-					cancel(fmt.Errorf("too slow: %.0fs behind real time", behind))
-					return
+				if behind, ok := pc.behind(); ok && behind > limit {
+					r.mu.Lock()
+					leave := r.canLeaveSlow() && time.Since(r.switched) > stall
+					if leave {
+						r.switched = time.Now()
+					}
+					r.mu.Unlock()
+					if leave {
+						cancel(slowError{fmt.Sprintf("too slow: %.0fs behind real time", behind)})
+						return
+					}
 				}
 			}
 		}
@@ -602,13 +722,24 @@ func (p *procReader) Close() error {
 	return nil
 }
 
+// resetHead starts collecting a new upstream's first bytes. Called with r.mu held.
+func (r *Relay) resetHead() {
+	r.head.Reset()
+	r.headFrom = r.off
+}
+
 func (r *Relay) broadcast(chunk []byte) {
 	r.bytesIn.Add(int64(len(chunk)))
 	r.mu.Lock()
-	if r.head.Len() < headBytes {
+	if r.head.Len() < headBytes && r.headFrom+int64(r.head.Len()) == r.off {
 		r.head.Write(chunk)
 	}
-	h := r.hls
+	if r.hls != nil {
+		// Fed under the lock so the output can tell which chunks its head
+		// start already holds.
+		r.hls.feed(tsChunk{off: r.off, b: chunk})
+	}
+	r.off += int64(len(chunk))
 	for id, v := range r.viewers {
 		if v.ch == nil {
 			continue
@@ -622,9 +753,6 @@ func (r *Relay) broadcast(chunk []byte) {
 		}
 	}
 	r.mu.Unlock()
-	if h != nil {
-		h.feed(chunk)
-	}
 }
 
 // Stats for the admin Live TV activity view.
@@ -715,7 +843,8 @@ type hlsOutput struct {
 	dir     string
 	video   string // copy | transcode
 	encoder string // when transcoding: the encoder in use
-	in      chan []byte
+	in      chan tsChunk
+	from    int64         // the relay's byte offset when the output was created
 	done    chan struct{} // closed when ffmpeg has exited (or never started)
 	once    sync.Once
 
@@ -724,7 +853,13 @@ type hlsOutput struct {
 	stopped bool
 }
 
-func (h *hlsOutput) feed(chunk []byte) {
+// tsChunk is relayed data and where it sits in the relay's byte stream.
+type tsChunk struct {
+	off int64
+	b   []byte
+}
+
+func (h *hlsOutput) feed(chunk tsChunk) {
 	select {
 	case h.in <- chunk:
 	case <-h.done:
@@ -733,7 +868,9 @@ func (h *hlsOutput) feed(chunk []byte) {
 	}
 }
 
-func (h *hlsOutput) close() {
+// close stops the output, and deletes its files when remove is set (the
+// channel stopped, rather than a new output taking over the folder).
+func (h *hlsOutput) close(remove bool) {
 	h.once.Do(func() {
 		h.mu.Lock()
 		h.stopped = true // stops a start that is still probing
@@ -741,6 +878,9 @@ func (h *hlsOutput) close() {
 			h.cmd.Process.Kill()
 		}
 		h.mu.Unlock()
+		if !remove {
+			return
+		}
 		go func() {
 			<-h.done
 			for i := 0; i < 10 && os.RemoveAll(h.dir) != nil; i++ {
@@ -750,19 +890,54 @@ func (h *hlsOutput) close() {
 	})
 }
 
+func (h *hlsOutput) isStopped() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.stopped
+}
+
+// restartHLS replaces the channel's HLS output, if one is running, with a
+// new one that carries on the same playlist after a discontinuity.
+func (r *Relay) restartHLS() {
+	r.mu.Lock()
+	h := r.hls
+	if h == nil {
+		r.mu.Unlock()
+		return
+	}
+	r.hls = nil
+	r.mu.Unlock()
+	h.close(false)
+	r.ensureHLSAfter(h)
+}
+
 // ensureHLS starts the channel's HLS output if it isn't running.
-func (r *Relay) ensureHLS() {
+func (r *Relay) ensureHLS() { r.ensureHLSAfter(nil) }
+
+// ensureHLSAfter starts the HLS output once prev (an output being replaced)
+// has exited. Every output of a relay writes to the same folder and playlist,
+// so players keep fetching the same URLs across upstream switches.
+func (r *Relay) ensureHLSAfter(prev *hlsOutput) {
 	r.mu.Lock()
 	if r.hls != nil || r.stopped.Load() {
 		r.mu.Unlock()
 		return
 	}
-	dir := filepath.Join(r.m.hlsBase(), fmt.Sprintf("ch%d-%s", r.channel.ID, newID()[:6]))
-	h := &hlsOutput{dir: dir, in: make(chan []byte, 1024), done: make(chan struct{}), video: "copy"}
+	if r.hlsDir == "" {
+		r.hlsDir = filepath.Join(r.m.hlsBase(), fmt.Sprintf("ch%d-%s", r.channel.ID, newID()[:6]))
+	}
+	dir := r.hlsDir
+	h := &hlsOutput{dir: dir, in: make(chan tsChunk, 1024), from: r.off, done: make(chan struct{}), video: "copy"}
 	r.hls = h
 	r.mu.Unlock()
 
 	go func() {
+		if prev != nil {
+			select {
+			case <-prev.done:
+			case <-time.After(5 * time.Second):
+			}
+		}
 		// Wait briefly for stream data so we can tell whether the browser can
 		// take the video as-is (H.264) or it needs converting.
 		codec := r.probeVideo()
@@ -773,6 +948,13 @@ func (r *Relay) ensureHLS() {
 			log.Printf("live tv: %v", err)
 			close(h.done)
 			return
+		}
+		// Carrying on an earlier output's playlist: its next segment starts
+		// new timestamps, which players must be told about.
+		if last := lastSegment(filepath.Join(dir, "live.m3u8")); last >= 0 {
+			r.mu.Lock()
+			r.hlsBreaks = append(r.hlsBreaks, last+1)
+			r.mu.Unlock()
 		}
 		args := []string{"-hide_banner", "-loglevel", "error", "-nostdin"}
 		var videoArgs []string
@@ -789,7 +971,7 @@ func (r *Relay) ensureHLS() {
 		args = append(args, videoArgs...)
 		args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k",
 			"-f", "hls", "-hls_time", fmt.Sprint(hlsSegmentSecs), "-hls_list_size", fmt.Sprint(r.m.playlistSegments()),
-			"-hls_flags", "delete_segments+independent_segments+omit_endlist",
+			"-hls_flags", "delete_segments+independent_segments+omit_endlist+append_list",
 			"-hls_segment_filename", filepath.Join(dir, "s%06d.ts"), filepath.Join(dir, "live.m3u8"))
 		cmd := exec.Command(r.m.ffmpeg, args...)
 		media.HideWindow(cmd)
@@ -815,15 +997,28 @@ func (r *Relay) ensureHLS() {
 		h.cmd = cmd
 		h.mu.Unlock()
 		go func() {
-			// Prime ffmpeg with what we already have so the first segment comes quickly.
+			// Prime ffmpeg with what we already have so the first segment
+			// comes quickly, if it runs straight on into what was queued
+			// since (an old head would replay the start of the stream).
 			r.mu.Lock()
 			head := append([]byte(nil), r.head.Bytes()...)
+			headEnd := r.headFrom + int64(len(head))
+			if h.from < r.headFrom || h.from > headEnd {
+				head, headEnd = nil, 0
+			}
 			r.mu.Unlock()
 			stdin.Write(head)
 			for {
 				select {
-				case chunk := <-h.in:
-					if _, err := stdin.Write(chunk); err != nil {
+				case c := <-h.in:
+					b := c.b
+					if skip := headEnd - c.off; skip > 0 {
+						if skip >= int64(len(b)) {
+							continue // already sent as part of the head
+						}
+						b = b[skip:]
+					}
+					if _, err := stdin.Write(b); err != nil {
 						return
 					}
 				case <-h.done:
@@ -835,7 +1030,7 @@ func (r *Relay) ensureHLS() {
 		err = cmd.Wait()
 		close(h.done)
 		stdin.Close()
-		if err != nil && !r.stopped.Load() {
+		if err != nil && !r.stopped.Load() && !h.isStopped() {
 			msg := strings.TrimSpace(stderr.String())
 			log.Printf("live tv: channel %q HLS output ended: %v %s", r.channel.Name, err, msg)
 			if h.encoder != "" && h.encoder != "none" && time.Since(started) < 20*time.Second {
@@ -1014,11 +1209,11 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 	if secs < stall.Seconds() {
 		return false, "not long enough"
 	}
-	if len(r.channel.Streams) < 2 {
-		return false, "no other stream"
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.canLeaveSlow() {
+		return false, "no other stream to switch to"
+	}
 	if r.skip == nil {
 		return false, "already switching"
 	}
@@ -1037,18 +1232,18 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 	}
 	var why string
 	switch {
-	case measured && behind >= 3:
+	case measured && behind >= max(3, float64(m.BufferSeconds())/2):
 		why = fmt.Sprintf("viewers buffering; the stream is %.0fs behind real time", behind)
 	case segAge > 3*hlsSegmentSecs*time.Second+2*time.Second:
 		why = fmt.Sprintf("viewers buffering; no new video for %.0fs", segAge.Seconds())
-	case !measured:
-		why = "viewers buffering" // can't measure this stream; trust the player
 	default:
+		// One player buffering while the stream keeps up is that player's
+		// network; switching would make everyone else replay what they saw.
 		log.Printf("live tv: channel %v %q: a viewer reports %.0fs of buffering, but the stream is keeping up (likely the viewer's network)",
 			r.channel.Number, r.channel.Name, secs)
 		return false, "stream is keeping up"
 	}
 	r.switched = time.Now()
-	r.skip(errors.New(why))
+	r.skip(slowError{why})
 	return true, why
 }

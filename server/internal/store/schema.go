@@ -634,4 +634,6 @@ CREATE TABLE library_pins (
 );
 ALTER TABLE users ADD COLUMN pins_chosen INTEGER NOT NULL DEFAULT 0;
 `,
+	// 29: an admin can turn Live TV (and DVR) off for a user.
+	`ALTER TABLE users ADD COLUMN live_tv INTEGER NOT NULL DEFAULT 1;`,
 }
