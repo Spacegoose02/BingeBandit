@@ -372,6 +372,15 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 - **Not yet tested with a real IPTV provider or HDHomeRun.** Things to watch: provider-specific user agents, HTTPS redirects, and `.m3u8` (HLS) upstreams. Only MPEG-TS over HTTP is relayed today; HLS upstream support is the most likely next need.
 - The exported playlist embeds the token it was fetched with. Use an API key (M6) for apps.
 
+## Discover (M3)
+
+- `internal/discover`: admins add YouTube playlists or channels on the Discover page (Manage). Links can be a playlist URL (`list=`), `/channel/UC…`, an `@handle` (looked up on the channel page), or a bare `PL…`/`UC…` id.
+  - Videos come from YouTube's public Atom feeds (`/feeds/videos.xml?playlist_id=` / `channel_id=`), so no API key is needed. Each feed holds the newest 15 videos; up to 50 per source are kept.
+  - Adding a source fetches it first, so a bad link is reported right away.
+  - The **Refresh Discover** task runs every 3 hours. A failed fetch keeps the old videos and shows the error in Manage.
+- Tables `discover_sources` and `discover_videos`. Videos play in a youtube-nocookie embed, and thumbnails load from i.ytimg.com.
+- Tested against a fake YouTube (`TestDiscover`). YouTube was blocked in the build sandbox, so it **still needs a check against real YouTube feeds**.
+
 ## Intro and credits detection (M3)
 
 - Pure Go (no Chromaprint dependency): `internal/markers`. The **Detect intros and credits** scheduled task (nightly, maintenance window) analyzes seasons that have new episodes. A show or season page has a "Detect now" button (admins).

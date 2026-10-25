@@ -71,7 +71,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Trailers or a custom intro video before a movie: per-user trailers of other unwatched movies (never rated above the movie; web player) and the admin's intro videos (web and TV app) |
 | ✅ | **Settings passcode**: a per-user 4–8 digit passcode locks Account changes and the Admin pages in the web UI until it (or the password) is entered; unlocks last 15 minutes of use; apps and API keys aren't affected; admins can clear a forgotten one |
 | ✅ | Recommendations from other users on Home: a Recommend button on movies and shows (with a note), a "Recommended for You" row for people who opt in under Account → Sharing |
-| | Discover: new shows and movie trailers (admin adds YouTube playlists) |
+| ✅ | **Discover**: new shows and movie trailers from YouTube playlists and channels the admin adds (no API key; refreshed every 3 hours), played in the page |
 | ✅ | Watch Together: start a watch party in the web player, invite people (or share the link); play, pause, seeking and the next episode stay in step for everyone |
 | ✅ | Notifications in the app: new episodes of shows you watch or have on your watchlist, and your recordings finishing or failing (a bell in the sidebar; each can be turned off under Account). Live sports alerts are with the sports tracker in M4 |
 

@@ -178,6 +178,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/plugins", s.pluginPages)
 			r.HandleFunc("/plugins/{id}/*", s.pluginProxy)
 
+			r.Get("/discover", s.discoverRows)
 			r.Get("/watchlist", s.watchlist)
 			r.Post("/watchlist/{id}", s.setWatchlist(true))
 			r.Delete("/watchlist/{id}", s.setWatchlist(false))
@@ -242,6 +243,12 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(requireAdmin)
+				r.Get("/discover", s.discoverSources)
+				r.Post("/discover", s.addDiscoverSource)
+				r.Post("/discover/refresh", s.refreshDiscover)
+				r.Put("/discover/order", s.orderDiscoverSources)
+				r.Put("/discover/{id}", s.renameDiscoverSource)
+				r.Delete("/discover/{id}", s.deleteDiscoverSource)
 				r.Get("/system", s.system)
 				r.Get("/stats", s.stats)
 				r.Get("/activity", s.activity)

@@ -99,6 +99,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
+| GET | `/discover` | Discover rows: `[{id, name, videos: [{id, title, description, publishedAt}]}]`, newest first. `id` is the YouTube video id (thumbnail `https://i.ytimg.com/vi/{id}/mqdefault.jpg`). |
 | GET / POST / DELETE | `/watchlist`, `/watchlist/{id}` | Your watchlist. |
 | GET / POST / PUT / DELETE | `/playlists`, `/playlists/{id}`, `/playlists/{id}/items`, `/playlists/{id}/order` | Playlists. |
 | GET | `/profiles`, `/profiles/{username}` | Public profiles and stats. |

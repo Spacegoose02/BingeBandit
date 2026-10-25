@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"bingebandit/internal/discover"
 	"bingebandit/internal/library"
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/markers"
@@ -56,6 +57,12 @@ func Builtin(d Deps) []*Task {
 			Description:    "Keep 48 hours of programming scheduled on every custom channel.",
 			DefaultEnabled: true, DefaultHours: 1,
 			Run: func(ctx context.Context) (string, error) { return livetv.RefillPlayouts(d.Store) },
+		},
+		{
+			ID: "refresh_discover", Name: "Refresh Discover",
+			Description:    "Fetch the newest videos from the YouTube playlists and channels on the Discover page.",
+			DefaultEnabled: true, DefaultHours: 3,
+			Run: func(ctx context.Context) (string, error) { return discover.RefreshAll(ctx, d.Store) },
 		},
 		{
 			ID: "refresh_metadata", Name: "Refresh metadata",
