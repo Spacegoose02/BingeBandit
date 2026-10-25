@@ -13,6 +13,27 @@ import type { Item, ItemDetail, MediaFile } from '../types'
 
 const REPORT_EVERY = 10 // seconds
 const STALL_MS = 8000 // direct play with no progress this long falls back to the transcoder
+const LADDER = [2160, 1080, 720, 480]
+
+// What ExoPlayer plays everywhere without extra decoders. Containers are the
+// file extension; the rest are ffprobe codec names.
+const DIRECT_CONTAINERS = new Set(['mp4', 'm4v', 'mov', 'mkv', 'webm', 'ts', 'm2ts', 'mts'])
+const DIRECT_VIDEO = new Set(['h264', 'hevc', 'vp9', 'av1'])
+// DTS and TrueHD have no decoder in Android; phones mostly lack Dolby too
+// (TVs pass it through to the receiver or decode it).
+const NO_DECODER_AUDIO = new Set(isPhone ? ['dts', 'truehd', 'mlp', 'ac3', 'eac3'] : ['dts', 'truehd', 'mlp'])
+
+/** Whether this device can play the file as is with the chosen audio track. */
+function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
+  if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
+  const audios = (f.streams ?? []).filter((s) => s.type === 'audio')
+  const a = audios.find((s) => s.index === audioIndex) ?? audios.find((s) => s.default) ?? audios[0]
+  return !a || !NO_DECODER_AUDIO.has(a.codec)
+}
+
+function resolutionLabel(h: number): string {
+  return h >= 2160 ? '4K' : `${h}p`
+}
 export const NO_LIVE_BADGE = { hideLiveBadge: true }
 
 function clock(t: number) {
@@ -98,6 +119,11 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
   const [sub, setSub] = useState<MediaStream | undefined>()
   const [cues, setCues] = useState<Cue[]>([])
   const [menu, setMenu] = useState(false)
+  // -1: play the file as is when this device can; 0: have the server convert
+  // it at its own size; otherwise the converted height.
+  const [quality, setQuality] = useState(-1)
+  const qualityRef = useRef(-1)
+  const [notice, setNotice] = useState('')
 
   const audioRef = useRef(-1) // what the transcoder is told
   const burnRef = useRef(-1) // image subtitle stream burned in by the server
@@ -131,6 +157,10 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           // Image subtitles need the server to burn them in.
           burnRef.current = picked.sub.index
           setSub(picked.sub)
+          startTranscode.current = true
+        } else if (!canDirectPlay(f, picked.audio)) {
+          // A container, codec or audio format this device can't play: convert from the start.
+          if (picked.sub) setSub(picked.sub)
           startTranscode.current = true
         } else {
           if (picked.sub) setSub(picked.sub)
@@ -206,11 +236,16 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
       try {
         const res = await api.post<{ session: { id: string }; playlist: string }>(`/api/files/${file.id}/transcode`, {
           start: at,
-          maxHeight: 0,
+          maxHeight: Math.max(qualityRef.current, 0),
           audioStream: audioRef.current,
           burnSubtitle: burnRef.current,
           replace: transcodeId.current,
-          adaptive: true, // ExoPlayer switches qualities itself when the server offers several
+          // At the file's own size ExoPlayer switches qualities itself when
+          // the server offers several; a picked quality stays fixed.
+          adaptive: qualityRef.current <= 0,
+          // Picked "Convert", or direct play stuttered: encode H.264 too
+          // instead of copying it, so a slow device gets something lighter.
+          encodeVideo: qualityRef.current >= 0,
           // Android's AAC decoder handles 5.1 everywhere (and mixes down for
           // stereo TVs), so surround tracks stay surround. AC-3/E-AC-3 copy
           // waits until passthrough is tested on real boxes.
@@ -238,10 +273,46 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
     }
   }, [file, transcode, start])
 
+  const chooseQuality = (q: number) => {
+    setQuality(q)
+    qualityRef.current = q
+    setMenu(false)
+    if (q < 0 && file && burnRef.current < 0 && canDirectPlay(file, audioRef.current)) {
+      if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
+      transcodeId.current = ''
+      offset.current = 0
+      lastTime.current = 0
+      setMode('direct')
+      setBuffering(true)
+      setSrc({ uri: absolute(`/api/files/${file.id}/direct`), startPosition: posRef.current * 1000 })
+    } else {
+      transcode(posRef.current)
+    }
+  }
+
+  // Direct play that keeps stopping to buffer: the device or the network
+  // can't keep up with the file, so have the server convert it.
+  const stalls = useRef<number[]>([])
+  const lastSeek = useRef(0)
+  const onStall = () => {
+    const now = Date.now()
+    // Buffering right after starting or seeking is expected.
+    if (mode !== 'direct' || qualityRef.current >= 0 || lastTime.current < 5 || now - lastSeek.current < 4000) return
+    stalls.current = [...stalls.current.filter((t) => now - t < 60000), now]
+    if (stalls.current.length < 3) return
+    stalls.current = []
+    setNotice('Playback kept stopping, so the server is converting this video.')
+    setTimeout(() => setNotice(''), 6000)
+    qualityRef.current = 0
+    setQuality(0)
+    transcode(posRef.current)
+  }
+
   const chooseAudio = (index: number) => {
     setAudio(index)
     audioRef.current = index
     if (mode === 'transcode') transcode(posRef.current) // the server mixes the new track
+    else if (file && !canDirectPlay(file, index)) transcode(posRef.current) // no decoder for that track here
   }
 
   const chooseSub = (s?: MediaStream) => {
@@ -306,6 +377,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
     t = Math.max(0, duration ? Math.min(t, duration - 2) : t)
     posRef.current = t
     setPos(t)
+    lastSeek.current = Date.now()
     if (mode === 'direct') video.current?.seek(t)
     else transcode(t) // the server converts from the new point
   }
@@ -433,7 +505,10 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
             setBuffering(false)
             showControls('seek') // a glimpse of the title and position
           }}
-          onBuffer={({ isBuffering }) => setBuffering(isBuffering)}
+          onBuffer={({ isBuffering }) => {
+            setBuffering(isBuffering)
+            if (isBuffering) onStall()
+          }}
           onError={onError}
           onEnd={onEnd}
           progressUpdateInterval={250}
@@ -485,7 +560,9 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
             )}
             <View style={st.times}>
               <Text style={st.time}>{clock(pos)}</Text>
-              <Text style={st.mode}>{paused ? 'Paused' : mode === 'transcode' ? 'Converting' : 'Direct play'}</Text>
+              <Text style={st.mode}>
+                {paused ? 'Paused' : mode === 'direct' ? 'Direct play' : quality > 0 ? `Converting · ${resolutionLabel(quality)}` : 'Converting'}
+              </Text>
               <Text style={[st.time, st.timeEnd]}>-{clock(duration - pos)}</Text>
             </View>
             {controls === 'full' ? (
@@ -494,7 +571,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
                 <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => setPaused((p) => !p)} />
                 <Button small label="30s ⟳" onPress={() => seekTo(posRef.current + 30)} />
                 {next && <Button small label="Next episode  ▶▶" onPress={() => nav.replace({ name: 'player', id: next.id, start: 0 })} />}
-                <Button small label="Audio & subtitles" onPress={() => setMenu(true)} />
+                <Button small label="Quality, audio & subtitles" onPress={() => setMenu(true)} />
                 {isPhone && (
                   <Button
                     small
@@ -512,8 +589,32 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           </View>
         </Pressable>
       )}
+      {!!notice && (
+        <View style={st.notice} pointerEvents="none">
+          <Text style={st.noticeText}>{notice}</Text>
+        </View>
+      )}
       {menu && (
         <View style={[st.menu, barsPad]}>
+          {file && (
+            <>
+              <Text style={st.menuTitle}>Quality</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {canDirectPlay(file, audioRef.current) && burnRef.current < 0 && (
+                  <Button small primary={mode === 'direct'} preferFocus={mode === 'direct'} label={`Original · Direct play`} onPress={() => chooseQuality(-1)} />
+                )}
+                <Button
+                  small
+                  primary={mode === 'transcode' && quality <= 0}
+                  label={`Original${file.height ? ` (${resolutionLabel(file.height)})` : ''} · Convert`}
+                  onPress={() => chooseQuality(0)}
+                />
+                {LADDER.filter((h) => h < file.height).map((h) => (
+                  <Button key={h} small primary={mode === 'transcode' && quality === h} label={`${resolutionLabel(h)} · Convert`} onPress={() => chooseQuality(h)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
           {audios.length > 1 && (
             <>
               <Text style={st.menuTitle}>Audio</Text>
@@ -601,6 +702,8 @@ const st = StyleSheet.create(scaled({
   time: { color: '#fff', fontSize: font.body, fontVariant: ['tabular-nums'], minWidth: 150 },
   timeEnd: { textAlign: 'right' },
   mode: { color: colors.accent, fontSize: font.small, fontWeight: '700' },
+  notice: { position: 'absolute', top: px(40), left: gutter, right: gutter, alignItems: 'center' },
+  noticeText: { color: colors.text, fontSize: font.small, backgroundColor: 'rgba(11,13,16,0.85)', paddingHorizontal: px(20), paddingVertical: px(10), borderRadius: px(8), overflow: 'hidden' },
   hint: { color: '#c3c9d0', fontSize: font.small, marginTop: 10, textAlign: 'center' },
   errorBox: { position: 'absolute', top: '40%', alignSelf: 'center', backgroundColor: 'rgba(20,24,29,0.95)', padding: 40, borderRadius: 20, maxWidth: 1300 },
   errorText: { color: colors.text, fontSize: font.body, textAlign: 'center' },

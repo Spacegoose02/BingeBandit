@@ -141,6 +141,7 @@ function audioCaps(video: HTMLVideoElement, stereoOnly: boolean): { audioCodecs:
 
 interface Choice {
   quality: number // max height; 0 = original
+  convert: boolean // at original quality: have the server convert the video instead of playing the file as is
   audio: number // stream index; -1 = file default
   burn: number // image subtitle stream burned in by the server; -1 = none
 }
@@ -252,6 +253,7 @@ function PlayerView({
   // currentTime while playing; seeks and pauses add nothing.
   const playedRef = useRef(0)
   const lastTick = useRef<number | null>(null)
+  const videoCopyRef = useRef(false) // the conversion copies the video as is (H.264 at its own size)
   const directSince = useRef(0) // where direct play started, to check that the picture shows too
   const playSession = useRef(Math.random().toString(36).slice(2) + Date.now().toString(36))
   const hideTimer = useRef<number>()
@@ -259,6 +261,7 @@ function PlayerView({
   const initialSub = initial.current.sub
   const [choice, setChoice] = useState<Choice>({
     quality: 0,
+    convert: false,
     audio: initial.current.audio,
     burn: initialSub && IMAGE_SUBS.has(initialSub.codec) ? initialSub.index : -1,
   })
@@ -338,7 +341,7 @@ function PlayerView({
           window.setTimeout(() => load(resumeAt, choiceRef.current), 1500)
         } else setError(why)
       }
-      if (c.quality === 0 && c.audio < 0 && c.burn < 0 && !forceTranscode.current && canDirectPlay(file, video)) {
+      if (c.quality === 0 && !c.convert && c.audio < 0 && c.burn < 0 && !forceTranscode.current && canDirectPlay(file, video)) {
         stopTranscode()
         offsetRef.current = 0
         setMode('direct')
@@ -348,7 +351,7 @@ function PlayerView({
         video.addEventListener('loadedmetadata', () => (video.currentTime = at), { once: true })
       } else {
         try {
-          const res = await api.post<{ session: { id: string; variants?: number[] }; playlist: string }>(`/api/files/${file.id}/transcode`, {
+          const res = await api.post<{ session: { id: string; variants?: number[]; videoCopy?: boolean }; playlist: string }>(`/api/files/${file.id}/transcode`, {
             start: at,
             maxHeight: c.quality,
             audioStream: c.audio,
@@ -357,9 +360,13 @@ function PlayerView({
             // At "original" quality, let the player switch between qualities
             // itself when the server offers it. A picked quality stays fixed.
             adaptive: c.quality === 0,
+            // H.264 at its own size would otherwise be copied, which doesn't
+            // help a device that can't keep up with the file itself.
+            encodeVideo: c.convert,
             ...audioCaps(video, stereoOnly.current),
           })
           transcodeRef.current = res.session.id
+          videoCopyRef.current = !!res.session.videoCopy
           adaptiveRef.current = (res.session.variants?.length ?? 0) > 1
           offsetRef.current = at
           setMode('transcode')
@@ -476,6 +483,31 @@ function PlayerView({
     setToast(`Playback kept pausing to buffer, so quality was lowered to ${resolutionLabel(lower)}.`)
     apply({ ...choiceRef.current, quality: lower })
   }
+
+  // A device too slow for the file (a high bitrate, 4K, a heavy profile)
+  // plays it without buffering but drops frames, so it looks laggy. Two
+  // checks in a row dropping over a fifth of the frames: convert instead.
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video?.getVideoPlaybackQuality || !file || !prefs.autoQuality || choice.convert || choice.quality) return
+    if (mode !== 'direct' && !videoCopyRef.current) return // already converted
+    let last = video.getVideoPlaybackQuality()
+    let bad = 0
+    const t = window.setInterval(() => {
+      const q = video.getVideoPlaybackQuality()
+      const total = q.totalVideoFrames - last.totalVideoFrames
+      const dropped = q.droppedVideoFrames - last.droppedVideoFrames
+      last = q
+      if (video.paused || settlingRef.current || total < 50) return
+      bad = dropped / total > 0.2 ? bad + 1 : 0
+      if (bad < 2) return
+      window.clearInterval(t)
+      setToast('This device was dropping frames, so the server is converting the video for it.')
+      apply({ ...choiceRef.current, convert: true })
+    }, 5000)
+    return () => window.clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, mode, choice.convert, choice.quality, prefs.autoQuality])
 
   // Watch Together: everyone else's play, pause, seek and next item land
   // here; this viewer's own go out through share().
@@ -701,6 +733,13 @@ function PlayerView({
   if (!file) return <div className="player"><div className="player-error">This item has no playable file.</div></div>
 
   const qualities = [0, ...LADDER.filter((q) => q < file.height)]
+  const directOK = videoRef.current ? canDirectPlay(file, videoRef.current) : false
+  const modeLabel =
+    mode === 'direct'
+      ? 'Direct Play'
+      : choice.quality
+        ? `${resolutionLabel(choice.quality)} Converting`
+        : 'Converting'
   const activeCue = cues.find((c) => time >= c.start && time <= c.end)
   const pct = duration ? (time / duration) * 100 : 0
   const title = item.kind === 'episode' ? item.showTitle : item.title
@@ -848,7 +887,7 @@ function PlayerView({
           </div>
           <div className="spacer" />
           <span className={`mode-pill ${mode}`}>
-            {mode === 'direct' ? 'Direct Play' : choice.quality ? `${resolutionLabel(choice.quality)} Transcode` : 'Transcode'}
+            {modeLabel}
           </span>
           <div className="menu-anchor">
             <button
@@ -871,11 +910,26 @@ function PlayerView({
             {menu === 'settings' && (
               <div className="menu player-menu">
                 <div className="menu-section">Quality</div>
-                {qualities.map((q) => (
-                  <button key={q} className={q === choice.quality ? 'active' : ''} onClick={() => apply({ ...choice, quality: q })}>
-                    {q === 0 ? `Original (${resolutionLabel(file.height)})` : resolutionLabel(q)}
+                {/* Original as is, original converted by the server (smoother on
+                    a device that can't keep up with the file), or smaller. */}
+                {directOK && (
+                  <button className={choice.quality === 0 && !choice.convert ? 'active' : ''} onClick={() => apply({ ...choice, quality: 0, convert: false })}>
+                    Original ({resolutionLabel(file.height)}) · Direct Play
                   </button>
-                ))}
+                )}
+                <button
+                  className={choice.quality === 0 && (choice.convert || !directOK) ? 'active' : ''}
+                  onClick={() => apply({ ...choice, quality: 0, convert: true })}
+                >
+                  Original ({resolutionLabel(file.height)}) · Convert
+                </button>
+                {qualities
+                  .filter((q) => q > 0)
+                  .map((q) => (
+                    <button key={q} className={q === choice.quality ? 'active' : ''} onClick={() => apply({ ...choice, quality: q, convert: false })}>
+                      {resolutionLabel(q)} · Convert
+                    </button>
+                  ))}
                 {audioStreams.length > 1 && <div className="menu-section">Audio</div>}
                 {audioStreams.length > 1 &&
                   audioStreams.map((s) => (

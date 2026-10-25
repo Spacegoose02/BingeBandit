@@ -48,6 +48,10 @@ type Options struct {
 	// Older clients send neither and get AAC stereo.
 	AudioCodecs      []string `json:"audioCodecs"`
 	MaxAudioChannels int      `json:"maxAudioChannels"`
+	// EncodeVideo converts H.264 that would otherwise be copied: the viewer
+	// picked "Convert", or direct play stuttered (a high bitrate, level or
+	// profile the device can't keep up with).
+	EncodeVideo bool `json:"encodeVideo"`
 }
 
 type Session struct {
@@ -191,7 +195,7 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		targetH = o.MaxHeight
 	}
 	s.Height = targetH
-	s.VideoCopy = f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
+	s.VideoCopy = !o.EncodeVideo && f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
 	s.Tonemap = tonemap && !s.VideoCopy
 	s.BurnSubtitle = burn
 
