@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"bingebandit/internal/discover"
+	"bingebandit/internal/importer"
 	"bingebandit/internal/library"
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/markers"
@@ -99,6 +100,12 @@ func Builtin(d Deps) []*Task {
 			Description: "Retry codec and stream analysis for files that couldn't be read during a scan.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.analyzeMedia,
+		},
+		{
+			ID: "sync_list_collections", Name: "Sync list collections",
+			Description:    "Update collections that follow an MDBList list or an RSS feed, adding new titles and dropping ones the list no longer has.",
+			DefaultEnabled: true, DefaultHours: 6,
+			Run: func(ctx context.Context) (string, error) { return importer.NewLists(d.Store).SyncAll(ctx) },
 		},
 	}
 }

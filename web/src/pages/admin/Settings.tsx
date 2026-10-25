@@ -114,6 +114,18 @@ export default function AdminSettings() {
             . Lets a show use TheTVDB instead of TMDB (Fix match on the show), for aired, DVD or absolute episode numbering.
           </p>
           <label>
+            MDBList API key for list collections (optional)
+            <input value={s.mdblist_api_key ?? ''} onChange={set('mdblist_api_key')} placeholder="Paste your key" autoComplete="off" spellCheck={false} />
+          </label>
+          <p className="muted small">
+            From{' '}
+            <a href="https://mdblist.com/preferences/" target="_blank" rel="noreferrer">
+              mdblist.com/preferences
+            </a>
+            . Collections can follow an MDBList list (Edit collection → Follow a list). Public lists work without a key; with MDBList as the ratings
+            provider its key is used too.
+          </p>
+          <label>
             IMDb and Rotten Tomatoes ratings
             <select value={s.ratings_provider ?? ''} onChange={set('ratings_provider')}>
               <option value="">Off</option>
