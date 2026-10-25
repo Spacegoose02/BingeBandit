@@ -5,6 +5,7 @@ import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
 import { Icon } from './Icon'
 import { PasscodePrompt } from './Passcode'
+import { TogetherInvites } from './Together'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -128,6 +129,7 @@ export default function Layout() {
         </div>
       </aside>
       <main className="main">
+        <TogetherInvites />
         <Outlet />
       </main>
       <PasscodePrompt />
