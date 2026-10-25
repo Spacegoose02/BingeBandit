@@ -121,6 +121,8 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | DELETE | `/live/viewers/{viewer}` | Stop watching. |
 | POST | `/live/viewers/{viewer}/ping` | Keep a paused viewer counted (every 10 s). 410 once the viewer is gone. |
 | GET | `/live/playlist.m3u`, `/live/epg.xml` | M3U and XMLTV for other IPTV apps. Use `?token=<API key>`. |
+| GET | `/items/{id}/preroll` | What to play before a movie, from the viewer's settings: `{trailers: [{itemId, title, year, youtube}], intro?: {url, name}}`. Empty for anything but a movie. |
+| GET | `/preroll/intro/{n}` | An intro video (range requests work). |
 | GET | `/dvr` | Upcoming, series rules and recorded. Upcoming recordings carry `conflict` when a provider's connection limit may stop them. |
 | POST | `/dvr/recordings` | `{channelId, programId, series, keepLast}` (`keepLast`: series only, keep the newest N recordings, 0 = all). |
 | PATCH | `/dvr/rules/{id}` | `{keepLast}`; older recordings and their files are deleted right away. |

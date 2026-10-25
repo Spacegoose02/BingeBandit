@@ -20,11 +20,17 @@ type Prefs struct {
 	// SkipIntro and SkipCredits: "button" (offer it), "auto" (just do it) or "off".
 	SkipIntro   string `json:"skipIntro"`
 	SkipCredits string `json:"skipCredits"`
+	// Before a movie that starts from the beginning: up to this many trailers
+	// of other movies, then the server's intro video when PreRollIntro is on
+	// and an admin has set one.
+	PreRollTrailers int  `json:"preRollTrailers"`
+	PreRollIntro    bool `json:"preRollIntro"`
 }
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
+	PreRollIntro: true,
 }
 
 func (p *Prefs) Validate() error {
@@ -42,6 +48,9 @@ func (p *Prefs) Validate() error {
 		if v != "button" && v != "auto" && v != "off" {
 			return fmt.Errorf("skip settings must be button, auto or off")
 		}
+	}
+	if p.PreRollTrailers < 0 || p.PreRollTrailers > 5 {
+		return fmt.Errorf("trailers before a movie must be from 0 to 5")
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {
 		return fmt.Errorf("language codes are at most 8 characters")

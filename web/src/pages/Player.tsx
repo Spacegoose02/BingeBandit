@@ -3,9 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { Icon } from '../components/Icon'
+import { PreRoll } from '../components/PreRoll'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
-import type { Item, ItemDetail, MediaFile, MediaStream, Prefs } from '../types'
+import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
 const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub'])
@@ -16,17 +17,40 @@ export default function Player() {
   const [params] = useSearchParams()
   const { data, error } = useApi<ItemDetail>(`/api/items/${id}`)
   const { data: prefs } = useApi<Prefs>('/api/me/prefs')
+  const startAt = Number(params.get('t')) || 0
+  const playlistId = Number(params.get('playlist')) || 0
+  // Trailers and the intro video play only when a movie starts from the beginning.
+  const [preRoll, setPreRoll] = useState<PreRollData | 'done' | undefined>()
+  const isMovie = data?.item.kind === 'movie'
+  useEffect(() => {
+    setPreRoll(undefined)
+    if (!prefs || !isMovie) return
+    if (startAt > 0 || playlistId || (!prefs.preRollTrailers && !prefs.preRollIntro)) {
+      setPreRoll('done')
+      return
+    }
+    let stale = false
+    api
+      .get<PreRollData>(`/api/items/${id}/preroll`)
+      .then((p) => !stale && setPreRoll(p.trailers.length || p.intro ? p : 'done'))
+      .catch(() => !stale && setPreRoll('done'))
+    return () => {
+      stale = true
+    }
+  }, [id, isMovie, prefs, startAt, playlistId])
+  const preRollDone = useCallback(() => setPreRoll('done'), [])
   useDocumentTitle(data ? (data.item.kind === 'episode' ? `${data.item.showTitle} ${episodeLabel(data.item)}` : data.item.title) : 'Player')
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
-  if (!data || !prefs) return <div className="player"><div className="spinner" /></div>
+  if (!data || !prefs || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
+  if (isMovie && preRoll && preRoll !== 'done') return <PreRoll data={preRoll} movieTitle={data.item.title} onDone={preRollDone} />
   return (
     <PlayerView
       key={id}
       detail={data}
       prefs={prefs}
-      startAt={Number(params.get('t')) || 0}
+      startAt={startAt}
       fileId={Number(params.get('file')) || 0}
-      playlistId={Number(params.get('playlist')) || 0}
+      playlistId={playlistId}
     />
   )
 }
