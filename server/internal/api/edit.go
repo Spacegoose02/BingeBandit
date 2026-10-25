@@ -314,10 +314,23 @@ func (s *Server) setMarkers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// detectMarkers re-runs intro/credits detection for a show or season in the background.
+// detectMarkers re-runs intro/credits detection for a show, season or movie
+// in the background.
 func (s *Server) detectMarkers(w http.ResponseWriter, r *http.Request) {
 	it := s.adminItem(w, r)
 	if it == nil {
+		return
+	}
+	if it.Kind == "movie" {
+		go func() {
+			found, err := s.Markers.Movie(s.ctx, it.ID)
+			if err != nil {
+				log.Printf("markers: movie %d: %v", it.ID, err)
+				return
+			}
+			log.Printf("markers: %q: credits found: %v", it.Title, found)
+		}()
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 	id := it.ID
@@ -326,7 +339,7 @@ func (s *Server) detectMarkers(w http.ResponseWriter, r *http.Request) {
 	}
 	seasons, err := s.Store.SeasonIDs(id)
 	if err != nil || len(seasons) == 0 {
-		writeErr(w, http.StatusBadRequest, "detection runs on shows, seasons and episodes")
+		writeErr(w, http.StatusBadRequest, "detection runs on movies, shows, seasons and episodes")
 		return
 	}
 	go func() {
