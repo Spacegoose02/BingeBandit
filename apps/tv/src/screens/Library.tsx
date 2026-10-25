@@ -189,9 +189,14 @@ function AllTitles({ library }: { library: Library }) {
   useEffect(() => more(0), [more])
 
   // Jumping to a letter loads every page up to it, then focuses its first title.
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const [pending, setPending] = useState(-1) // a letter's offset waiting for its page to be drawn
   const jump = async (l: Letter) => {
+    // A page still loading (from scrolling) finishes first instead of the press being dropped.
+    for (let i = 0; busyRef.current && i < 100; i++) await new Promise<void>((r) => setTimeout(r, 100))
     if (busyRef.current) return
-    let loaded = items
+    let loaded = itemsRef.current
     if (loaded.length <= l.offset) {
       busyRef.current = true
       setBusy(true)
@@ -199,7 +204,8 @@ function AllTitles({ library }: { library: Library }) {
         while (loaded.length <= l.offset && loaded.length < total) {
           const p = await api.get<{ items: Item[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${loaded.length}&limit=500`)
           if (!p.items.length) break
-          loaded = [...loaded, ...p.items]
+          const have = new Set(loaded.map((it) => it.id))
+          loaded = [...loaded, ...p.items.filter((it) => !have.has(it.id))]
         }
         setItems(loaded)
       } catch (e) {
@@ -210,13 +216,19 @@ function AllTitles({ library }: { library: Library }) {
       }
     }
     if (l.offset >= loaded.length) return
-    // Clear first so picking the same letter again still moves focus there.
+    // Cleared first so picking the same letter again still moves focus there.
     setTarget(-1)
-    requestAnimationFrame(() => {
-      list.current?.scrollToIndex({ index: Math.floor((collections.length + l.offset) / cols), animated: true })
-      setTarget(l.offset)
-    })
+    setPending(l.offset)
   }
+  // Scroll once the rows holding the letter are in the list, then hand focus
+  // to its first title. Rows have a fixed height, so the offset is exact
+  // (scrollToIndex throws for rows the list hasn't caught up with yet).
+  useEffect(() => {
+    if (pending < 0 || pending >= items.length) return
+    list.current?.scrollToOffset({ offset: px(ROW_H) * Math.floor((collections.length + pending) / cols), animated: false })
+    setTarget(pending)
+    setPending(-1)
+  }, [pending, items.length, collections.length, cols])
 
   if (error) return <Problem error={error} retry={() => { setError(''); more(items.length) }} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
@@ -242,6 +254,8 @@ function AllTitles({ library }: { library: Library }) {
                 onPress={() => nav.push({ name: 'details', id: t.item.id })}
                 onFocus={() => {
                   setFocused(t.index)
+                  // Landed: stop preferring it, or scrolling back to its row later would pull focus there again.
+                  if (t.index === target) setTarget(-1)
                   // Reaching the last rows loads the next page.
                   if (items.length < total && t.index >= items.length - cols * 3) more(items.length)
                 }}

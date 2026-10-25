@@ -127,27 +127,42 @@ function LibraryView({ id }: { id: string }) {
   }, [items.length, total, load, tab])
 
   // Jumping to a letter loads every page up to it first, then scrolls there.
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const [jumpId, setJumpId] = useState(0) // the title a letter jump scrolls to once it's drawn
   const jumpTo = async (l: Letter) => {
-    let loaded = items
-    if (loaded.length <= l.offset && !loadingRef.current) {
+    // A page still loading from scrolling finishes first, instead of the click being dropped.
+    for (let i = 0; loadingRef.current && i < 100; i++) await new Promise((r) => setTimeout(r, 100))
+    if (loadingRef.current) return
+    const gen = generation.current
+    let loaded = itemsRef.current
+    if (loaded.length <= l.offset) {
       loadingRef.current = true
       setLoading(true)
       try {
         while (loaded.length <= l.offset && loaded.length < total) {
           const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${loaded.length}&limit=500`)
-          if (!page.items.length) break
-          loaded = [...loaded, ...page.items]
+          if (gen !== generation.current || !page.items.length) break
+          const have = new Set(loaded.map((it) => it.id))
+          loaded = [...loaded, ...page.items.filter((it) => !have.has(it.id))]
         }
-        setItems(loaded)
+        if (gen === generation.current) setItems(loaded)
       } finally {
         loadingRef.current = false
         setLoading(false)
       }
     }
+    if (gen !== generation.current) return
     const target = loaded[l.offset]
-    if (!target) return
-    requestAnimationFrame(() => document.getElementById(`lib-item-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    if (target) setJumpId(target.id)
   }
+  // Scrolls after the jump's pages are drawn. Instant, like Plex: a smooth
+  // scroll across a big library lands short while posters load in.
+  useEffect(() => {
+    if (!jumpId) return
+    document.getElementById(`lib-item-${jumpId}`)?.scrollIntoView({ block: 'start' })
+    setJumpId(0)
+  }, [jumpId])
 
   const changeSort = (s: string) => {
     localStorage.setItem(`bb.sort.${id}`, s)
