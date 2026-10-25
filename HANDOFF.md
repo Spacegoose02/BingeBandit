@@ -11,6 +11,14 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 - **Web player:** people icon → start a watch party / invite / copy link / leave. Joining fetches the room first and starts at the room's position (or follows it to what it plays now). Local play/pause/seek (buttons, keys, seek bar, skip intro) are sent; remote ones are applied with a toast ("Sam paused"). Every 5 s a playing viewer more than 3 s off the room jumps back in step. Next episode / playlist item moves everyone (`state: {togetherMove}` on the navigation, announced on arrival). Pre-roll is skipped in watch parties.
 - **Not in the TV app yet.** Tested: API test (access, invites, SSE updates, item change) and two Chromium browsers in one party (pause, seek while paused, the guest pressing play).
 
+## Notifications (M3)
+
+- **Table** `notifications` (migration 24): one row per user, with `kind`, `title`, `body`, `link` (a web app path), `image` (poster), `read_at`. Pruned after 60 days. API: `GET /api/notifications`, `POST /api/notifications/read`, `DELETE /api/notifications`.
+- **New episodes** (`api/notifications.go`, `Server.RunNotifications`, every 5 minutes from `main.go`): episodes with `added_at` past the watermark (internal setting `notify_episodes_since`; the first run only sets it to now, so an existing library doesn't notify) are grouped per show. Followers are users who started or finished any episode of the show or have it on their watchlist, who can still see it, haven't watched the new episode, and have pref `notifyEpisodes` on. One notification per show and user ("3 new episodes of …"; a single episode links to the episode).
+- **Recordings:** `Server.Emit` turns `recording.completed` / `recording.failed` into a notification for the recording's owner when pref `notifyRecordings` is on.
+- **Web:** a bell next to the user chip with an unread badge (polls every minute), list, mark all read, clear. Account → Playback has the two switches. The TV app doesn't show them yet.
+- **Tested:** API test (followers, hidden library, pref off, watched episode skipped, no repeats, recordings, read/clear) and the bell in Chromium at desktop and phone widths.
+
 ## Passkeys (M6)
 
 - **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 23): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.

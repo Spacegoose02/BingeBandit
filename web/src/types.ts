@@ -247,6 +247,8 @@ export interface Prefs {
   preRollTrailers: number
   /** The server's intro video before a movie, when an admin has set one. */
   preRollIntro: boolean
+  notifyEpisodes: boolean
+  notifyRecordings: boolean
 }
 
 export interface PreRoll {

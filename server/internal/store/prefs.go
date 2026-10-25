@@ -25,12 +25,15 @@ type Prefs struct {
 	// and an admin has set one.
 	PreRollTrailers int  `json:"preRollTrailers"`
 	PreRollIntro    bool `json:"preRollIntro"`
+	// Notifications in the app.
+	NotifyEpisodes   bool `json:"notifyEpisodes"`   // new episodes of shows you watch or have on your watchlist
+	NotifyRecordings bool `json:"notifyRecordings"` // your recordings finished or failed
 }
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
-	PreRollIntro: true,
+	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true,
 }
 
 func (p *Prefs) Validate() error {
