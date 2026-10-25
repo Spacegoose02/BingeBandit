@@ -634,7 +634,7 @@ CREATE TABLE library_pins (
 );
 ALTER TABLE users ADD COLUMN pins_chosen INTEGER NOT NULL DEFAULT 0;
 `,
-	// 28: each library's rows (built-in ones like Recently Added, and its
+	// 29: each library's rows (built-in ones like Recently Added, and its
 	// collections), their order, and where each shows: the library's
 	// Recommended tab, Home, and Home for people outside the admin's household
 	// (Plex's "Manage Recommendations"). Rows without one use the defaults.
