@@ -667,4 +667,7 @@ CREATE TABLE show_aliases (
 	PRIMARY KEY (library_id, match_key)
 );
 `,
+	// 33: a collection's own Collection Mode (Plex's Advanced tab), which
+	// overrides the library's: '' (library default), show, hide or collapse.
+	`ALTER TABLE collections ADD COLUMN mode TEXT NOT NULL DEFAULT '';`,
 }

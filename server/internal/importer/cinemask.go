@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,33 +28,75 @@ func NewCinemask(baseURL, key string) *Cinemask {
 
 func (c *Cinemask) Kind() string { return "cinemask" }
 
-func (c *Cinemask) get(ctx context.Context, path string, out any) error {
+func (c *Cinemask) open(ctx context.Context, path string) (io.ReadCloser, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Api-Key", c.Key)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't reach Cinemask: %w", err)
+	}
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return resp.Body, nil
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		err = fmt.Errorf("Cinemask didn't accept the API key")
+	case resp.StatusCode == http.StatusNotFound:
+		err = errNotFound
+	default:
+		err = fmt.Errorf("Cinemask answered %s", resp.Status)
+	}
+	resp.Body.Close()
+	return nil, err
+}
+
+func (c *Cinemask) get(ctx context.Context, path string, out any) error {
+	body, err := c.open(ctx, path)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Api-Key", c.Key)
-	req.Header.Set("Accept", "application/json")
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("couldn't reach Cinemask: %w", err)
-	}
-	defer resp.Body.Close()
-	switch {
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return fmt.Errorf("Cinemask didn't accept the API key")
-	case resp.StatusCode == http.StatusNotFound:
-		return errNotFound
-	case resp.StatusCode != http.StatusOK:
-		return fmt.Errorf("Cinemask answered %s", resp.Status)
-	}
-	return json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(out)
+	defer body.Close()
+	return json.NewDecoder(io.LimitReader(body, 64<<20)).Decode(out)
 }
+
+// Artwork: Cinemask only has collection posters, which come with Collections.
+func (c *Cinemask) Artwork(context.Context, func(Art) error, func(string, int, int)) error {
+	return nil
+}
+
+// Image fetches a collection poster. Cinemask keeps TMDB paths (turned into
+// tmdb:/ references before this), https links, and covers on Plex, Jellyfin
+// or its own disk, which it serves at /api/images.
+func (c *Cinemask) Image(ctx context.Context, ref string) (io.ReadCloser, error) {
+	if strings.HasPrefix(ref, "https://") {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ref, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			return nil, fmt.Errorf("%s answered %s", req.URL.Host, resp.Status)
+		}
+		return resp.Body, nil
+	}
+	return c.open(ctx, "/api/images?src="+url.QueryEscape(ref))
+}
+
+var tmdbPoster = regexp.MustCompile(`^/[A-Za-z0-9_-]+\.(jpe?g|png|webp)$`)
 
 type cinemaskCollection struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Poster      string `json:"poster"`    // TMDB path, https link, or plex:/jellyfin:/local: image
+	PlexLabel   string `json:"plexLabel"` // put on every member in Plex
+	FromLabel   string `json:"fromLabel"` // members are everything with this label
 	Items       []struct {
 		Kind   string `json:"kind"` // movie | show
 		TMDBID int64  `json:"tmdbId"`
@@ -84,7 +128,10 @@ func (c *Cinemask) Collections(ctx context.Context, emit func(Collection) error)
 		if err := c.get(ctx, "/api/collections/"+strconv.FormatInt(sum.ID, 10), &col); err != nil {
 			return err
 		}
-		out := Collection{Name: col.Name, Summary: col.Description}
+		out := Collection{Name: col.Name, Summary: col.Description, Poster: col.Poster, Label: col.FromLabel, ItemLabel: col.PlexLabel}
+		if tmdbPoster.MatchString(col.Poster) {
+			out.Poster = "tmdb:" + col.Poster
+		}
 		for _, it := range col.Items {
 			if it.Kind != "movie" && it.Kind != "show" {
 				continue

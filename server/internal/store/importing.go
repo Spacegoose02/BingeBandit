@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -133,8 +134,8 @@ func (s *Store) SetCollectionArtwork(id int64, kind, ref string) error {
 }
 
 // EnsureCollection finds a collection by name in a library, creating it if needed,
-// and adds the items. It returns the collection and how many items were new to it.
-func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (int64, int, error) {
+// and adds the items. It returns its id and how many items were new to it.
+func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (id int64, added int, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return 0, 0, err
@@ -144,11 +145,9 @@ func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs
 		libraryID, name, overview, now()); err != nil {
 		return 0, 0, err
 	}
-	var id int64
 	if err := tx.QueryRow(`SELECT id FROM collections WHERE library_id = ? AND name = ? COLLATE NOCASE`, libraryID, name).Scan(&id); err != nil {
 		return 0, 0, err
 	}
-	added := 0
 	for _, it := range itemIDs {
 		res, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id) VALUES (?, ?)`, id, it)
 		if err != nil {
@@ -158,4 +157,29 @@ func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs
 		added += int(n)
 	}
 	return id, added, tx.Commit()
+}
+
+// SetCollectionLabel makes a collection gather everything with label, unless
+// it already has a label rule.
+func (s *Store) SetCollectionLabel(id int64, label string) error {
+	_, err := s.db.Exec(`UPDATE collections SET label_rule = ? WHERE id = ? AND label_rule = ''`, label, id)
+	return err
+}
+
+// AddItemLabel puts a label on a movie or show, reporting whether it was new.
+func (s *Store) AddItemLabel(itemID int64, label string) (bool, error) {
+	var raw string
+	if err := s.db.QueryRow(`SELECT labels FROM items WHERE id = ?`, itemID).Scan(&raw); err != nil {
+		return false, err
+	}
+	var labels []string
+	json.Unmarshal([]byte(raw), &labels)
+	for _, l := range labels {
+		if strings.EqualFold(l, label) {
+			return false, nil
+		}
+	}
+	b, _ := json.Marshal(append(labels, label))
+	_, err := s.db.Exec(`UPDATE items SET labels = ? WHERE id = ?`, string(b), itemID)
+	return err == nil, err
 }

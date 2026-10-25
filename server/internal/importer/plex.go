@@ -463,3 +463,44 @@ func (p *Plex) Image(ctx context.Context, path string) (io.ReadCloser, error) {
 	}
 	return resp.Body, nil
 }
+
+// Labels sends every label in movie and show libraries with the titles that
+// carry it. Kometa and Cinemask put their labels here.
+func (p *Plex) Labels(ctx context.Context, emit func(LabelSet) error) error {
+	secs, err := p.get(ctx, "/library/sections", nil)
+	if err != nil {
+		return err
+	}
+	for _, sec := range secs.MediaContainer.Directory {
+		if sec.Type != "movie" && sec.Type != "show" {
+			continue
+		}
+		labels, err := p.get(ctx, "/library/sections/"+sec.Key+"/label", nil)
+		if err != nil {
+			if errors.Is(err, errNotFound) {
+				continue
+			}
+			return err
+		}
+		for _, l := range labels.MediaContainer.Directory {
+			items, err := p.get(ctx, "/library/sections/"+sec.Key+"/all", url.Values{"label": {l.Key}, "includeGuids": {"1"}})
+			if err != nil {
+				if ctx.Err() != nil {
+					return err
+				}
+				log.Printf("import (plex): label %q: %v", l.Title, err)
+				continue
+			}
+			set := LabelSet{Name: l.Title}
+			for i := range items.MediaContainer.Metadata {
+				m := &items.MediaContainer.Metadata[i]
+				p.meta[m.RatingKey] = m
+				set.Items = append(set.Items, p.record(ctx, m))
+			}
+			if err := emit(set); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

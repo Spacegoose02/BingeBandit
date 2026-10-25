@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
 
@@ -24,8 +25,24 @@ type Collection struct {
 	Name     string
 	Summary  string
 	Items    []Record
-	Poster   string // source image paths for ArtworkSource.Image; "" = none
+	Poster   string // source image paths for ArtworkSource.Image, or a "tmdb:/<file>" reference; "" = none
 	Backdrop string
+	// Label makes the collection gather everything carrying it, as well as
+	// its members (Cinemask's "fill from label").
+	Label string
+	// ItemLabel is put on every member (Cinemask's Plex label).
+	ItemLabel string
+}
+
+// LabelSet is a label on the source and the titles carrying it.
+type LabelSet struct {
+	Name  string
+	Items []Record
+}
+
+// labelSource is a source that can send its labels (Plex, where Kometa puts them).
+type labelSource interface {
+	Labels(ctx context.Context, emit func(LabelSet) error) error
 }
 
 // Art is an item's poster and background on the source.
@@ -62,6 +79,7 @@ type Options struct {
 	Watched     bool             `json:"watched"` // watched marks and resume points
 	Collections bool             `json:"collections"`
 	Artwork     bool             `json:"artwork"` // posters and backgrounds (ArtworkSource only)
+	Labels      bool             `json:"labels"`  // put the source's labels on matching titles
 	DryRun      bool             `json:"dryRun"`
 	Users       map[string]int64 `json:"users"` // source user → BingeBandit user id; missing or 0 = skip
 }
@@ -87,6 +105,7 @@ type Status struct {
 	CollItems    int      `json:"collectionItems"`
 	Artwork      int      `json:"artwork"` // images replaced
 	ArtFailed    int      `json:"artworkFailed"`
+	Labels       int      `json:"labels"`    // labels put on titles
 	Unmatched    []string `json:"unmatched"` // most-played titles that weren't found
 	UnmatchedNum int      `json:"unmatchedCount"`
 	Error        string   `json:"error,omitempty"`
@@ -216,6 +235,18 @@ func (r *Runner) run(ctx context.Context, src Source, opt Options) error {
 				return ctx.Err()
 			}
 			return r.applyCollection(ctx, src, m, c, opt)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if ls, ok := src.(labelSource); ok && opt.Labels {
+		progress("Labels", 0, 0)
+		err := ls.Labels(ctx, func(l LabelSet) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return r.applyLabel(m, l, opt)
 		})
 		if err != nil {
 			return err
@@ -378,6 +409,18 @@ func (r *Runner) applyCollection(ctx context.Context, src Source, m *Matcher, c 
 				return err
 			}
 			n = added
+			if c.Label != "" {
+				if err := r.st.SetCollectionLabel(id, c.Label); err != nil {
+					return err
+				}
+			}
+			if c.ItemLabel != "" {
+				for _, it := range ids {
+					if _, err := r.st.AddItemLabel(it, c.ItemLabel); err != nil {
+						return err
+					}
+				}
+			}
 			if as != nil {
 				for kind, path := range map[string]string{"poster": c.Poster, "backdrop": c.Backdrop} {
 					if path == "" {
@@ -442,7 +485,30 @@ func (r *Runner) applyArtwork(ctx context.Context, as ArtworkSource, m *Matcher,
 	return nil
 }
 
+func (r *Runner) applyLabel(m *Matcher, l LabelSet, opt Options) error {
+	for i := range l.Items {
+		it := m.Match(&l.Items[i])
+		if it == nil {
+			continue
+		}
+		added := true
+		if !opt.DryRun {
+			var err error
+			if added, err = r.st.AddItemLabel(it.ID, l.Name); err != nil {
+				return err
+			}
+		}
+		if added {
+			r.update(func(s *Status) { s.Labels++ })
+		}
+	}
+	return nil
+}
+
 func (r *Runner) fetchImage(ctx context.Context, as ArtworkSource, path string) (string, error) {
+	if metadata.ValidTMDBRef(path) {
+		return path, nil // TMDB images are served by reference
+	}
 	body, err := as.Image(ctx, path)
 	if err != nil {
 		return "", err

@@ -485,6 +485,7 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 type collectionReq struct {
 	Name     string `json:"name"`
 	Overview string `json:"overview"`
+	Mode     string `json:"mode"` // "" follows the library
 	store.SmartRules
 }
 
@@ -493,6 +494,11 @@ func (c *collectionReq) clean() error {
 	c.GenreRule, c.StudioRule = strings.TrimSpace(c.GenreRule), strings.TrimSpace(c.StudioRule)
 	if c.Name == "" {
 		return errors.New("name is required")
+	}
+	switch c.Mode {
+	case "", "show", "hide", "collapse":
+	default:
+		return errors.New("unknown collection mode")
 	}
 	for _, y := range []int{c.YearFrom, c.YearTo} {
 		if y != 0 && (y < 1870 || y > 2200) {
@@ -547,7 +553,7 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.Store.UpdateCollection(id, req.Name, req.Overview, req.SmartRules); err != nil {
+	if err := s.Store.UpdateCollection(id, req.Name, req.Overview, req.Mode, req.SmartRules); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			writeErr(w, http.StatusConflict, "a collection with that name already exists")
 			return

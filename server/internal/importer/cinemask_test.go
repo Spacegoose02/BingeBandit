@@ -2,6 +2,7 @@ package importer
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,7 +18,9 @@ func TestCinemaskCollections(t *testing.T) {
 		case "/api/collections":
 			w.Write([]byte(`[{"id":7,"name":"Pixar","itemCount":2}]`))
 		case "/api/collections/7":
-			w.Write([]byte(`{"id":7,"name":"Pixar","description":"Lamps","items":[{"kind":"movie","tmdbId":862,"title":"Toy Story","year":1995},{"kind":"show","tmdbId":1,"title":"Bluey"},{"kind":"book","tmdbId":2}]}`))
+			w.Write([]byte(`{"id":7,"name":"Pixar","description":"Lamps","poster":"/lamp.jpg","plexLabel":"Pixar","fromLabel":"Pixar Films","items":[{"kind":"movie","tmdbId":862,"title":"Toy Story","year":1995},{"kind":"show","tmdbId":1,"title":"Bluey"},{"kind":"book","tmdbId":2}]}`))
+		case "/api/images":
+			w.Write([]byte("img:" + r.URL.Query().Get("src")))
 		default:
 			http.NotFound(w, r)
 		}
@@ -40,5 +43,18 @@ func TestCinemaskCollections(t *testing.T) {
 	}
 	if it := got[0].Items[0]; it.Kind != "movie" || it.TMDB != 862 || it.Year != 1995 {
 		t.Errorf("first item %+v", it)
+	}
+	if g := got[0]; g.Poster != "tmdb:/lamp.jpg" || g.Label != "Pixar Films" || g.ItemLabel != "Pixar" {
+		t.Errorf("poster %q label %q item label %q", g.Poster, g.Label, g.ItemLabel)
+	}
+	// Covers Cinemask keeps on Plex come through its image proxy.
+	body, err := c.Image(context.Background(), "plex:/library/collections/5/thumb/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(body)
+	body.Close()
+	if string(b) != "img:plex:/library/collections/5/thumb/1" {
+		t.Errorf("image %q", b)
 	}
 }

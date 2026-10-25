@@ -23,7 +23,7 @@ interface Page {
   library: Library
   items: Item[]
   total: number
-  collections?: Collection[] // first page only, unless the library hides them
+  collections?: Collection[] // first page only; collections whose mode hides them are left out
   letters?: Letter[] // first page sorted by title: where each letter starts
 }
 

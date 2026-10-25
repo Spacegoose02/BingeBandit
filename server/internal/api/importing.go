@@ -97,7 +97,9 @@ func (s *Server) importConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, row{u, sug})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex" || req.Source == "cinemask", "watchedState": req.Source == "plex", "artwork": req.Source == "plex"})
+	// Cinemask's artwork is its collection posters.
+	writeJSON(w, http.StatusOK, map[string]any{"users": out, "collections": req.Source == "plex" || req.Source == "cinemask", "labels": req.Source == "plex",
+		"watchedState": req.Source == "plex", "artwork": req.Source == "plex" || req.Source == "cinemask"})
 }
 
 func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +117,7 @@ func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !req.History && !req.Watched && !req.Collections && !req.Artwork {
+	if !req.History && !req.Watched && !req.Collections && !req.Artwork && !req.Labels {
 		writeErr(w, http.StatusBadRequest, "choose something to import")
 		return
 	}

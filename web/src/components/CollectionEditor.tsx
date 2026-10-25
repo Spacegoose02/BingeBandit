@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { useApi } from '../hooks'
-import type { Collection } from '../types'
+import type { Collection, CollectionMode } from '../types'
 import { Modal } from './Modal'
 
 interface Facets {
@@ -9,6 +9,14 @@ interface Facets {
   genres: string[]
   studios: string[]
 }
+
+// Plex's per-collection Collection Mode, which overrides the library's.
+const modes: [CollectionMode | '', string][] = [
+  ['', 'Library default'],
+  ['collapse', 'Hide items in this collection'],
+  ['show', 'Show this collection and its items'],
+  ['hide', 'Hide this collection but show its items'],
+]
 
 const yearValue = (s: string) => (s ? Number(s) : 0)
 
@@ -26,6 +34,7 @@ export function CollectionEditor({
 }) {
   const [name, setName] = useState(collection?.name ?? '')
   const [overview, setOverview] = useState(collection?.overview ?? '')
+  const [mode, setMode] = useState<CollectionMode | ''>(collection?.mode ?? '')
   const [labelRule, setLabelRule] = useState(collection?.labelRule ?? '')
   const [genreRule, setGenreRule] = useState(collection?.genreRule ?? '')
   const [studioRule, setStudioRule] = useState(collection?.studioRule ?? '')
@@ -39,7 +48,7 @@ export function CollectionEditor({
     setError('')
     const rules = { labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
     try {
-      if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, ...rules })
+      if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, ...rules })
       else await api.post(`/api/admin/libraries/${libraryId}/collections`, { name, ...rules })
       onSaved()
     } catch (err) {
@@ -58,6 +67,19 @@ export function CollectionEditor({
           <label>
             Summary
             <textarea rows={3} value={overview} onChange={(e) => setOverview(e.target.value)} />
+          </label>
+        )}
+        {collection && (
+          <label>
+            Collection mode
+            <select value={mode} onChange={(e) => setMode(e.target.value as CollectionMode | '')}>
+              {modes.map(([v, label]) => (
+                <option key={v} value={v}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <span className="muted small">How this collection and its titles show on the library's Library tab.</span>
           </label>
         )}
         <div className="label">Smart rules: include everything that matches all of these</div>
