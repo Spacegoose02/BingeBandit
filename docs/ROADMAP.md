@@ -70,7 +70,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Credits detection for movies (no sibling episodes to compare; needs black-frame/text detection) |
 | ✅ | Trailers or a custom intro video before a movie: per-user trailers of other unwatched movies (never rated above the movie; web player) and the admin's intro videos (web and TV app) |
 | ✅ | **Settings passcode**: a per-user 4–8 digit passcode locks Account changes and the Admin pages in the web UI until it (or the password) is entered; unlocks last 15 minutes of use; apps and API keys aren't affected; admins can clear a forgotten one |
-| | Recommendations from other users on Home (opt-in) |
+| ✅ | Recommendations from other users on Home: a Recommend button on movies and shows (with a note), a "Recommended for You" row for people who opt in under Account → Sharing |
 | | Discover: new shows and movie trailers (admin adds YouTube playlists) |
 | | Watch Together: invite a user and sync playback |
 | | Notifications: new episodes, live sports starting, etc. |

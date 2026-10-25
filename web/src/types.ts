@@ -489,6 +489,14 @@ export interface HomeData {
   hero: Item[]
   continueWatching: Item[]
   rows: { id: string; title: string; items: Item[] }[]
+  recommendedBy?: Record<string, Recommendation> // item id → who recommended it
+}
+
+export interface Recommendation {
+  itemId: number
+  from: string[]
+  notes?: string[] // "Name: note"
+  at: number
 }
 
 export interface ScanStatus {

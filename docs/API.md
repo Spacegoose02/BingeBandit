@@ -89,6 +89,10 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
 | GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
 | GET | `/items/{id}` | A movie, show, season or episode, with files, streams, cast and children. Movies and shows include `externalRatings` (`imdb`, `imdbVotes`, `imdbId`, `rottenTomatoes`, `rottenTomatoesAudience`, `metacritic`) once a ratings provider has scores for them. |
+| GET | `/items/{id}/recommend` | People this movie or show can be recommended to (opted in, and able to see it): `[{id, name}]`. |
+| POST | `/items/{id}/recommend` | `{userIds, note}` → `{sent}`. Recommending again renews it. |
+| DELETE | `/recommendations/{itemId}` | Hide a title from your "Recommended for You" row. |
+| GET/PUT | `/me/recommendations` | `{accept}`: whether others may recommend titles to you (off by default). `/home` includes the row (`id: "recommended"`) and `recommendedBy` (item id → `{from, notes}`). |
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
