@@ -178,6 +178,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/dvr", s.recordings)
 			r.Post("/dvr/recordings", s.scheduleRecording)
 			r.Delete("/dvr/recordings/{id}", s.deleteRecording)
+			r.Patch("/dvr/rules/{id}", s.updateRule)
 			r.Delete("/dvr/rules/{id}", s.deleteRule)
 			r.Get("/live/playlist.m3u", s.livePlaylist)
 			r.Get("/live/epg.xml", s.liveEPG)

@@ -106,6 +106,48 @@ func (rec *Recorder) ApplyRules() {
 		for _, a := range airings {
 			rec.st.CreateRecording(fromProgram(&a.Program, a.ChannelID, a.ChannelName, rule.UserID, rule.ID, "scheduled", before, after))
 		}
+		rec.Prune(rule.ID)
+	}
+}
+
+// Prune deletes a series' oldest completed recordings (row and file) beyond
+// the rule's keep-last count. Files outside the recordings folder are left
+// on disk.
+func (rec *Recorder) Prune(ruleID int64) {
+	rule, err := rec.st.Rule(ruleID)
+	if err != nil || rule.KeepLast <= 0 {
+		return
+	}
+	extra, err := rec.st.ExtraRecordings(ruleID, rule.KeepLast)
+	if err != nil {
+		return
+	}
+	for _, r := range extra {
+		if r.Path != "" && rec.InFolder(r.Path) {
+			if err := os.Remove(r.Path); err != nil && !os.IsNotExist(err) {
+				log.Printf("dvr: keeping %q: could not delete %s: %v", r.Title, r.Path, err)
+				continue
+			}
+			removeEmptyDirs(filepath.Dir(r.Path), rec.Folder())
+		}
+		rec.st.DeleteRecording(r.ID)
+		log.Printf("dvr: deleted %q (%s) to keep the newest %d of the series", r.Title, time.Unix(r.ProgramStart, 0).Format("2006-01-02"), rule.KeepLast)
+	}
+}
+
+// InFolder reports whether path is inside the recordings folder.
+func (rec *Recorder) InFolder(path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(rec.Folder()), filepath.Clean(path))
+	return err == nil && rel != "." && !strings.HasPrefix(rel, "..")
+}
+
+// removeEmptyDirs removes dir and its empty parents up to (not including) root.
+func removeEmptyDirs(dir, root string) {
+	root = filepath.Clean(root)
+	for dir = filepath.Clean(dir); dir != root && strings.HasPrefix(dir, root+string(filepath.Separator)); dir = filepath.Dir(dir) {
+		if os.Remove(dir) != nil { // fails when not empty
+			return
+		}
 	}
 }
 
@@ -119,7 +161,7 @@ func fromProgram(p *store.GuideProgram, channelID int64, channelName string, use
 }
 
 // Schedule creates a recording for a guide program (and optionally a series rule).
-func (rec *Recorder) Schedule(p *store.GuideProgram, ch *store.Channel, userID int64, series, needsApproval bool) (*store.Recording, error) {
+func (rec *Recorder) Schedule(p *store.GuideProgram, ch *store.Channel, userID int64, series bool, keepLast int, needsApproval bool) (*store.Recording, error) {
 	status := "scheduled"
 	if needsApproval {
 		status = "pending"
@@ -130,7 +172,7 @@ func (rec *Recorder) Schedule(p *store.GuideProgram, ch *store.Channel, userID i
 		if needsApproval {
 			ruleStatus = "pending"
 		}
-		rule, err := rec.st.CreateRule(&store.RecordingRule{UserID: userID, ChannelID: ch.ID, Title: p.Title, Status: ruleStatus})
+		rule, err := rec.st.CreateRule(&store.RecordingRule{UserID: userID, ChannelID: ch.ID, Title: p.Title, Status: ruleStatus, KeepLast: keepLast})
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +234,7 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 	log.Printf("dvr: recording %q on %s → %s", r.Title, r.ChannelName, path)
 
 	var written int64
-	var lastErr string
+	lastErr := "the channel did not start"
 	user := &store.User{ID: r.UserID, Username: "DVR"}
 	for ctx.Err() == nil {
 		ch, err := rec.st.Channel(0, r.ChannelID)
@@ -200,7 +242,7 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 			lastErr = "the channel was deleted"
 			break
 		}
-		v, err := rec.live.Join(ch, user, "dvr", "ts")
+		v, err := rec.live.Join(ch, user, dvrClient, "ts")
 		if err != nil {
 			lastErr = err.Error()
 			sleepCtx(ctx, 5*time.Second)
@@ -212,7 +254,7 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 			case <-ctx.Done():
 				break copyLoop
 			case <-v.Done():
-				lastErr = "the stream dropped; reconnecting"
+				lastErr = rec.live.ChannelError(ch.ID, "the stream dropped; reconnecting")
 				break copyLoop
 			case chunk := <-v.Chunks():
 				n, err := f.Write(chunk)
@@ -240,8 +282,14 @@ func (rec *Recorder) record(ctx context.Context, r *store.Recording) {
 	case time.Now().Unix() < r.StopAt-30:
 		status, msg = "completed", "stopped early" // cancelled by a user or the server
 	}
+	if status == "failed" {
+		os.Remove(path) // nothing in it
+	}
 	rec.st.SetRecordingState(r.ID, status, path, written, msg)
 	rec.event("recording."+status, r.ID)
+	if status == "completed" && r.RuleID != 0 {
+		rec.Prune(r.RuleID)
+	}
 	log.Printf("dvr: %q finished (%s, %.1f MB)", r.Title, status, float64(written)/(1<<20))
 }
 

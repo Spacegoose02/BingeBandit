@@ -519,6 +519,10 @@ ALTER TABLE collections ADD COLUMN studio_rule TEXT NOT NULL DEFAULT '';
 ALTER TABLE collections ADD COLUMN year_from INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE collections ADD COLUMN year_to INTEGER NOT NULL DEFAULT 0;
 `,
+	// 20: DVR series rules can keep only the newest N recordings (0 = all).
+	`
+ALTER TABLE recording_rules ADD COLUMN keep_last INTEGER NOT NULL DEFAULT 0;
+`,
 	// 21: IMDb, Rotten Tomatoes and Metacritic scores for movies and shows,
 	// from MDBList or OMDb. A row with no scores records a lookup that found
 	// nothing, so it isn't retried every run.
