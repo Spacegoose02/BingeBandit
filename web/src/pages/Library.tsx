@@ -77,23 +77,35 @@ function LibraryView({ id }: { id: string }) {
   const loadingRef = useRef(false)
   useDocumentTitle(library?.name)
 
+  const generation = useRef(0)
   const load = useCallback(
     async (offset: number) => {
-      if (loadingRef.current) return
+      // A new first page (another library or sort) always goes ahead, and a
+      // page still on its way for the old one is dropped when it lands.
+      if (offset === 0) generation.current++
+      else if (loadingRef.current) return
+      const gen = generation.current
       loadingRef.current = true
       setLoading(true)
       try {
         const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${offset}&limit=${PAGE}`)
+        if (gen !== generation.current) return
         setLibrary(page.library)
         setTotal(page.total)
-        setItems((prev) => (offset === 0 ? page.items : [...prev, ...page.items]))
+        setItems((prev) => {
+          if (offset === 0) return page.items
+          const have = new Set(prev.map((it) => it.id))
+          return [...prev, ...page.items.filter((it) => !have.has(it.id))]
+        })
         if (offset === 0) {
           setCollections(page.collections ?? [])
           setLetters(page.letters ?? [])
         }
       } finally {
-        loadingRef.current = false
-        setLoading(false)
+        if (gen === generation.current) {
+          loadingRef.current = false
+          setLoading(false)
+        }
       }
     },
     [id, sort],

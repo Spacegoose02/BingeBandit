@@ -185,11 +185,11 @@ func (s *Store) ShowEpisodes(uid, showID int64) ([]*Item, error) {
 }
 
 var librarySorts = map[string]string{
-	"title":   "i.sort_title COLLATE NOCASE",
-	"added":   "i.added_at DESC",
-	"year":    "i.year DESC, i.sort_title COLLATE NOCASE",
-	"release": "i.release_date DESC",
-	"rating":  "i.rating DESC",
+	"title":   "i.sort_title COLLATE NOCASE, i.id",
+	"added":   "i.added_at DESC, i.id",
+	"year":    "i.year DESC, i.sort_title COLLATE NOCASE, i.id",
+	"release": "i.release_date DESC, i.id",
+	"rating":  "i.rating DESC, i.id",
 }
 
 // LibraryItems pages through a library's movies or shows, leaving out the

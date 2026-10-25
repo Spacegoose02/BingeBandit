@@ -655,4 +655,16 @@ CREATE TABLE library_rows (
 	// show (collections and their items), hide (items only) or collapse
 	// (collections instead of the items in them).
 	`ALTER TABLE libraries ADD COLUMN collection_mode TEXT NOT NULL DEFAULT 'show';`,
+	// 32: shows found in more than one folder ("The Office (US)" and
+	// "The Office (2005)", or the same show on two drives) are merged into one
+	// once they match the same TMDB or TVDB entry. The folder's match key
+	// then points at the show that was kept, so later scans add to it.
+	`
+CREATE TABLE show_aliases (
+	library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+	match_key  TEXT NOT NULL,
+	show_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	PRIMARY KEY (library_id, match_key)
+);
+`,
 }

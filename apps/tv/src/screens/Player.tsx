@@ -421,7 +421,14 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           paused={paused}
           selectedAudioTrack={mode === 'direct' && audioPos >= 0 ? { type: SelectedTrackType.INDEX, value: audioPos } : undefined}
           onProgress={onProgress}
-          onLoad={() => {
+          onLoad={(d) => {
+            // ExoPlayer quietly drops a video track this device can't decode
+            // (10-bit H.264, some HEVC, VC-1 …) and plays only the sound.
+            // No picture in direct play: let the server convert the file.
+            if (mode === 'direct' && file?.videoCodec && !d.naturalSize?.width) {
+              transcode(posRef.current)
+              return
+            }
             setBuffering(false)
             showControls('seek') // a glimpse of the title and position
           }}
