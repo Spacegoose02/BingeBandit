@@ -236,6 +236,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/images/tmdb/{file}", s.tmdbImage)
 			r.Get("/images/local/{file}", s.localImage)
 			r.Get("/libraries/{id}/collections", s.libraryCollections)
+			r.Get("/libraries/{id}/hubs", s.libraryHubs)
 			r.Get("/collections/{id}", s.collection)
 
 			r.Post("/progress", s.progress)
@@ -285,6 +286,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/libraries/{id}/facets", s.libraryFacets)
 				r.Post("/libraries/{id}/collections", s.createCollection)
 				r.Put("/collections/{id}", s.updateCollection)
+				r.Put("/collections/{id}/visibility", s.setCollectionVisibility)
+				r.Get("/libraries/{id}/rows", s.libraryRows)
+				r.Put("/libraries/{id}/rows", s.setLibraryRows)
 				r.Delete("/collections/{id}", s.deleteCollection)
 
 				r.Get("/live/sources", s.liveSources)

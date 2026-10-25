@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type WatchState struct {
@@ -217,13 +216,6 @@ func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error
 	}
 	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` ORDER BY `+order+` LIMIT @limit`,
 		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
-}
-
-func (s *Store) RecentlyReleased(uid int64, kind string, limit int) ([]*Item, error) {
-	today := time.Now().Format("2006-01-02")
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND i.release_date != '' AND i.release_date <= @today AND `+visible+` AND `+pinned+`
-		ORDER BY i.release_date DESC LIMIT @limit`,
-		uidArg(uid), sql.Named("kind", kind), sql.Named("today", today), sql.Named("limit", limit))
 }
 
 // TrailerCandidates are the newest movies the user can see, hasn't watched

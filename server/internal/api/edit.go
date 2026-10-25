@@ -449,6 +449,12 @@ func (s *Server) libraryCollections(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		cols = visible
+	} else if lib, err := s.Store.Library(id); err == nil {
+		where := s.collectionVisibility(lib)
+		for _, c := range cols {
+			v := where[c.ID]
+			c.Visible = &v
+		}
 	}
 	writeJSON(w, http.StatusOK, cols)
 }

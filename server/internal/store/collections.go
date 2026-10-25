@@ -19,6 +19,8 @@ type Collection struct {
 	TMDBID    int64  `json:"tmdbId,omitempty"`
 	SmartRules
 	ItemCount int `json:"itemCount"`
+	// Visible is where the collection shows as a row; only sent to admins.
+	Visible *Visibility `json:"visible,omitempty"`
 }
 
 // SmartRules pick a collection's members automatically. Each rule that is set

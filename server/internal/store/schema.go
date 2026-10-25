@@ -628,4 +628,19 @@ CREATE TABLE library_pins (
 );
 ALTER TABLE users ADD COLUMN pins_chosen INTEGER NOT NULL DEFAULT 0;
 `,
+	// 28: each library's rows (built-in ones like Recently Added, and its
+	// collections), their order, and where each shows: the library's
+	// Recommended tab, Home, and Home for people outside the admin's household
+	// (Plex's "Manage Recommendations"). Rows without one use the defaults.
+	`
+CREATE TABLE library_rows (
+	library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+	row_key    TEXT NOT NULL, -- built-in name, or collection:<id>
+	position   INTEGER NOT NULL,
+	on_library INTEGER NOT NULL,
+	on_home    INTEGER NOT NULL,
+	on_friends INTEGER NOT NULL,
+	PRIMARY KEY (library_id, row_key)
+);
+`,
 }

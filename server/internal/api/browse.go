@@ -17,9 +17,11 @@ import (
 )
 
 type homeRow struct {
-	ID    string        `json:"id"`
-	Title string        `json:"title"`
-	Items []*store.Item `json:"items"`
+	ID           string        `json:"id"`
+	Title        string        `json:"title"`
+	Items        []*store.Item `json:"items"`
+	CollectionID int64         `json:"collectionId,omitempty"`
+	LibraryID    int64         `json:"libraryId,omitempty"`
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -46,21 +48,26 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	recommended, recommendedBy := s.recommendedRow(uid)
 	add("recommended", "Recommended for You", recommended, nil)
-	movies, err := s.Store.RecentlyAdded(uid, "movie", 24)
-	add("recent-movies", "Recently Added Movies", movies, err)
-	shows, err := s.Store.RecentlyAdded(uid, "show", 24)
-	add("recent-shows", "Recently Added TV", shows, err)
-	released, err := s.Store.RecentlyReleased(uid, "movie", 24)
-	add("released-movies", "Recently Released Movies", released, err)
+	libRows := s.homeLibraryRows(currentUser(r))
+	for _, lr := range libRows {
+		rows = append(rows, homeRow{ID: lr.ID, Title: lr.Title, Items: lr.Items, CollectionID: lr.CollectionID, LibraryID: lr.LibraryID})
+	}
 
-	// Hero carousel: recent items that have artwork to show off.
+	// Hero carousel: the newest titles that have artwork to show off.
 	hero := []*store.Item{}
-	for _, it := range append(append([]*store.Item{}, movies...), shows...) {
-		if it.Backdrop != "" && len(hero) < 6 {
-			hero = append(hero, it)
+	for _, lr := range libRows {
+		if strings.HasSuffix(lr.ID, "-recent") {
+			for _, it := range lr.Items {
+				if it.Backdrop != "" {
+					hero = append(hero, it)
+				}
+			}
 		}
 	}
 	sort.SliceStable(hero, func(i, j int) bool { return hero[i].AddedAt > hero[j].AddedAt })
+	if len(hero) > 6 {
+		hero = hero[:6]
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"hero": hero, "continueWatching": cw, "rows": rows, "recommendedBy": recommendedBy})
 }
