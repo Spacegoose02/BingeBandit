@@ -36,14 +36,4 @@ func TestCollectionModesAndLabels(t *testing.T) {
 	if got.LabelRule != "Kometa Horror" || got.ItemCount != 1 {
 		t.Errorf("label rule %q, %d items", got.LabelRule, got.ItemCount)
 	}
-
-	// Imported posters never replace one that's already set.
-	if s.CollectionHasPoster(horror) {
-		t.Error("no poster yet")
-	}
-	s.SetCollectionPoster(horror, "local:/a.jpg")
-	s.SetCollectionPoster(horror, "local:/b.jpg")
-	if got, _ := s.Collection(horror); got.Poster != ImageURL("local:/a.jpg") {
-		t.Errorf("poster %q", got.Poster)
-	}
 }

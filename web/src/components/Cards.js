@@ -22,9 +22,9 @@ function Progress({ item }) {
         return null;
     return (_jsx("div", { className: "progress", children: _jsx("div", { style: { width: `${f * 100}%` } }) }));
 }
-export function PosterCard({ item, subtitle }) {
+export function PosterCard({ item, subtitle, domId }) {
     const poster = img(item.poster || item.showPoster, 'w342');
-    return (_jsxs(Link, { to: `/item/${item.id}`, className: "poster-card", children: [_jsxs("div", { className: "poster-frame", children: [poster ? _jsx("img", { src: poster, alt: "", loading: "lazy" }) : _jsx("div", { className: "poster-fallback", children: item.title }), _jsx(Badge, { item: item }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx("div", { className: "card-title", title: item.title, children: item.title }), _jsx("div", { className: "card-sub", children: subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '') })] }));
+    return (_jsxs(Link, { to: `/item/${item.id}`, className: "poster-card", id: domId, children: [_jsxs("div", { className: "poster-frame", children: [poster ? _jsx("img", { src: poster, alt: "", loading: "lazy" }) : _jsx("div", { className: "poster-fallback", children: item.title }), _jsx(Badge, { item: item }), _jsx(Progress, { item: item }), _jsx("div", { className: "poster-hover", children: _jsx(Icon, { name: "play", fill: true, size: 34 }) })] }), _jsx("div", { className: "card-title", title: item.title, children: item.title }), _jsx("div", { className: "card-sub", children: subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '') })] }));
 }
 /** Landscape card for Continue Watching and episode lists. Clicking plays. */
 export function WideCard({ item }) {

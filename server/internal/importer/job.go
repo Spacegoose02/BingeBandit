@@ -22,13 +22,11 @@ type SourceUser struct {
 
 // Collection is a collection on the source, with its members as records.
 type Collection struct {
-	Name    string
-	Summary string
-	Items   []Record
-	// Poster is the collection's own artwork: a "tmdb:/<file>" reference, or
-	// a reference the source fetches with Image. It's only used when the
-	// collection has no poster yet.
-	Poster string
+	Name     string
+	Summary  string
+	Items    []Record
+	Poster   string // source image paths for ArtworkSource.Image, or a "tmdb:/<file>" reference; "" = none
+	Backdrop string
 	// Label makes the collection gather everything carrying it, as well as
 	// its members (Cinemask's "fill from label").
 	Label string
@@ -42,18 +40,26 @@ type LabelSet struct {
 	Items []Record
 }
 
-// imageSource is a source that serves artwork, such as collection posters.
-type imageSource interface {
-	Image(ctx context.Context, ref string) (io.ReadCloser, error)
-}
-
 // labelSource is a source that can send its labels (Plex, where Kometa puts them).
 type labelSource interface {
 	Labels(ctx context.Context, emit func(LabelSet) error) error
 }
 
-// ArtStore keeps downloaded artwork (metadata.Artwork).
-type ArtStore interface {
+// Art is an item's poster and background on the source.
+type Art struct {
+	Record          // which item (Kind movie, show or season)
+	Poster   string // source image paths for ArtworkSource.Image; "" = none
+	Backdrop string
+}
+
+// ArtworkSource is a Source that can also hand over its posters and backgrounds.
+type ArtworkSource interface {
+	Artwork(ctx context.Context, emit func(Art) error, progress func(phase string, done, total int)) error
+	Image(ctx context.Context, path string) (io.ReadCloser, error)
+}
+
+// ImageSaver stores a downloaded image and returns its artwork reference.
+type ImageSaver interface {
 	Save(r io.Reader) (string, error)
 }
 
@@ -72,7 +78,8 @@ type Options struct {
 	History     bool             `json:"history"`
 	Watched     bool             `json:"watched"` // watched marks and resume points
 	Collections bool             `json:"collections"`
-	Labels      bool             `json:"labels"` // put the source's labels on matching titles
+	Artwork     bool             `json:"artwork"` // posters and backgrounds (ArtworkSource only)
+	Labels      bool             `json:"labels"`  // put the source's labels on matching titles
 	DryRun      bool             `json:"dryRun"`
 	Users       map[string]int64 `json:"users"` // source user → BingeBandit user id; missing or 0 = skip
 }
@@ -96,6 +103,8 @@ type Status struct {
 	SkippedUser  int      `json:"skippedUser"`
 	Collections  int      `json:"collections"`
 	CollItems    int      `json:"collectionItems"`
+	Artwork      int      `json:"artwork"` // images replaced
+	ArtFailed    int      `json:"artworkFailed"`
 	Labels       int      `json:"labels"`    // labels put on titles
 	Unmatched    []string `json:"unmatched"` // most-played titles that weren't found
 	UnmatchedNum int      `json:"unmatchedCount"`
@@ -104,8 +113,9 @@ type Status struct {
 
 // Runner runs one import at a time in the background.
 type Runner struct {
-	st  *store.Store
-	art ArtStore
+	st *store.Store
+	// Images stores artwork brought over from the source; without it artwork is skipped.
+	Images ImageSaver
 
 	mu      sync.Mutex
 	status  Status
@@ -113,7 +123,7 @@ type Runner struct {
 	cancel  context.CancelFunc
 }
 
-func NewRunner(st *store.Store, art ArtStore) *Runner { return &Runner{st: st, art: art} }
+func NewRunner(st *store.Store) *Runner { return &Runner{st: st} }
 
 func (r *Runner) Status() Status {
 	r.mu.Lock()
@@ -167,8 +177,8 @@ func (r *Runner) Start(parent context.Context, src Source, opt Options) error {
 			}
 		}
 		r.status.Unmatched, r.status.UnmatchedNum = topMissing(r.missing, 50)
-		log.Printf("import (%s): %d read, %d matched, %d plays, %d watched, %d resume points, %d collection items; err=%v",
-			src.Kind(), r.status.Seen, r.status.Matched, r.status.Plays, r.status.Watched, r.status.Resumes, r.status.CollItems, err)
+		log.Printf("import (%s): %d read, %d matched, %d plays, %d watched, %d resume points, %d collection items, %d images; err=%v",
+			src.Kind(), r.status.Seen, r.status.Matched, r.status.Plays, r.status.Watched, r.status.Resumes, r.status.CollItems, r.status.Artwork, err)
 	}()
 	return nil
 }
@@ -177,6 +187,7 @@ func (r *Runner) Start(parent context.Context, src Source, opt Options) error {
 // one person's own Trakt history).
 func RunOnce(ctx context.Context, st *store.Store, src Source, opt Options) (Status, error) {
 	r := &Runner{st: st, missing: map[string]int{}}
+	opt.Artwork = false
 	r.status = Status{Running: true, Source: src.Kind(), DryRun: opt.DryRun, StartedAt: time.Now().Unix()}
 	err := r.run(ctx, src, opt)
 	r.status.Running, r.status.FinishedAt, r.status.Phase = false, time.Now().Unix(), "Finished"
@@ -237,6 +248,17 @@ func (r *Runner) run(ctx context.Context, src Source, opt Options) error {
 			}
 			return r.applyLabel(m, l, opt)
 		})
+		if err != nil {
+			return err
+		}
+	}
+	if as, ok := src.(ArtworkSource); ok && opt.Artwork && r.Images != nil {
+		err := as.Artwork(ctx, func(a Art) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return r.applyArtwork(ctx, as, m, a, opt)
+		}, progress)
 		if err != nil {
 			return err
 		}
@@ -378,6 +400,7 @@ func (r *Runner) applyCollection(ctx context.Context, src Source, m *Matcher, c 
 		r.mu.Unlock()
 		return nil
 	}
+	as := r.artworkFor(src, c, opt)
 	for lib, ids := range byLib {
 		n := len(ids)
 		if !opt.DryRun {
@@ -398,35 +421,68 @@ func (r *Runner) applyCollection(ctx context.Context, src Source, m *Matcher, c 
 					}
 				}
 			}
-			if c.Poster != "" && !r.st.CollectionHasPoster(id) {
-				if ref, err := r.poster(ctx, src, c.Poster); err != nil {
-					log.Printf("import (%s): poster for %q: %v", src.Kind(), c.Name, err)
-				} else if err := r.st.SetCollectionPoster(id, ref); err != nil {
-					return err
+			if as != nil {
+				for kind, path := range map[string]string{"poster": c.Poster, "backdrop": c.Backdrop} {
+					if path == "" {
+						continue
+					}
+					ref, err := r.fetchImage(ctx, as, path)
+					if err == nil {
+						err = r.st.SetCollectionArtwork(id, kind, ref)
+					}
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					r.countArt(err, "collection "+c.Name)
 				}
 			}
+		} else if as != nil {
+			r.update(func(s *Status) {
+				for _, p := range []string{c.Poster, c.Backdrop} {
+					if p != "" {
+						s.Artwork++
+					}
+				}
+			})
 		}
 		r.update(func(s *Status) { s.Collections++; s.CollItems += n })
 	}
 	return nil
 }
 
-// poster turns a source's artwork reference into one of ours, downloading
-// what only the source can serve.
-func (r *Runner) poster(ctx context.Context, src Source, ref string) (string, error) {
-	if metadata.ValidTMDBRef(ref) {
-		return ref, nil
+// artworkFor returns the source to download a collection's images from, when
+// artwork is being imported.
+func (r *Runner) artworkFor(src Source, c Collection, opt Options) ArtworkSource {
+	if !opt.Artwork || r.Images == nil || (c.Poster == "" && c.Backdrop == "") {
+		return nil
 	}
-	is, ok := src.(imageSource)
-	if !ok || r.art == nil {
-		return "", fmt.Errorf("can't fetch %s", ref)
+	as, _ := src.(ArtworkSource)
+	return as
+}
+
+func (r *Runner) applyArtwork(ctx context.Context, as ArtworkSource, m *Matcher, a Art, opt Options) error {
+	it := m.Match(&a.Record)
+	if it == nil {
+		return nil // history already reports what's missing; a season without a folder here is normal
 	}
-	body, err := is.Image(ctx, ref)
-	if err != nil {
-		return "", err
+	for _, img := range []struct{ kind, path string }{{"poster", a.Poster}, {"backdrop", a.Backdrop}} {
+		if img.path == "" {
+			continue
+		}
+		if opt.DryRun {
+			r.update(func(s *Status) { s.Artwork++ })
+			continue
+		}
+		ref, err := r.fetchImage(ctx, as, img.path)
+		if err == nil {
+			err = r.st.SetArtwork(it.ID, img.kind, ref)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		r.countArt(err, a.Label())
 	}
-	defer body.Close()
-	return r.art.Save(body)
+	return nil
 }
 
 func (r *Runner) applyLabel(m *Matcher, l LabelSet, opt Options) error {
@@ -447,6 +503,32 @@ func (r *Runner) applyLabel(m *Matcher, l LabelSet, opt Options) error {
 		}
 	}
 	return nil
+}
+
+func (r *Runner) fetchImage(ctx context.Context, as ArtworkSource, path string) (string, error) {
+	if metadata.ValidTMDBRef(path) {
+		return path, nil // TMDB images are served by reference
+	}
+	body, err := as.Image(ctx, path)
+	if err != nil {
+		return "", err
+	}
+	defer body.Close()
+	return r.Images.Save(body)
+}
+
+// countArt tallies one image; a single bad image doesn't stop the import.
+func (r *Runner) countArt(err error, what string) {
+	if err != nil {
+		log.Printf("import: artwork for %s: %v", what, err)
+	}
+	r.update(func(s *Status) {
+		if err != nil {
+			s.ArtFailed++
+		} else {
+			s.Artwork++
+		}
+	})
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
