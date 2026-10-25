@@ -655,4 +655,7 @@ CREATE TABLE library_rows (
 	// show (collections and their items), hide (items only) or collapse
 	// (collections instead of the items in them).
 	`ALTER TABLE libraries ADD COLUMN collection_mode TEXT NOT NULL DEFAULT 'show';`,
+	// 32: a collection's own Collection Mode (Plex's Advanced tab), which
+	// overrides the library's: '' (library default), show, hide or collapse.
+	`ALTER TABLE collections ADD COLUMN mode TEXT NOT NULL DEFAULT '';`,
 }

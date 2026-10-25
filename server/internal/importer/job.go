@@ -3,12 +3,14 @@ package importer
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
+	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
 
@@ -23,6 +25,36 @@ type Collection struct {
 	Name    string
 	Summary string
 	Items   []Record
+	// Poster is the collection's own artwork: a "tmdb:/<file>" reference, or
+	// a reference the source fetches with Image. It's only used when the
+	// collection has no poster yet.
+	Poster string
+	// Label makes the collection gather everything carrying it, as well as
+	// its members (Cinemask's "fill from label").
+	Label string
+	// ItemLabel is put on every member (Cinemask's Plex label).
+	ItemLabel string
+}
+
+// LabelSet is a label on the source and the titles carrying it.
+type LabelSet struct {
+	Name  string
+	Items []Record
+}
+
+// imageSource is a source that serves artwork, such as collection posters.
+type imageSource interface {
+	Image(ctx context.Context, ref string) (io.ReadCloser, error)
+}
+
+// labelSource is a source that can send its labels (Plex, where Kometa puts them).
+type labelSource interface {
+	Labels(ctx context.Context, emit func(LabelSet) error) error
+}
+
+// ArtStore keeps downloaded artwork (metadata.Artwork).
+type ArtStore interface {
+	Save(r io.Reader) (string, error)
 }
 
 // Source is somewhere history can be imported from.
@@ -40,6 +72,7 @@ type Options struct {
 	History     bool             `json:"history"`
 	Watched     bool             `json:"watched"` // watched marks and resume points
 	Collections bool             `json:"collections"`
+	Labels      bool             `json:"labels"` // put the source's labels on matching titles
 	DryRun      bool             `json:"dryRun"`
 	Users       map[string]int64 `json:"users"` // source user → BingeBandit user id; missing or 0 = skip
 }
@@ -63,6 +96,7 @@ type Status struct {
 	SkippedUser  int      `json:"skippedUser"`
 	Collections  int      `json:"collections"`
 	CollItems    int      `json:"collectionItems"`
+	Labels       int      `json:"labels"`    // labels put on titles
 	Unmatched    []string `json:"unmatched"` // most-played titles that weren't found
 	UnmatchedNum int      `json:"unmatchedCount"`
 	Error        string   `json:"error,omitempty"`
@@ -70,7 +104,8 @@ type Status struct {
 
 // Runner runs one import at a time in the background.
 type Runner struct {
-	st *store.Store
+	st  *store.Store
+	art ArtStore
 
 	mu      sync.Mutex
 	status  Status
@@ -78,7 +113,7 @@ type Runner struct {
 	cancel  context.CancelFunc
 }
 
-func NewRunner(st *store.Store) *Runner { return &Runner{st: st} }
+func NewRunner(st *store.Store, art ArtStore) *Runner { return &Runner{st: st, art: art} }
 
 func (r *Runner) Status() Status {
 	r.mu.Lock()
@@ -188,7 +223,19 @@ func (r *Runner) run(ctx context.Context, src Source, opt Options) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return r.applyCollection(m, c, opt)
+			return r.applyCollection(ctx, src, m, c, opt)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if ls, ok := src.(labelSource); ok && opt.Labels {
+		progress("Labels", 0, 0)
+		err := ls.Labels(ctx, func(l LabelSet) error {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return r.applyLabel(m, l, opt)
 		})
 		if err != nil {
 			return err
@@ -318,7 +365,7 @@ func (r *Runner) apply(m *Matcher, rec *Record, opt Options) error {
 	return nil
 }
 
-func (r *Runner) applyCollection(m *Matcher, c Collection, opt Options) error {
+func (r *Runner) applyCollection(ctx context.Context, src Source, m *Matcher, c Collection, opt Options) error {
 	byLib := map[int64][]int64{}
 	for i := range c.Items {
 		if it := m.Match(&c.Items[i]); it != nil {
@@ -334,12 +381,70 @@ func (r *Runner) applyCollection(m *Matcher, c Collection, opt Options) error {
 	for lib, ids := range byLib {
 		n := len(ids)
 		if !opt.DryRun {
-			var err error
-			if n, err = r.st.EnsureCollection(lib, c.Name, c.Summary, ids); err != nil {
+			id, added, err := r.st.EnsureCollection(lib, c.Name, c.Summary, ids)
+			if err != nil {
 				return err
+			}
+			n = added
+			if c.Label != "" {
+				if err := r.st.SetCollectionLabel(id, c.Label); err != nil {
+					return err
+				}
+			}
+			if c.ItemLabel != "" {
+				for _, it := range ids {
+					if _, err := r.st.AddItemLabel(it, c.ItemLabel); err != nil {
+						return err
+					}
+				}
+			}
+			if c.Poster != "" && !r.st.CollectionHasPoster(id) {
+				if ref, err := r.poster(ctx, src, c.Poster); err != nil {
+					log.Printf("import (%s): poster for %q: %v", src.Kind(), c.Name, err)
+				} else if err := r.st.SetCollectionPoster(id, ref); err != nil {
+					return err
+				}
 			}
 		}
 		r.update(func(s *Status) { s.Collections++; s.CollItems += n })
+	}
+	return nil
+}
+
+// poster turns a source's artwork reference into one of ours, downloading
+// what only the source can serve.
+func (r *Runner) poster(ctx context.Context, src Source, ref string) (string, error) {
+	if metadata.ValidTMDBRef(ref) {
+		return ref, nil
+	}
+	is, ok := src.(imageSource)
+	if !ok || r.art == nil {
+		return "", fmt.Errorf("can't fetch %s", ref)
+	}
+	body, err := is.Image(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	defer body.Close()
+	return r.art.Save(body)
+}
+
+func (r *Runner) applyLabel(m *Matcher, l LabelSet, opt Options) error {
+	for i := range l.Items {
+		it := m.Match(&l.Items[i])
+		if it == nil {
+			continue
+		}
+		added := true
+		if !opt.DryRun {
+			var err error
+			if added, err = r.st.AddItemLabel(it.ID, l.Name); err != nil {
+				return err
+			}
+		}
+		if added {
+			r.update(func(s *Status) { s.Labels++ })
+		}
 	}
 	return nil
 }

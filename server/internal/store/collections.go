@@ -18,6 +18,9 @@ type Collection struct {
 	Poster    string `json:"poster,omitempty"`
 	Backdrop  string `json:"backdrop,omitempty"`
 	TMDBID    int64  `json:"tmdbId,omitempty"`
+	// Mode overrides the library's Collection Mode for this collection:
+	// "" (library default), "show", "hide" or "collapse".
+	Mode string `json:"mode"`
 	SmartRules
 	ItemCount int `json:"itemCount"`
 	// Visible is where the collection shows as a row; only sent to admins.
@@ -49,7 +52,7 @@ const memberOf = `(i.library_id = c.library_id AND i.kind IN ('movie','show') AN
 		AND (c.year_from = 0 OR i.year >= c.year_from)
 		AND (c.year_to = 0 OR (i.year > 0 AND i.year <= c.year_to)))))`
 
-const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to,
+const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to,
 	(SELECT COUNT(*) FROM items i WHERE ` + memberOf + `),
 	COALESCE((SELECT i.poster FROM items i WHERE ` + memberOf + ` AND i.poster != '' ORDER BY i.release_date LIMIT 1), '')
 FROM collections c`
@@ -57,7 +60,7 @@ FROM collections c`
 func scanCollection(r interface{ Scan(...any) error }) (*Collection, error) {
 	var c Collection
 	var fallback string
-	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.ItemCount, &fallback)
+	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.Mode, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.ItemCount, &fallback)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -92,24 +95,32 @@ func (s *Store) queryCollections(q string, args ...any) ([]*Collection, error) {
 // are worked out here in one pass over the library rather than one SQL scan
 // per collection, which took seconds on libraries with many collections.
 func (s *Store) LibraryCollections(libraryID int64) ([]*Collection, error) {
-	cols, _, err := s.libraryCollectionMembers(libraryID)
+	cols, _, err := s.LibraryCollectionsHiding(libraryID, func(*Collection) bool { return false })
 	return cols, err
 }
 
 // CollectedItems are the ids of a library's movies or shows that are in at
 // least one of its collections.
 func (s *Store) CollectedItems(libraryID int64) ([]int64, error) {
-	_, in, err := s.libraryCollectionMembers(libraryID)
+	_, ids, err := s.LibraryCollectionsHiding(libraryID, func(*Collection) bool { return true })
+	return ids, err
+}
+
+// LibraryCollectionsHiding lists a library's collections, and the titles in
+// the ones collapse picks, which the Library tab leaves out ("Hide items in
+// this collection").
+func (s *Store) LibraryCollectionsHiding(libraryID int64, collapse func(*Collection) bool) ([]*Collection, []int64, error) {
+	cols, in, err := s.libraryCollectionMembers(libraryID, collapse)
 	ids := make([]int64, 0, len(in))
 	for id := range in {
 		ids = append(ids, id)
 	}
-	return ids, err
+	return cols, ids, err
 }
 
-func (s *Store) libraryCollectionMembers(libraryID int64) ([]*Collection, map[int64]bool, error) {
+func (s *Store) libraryCollectionMembers(libraryID int64, collapse func(*Collection) bool) ([]*Collection, map[int64]bool, error) {
 	collected := map[int64]bool{}
-	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
+	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
 		FROM collections c WHERE c.library_id = ? ORDER BY c.name COLLATE NOCASE`, libraryID)
 	if err != nil || len(cols) == 0 {
 		return cols, collected, err
@@ -169,7 +180,7 @@ func (s *Store) libraryCollectionMembers(libraryID int64) ([]*Collection, map[in
 		return false
 	}
 	for _, c := range cols {
-		smart := c.Smart()
+		smart, hides := c.Smart(), collapse(c)
 		var first *member
 		for id, m := range items {
 			in := explicit[c.ID][id]
@@ -184,7 +195,9 @@ func (s *Store) libraryCollectionMembers(libraryID int64) ([]*Collection, map[in
 				continue
 			}
 			c.ItemCount++
-			collected[id] = true
+			if hides {
+				collected[id] = true
+			}
 			if m.poster != "" && (first == nil || m.release < first.release) {
 				first = m
 			}
@@ -300,9 +313,9 @@ func (s *Store) CreateCollection(libraryID int64, name string, rules SmartRules)
 	return s.Collection(id)
 }
 
-func (s *Store) UpdateCollection(id int64, name, overview string, rules SmartRules) error {
-	_, err := s.db.Exec(`UPDATE collections SET name = ?, overview = ?, label_rule = ?, genre_rule = ?, studio_rule = ?, year_from = ?, year_to = ?
-		WHERE id = ?`, name, overview, rules.LabelRule, rules.GenreRule, rules.StudioRule, rules.YearFrom, rules.YearTo, id)
+func (s *Store) UpdateCollection(id int64, name, overview, mode string, rules SmartRules) error {
+	_, err := s.db.Exec(`UPDATE collections SET name = ?, overview = ?, mode = ?, label_rule = ?, genre_rule = ?, studio_rule = ?, year_from = ?, year_to = ?
+		WHERE id = ?`, name, overview, mode, rules.LabelRule, rules.GenreRule, rules.StudioRule, rules.YearFrom, rules.YearTo, id)
 	return err
 }
 

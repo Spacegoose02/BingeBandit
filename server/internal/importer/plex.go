@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -50,6 +51,7 @@ type plexMeta struct {
 	Type                 string      `json:"type"`
 	Title                string      `json:"title"`
 	Summary              string      `json:"summary"`
+	Thumb                string      `json:"thumb"`
 	Year                 int         `json:"year"`
 	GrandparentTitle     string      `json:"grandparentTitle"`
 	GrandparentRatingKey string      `json:"grandparentRatingKey"`
@@ -359,13 +361,86 @@ func (p *Plex) Collections(ctx context.Context, emit func(Collection) error) err
 				log.Printf("import (plex): collection %q: %v", col.Title, err)
 				continue
 			}
-			c := Collection{Name: col.Title, Summary: col.Summary}
+			c := Collection{Name: col.Title, Summary: col.Summary, Poster: plexImage(col.Thumb)}
 			for i := range kids.MediaContainer.Metadata {
 				m := &kids.MediaContainer.Metadata[i]
 				p.meta[m.RatingKey] = m
 				c.Items = append(c.Items, p.record(ctx, m))
 			}
 			if err := emit(c); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// plexImage keeps image paths on the Plex server, which Image fetches. Plex
+// makes /composite/ covers from the first few posters; those are kept too, as
+// they're what Plex shows.
+func plexImage(path string) string {
+	if strings.HasPrefix(path, "/library/") {
+		return "plex:" + path
+	}
+	return ""
+}
+
+// Image fetches artwork from Plex, such as a collection's poster.
+func (p *Plex) Image(ctx context.Context, ref string) (io.ReadCloser, error) {
+	path, ok := strings.CutPrefix(ref, "plex:")
+	if !ok {
+		return nil, fmt.Errorf("not a Plex image: %s", ref)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.BaseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Plex-Token", p.Token)
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("Plex answered %s for %s", resp.Status, path)
+	}
+	return resp.Body, nil
+}
+
+// Labels sends every label in movie and show libraries with the titles that
+// carry it. Kometa and Cinemask put their labels here.
+func (p *Plex) Labels(ctx context.Context, emit func(LabelSet) error) error {
+	secs, err := p.get(ctx, "/library/sections", nil)
+	if err != nil {
+		return err
+	}
+	for _, sec := range secs.MediaContainer.Directory {
+		if sec.Type != "movie" && sec.Type != "show" {
+			continue
+		}
+		labels, err := p.get(ctx, "/library/sections/"+sec.Key+"/label", nil)
+		if err != nil {
+			if errors.Is(err, errNotFound) {
+				continue
+			}
+			return err
+		}
+		for _, l := range labels.MediaContainer.Directory {
+			items, err := p.get(ctx, "/library/sections/"+sec.Key+"/all", url.Values{"label": {l.Key}, "includeGuids": {"1"}})
+			if err != nil {
+				if ctx.Err() != nil {
+					return err
+				}
+				log.Printf("import (plex): label %q: %v", l.Title, err)
+				continue
+			}
+			set := LabelSet{Name: l.Title}
+			for i := range items.MediaContainer.Metadata {
+				m := &items.MediaContainer.Metadata[i]
+				p.meta[m.RatingKey] = m
+				set.Items = append(set.Items, p.record(ctx, m))
+			}
+			if err := emit(set); err != nil {
 				return err
 			}
 		}

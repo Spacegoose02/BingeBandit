@@ -48,11 +48,11 @@ func TestImportDedupeAndState(t *testing.T) {
 		t.Error("ImportWatched didn't mark the item watched")
 	}
 
-	n, err := s.EnsureCollection(lib.ID, "Faves", "", []int64{id})
+	_, n, err := s.EnsureCollection(lib.ID, "Faves", "", []int64{id})
 	if n != 1 || err != nil {
 		t.Fatalf("EnsureCollection: %d %v", n, err)
 	}
-	if n, _ := s.EnsureCollection(lib.ID, "faves", "", []int64{id}); n != 0 {
+	if _, n, _ := s.EnsureCollection(lib.ID, "faves", "", []int64{id}); n != 0 {
 		t.Error("collection names should match case-insensitively and items not be added twice")
 	}
 }

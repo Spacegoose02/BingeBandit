@@ -503,6 +503,7 @@ export interface Collection {
   poster?: string
   backdrop?: string
   tmdbId?: number
+  mode?: CollectionMode | ''
   labelRule?: string
   genreRule?: string
   studioRule?: string

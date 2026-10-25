@@ -29,6 +29,7 @@ interface ImportStatus {
   skippedUser: number
   collections: number
   collectionItems: number
+  labels: number
   unmatched: string[]
   unmatchedCount: number
   error?: string
@@ -42,9 +43,9 @@ export default function AdminImport() {
   const [url, setUrl] = useState('')
   const [token, setToken] = useState('')
   const [path, setPath] = useState('')
-  const [connected, setConnected] = useState<{ users: SourceUser[]; collections: boolean; watchedState: boolean } | null>(null)
+  const [connected, setConnected] = useState<{ users: SourceUser[]; collections: boolean; labels: boolean; watchedState: boolean } | null>(null)
   const [map, setMap] = useState<Record<string, number>>({})
-  const [opts, setOpts] = useState({ history: true, watched: true, collections: true })
+  const [opts, setOpts] = useState({ history: true, watched: true, collections: true, labels: true })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<ImportStatus | null>(null)
@@ -79,7 +80,7 @@ export default function AdminImport() {
     setError('')
     setConnected(null)
     try {
-      const res = await api.post<{ users: SourceUser[]; collections: boolean; watchedState: boolean }>('/api/admin/import/connect', body())
+      const res = await api.post<{ users: SourceUser[]; collections: boolean; labels: boolean; watchedState: boolean }>('/api/admin/import/connect', body())
       setConnected(res)
       setMap(Object.fromEntries(res.users.map((u) => [u.name, u.suggest])))
     } catch (err) {
@@ -97,6 +98,7 @@ export default function AdminImport() {
         history: opts.history && !collectionsOnly,
         watched: opts.watched && !collectionsOnly,
         collections: opts.collections && !!connected?.collections,
+        labels: opts.labels && !!connected?.labels,
         dryRun,
         users: map,
       })
@@ -247,7 +249,13 @@ export default function AdminImport() {
           {connected.collections && (
             <label className="check">
               <input type="checkbox" checked={opts.collections} onChange={(e) => setOpts({ ...opts, collections: e.target.checked })} />
-              Collections (added to the matching library; existing collections with the same name get the new items)
+              Collections (added to the matching library; existing collections with the same name get the new items and their poster)
+            </label>
+          )}
+          {connected.labels && (
+            <label className="check">
+              <input type="checkbox" checked={opts.labels} onChange={(e) => setOpts({ ...opts, labels: e.target.checked })} />
+              Labels (the ones Kometa and Cinemask put on titles; a collection with a label rule gathers everything carrying it)
             </label>
           )}
           <p className="muted small">
@@ -259,7 +267,7 @@ export default function AdminImport() {
             <button type="button" className="btn btn-glass" disabled={running} onClick={() => start(true)}>
               Preview
             </button>
-            <button type="button" className="btn btn-primary" disabled={running || (mapped === 0 && !(opts.collections && connected.collections))} onClick={() => start(false)}>
+            <button type="button" className="btn btn-primary" disabled={running || (mapped === 0 && !(opts.collections && connected.collections) && !(opts.labels && connected.labels))} onClick={() => start(false)}>
               Import
             </button>
           </div>
@@ -280,6 +288,7 @@ function ImportResult({ status: s }: { status: ImportStatus }) {
     [s.dryRun ? 'To mark watched' : 'Marked watched', s.watched, ''],
     ['Resume points', s.resumes, ''],
     ['Collections', s.collections, s.collectionItems ? `${s.collectionItems} items` : ''],
+    ['Labels', s.labels ?? 0, ''],
   ]
   return (
     <section className="panel" style={{ marginBottom: 20 }} aria-live="polite">

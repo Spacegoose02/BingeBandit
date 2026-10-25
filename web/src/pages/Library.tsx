@@ -23,7 +23,7 @@ interface Page {
   library: Library
   items: Item[]
   total: number
-  collections?: Collection[] // first page only, unless the library hides them
+  collections?: Collection[] // first page only; collections whose mode hides them are left out
 }
 
 type Tile = { item: Item } | { collection: Collection }

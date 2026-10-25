@@ -1,6 +1,9 @@
 package store
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // IndexItem is the slice of an item the importers match against.
 type IndexItem struct {
@@ -121,29 +124,66 @@ func (s *Store) ImportResume(uid, itemID int64, position, duration float64, at i
 }
 
 // EnsureCollection finds a collection by name in a library, creating it if needed,
-// and adds the items. It returns how many items were new to it.
-func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (int, error) {
+// and adds the items. It returns its id and how many items were new to it.
+func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (id int64, added int, err error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`INSERT OR IGNORE INTO collections (library_id, name, overview, created_at) VALUES (?, ?, ?, ?)`,
 		libraryID, name, overview, now()); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	var id int64
 	if err := tx.QueryRow(`SELECT id FROM collections WHERE library_id = ? AND name = ? COLLATE NOCASE`, libraryID, name).Scan(&id); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	added := 0
 	for _, it := range itemIDs {
 		res, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id) VALUES (?, ?)`, id, it)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		n, _ := res.RowsAffected()
 		added += int(n)
 	}
-	return added, tx.Commit()
+	return id, added, tx.Commit()
+}
+
+// CollectionHasPoster reports whether a collection has artwork of its own,
+// so imports don't fetch a poster the admin already set.
+func (s *Store) CollectionHasPoster(id int64) bool {
+	var poster string
+	s.db.QueryRow(`SELECT poster FROM collections WHERE id = ?`, id).Scan(&poster)
+	return poster != ""
+}
+
+// SetCollectionPoster sets a collection's poster unless it already has one.
+func (s *Store) SetCollectionPoster(id int64, ref string) error {
+	_, err := s.db.Exec(`UPDATE collections SET poster = ? WHERE id = ? AND poster = ''`, ref, id)
+	return err
+}
+
+// SetCollectionLabel makes a collection gather everything with label, unless
+// it already has a label rule.
+func (s *Store) SetCollectionLabel(id int64, label string) error {
+	_, err := s.db.Exec(`UPDATE collections SET label_rule = ? WHERE id = ? AND label_rule = ''`, label, id)
+	return err
+}
+
+// AddItemLabel puts a label on a movie or show, reporting whether it was new.
+func (s *Store) AddItemLabel(itemID int64, label string) (bool, error) {
+	var raw string
+	if err := s.db.QueryRow(`SELECT labels FROM items WHERE id = ?`, itemID).Scan(&raw); err != nil {
+		return false, err
+	}
+	var labels []string
+	json.Unmarshal([]byte(raw), &labels)
+	for _, l := range labels {
+		if strings.EqualFold(l, label) {
+			return false, nil
+		}
+	}
+	b, _ := json.Marshal(append(labels, label))
+	_, err := s.db.Exec(`UPDATE items SET labels = ? WHERE id = ?`, string(b), itemID)
+	return err == nil, err
 }

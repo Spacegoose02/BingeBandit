@@ -67,12 +67,13 @@ func main() {
 	recorder := livetv.NewRecorder(st, live, cfg.DataDir)
 	go recorder.Run(ctx)
 
+	artwork := metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork"))
 	srv := &api.Server{
 		Store:      st,
 		Scanner:    scanner,
 		Metadata:   meta,
 		Images:     metadata.NewImageCache(filepath.Join(cfg.DataDir, "cache", "images")),
-		Artwork:    metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork")),
+		Artwork:    artwork,
 		TPDb:       metadata.NewTPDb(cfg.TPDbURL, filepath.Join(cfg.DataDir, "cache", "tpdb")),
 		Transcoder: transcoder,
 		Activity:   stream.NewActivity(),
@@ -82,7 +83,7 @@ func main() {
 		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
 		LogoLib:    livetv.NewLogoLibrary(filepath.Join(cfg.DataDir, "logos")),
 		DVR:        recorder,
-		Importer:   importer.NewRunner(st),
+		Importer:   importer.NewRunner(st, artwork),
 		Trakt:      trakt.NewSyncer(st, cfg.TraktAPI),
 		Logs:       logBuf,
 		Version:    version,
