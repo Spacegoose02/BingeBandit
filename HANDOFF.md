@@ -2,7 +2,15 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-24, DVR keep-last-N and conflicts (M4)._
+_Last updated: 2026-10-25, trailers and intro video before movies (M3)._
+
+## Trailers and intro video before movies (M3)
+
+- **Admin:** Settings → Library → *Intro videos before movies* (`preroll_paths`): files or folders (searched two levels deep for mp4/m4v/mov/webm/mkv), one per line. One is picked at random, served by `GET /api/preroll/intro/{n}` (index into the sorted list).
+- **Per user** (prefs `preRollTrailers` 0–5, default 0; `preRollIntro`, default on): `GET /api/items/{id}/preroll` returns trailers (YouTube keys from TMDB) of other movies the viewer can see and hasn't watched, a random pick of the 12 newest, never rated above the movie when it has a known US rating; plus the intro.
+- **Web player** (`components/PreRoll.tsx`): only for movies started from the beginning and not from a playlist. Trailers use YouTube's iframe API (skipped if it can't load in 8 s or the video errors), then the intro; Skip / Skip all / Esc. Intros fall back to muted autoplay when the browser blocks sound.
+- **TV app:** plays the intro only (no web view for YouTube), with a Start movie button. Typechecked only; **not tried on a device**.
+- **Tested:** API test (ratings, watched, hidden libraries, episodes, intro file serving, pref off) and the intro → movie flow in Chromium. YouTube trailers were **not** tried (no YouTube access from the build machine).
 
 ## DVR keep-last-N and connection-limit conflicts (M4)
 

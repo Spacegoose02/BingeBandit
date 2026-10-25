@@ -13,7 +13,7 @@ import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, fileSummary, formatBytes, formatClock, formatRuntime, languageName, progressFraction } from '../format'
-import type { Item, ItemDetail, MediaFile } from '../types'
+import type { ExternalRatings, Item, ItemDetail, MediaFile } from '../types'
 
 export default function ItemPage() {
   const { id } = useParams()
@@ -108,6 +108,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               </h1>
             )}
             <MetaLine item={item} />
+            {detail.externalRatings && <ExternalScores r={detail.externalRatings} />}
             {item.tagline && <p className="tagline">{item.tagline}</p>}
 
             <div className="actions">
@@ -341,5 +342,34 @@ function EpisodeList({ episodes }: { episodes: Item[] }) {
         )
       })}
     </section>
+  )
+}
+
+/** IMDb, Rotten Tomatoes and Metacritic scores, each linking to the source when it can. */
+function ExternalScores({ r }: { r: ExternalRatings }) {
+  const imdb = r.imdbId ? `https://www.imdb.com/title/${r.imdbId}/` : undefined
+  return (
+    <div className="external-scores">
+      {!!r.imdb && (
+        <a className="ext-score imdb" href={imdb} target="_blank" rel="noreferrer" title={r.imdbVotes ? `${r.imdbVotes.toLocaleString()} votes` : undefined}>
+          <span className="ext-badge">IMDb</span> {r.imdb.toFixed(1)}
+        </a>
+      )}
+      {!!r.rottenTomatoes && (
+        <span className="ext-score" title="Rotten Tomatoes critics">
+          <span className="ext-badge rt">{r.rottenTomatoes >= 60 ? '🍅' : '🤢'}</span> {r.rottenTomatoes}%
+        </span>
+      )}
+      {!!r.rottenTomatoesAudience && (
+        <span className="ext-score" title="Rotten Tomatoes audience">
+          <span className="ext-badge rt">🍿</span> {r.rottenTomatoesAudience}%
+        </span>
+      )}
+      {!!r.metacritic && (
+        <span className="ext-score" title="Metacritic">
+          <span className={`ext-badge mc ${r.metacritic >= 61 ? 'good' : r.metacritic >= 40 ? 'mixed' : 'bad'}`}>{r.metacritic}</span> Metacritic
+        </span>
+      )}
+    </div>
   )
 }

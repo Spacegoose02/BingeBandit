@@ -88,7 +88,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/libraries` | Libraries you can see. |
 | GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
 | GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
-| GET | `/items/{id}` | A movie, show, season or episode, with files, streams, cast and children. |
+| GET | `/items/{id}` | A movie, show, season or episode, with files, streams, cast and children. Movies and shows include `externalRatings` (`imdb`, `imdbVotes`, `imdbId`, `rottenTomatoes`, `rottenTomatoesAudience`, `metacritic`) once a ratings provider has scores for them. |
 | GET | `/items/{id}/recommend` | People this movie or show can be recommended to (opted in, and able to see it): `[{id, name}]`. |
 | POST | `/items/{id}/recommend` | `{userIds, note}` → `{sent}`. Recommending again renews it. |
 | DELETE | `/recommendations/{itemId}` | Hide a title from your "Recommended for You" row. |
@@ -125,6 +125,8 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | DELETE | `/live/viewers/{viewer}` | Stop watching. |
 | POST | `/live/viewers/{viewer}/ping` | Keep a paused viewer counted (every 10 s). 410 once the viewer is gone. |
 | GET | `/live/playlist.m3u`, `/live/epg.xml` | M3U and XMLTV for other IPTV apps. Use `?token=<API key>`. |
+| GET | `/items/{id}/preroll` | What to play before a movie, from the viewer's settings: `{trailers: [{itemId, title, year, youtube}], intro?: {url, name}}`. Empty for anything but a movie. |
+| GET | `/preroll/intro/{n}` | An intro video (range requests work). |
 | GET | `/dvr` | Upcoming, series rules and recorded. Upcoming recordings carry `conflict` when a provider's connection limit may stop them. |
 | POST | `/dvr/recordings` | `{channelId, programId, series, keepLast}` (`keepLast`: series only, keep the newest N recordings, 0 = all). |
 | PATCH | `/dvr/rules/{id}` | `{keepLast}`; older recordings and their files are deleted right away. |

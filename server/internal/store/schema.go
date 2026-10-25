@@ -523,7 +523,22 @@ ALTER TABLE collections ADD COLUMN year_to INTEGER NOT NULL DEFAULT 0;
 	`
 ALTER TABLE recording_rules ADD COLUMN keep_last INTEGER NOT NULL DEFAULT 0;
 `,
-	// 23: people recommend movies and shows to each other. Only users who
+	// 21: IMDb, Rotten Tomatoes and Metacritic scores for movies and shows,
+	// from MDBList or OMDb. A row with no scores records a lookup that found
+	// nothing, so it isn't retried every run.
+	`
+CREATE TABLE external_ratings (
+	item_id     INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+	imdb_id     TEXT NOT NULL DEFAULT '',
+	imdb        REAL NOT NULL DEFAULT 0,
+	imdb_votes  INTEGER NOT NULL DEFAULT 0,
+	rt          INTEGER NOT NULL DEFAULT 0,
+	rt_audience INTEGER NOT NULL DEFAULT 0,
+	metacritic  INTEGER NOT NULL DEFAULT 0,
+	fetched_at  INTEGER NOT NULL
+);
+`,
+	// 22: people recommend movies and shows to each other. Only users who
 	// opted in (recommendation_optins) can receive them.
 	`
 CREATE TABLE recommendation_optins (

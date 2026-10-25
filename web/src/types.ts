@@ -234,6 +234,15 @@ export interface Prefs {
   autoPlayNext: boolean
   skipIntro: 'button' | 'auto' | 'off'
   skipCredits: 'button' | 'auto' | 'off'
+  /** Trailers of other movies before a movie (0 = none). */
+  preRollTrailers: number
+  /** The server's intro video before a movie, when an admin has set one. */
+  preRollIntro: boolean
+}
+
+export interface PreRoll {
+  trailers: { itemId: number; title: string; year?: number; youtube: string }[]
+  intro?: { url: string; name: string }
 }
 
 export interface GuideProgram {
@@ -448,6 +457,16 @@ export interface ItemDetail {
   collections?: { collection: Collection; items: Item[] }[]
   collectionNames?: string[] // admin only: explicit collection links
   markers?: Marker[]
+  externalRatings?: ExternalRatings // movies and shows, when a ratings provider is set up
+}
+
+export interface ExternalRatings {
+  imdbId?: string
+  imdb?: number
+  imdbVotes?: number
+  rottenTomatoes?: number
+  rottenTomatoesAudience?: number
+  metacritic?: number
 }
 
 export interface Collection {

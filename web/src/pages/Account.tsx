@@ -625,6 +625,25 @@ function PlaybackPrefs() {
           </select>
         </label>
       </div>
+      <div className="field-grid">
+        <label>
+          Before a movie
+          <select value={p.preRollTrailers} onChange={(e) => set('preRollTrailers', Number(e.target.value))}>
+            <option value={0}>No trailers</option>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>{n === 1 ? '1 trailer' : `${n} trailers`} of other movies</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="check">
+        <input type="checkbox" checked={p.preRollIntro} onChange={(e) => set('preRollIntro', e.target.checked)} />
+        Play the server's intro video before a movie (when your admin has set one)
+      </label>
+      <p className="muted small">
+        Trailers are of movies here you haven't watched, newest first, never rated above the movie you're starting. They play only when a
+        movie starts from the beginning, in the web player; the TV app plays the intro.
+      </p>
       <label className="check">
         <input type="checkbox" checked={p.autoQuality} onChange={(e) => set('autoQuality', e.target.checked)} />
         Lower the quality automatically when playback keeps buffering

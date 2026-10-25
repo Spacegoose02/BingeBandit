@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -200,6 +203,15 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		resp["children"] = children
 	}
 
+	if it.Kind == "movie" || it.Kind == "show" {
+		if er, err := s.Store.ExternalRatings(it.ID); err == nil {
+			if !er.Empty() {
+				resp["externalRatings"] = er
+			}
+		} else if it.TMDBID > 0 {
+			s.fetchRatingsSoon(it)
+		}
+	}
 	if it.Kind == "show" {
 		if next, err := s.upNext(u.ID, it.ID); err == nil && next != nil {
 			resp["upNext"] = next
@@ -344,4 +356,23 @@ func (s *Server) tmdbImage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "private, max-age=2592000")
 	http.ServeFile(w, r, path)
+}
+
+// fetchRatingsSoon looks up a title's external scores in the background the
+// first time someone opens it, so they show up without waiting for the task.
+func (s *Server) fetchRatingsSoon(it *store.Item) {
+	if s.Metadata == nil || !s.Metadata.RatingsEnabled() {
+		return
+	}
+	if _, busy := s.ratingFetches.LoadOrStore(it.ID, true); busy {
+		return
+	}
+	go func() {
+		defer s.ratingFetches.Delete(it.ID)
+		ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+		defer cancel()
+		if err := s.Metadata.RefreshRatings(ctx, store.RatingTarget{ID: it.ID, Kind: it.Kind, TMDBID: it.TMDBID}); err != nil {
+			log.Printf("ratings: %q: %v", it.Title, err)
+		}
+	}()
 }
