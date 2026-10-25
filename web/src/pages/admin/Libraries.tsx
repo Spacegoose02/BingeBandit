@@ -99,14 +99,16 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
   const [kind, setKind] = useState<'movies' | 'shows'>(library?.kind ?? 'movies')
   const [paths, setPaths] = useState<string[]>(library?.paths ?? [])
   const [picking, setPicking] = useState(paths.length === 0)
+  const [detect, setDetect] = useState(!library?.skipMarkers)
   const [error, setError] = useState('')
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     try {
-      if (library) await api.put(`/api/admin/libraries/${library.id}`, { name, kind, paths })
-      else await api.post('/api/admin/libraries', { name, kind, paths })
+      const body = { name, kind, paths, skipMarkers: !detect }
+      if (library) await api.put(`/api/admin/libraries/${library.id}`, body)
+      else await api.post('/api/admin/libraries', body)
       onSaved()
     } catch (err) {
       setError((err as Error).message)
@@ -160,6 +162,10 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
             ? 'Tip: name folders "Movie Title (Year)" for the best matches.'
             : 'Tip: use "Show Name/Season 01/Show Name - S01E01.mkv" for the best matches.'}
         </p>
+        <label className="check">
+          <input type="checkbox" checked={detect} onChange={(e) => setDetect(e.target.checked)} />
+          {kind === 'movies' ? 'Detect end credits (for the Skip Credits button)' : 'Detect intros and end credits (for the Skip buttons)'}
+        </label>
         {error && <div className="form-error">{error}</div>}
         <div className="actions end">
           <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>

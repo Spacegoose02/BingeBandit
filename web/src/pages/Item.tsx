@@ -244,6 +244,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
       {dialog === 'match' && (
         <MatchDialog
           item={item}
+          tvdb={detail.tvdbId ? { id: detail.tvdbId, order: detail.tvdbOrder ?? '' } : undefined}
           onClose={() => setDialog(null)}
           onMatched={() => {
             setDialog(null)

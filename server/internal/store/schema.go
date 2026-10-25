@@ -538,4 +538,12 @@ CREATE TABLE external_ratings (
 	fetched_at  INTEGER NOT NULL
 );
 `,
+	// 22: a show can take its metadata and episode numbering from TheTVDB
+	// (tvdb_id set) in aired, DVD or absolute order. Libraries can turn off
+	// intro and credits detection.
+	`
+ALTER TABLE items ADD COLUMN tvdb_id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE items ADD COLUMN tvdb_order TEXT NOT NULL DEFAULT '';
+ALTER TABLE libraries ADD COLUMN skip_markers INTEGER NOT NULL DEFAULT 0;
+`,
 }

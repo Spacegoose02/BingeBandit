@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-const tmdbBase = "https://api.themoviedb.org/3"
+// tmdbBase is a variable so tests can point it elsewhere.
+var tmdbBase = "https://api.themoviedb.org/3"
 
 type TMDB struct {
 	key  string
@@ -283,11 +284,12 @@ func (t *TMDB) Season(ctx context.Context, showID int64, season int) (*tmdbSeaso
 
 // SearchResult is one candidate for Fix Match.
 type SearchResult struct {
-	TMDBID   int64  `json:"tmdbId"`
+	TMDBID   int64  `json:"tmdbId,omitempty"`
+	TVDBID   int64  `json:"tvdbId,omitempty"`
 	Title    string `json:"title"`
 	Year     int    `json:"year,omitempty"`
 	Overview string `json:"overview,omitempty"`
-	Poster   string `json:"poster,omitempty"` // image ref, e.g. tmdb:/x.jpg
+	Poster   string `json:"poster,omitempty"` // image ref, e.g. tmdb:/x.jpg, or a TheTVDB URL
 }
 
 // Search lists candidates for a movie ("movie") or show ("show").

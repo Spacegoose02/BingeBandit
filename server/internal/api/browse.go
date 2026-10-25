@@ -211,6 +211,9 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if it.Kind == "show" {
+		if id, order, err := s.Store.ShowTVDB(it.ID); err == nil && id > 0 {
+			resp["tvdbId"], resp["tvdbOrder"] = id, order
+		}
 		if next, err := s.upNext(u.ID, it.ID); err == nil && next != nil {
 			resp["upNext"] = next
 		}
