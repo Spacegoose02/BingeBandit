@@ -64,6 +64,7 @@ type Server struct {
 	netp        netHolder
 	unlocks     unlocks
 	restoreMu   sync.Mutex // one restore at a time
+	dispatcharr livetv.DispatcharrJob
 	// ratingFetches holds items whose external ratings are being looked up.
 	ratingFetches sync.Map
 	ctx           context.Context // server lifetime, for work that outlives a request
@@ -290,6 +291,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/live/channels/{id}", s.updateChannel)
 				r.Delete("/live/channels/{id}", s.deleteChannel)
 				r.Get("/live/epg-channels", s.epgChannels)
+				r.Post("/live/dispatcharr/preview", s.dispatcharrPreview)
+				r.Post("/live/dispatcharr/import", s.dispatcharrImport)
+				r.Get("/live/dispatcharr/import", s.dispatcharrStatus)
 				r.Get("/live/logos", s.adminLogos)
 				r.Post("/live/logos", s.uploadLogos)
 				r.Post("/live/logos/match", s.matchAllLogos)
