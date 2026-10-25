@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -54,6 +55,11 @@ type plexMeta struct {
 	GrandparentTitle     string      `json:"grandparentTitle"`
 	GrandparentRatingKey string      `json:"grandparentRatingKey"`
 	GrandparentKey       string      `json:"grandparentKey"`
+	ParentRatingKey      string      `json:"parentRatingKey"`
+	ParentTitle          string      `json:"parentTitle"`
+	ParentYear           int         `json:"parentYear"`
+	Thumb                string      `json:"thumb"` // poster, a path on the server
+	Art                  string      `json:"art"`   // background
 	ParentIndex          int         `json:"parentIndex"`
 	Index                int         `json:"index"`
 	Duration             int64       `json:"duration"` // ms
@@ -359,7 +365,7 @@ func (p *Plex) Collections(ctx context.Context, emit func(Collection) error) err
 				log.Printf("import (plex): collection %q: %v", col.Title, err)
 				continue
 			}
-			c := Collection{Name: col.Title, Summary: col.Summary}
+			c := Collection{Name: col.Title, Summary: col.Summary, Poster: col.Thumb, Backdrop: col.Art}
 			for i := range kids.MediaContainer.Metadata {
 				m := &kids.MediaContainer.Metadata[i]
 				p.meta[m.RatingKey] = m
@@ -371,4 +377,89 @@ func (p *Plex) Collections(ctx context.Context, emit func(Collection) error) err
 		}
 	}
 	return nil
+}
+
+// Artwork sends the poster and background of every movie, show and season,
+// so posters picked or uploaded in Plex (or by Kometa) come along.
+func (p *Plex) Artwork(ctx context.Context, emit func(Art) error, progress func(string, int, int)) error {
+	secs, err := p.get(ctx, "/library/sections", nil)
+	if err != nil {
+		return err
+	}
+	for _, sec := range secs.MediaContainer.Directory {
+		var types []string
+		switch sec.Type {
+		case "movie":
+			types = []string{"1"}
+		case "show":
+			types = []string{"2", "3"} // shows, then their seasons
+		default:
+			continue
+		}
+		shows := map[string]*plexMeta{}
+		for _, typ := range types {
+			c, err := p.get(ctx, "/library/sections/"+sec.Key+"/all", url.Values{"type": {typ}, "includeGuids": {"1"}})
+			if err != nil {
+				return err
+			}
+			for i := range c.MediaContainer.Metadata {
+				m := &c.MediaContainer.Metadata[i]
+				progress("Reading artwork from "+sec.Title, i+1, len(c.MediaContainer.Metadata))
+				a := Art{Poster: m.Thumb, Backdrop: m.Art}
+				switch m.Type {
+				case "movie":
+					a.Record = Record{Kind: "movie", Title: m.Title, Year: m.Year, TMDB: guidTMDB(m.Guid), File: firstFile(m.Media)}
+				case "show":
+					shows[m.RatingKey] = m
+					a.Record = Record{Kind: "show", Title: m.Title, Year: m.Year, TMDB: guidTMDB(m.Guid)}
+				case "season":
+					a.Record = Record{Kind: "season", ShowTitle: m.ParentTitle, ShowYear: m.ParentYear, Season: m.Index}
+					if show := shows[m.ParentRatingKey]; show != nil {
+						a.ShowTitle, a.ShowYear, a.TMDB = show.Title, show.Year, guidTMDB(show.Guid)
+						if a.Backdrop == show.Art {
+							a.Backdrop = "" // Plex hands seasons their show's background
+						}
+						if a.Poster == show.Thumb {
+							a.Poster = ""
+						}
+					}
+					a.Title = fmt.Sprintf("Season %d", m.Index)
+				default:
+					continue
+				}
+				if a.Poster == "" && a.Backdrop == "" {
+					continue
+				}
+				if err := emit(a); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// Image downloads one of Plex's images by its path (an item's thumb or art).
+func (p *Plex) Image(ctx context.Context, path string) (io.ReadCloser, error) {
+	if !strings.HasPrefix(path, "/") {
+		return nil, fmt.Errorf("not a Plex image path: %q", path)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.BaseURL+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Plex-Token", p.Token)
+	req.Header.Set("X-Plex-Client-Identifier", "bingebandit-importer")
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't reach Plex at %s: %w", p.BaseURL, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, errPlexAuth
+		}
+		return nil, fmt.Errorf("Plex answered %s for %s", resp.Status, path)
+	}
+	return resp.Body, nil
 }

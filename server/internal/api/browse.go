@@ -232,6 +232,15 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 	if offset == 0 && cols != nil {
 		resp["collections"] = cols
 	}
+	if offset == 0 && (q.Get("sort") == "" || q.Get("sort") == "title") {
+		// Where each letter starts, for the A–Z jump bar.
+		letters, err := s.Store.LibraryLetters(currentUser(r).ID, id, hide)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		resp["letters"] = letters
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
