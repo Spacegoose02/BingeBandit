@@ -174,38 +174,38 @@ func (s *Store) RowItems(uid int64, libs []int64, libraryKind, key, genre string
 	}
 	ids, _ := json.Marshal(libs)
 	where := `i.kind = @kind AND i.library_id IN (SELECT value FROM json_each(@libs)) AND ` + visible
-	args := []any{uidArg(uid), sql.Named("kind", kind), sql.Named("libs", string(ids)), sql.Named("limit", limit)}
-	var q string
+	args := []any{uidArg(uid), sql.Named("kind", kind), sql.Named("libs", string(ids)), sql.Named("limit", limit), sql.Named("offset", 0)}
+	var q, order string
 	switch key {
 	case "recent":
-		order := "i.added_at DESC"
+		order = "i.added_at DESC"
 		if kind == "show" {
 			order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
 		}
-		q = where + ` ORDER BY ` + order
+		q = where
 	case "released":
 		args = append(args, sql.Named("today", time.Now().Format("2006-01-02")))
-		q = where + ` AND i.release_date != '' AND i.release_date <= @today ORDER BY i.release_date DESC`
+		q, order = where+` AND i.release_date != '' AND i.release_date <= @today`, `i.release_date DESC`
 	case "top-rated":
-		q = where + ` AND i.rating > 0 ORDER BY i.rating DESC, i.sort_title COLLATE NOCASE`
+		q, order = where+` AND i.rating > 0`, `i.rating DESC, i.sort_title COLLATE NOCASE`
 	case "unwatched":
-		q = where + ` AND i.rating > 0 AND ` + unwatched + ` ORDER BY i.rating DESC, i.sort_title COLLATE NOCASE`
+		q, order = where+` AND i.rating > 0 AND `+unwatched, `i.rating DESC, i.sort_title COLLATE NOCASE`
 	case "genres":
 		args = append(args, sql.Named("genre", genre))
-		q = where + ` AND EXISTS (SELECT 1 FROM json_each(i.genres) g WHERE g.value = @genre) ORDER BY i.rating DESC, i.sort_title COLLATE NOCASE`
+		q, order = where+` AND EXISTS (SELECT 1 FROM json_each(i.genres) g WHERE g.value = @genre)`, `i.rating DESC, i.sort_title COLLATE NOCASE`
 	case "watched":
-		q = where + ` AND ` + lastWatched + ` > 0 ORDER BY ` + lastWatched + ` DESC`
+		q, order = where+` AND `+lastWatched+` > 0`, lastWatched+` DESC`
 	case "continue":
 		// Movies in progress, and shows with an episode in progress or
 		// started but not finished.
 		q = where + ` AND ((i.kind = 'movie' AND w.position > 15 AND COALESCE(w.watched, 0) = 0)
 			OR (i.kind = 'show' AND EXISTS (SELECT 1 FROM watch_state x JOIN items e ON e.id = x.item_id
-				WHERE e.show_id = i.id AND x.user_id = @uid AND (x.watched = 1 OR x.position > 15)) AND ` + unwatchedEpisodes + `))
-			ORDER BY ` + lastWatched + ` DESC`
+				WHERE e.show_id = i.id AND x.user_id = @uid AND (x.watched = 1 OR x.position > 15)) AND ` + unwatchedEpisodes + `))`
+		order = lastWatched + ` DESC`
 	default:
 		return nil, fmt.Errorf("unknown row %q", key)
 	}
-	return s.queryItems(itemSelect+` WHERE `+q+` LIMIT @limit`, args...)
+	return s.pagedItems("", q, order+`, i.id`, args...)
 }
 
 // unwatched: a movie not watched, or a show with no episode watched.

@@ -512,12 +512,20 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
-	items, err := s.Store.CollectionMembers(currentUser(r).ID, id)
+	// Apps page through big collections (a smart "Drama" can be most of a
+	// library); without a limit every title comes at once, as older apps expect.
+	q := r.URL.Query()
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, err := strconv.Atoi(q.Get("limit"))
+	if err != nil || limit <= 0 || limit > 500 {
+		limit = -1
+	}
+	items, err := s.Store.CollectionPage(currentUser(r).ID, id, max(offset, 0), limit)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"collection": c, "items": items})
+	writeJSON(w, http.StatusOK, map[string]any{"collection": c, "items": items, "total": c.ItemCount})
 }
 
 type collectionReq struct {

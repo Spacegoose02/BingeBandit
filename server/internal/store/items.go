@@ -105,6 +105,25 @@ FROM items i
 LEFT JOIN watch_state w ON w.item_id = i.id AND w.user_id = @uid
 LEFT JOIN items sh ON sh.id = i.show_id`
 
+// listSelect is itemSelect without cast and crew, which grids and rows never
+// show and which were most of a library page's size.
+var listSelect = strings.Replace(itemSelect, "i.trailer, i.credits,", "i.trailer, '[]',", 1)
+
+// pagedItems lists a page of titles in two steps: the page's ids first,
+// filtered, sorted and cut using only the columns that needs, then the full
+// rows of just those ids. As one query SQLite works out every column (episode
+// and unwatched counts too) for every title in the library before it sorts
+// and cuts, which made each page of a big library take a noticeable while.
+// join adds tables the filter needs; args must bind @uid, @limit and
+// @offset (a @limit of -1 is no limit).
+func (s *Store) pagedItems(join, where, order string, args ...any) ([]*Item, error) {
+	return s.queryItems(`WITH page AS (
+		SELECT i.id, ROW_NUMBER() OVER (ORDER BY `+order+`) AS n FROM items i
+		LEFT JOIN watch_state w ON w.item_id = i.id AND w.user_id = @uid `+join+`
+		WHERE `+where+` ORDER BY n LIMIT @limit OFFSET @offset)
+	`+listSelect+` JOIN page ON page.id = i.id ORDER BY page.n`, args...)
+}
+
 func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	var it Item
 	var parent, show, season, episode sql.NullInt64
@@ -217,8 +236,7 @@ func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit in
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM items i WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
-	items, err := s.queryItems(itemSelect+` WHERE `+where+` AND `+visible+`
-		ORDER BY `+order+` LIMIT @limit OFFSET @offset`, args...)
+	items, err := s.pagedItems("", where+` AND `+visible, order, args...)
 	return items, total, err
 }
 
