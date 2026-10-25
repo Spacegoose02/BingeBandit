@@ -538,7 +538,7 @@ CREATE TABLE external_ratings (
 	fetched_at  INTEGER NOT NULL
 );
 `,
-	// 22: a show can take its metadata and episode numbering from TheTVDB
+	// 25: a show can take its metadata and episode numbering from TheTVDB
 	// (tvdb_id set) in aired, DVD or absolute order. Libraries can turn off
 	// intro and credits detection.
 	`
