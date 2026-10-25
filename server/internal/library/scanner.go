@@ -378,11 +378,18 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 	}
 	showKey := fmt.Sprintf("show:%s:%d", normKey(showTitle), showYear)
 
-	showID, err := s.st.UpsertItem(&store.Item{
-		LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, MatchKey: showKey,
-	})
-	if err != nil {
-		return 0, err
+	// A folder whose show was merged into another (same TMDB/TVDB show)
+	// adds its episodes there.
+	showID, aliasKey, merged := s.st.ShowAlias(lib.ID, showKey)
+	if merged {
+		showKey = aliasKey
+	} else {
+		showID, err = s.st.UpsertItem(&store.Item{
+			LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, MatchKey: showKey,
+		})
+		if err != nil {
+			return 0, err
+		}
 	}
 	seasonTitle := fmt.Sprintf("Season %d", season)
 	if season == 0 {
@@ -417,7 +424,25 @@ func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Sta
 		return nil
 	}
 	s.update(st, func(st *Status) { st.Phase, st.Processed, st.Found = "metadata", 0, 0 })
-	return s.meta.RefreshLibrary(ctx, lib.ID, force, func(done, total int) {
+	progress := func(done, total int) {
 		s.update(st, func(st *Status) { st.Processed, st.Found = done, total })
-	})
+	}
+	if err := s.meta.RefreshLibrary(ctx, lib.ID, force, progress); err != nil {
+		return err
+	}
+	if lib.Kind != "shows" {
+		return nil
+	}
+	merged, err := s.st.MergeDuplicateShows(lib.ID)
+	if err != nil {
+		return fmt.Errorf("merge duplicate shows: %w", err)
+	}
+	if len(merged) == 0 {
+		return nil
+	}
+	for _, m := range merged {
+		log.Printf("scan %q: merged a second folder of %q into show %d", lib.Name, m.Title, m.KeptID)
+	}
+	// Episodes new to the kept show still need their details.
+	return s.meta.RefreshLibrary(ctx, lib.ID, false, progress)
 }
