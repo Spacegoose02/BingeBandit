@@ -14,6 +14,9 @@ export interface Member {
   isOwner: boolean
   hasPin: boolean
   current: boolean
+  avatar?: string
+  /** The account opens as this member without asking who's watching. */
+  auto?: boolean
 }
 
 export interface WatchState {

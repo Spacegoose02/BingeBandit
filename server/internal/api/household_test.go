@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
 
@@ -124,3 +127,81 @@ func TestProfiles(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestProfilePicturesAndAutoSelect(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	owner, _ := st.CreateUser("dana", "x", false)
+	other, _ := st.CreateUser("sam", "x", false)
+	kids, _ := st.CreateProfile(owner, "Kids")
+	st.CreateSession("dana-token", owner.ID, "Web", "")
+	st.CreateSession("kids-token", kids.ID, "Web", "")
+	st.CreateSession("sam-token", other.ID, "Web", "")
+	h := (&Server{Store: st, Artwork: metadata.NewArtwork(t.TempDir())}).Router(context.Background())
+
+	png := []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00")
+	upload := func(token string, id int64) int {
+		t.Helper()
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		fw, _ := mw.CreateFormFile("file", "me.png")
+		fw.Write(png)
+		mw.Close()
+		req := httptest.NewRequest("PUT", "/api/household/"+itoa(id)+"/avatar", &body)
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	call := func(token, method, path, body string, out any) int {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if out != nil {
+			json.Unmarshal(rec.Body.Bytes(), out)
+		}
+		return rec.Code
+	}
+
+	// The account sets anyone's picture, a profile only its own, nobody else's.
+	if c := upload("dana-token", kids.ID); c != http.StatusOK {
+		t.Fatalf("account sets profile picture: %d", c)
+	}
+	if c := upload("kids-token", kids.ID); c != http.StatusOK {
+		t.Fatalf("profile sets own picture: %d", c)
+	}
+	if c := upload("kids-token", owner.ID); c != http.StatusNotFound {
+		t.Fatalf("profile sets account picture: %d", c)
+	}
+	if c := upload("sam-token", kids.ID); c != http.StatusNotFound {
+		t.Fatalf("other account sets picture: %d", c)
+	}
+
+	// Auto-select: only the account, only its own household.
+	if c := call("dana-token", "PUT", "/api/household/autoselect", `{"memberId":`+itoa(other.ID)+`}`, nil); c != http.StatusBadRequest {
+		t.Fatalf("auto-select someone else: %d", c)
+	}
+	if c := call("kids-token", "PUT", "/api/household/autoselect", `{"memberId":`+itoa(kids.ID)+`}`, nil); c != http.StatusForbidden {
+		t.Fatalf("profile sets auto-select: %d", c)
+	}
+	if c := call("dana-token", "PUT", "/api/household/autoselect", `{"memberId":`+itoa(kids.ID)+`}`, nil); c != http.StatusNoContent {
+		t.Fatalf("auto-select: %d", c)
+	}
+	var members []member
+	call("kids-token", "GET", "/api/household", "", &members)
+	if len(members) != 2 || members[0].Auto || !members[1].Auto || !strings.HasPrefix(members[1].Avatar, "/api/images/local/") || members[0].Avatar != "" {
+		t.Fatalf("household = %+v", members)
+	}
+	if c := call("kids-token", "DELETE", "/api/household/"+itoa(kids.ID)+"/avatar", "", nil); c != http.StatusNoContent {
+		t.Fatalf("remove picture: %d", c)
+	}
+	if u, _ := st.UserByID(kids.ID); u.Avatar != "" {
+		t.Fatalf("picture after removing: %q", u.Avatar)
+	}
+}

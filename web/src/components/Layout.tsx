@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useAuth } from '../auth'
 import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
+import { Avatar } from './Avatar'
 import { Icon } from './Icon'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
@@ -139,7 +140,7 @@ export default function Layout() {
         <div className="sidebar-user">
           <div className="sidebar-user-row">
             <button className="user-chip" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
-              <span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span>
+              <Avatar name={displayName} src={user?.avatar} />
               <span className="user-name">{displayName}</span>
             </button>
             <NotificationBell />

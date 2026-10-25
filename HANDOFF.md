@@ -114,8 +114,10 @@ _Last updated: 2026-10-25, Import from Dispatcharr (M4)._
   - Switching ends the current session and starts one for the member on the same device name. A member with a PIN needs it, rate limited, and a wrong PIN answers 403.
   - A profile's PIN is its `passcode_hash`. The account's PIN is its settings passcode.
   - Library limits for a profile are capped at what the account sees.
-- **Web:** `pages/WhoIsWatching.tsx` at `/who` appears after a password sign-in (a `sessionStorage` flag in `profilePick.ts`) and from the user menu → Switch profile. Account → Profiles adds, edits (name, libraries, PIN) and deletes profiles. Admin → Users marks profiles and hides Reset password for them.
-- **TV app:** `screens/Profiles.tsx` with a remote-friendly PIN pad. It shows after sign-in when the account has profiles, and from Settings → Switch profile. **Not yet tried on a device**: the onn box and the S24+ still need a run-through. It type-checks and lints.
+  - **Pictures** (migration 27, `users.avatar`, an artwork ref stored by `metadata.Artwork`): `PUT/DELETE /api/household/{id}/avatar`. The account can set anyone's picture, and a profile can set its own. The web crops pictures to a 512 px square JPEG before uploading (`components/Avatar.tsx`).
+  - **Opening as a member** (`users.auto_profile_id` on the account, 0 = ask): `PUT /api/household/autoselect {memberId}`. `GET /api/household` marks that member `auto`. Clients then skip the picker, switching to that member unless it has a PIN, in which case the picker shows.
+- **Web:** `pages/WhoIsWatching.tsx` at `/who` appears whenever the app opens in a new tab or after signing in (the `sessionStorage` "picked" flag in `profilePick.ts`; a reload doesn't ask again), keeping the link that was opened. It also appears from the user menu → Switch profile, and that never auto-selects. Account → Profiles adds, edits (name, libraries, PIN) and deletes profiles. Admin → Users marks profiles and hides Reset password for them.
+- **TV app:** `screens/Profiles.tsx` with a remote-friendly PIN pad. It shows on every app start and after sign-in when the account has profiles (`needsPicker`, which also applies the account's "open as"), and from Settings → Switch profile. It shows the profiles' pictures. **Not yet tried on a device**: the onn box and the S24+ still need a run-through. It type-checks and lints.
 
 ## Live TV: switch streams when viewers would be buffering
 

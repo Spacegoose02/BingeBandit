@@ -27,6 +27,8 @@ type member struct {
 	IsOwner bool    `json:"isOwner"`
 	HasPIN  bool    `json:"hasPin"`
 	Current bool    `json:"current"`
+	Avatar  string  `json:"avatar,omitempty"`
+	Auto    bool    `json:"auto,omitempty"` // the account opens as this member without asking
 	AllLibs bool    `json:"allLibraries"`
 	LibIDs  []int64 `json:"libraryIds,omitempty"`
 }
@@ -45,9 +47,16 @@ func (s *Server) household(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	var auto int64
+	for _, m := range users {
+		if m.OwnerID == 0 {
+			auto = m.AutoProfileID
+		}
+	}
 	out := make([]member, 0, len(users))
 	for _, m := range users {
-		mem := member{ID: m.ID, Name: memberName(m), IsOwner: m.OwnerID == 0, HasPIN: m.HasPasscode, Current: m.ID == u.ID, AllLibs: m.IsAdmin || m.AllLibraries}
+		mem := member{ID: m.ID, Name: memberName(m), IsOwner: m.OwnerID == 0, HasPIN: m.HasPasscode, Current: m.ID == u.ID,
+			Avatar: m.Avatar, Auto: m.ID == auto, AllLibs: m.IsAdmin || m.AllLibraries}
 		// Only the account sees what each profile may browse.
 		if u.OwnerID == 0 && m.OwnerID != 0 && !m.AllLibraries {
 			mem.LibIDs, _ = s.Store.UserLibraryIDs(m.ID)
@@ -228,6 +237,93 @@ func (s *Server) deleteProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recheckTranscodes()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// householdMember loads member {id} if the signed-in user may change its
+// picture: the account for anyone in its household, a profile for itself.
+func (s *Server) householdMember(w http.ResponseWriter, r *http.Request) *store.User {
+	u := currentUser(r)
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return nil
+	}
+	m, err := s.Store.UserByID(id)
+	if err != nil || (m.ID != u.ID && (u.OwnerID != 0 || m.OwnerID != u.ID)) {
+		writeErr(w, http.StatusNotFound, "not found")
+		return nil
+	}
+	return m
+}
+
+// maxAvatarBytes caps a profile picture upload. The web app crops and shrinks
+// pictures before sending them, so real ones are far smaller.
+const maxAvatarBytes = 5 << 20
+
+// setAvatar stores an uploaded profile picture (the "file" field).
+func (s *Server) setAvatar(w http.ResponseWriter, r *http.Request) {
+	m := s.householdMember(w, r)
+	if m == nil {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBytes+64<<10)
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "attach a JPEG, PNG or WebP picture of up to 5 MB as the \"file\" field")
+		return
+	}
+	defer file.Close()
+	ref, err := s.Artwork.Save(file)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.Store.SetAvatar(m.ID, ref); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"avatar": store.ImageURL(ref)})
+}
+
+func (s *Server) removeAvatar(w http.ResponseWriter, r *http.Request) {
+	m := s.householdMember(w, r)
+	if m == nil {
+		return
+	}
+	if err := s.Store.SetAvatar(m.ID, ""); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// setAutoProfile picks the member this account opens as on every device
+// without asking who's watching; 0 asks every time. A member with a PIN still
+// asks for it.
+func (s *Server) setAutoProfile(w http.ResponseWriter, r *http.Request) {
+	owner := accountOnly(w, r)
+	if owner == nil {
+		return
+	}
+	var req struct {
+		MemberID int64 `json:"memberId"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.MemberID != 0 {
+		m, err := s.Store.UserByID(req.MemberID)
+		if err != nil || m.HouseholdID() != owner.ID {
+			writeErr(w, http.StatusBadRequest, "pick yourself or one of your profiles")
+			return
+		}
+	}
+	if err := s.Store.SetAutoProfile(owner.ID, req.MemberID); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

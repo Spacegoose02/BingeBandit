@@ -615,7 +615,13 @@ CREATE TABLE discover_videos (
 	PRIMARY KEY (source_id, video_id)
 );
 `,
-	// 27: which libraries each user pinned, and in what order (Plex's pinned
+	// 27: profile pictures, and the member an account opens as without asking
+	// who's watching (0 asks).
+	`
+ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN auto_profile_id INTEGER NOT NULL DEFAULT 0;
+`,
+	// 28: which libraries each user pinned, and in what order (Plex's pinned
 	// sidebar). A library without a row is pinned, so new libraries show up;
 	// pins_chosen is set once the user has been asked.
 	`

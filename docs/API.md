@@ -77,10 +77,12 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/household` | The account and its profiles: `[{id, name, isOwner, hasPin, current, allLibraries, libraryIds}]`. |
+| GET | `/household` | The account and its profiles: `[{id, name, isOwner, hasPin, current, avatar, auto, allLibraries, libraryIds}]`. `avatar` is the picture's URL; `auto` marks the member the account opens as without asking who's watching (switch to it unless it has a PIN). |
 | POST | `/household` | Account only. `{name}` adds a profile (up to 10). |
 | PUT / DELETE | `/household/{id}` | Account only. `{name, allLibraries, libraryIds}` (never more than the account sees); delete removes the profile and its history. |
 | PUT | `/household/{id}/pin` | Account only. `{pin}` sets a profile's PIN; `""` removes it. The account's own PIN is its settings passcode. |
+| PUT / DELETE | `/household/{id}/avatar` | The account for anyone in it, or a profile for itself. PUT a JPEG, PNG or WebP of up to 5 MB as the multipart `file` field → `{avatar}`. |
+| PUT | `/household/autoselect` | Account only. `{memberId}` opens every device as that member without asking; `0` asks who's watching. |
 | POST | `/household/{id}/switch` | `{pin}` when the member has one. Ends this session and returns `{token, user}` for the member (and sets the cookie for the web UI). A wrong PIN answers 403 `{needsPin: true}`. |
 
 ## Browsing
