@@ -25,10 +25,10 @@ function Progress({ item }: { item: Item }) {
   )
 }
 
-export function PosterCard({ item, subtitle }: { item: Item; subtitle?: string }) {
+export function PosterCard({ item, subtitle, domId }: { item: Item; subtitle?: string; domId?: string }) {
   const poster = img(item.poster || item.showPoster, 'w342')
   return (
-    <Link to={`/item/${item.id}`} className="poster-card">
+    <Link to={`/item/${item.id}`} className="poster-card" id={domId}>
       <div className="poster-frame">
         {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{item.title}</div>}
         <Badge item={item} />

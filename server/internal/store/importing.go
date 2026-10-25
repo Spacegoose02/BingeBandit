@@ -1,6 +1,9 @@
 package store
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // IndexItem is the slice of an item the importers match against.
 type IndexItem struct {
@@ -16,10 +19,10 @@ type IndexItem struct {
 	Files     []string // lower-case base names
 }
 
-// ImportIndex loads every movie, show and episode with its file names.
+// ImportIndex loads every movie, show, season and episode with its file names.
 func (s *Store) ImportIndex() ([]*IndexItem, error) {
 	rows, err := s.db.Query(`SELECT id, library_id, kind, title, year, tmdb_id, COALESCE(show_id, 0),
-		COALESCE(season_number, 0), COALESCE(episode_number, 0) FROM items WHERE kind != 'season'`)
+		COALESCE(season_number, 0), COALESCE(episode_number, 0) FROM items`)
 	if err != nil {
 		return nil, err
 	}
@@ -120,30 +123,39 @@ func (s *Store) ImportResume(uid, itemID int64, position, duration float64, at i
 	return n > 0, nil
 }
 
+// SetCollectionArtwork replaces a collection's poster or backdrop.
+func (s *Store) SetCollectionArtwork(id int64, kind, ref string) error {
+	if kind != "poster" && kind != "backdrop" {
+		return fmt.Errorf("unknown collection artwork type %q", kind)
+	}
+	_, err := s.db.Exec(`UPDATE collections SET `+kind+` = ? WHERE id = ?`, ref, id)
+	return err
+}
+
 // EnsureCollection finds a collection by name in a library, creating it if needed,
-// and adds the items. It returns how many items were new to it.
-func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (int, error) {
+// and adds the items. It returns the collection and how many items were new to it.
+func (s *Store) EnsureCollection(libraryID int64, name, overview string, itemIDs []int64) (int64, int, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`INSERT OR IGNORE INTO collections (library_id, name, overview, created_at) VALUES (?, ?, ?, ?)`,
 		libraryID, name, overview, now()); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	var id int64
 	if err := tx.QueryRow(`SELECT id FROM collections WHERE library_id = ? AND name = ? COLLATE NOCASE`, libraryID, name).Scan(&id); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	added := 0
 	for _, it := range itemIDs {
 		res, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id) VALUES (?, ?)`, id, it)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
 		n, _ := res.RowsAffected()
 		added += int(n)
 	}
-	return added, tx.Commit()
+	return id, added, tx.Commit()
 }
