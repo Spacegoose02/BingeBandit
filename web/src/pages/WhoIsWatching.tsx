@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
 import type { Member, User } from '../types'
@@ -11,18 +12,45 @@ export default function WhoIsWatching() {
   useDocumentTitle("Who's watching?")
   const { signedIn } = useAuth()
   const navigate = useNavigate()
-  const { data: members } = useApi<Member[]>('/api/household')
+  const state = useLocation().state as { from?: string; opening?: boolean } | null
+  const next = state?.from && state.from !== '/who' ? state.from : '/'
+  const { data: members, error: loadError } = useApi<Member[]>('/api/household')
   const [asking, setAsking] = useState<Member | null>(null)
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
+  // While opening, the account's chosen member (if any) is tried before showing the picker.
+  const [deciding, setDeciding] = useState(true)
 
-  // One person in the household: nothing to pick.
   useEffect(() => {
-    if (members && members.length < 2) {
+    // The household couldn't load (an API key, the server restarting): carry on as who this is.
+    if (loadError && !members) {
       donePicking()
-      navigate('/', { replace: true })
+      navigate(next, { replace: true })
     }
-  }, [members, navigate])
+  }, [loadError]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!members) return
+    const leave = () => {
+      donePicking()
+      navigate(next, { replace: true })
+    }
+    // One person in the household: nothing to pick.
+    if (members.length < 2) return leave()
+    const auto = state?.opening ? members.find((m) => m.auto) : undefined
+    if (auto?.current) return leave()
+    if (auto && !auto.hasPin) {
+      api.post<{ user: User }>(`/api/household/${auto.id}/switch`, {}).then(
+        (res) => {
+          signedIn(res.user)
+          leave()
+        },
+        () => setDeciding(false),
+      )
+      return
+    }
+    setDeciding(false)
+  }, [members]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const choose = async (m: Member, code = '') => {
     if (m.hasPin && !m.current && !code) {
@@ -37,7 +65,7 @@ export default function WhoIsWatching() {
         signedIn(res.user)
       }
       donePicking()
-      navigate('/', { replace: true })
+      navigate(next, { replace: true })
     } catch (e) {
       setError((e as Error).message)
       setPin('')
@@ -47,6 +75,9 @@ export default function WhoIsWatching() {
     e.preventDefault()
     if (asking) choose(asking, pin)
   }
+
+  // Nothing to show until it's clear there is a choice to make.
+  if (!members || deciding) return <div className="auth-page" />
 
   return (
     <div className="auth-page">
@@ -75,7 +106,7 @@ export default function WhoIsWatching() {
           <div className="who-grid">
             {members?.map((m) => (
               <button key={m.id} className={`who-card ${m.current ? 'current' : ''}`} onClick={() => choose(m)}>
-                <span className="avatar who-avatar">{m.name.slice(0, 1).toUpperCase()}</span>
+                <Avatar name={m.name} src={m.avatar} className="who-avatar" />
                 <span className="who-name">{m.name}</span>
                 {m.hasPin && !m.current && <Icon name="lock" size={14} className="muted" />}
               </button>

@@ -615,4 +615,10 @@ CREATE TABLE discover_videos (
 	PRIMARY KEY (source_id, video_id)
 );
 `,
+	// 27: profile pictures, and the member an account opens as without asking
+	// who's watching (0 asks).
+	`
+ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN auto_profile_id INTEGER NOT NULL DEFAULT 0;
+`,
 }

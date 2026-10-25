@@ -10,12 +10,14 @@ export class ApiError extends Error {
 
 async function request<T>(method: string, path: string, body?: unknown, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { 'X-Requested-With': 'BingeBandit' }
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  // A FormData body (a file upload) sets its own multipart Content-Type.
+  const form = body instanceof FormData
+  if (body !== undefined && !form) headers['Content-Type'] = 'application/json'
   const res = await fetch(path, {
     method,
     credentials: 'same-origin',
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: form ? body : body !== undefined ? JSON.stringify(body) : undefined,
     ...init,
   })
   if (res.status === 204 || res.status === 202) return undefined as T

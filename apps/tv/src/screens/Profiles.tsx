@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { ApiError, api, current, saveSession, type Session } from '../api'
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ApiError, api, current, image, saveSession, type Session } from '../api'
 import { Button, Focusable } from '../components'
 import { colors, font, scaled } from '../theme'
 import type { Member, User } from '../types'
@@ -8,6 +8,28 @@ import type { Member, User } from '../types'
 /** The household's members: the account and its profiles. */
 export function fetchHousehold(): Promise<Member[]> {
   return api.get<Member[]>('/api/household')
+}
+
+/**
+ * Decides whether opening the app needs "Who's watching?". It doesn't for a
+ * single member, or when the account chose a member to open as (switching to
+ * it here unless it has a PIN). Resolves true when the picker should show.
+ */
+export async function needsPicker(): Promise<boolean> {
+  const members = await fetchHousehold().catch(() => [] as Member[])
+  if (members.length < 2) return false
+  const auto = members.find((m) => m.auto)
+  if (auto?.current) return false
+  if (!auto || auto.hasPin) return true
+  const s = current()
+  if (!s) return true
+  try {
+    const res = await api.post<{ token: string; user: User }>(`/api/household/${auto.id}/switch`, { pin: '' })
+    await saveSession({ server: s.server, token: res.token, user: res.user })
+    return false
+  } catch {
+    return true
+  }
 }
 
 /**
@@ -68,7 +90,11 @@ export default function Profiles({ onDone, onCancel }: { onDone: (s: Session) =>
         {members?.map((m, i) => (
           <Focusable key={m.id} onPress={() => choose(m)} hasTVPreferredFocus={m.current || (i === 0 && !members.some((x) => x.current))} style={st.card}>
             <View style={[st.avatar, m.current && st.avatarCurrent]}>
-              <Text style={st.initial}>{m.name.slice(0, 1).toUpperCase()}</Text>
+              {m.avatar ? (
+                <Image source={image(m.avatar, 'w342')} style={st.avatarImg} />
+              ) : (
+                <Text style={st.initial}>{m.name.slice(0, 1).toUpperCase()}</Text>
+              )}
             </View>
             <Text style={st.name} numberOfLines={1}>
               {m.name}
@@ -124,7 +150,8 @@ const st = StyleSheet.create(scaled({
   title: { color: colors.text, fontSize: font.hero, fontWeight: '800', marginBottom: 40, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   card: { alignItems: 'center', width: 260, padding: 20, margin: 16, borderRadius: 24 },
-  avatar: { width: 180, height: 180, borderRadius: 40, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 180, height: 180, borderRadius: 40, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%' },
   avatarCurrent: { borderWidth: 6, borderColor: colors.text },
   initial: { color: colors.accentText, fontSize: 90, fontWeight: '800' },
   name: { color: colors.text, fontSize: font.heading, fontWeight: '700', marginTop: 18, maxWidth: 240 },

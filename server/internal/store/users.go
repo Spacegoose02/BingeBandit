@@ -24,9 +24,31 @@ type User struct {
 	HasPasscode   bool    `json:"hasPasscode"`          // settings are locked until the passcode is entered
 	OwnerID       int64   `json:"ownerId,omitempty"`    // set for a profile: the account it belongs to
 	ProfileName   string  `json:"profileName,omitempty"`
+	Avatar        string  `json:"avatar,omitempty"`        // URL of the profile picture
+	AutoProfileID int64   `json:"autoProfileId,omitempty"` // an account's member to open as without asking
 	PasswordHash  string  `json:"-"`
 	PasscodeHash  string  `json:"-"`
 	TOTPSecret    string  `json:"-"`
+}
+
+// SetAvatar stores a user's profile picture as an artwork reference
+// ("local:/<file>"); "" removes it.
+func (s *Store) SetAvatar(userID int64, ref string) error {
+	res, err := s.db.Exec(`UPDATE users SET avatar = ? WHERE id = ?`, ref, userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetAutoProfile sets the member an account opens as without asking who's
+// watching; 0 asks every time.
+func (s *Store) SetAutoProfile(accountID, memberID int64) error {
+	_, err := s.db.Exec(`UPDATE users SET auto_profile_id = ? WHERE id = ? AND owner_id IS NULL`, memberID, accountID)
+	return err
 }
 
 // SetPasscode stores a bcrypt hash of the user's settings passcode; "" removes it.
@@ -125,12 +147,13 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
+	var avatar string
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -138,6 +161,9 @@ func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.HasPassword = u.PasswordHash != ""
 	u.HasPasscode = u.PasscodeHash != ""
+	if avatar != "" {
+		u.Avatar = ImageURL(avatar)
+	}
 	return &u, nil
 }
 
