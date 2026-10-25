@@ -15,6 +15,7 @@ const (
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
 	SettingBackupDir         = "backup_dir"
+	SettingPreRollPaths      = "preroll_paths" // intro videos before movies: files or folders, one per line
 	SettingBackupKeep        = "backup_keep"
 	SettingDVRFolder         = "dvr_folder"
 	SettingDVRNaming         = "dvr_naming" // library (Show/Season 01/…) | folder (one flat folder)
@@ -48,6 +49,7 @@ var SettingDefaults = map[string]string{
 	SettingMaintenanceStart:  "2",
 	SettingMaintenanceEnd:    "5",
 	SettingBackupDir:         "",
+	SettingPreRollPaths:      "",
 	SettingBackupKeep:        "7",
 	SettingDVRFolder:         "",
 	SettingDVRNaming:         "library",

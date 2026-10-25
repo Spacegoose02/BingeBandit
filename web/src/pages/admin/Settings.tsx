@@ -141,6 +141,21 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
             Let users download original files
           </label>
+          <label>
+            Intro videos before movies
+            <textarea
+              className="mono"
+              rows={2}
+              value={s.preroll_paths ?? ''}
+              onChange={(e) => setS({ ...s, preroll_paths: e.target.value })}
+              placeholder="Files or folders, one per line (e.g. /media/prerolls)"
+              spellCheck={false}
+            />
+          </label>
+          <p className="muted small">
+            One is picked at random each time, like Plex's movie pre-roll. Each person turns it off, or adds trailers, in their playback
+            settings. Use MP4 (H.264 and AAC) so every browser can play it.
+          </p>
         </section>
 
         <section className="panel form">

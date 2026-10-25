@@ -234,6 +234,15 @@ export interface Prefs {
   autoPlayNext: boolean
   skipIntro: 'button' | 'auto' | 'off'
   skipCredits: 'button' | 'auto' | 'off'
+  /** Trailers of other movies before a movie (0 = none). */
+  preRollTrailers: number
+  /** The server's intro video before a movie, when an admin has set one. */
+  preRollIntro: boolean
+}
+
+export interface PreRoll {
+  trailers: { itemId: number; title: string; year?: number; youtube: string }[]
+  intro?: { url: string; name: string }
 }
 
 export interface GuideProgram {

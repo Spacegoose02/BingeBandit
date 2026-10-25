@@ -997,3 +997,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 @media (max-width: 560px) {
   .logo-library { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+.preroll { cursor: default; }
+.preroll-yt, .preroll-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.preroll-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px clamp(16px, 3vw, 36px); background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); }
+.preroll-actions { display: flex; gap: 8px; }
