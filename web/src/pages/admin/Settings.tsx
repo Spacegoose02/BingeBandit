@@ -96,6 +96,32 @@ export default function AdminSettings() {
             Metadata language
             <input value={s.metadata_language ?? ''} onChange={set('metadata_language')} placeholder="en-US" />
           </label>
+          <label>
+            IMDb and Rotten Tomatoes ratings
+            <select value={s.ratings_provider ?? ''} onChange={set('ratings_provider')}>
+              <option value="">Off</option>
+              <option value="mdblist">MDBList (IMDb, Rotten Tomatoes critics and audience, Metacritic)</option>
+              <option value="omdb">OMDb (IMDb, Rotten Tomatoes critics, Metacritic; needs the TMDB key)</option>
+            </select>
+          </label>
+          {s.ratings_provider && (
+            <>
+              <label>
+                {s.ratings_provider === 'omdb' ? 'OMDb' : 'MDBList'} API key
+                <input value={s.ratings_api_key ?? ''} onChange={set('ratings_api_key')} placeholder="Paste your key" autoComplete="off" spellCheck={false} />
+              </label>
+              <p className="muted small">
+                Free at{' '}
+                {s.ratings_provider === 'omdb' ? (
+                  <a href="https://www.omdbapi.com/apikey.aspx" target="_blank" rel="noreferrer">omdbapi.com</a>
+                ) : (
+                  <a href="https://mdblist.com/preferences/" target="_blank" rel="noreferrer">mdblist.com/preferences</a>
+                )}
+                {' '}(about 1,000 lookups a day). Scores fill in when a title is opened, and the “Refresh IMDb and Rotten Tomatoes ratings” task
+                keeps them current.
+              </p>
+            </>
+          )}
         </section>
 
         <section className="panel form">

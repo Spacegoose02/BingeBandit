@@ -59,7 +59,7 @@ func main() {
 	defer stop()
 	detector := markers.NewDetector(st, cfg.FFmpeg, filepath.Join(cfg.DataDir, "cache", "fingerprints"))
 	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{
-		Store: st, Scanner: scanner, Markers: detector, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
+		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
 	})...)
 	go scheduler.Start(ctx)
 	go scanner.Watch(ctx)

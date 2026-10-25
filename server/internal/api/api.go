@@ -61,8 +61,10 @@ type Server struct {
 	oidc        *oidcFlows
 	netp        netHolder
 	unlocks     unlocks
-	restoreMu   sync.Mutex      // one restore at a time
-	ctx         context.Context // server lifetime, for work that outlives a request
+	restoreMu   sync.Mutex // one restore at a time
+	// ratingFetches holds items whose external ratings are being looked up.
+	ratingFetches sync.Map
+	ctx           context.Context // server lifetime, for work that outlives a request
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
