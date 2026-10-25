@@ -121,6 +121,8 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 
 ## Live TV and DVR
 
+An admin can turn Live TV off for a user (`PUT /api/admin/users/{id}/live-tv {on}`); `GET /me` then has `liveTV: false` and everything in this section answers **403**.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/live/channels` | Channels with what's on now and next. |

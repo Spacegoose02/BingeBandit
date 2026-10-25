@@ -19,6 +19,7 @@ type pace struct {
 	pid      int    // the PID carrying the PCR, -1 until seen
 	started  bool
 	wall0    time.Time
+	lastWall time.Time
 	lastPCR  float64 // seconds
 	elapsed  float64 // stream time since the first PCR
 	maxAhead float64
@@ -74,7 +75,7 @@ func (p *pace) packet(pkt []byte) {
 func (p *pace) pcr(media float64) {
 	now := p.now()
 	if !p.started {
-		p.started, p.wall0, p.lastPCR = true, now, media
+		p.started, p.wall0, p.lastWall, p.lastPCR = true, now, now, media
 		return
 	}
 	step := media - p.lastPCR
@@ -82,9 +83,12 @@ func (p *pace) pcr(media float64) {
 		step += pcrWrap // the 33-bit clock wrapped (every ~26.5 h)
 	}
 	if step < 0 || step > 10 {
-		step = 0 // a discontinuity (ad splice, encoder restart): carry on from here
+		// A discontinuity (ad splice, encoder restart, a provider skipping
+		// ahead): the clock can't say how much video was in between, so
+		// assume it kept up rather than count the gap as falling behind.
+		step = max(0, now.Sub(p.lastWall).Seconds())
 	}
-	p.lastPCR = media
+	p.lastPCR, p.lastWall = media, now
 	p.elapsed += step
 	if ahead := p.elapsed - now.Sub(p.wall0).Seconds(); ahead > p.maxAhead {
 		p.maxAhead = ahead

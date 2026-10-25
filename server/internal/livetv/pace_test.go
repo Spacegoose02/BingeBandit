@@ -67,4 +67,21 @@ func TestPace(t *testing.T) {
 	if b, _ := p.behind(); b > 1.1 {
 		t.Errorf("wrap/splice counted as %.1fs behind", b)
 	}
+	// Repeated discontinuities (a remuxed HLS upstream skipping segments)
+	// while the stream keeps playing in real time aren't falling behind.
+	p = newPace()
+	p.now = func() time.Time { return clock }
+	media := 10.0
+	p.feed(tsWithPCR(256, media))
+	for i := 0; i < 600; i++ {
+		clock = clock.Add(100 * time.Millisecond)
+		media += 0.1
+		if i%50 == 49 {
+			media += 30
+		}
+		p.feed(tsWithPCR(256, media))
+	}
+	if b, _ := p.behind(); b > 0.5 {
+		t.Errorf("a stream with discontinuities is %.1fs behind, want ~0", b)
+	}
 }

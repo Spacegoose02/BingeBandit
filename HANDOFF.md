@@ -2,7 +2,17 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, Import from Dispatcharr (M4)._
+_Last updated: 2026-10-25, calmer Live TV failover and per-user Live TV._
+
+## Calmer Live TV failover, per-user Live TV (after v0.6.1)
+
+- **Why:** fallback streams of a channel are often seconds apart in what they show, so every switch replays (or skips) a moment, and the slow-stream switching from #32 switched far too often. Jellyfin, which Michael found steady, never switches streams mid-play: it shares one tuner stream per channel and only fails when it ends.
+- **Pace** (`livetv/pace.go`): a PCR discontinuity counts the wall time since the last PCR as played instead of zero, so a remuxed HLS upstream skipping ahead no longer reads as falling behind.
+- **When to leave a slow stream** (`relay.go`): only once it's `buffer + switch time` behind real time (when viewers would really have buffered for the switch time, not just used up their cushion); never within the switch time of the last switch; and only if there's another stream that wasn't itself left for being slow in the last 10 minutes (`bench`, `canLeaveSlow`). Benched streams go to the back of each pass (`passOrder`). A stream that played 2 minutes resets the pass count, so a channel that fails now and then doesn't stop after three failures in a day. A player's buffering report switches only if the server sees it too (stream ≥ max(3, buffer/2) s behind, or no new segment for 8 s); an unmeasurable stream no longer trusts the player alone. Setting `live_switch_slow` (default true) turns slowness switching off entirely; failing or silent streams always switch.
+- **HLS across a switch:** each new upstream gets a fresh HLS ffmpeg writing into the same folder with `append_list`, so segment numbers carry on and players keep the same URLs. The relay records the first segment of each output (`hlsBreaks`), and `Manager.Playlist` rewrites the served playlist with `EXT-X-DISCONTINUITY` before it and a correct `EXT-X-DISCONTINUITY-SEQUENCE` (ffmpeg's own tags on appended lists are wrong). Before, the new stream's bytes went into the same ffmpeg, whose timestamps then went backwards. Priming a new output with the stream's head skips bytes already queued for it (`tsChunk` offsets), so the start isn't fed twice, and a stale head (output started long after the stream) isn't used at all.
+- **Per-user Live TV:** migration 29 adds `users.live_tv` (default 1; admins always have it). `PUT /api/admin/users/{id}/live-tv {on}` sets it for the account and its profiles, and turning it off disconnects their viewers (`Manager.KickUser`, not the DVR). All `/live/*` and `/dvr*` user routes sit behind `requireLiveTV` (403). Web hides Live TV and Recordings; the TV app checks `/api/me` on launch and hides the Live TV tab. Admin → Users has the toggle.
+- **Tested:** unit tests for pace discontinuities, slow failover + benching, slowness switching off, playlist discontinuity rewriting; Chromium playing the fake flaky channel through its failover (0.3 s hiccup, no jump back); the toggle with a second account (403s, nav hidden, back on).
+
 
 ## Import from Dispatcharr (M4)
 
