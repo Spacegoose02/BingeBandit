@@ -239,9 +239,10 @@ func roots() []dirEntry {
 }
 
 type libraryReq struct {
-	Name  string   `json:"name"`
-	Kind  string   `json:"kind"`
-	Paths []string `json:"paths"`
+	Name        string   `json:"name"`
+	Kind        string   `json:"kind"`
+	Paths       []string `json:"paths"`
+	SkipMarkers *bool    `json:"skipMarkers"` // left out: unchanged on an edit
 }
 
 func (l *libraryReq) validate() error {
@@ -276,7 +277,7 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	lib := &store.Library{Name: req.Name, Kind: req.Kind, Paths: req.Paths}
+	lib := &store.Library{Name: req.Name, Kind: req.Kind, Paths: req.Paths, SkipMarkers: req.SkipMarkers != nil && *req.SkipMarkers}
 	if err := s.Store.CreateLibrary(lib); err != nil {
 		writeStoreErr(w, err)
 		return
@@ -306,6 +307,9 @@ func (s *Server) updateLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lib.Name, lib.Paths = req.Name, req.Paths
+	if req.SkipMarkers != nil {
+		lib.SkipMarkers = *req.SkipMarkers
+	}
 	if err := s.Store.UpdateLibrary(lib); err != nil {
 		writeStoreErr(w, err)
 		return
@@ -372,7 +376,7 @@ func (s *Server) refreshItem(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad id")
 		return
 	}
-	if !s.Metadata.Enabled() {
+	if !s.Metadata.AnyEnabled() {
 		writeErr(w, http.StatusBadRequest, "add a TMDB API key in Settings first")
 		return
 	}

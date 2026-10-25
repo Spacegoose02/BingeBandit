@@ -5,12 +5,17 @@ import (
 	"errors"
 	"log"
 	"strings"
+	"sync"
 
 	"bingebandit/internal/store"
 )
 
 type Service struct {
 	st *store.Store
+
+	tvMu  sync.Mutex
+	tv    *TVDB // kept so its login token is reused
+	tvKey string
 }
 
 func NewService(st *store.Store) *Service { return &Service{st: st} }
@@ -26,11 +31,32 @@ func (s *Service) client() *TMDB {
 
 func (s *Service) Enabled() bool { return s.client() != nil }
 
+// tvdb returns nil when no TheTVDB key is configured.
+func (s *Service) tvdb() *TVDB {
+	key, pin := strings.TrimSpace(s.st.Setting(store.SettingTVDBKey)), s.st.Setting(store.SettingTVDBPin)
+	if key == "" {
+		return nil
+	}
+	lang := s.st.Setting(store.SettingMetadataLanguage)
+	s.tvMu.Lock()
+	defer s.tvMu.Unlock()
+	if id := key + "\x00" + pin + "\x00" + lang; s.tv == nil || s.tvKey != id {
+		s.tv, s.tvKey = NewTVDB(key, pin, lang), id
+	}
+	return s.tv
+}
+
+// TVDBEnabled reports whether a TheTVDB key is set.
+func (s *Service) TVDBEnabled() bool { return s.tvdb() != nil }
+
+// AnyEnabled reports whether either provider can be used.
+func (s *Service) AnyEnabled() bool { return s.Enabled() || s.TVDBEnabled() }
+
 // RefreshLibrary fetches metadata for new items, or every item when force is set.
 // progress is called after each top-level item.
 func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force bool, progress func(done, total int)) error {
-	c := s.client()
-	if c == nil {
+	c, tv := s.client(), s.tvdb()
+	if c == nil && tv == nil {
 		return nil
 	}
 	items, err := s.st.ItemsNeedingMetadata(0, libraryID, force)
@@ -41,7 +67,7 @@ func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force boo
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := s.refresh(ctx, c, it); err != nil {
+		if err := s.refresh(ctx, c, tv, it); err != nil {
 			log.Printf("metadata: %s %q: %v", it.Kind, it.Title, err)
 		}
 		if progress != nil {
@@ -53,8 +79,8 @@ func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force boo
 
 // RefreshItem re-fetches one movie or show (seasons and episodes resolve to their show).
 func (s *Service) RefreshItem(ctx context.Context, id int64) error {
-	c := s.client()
-	if c == nil {
+	c, tv := s.client(), s.tvdb()
+	if c == nil && tv == nil {
 		return nil
 	}
 	it, err := s.st.Item(0, id)
@@ -66,10 +92,13 @@ func (s *Service) RefreshItem(ctx context.Context, id int64) error {
 			return err
 		}
 	}
-	return s.refresh(ctx, c, it)
+	return s.refresh(ctx, c, tv, it)
 }
 
-var ErrNoKey = errors.New("add a TMDB API key in Settings first")
+var (
+	ErrNoKey     = errors.New("add a TMDB API key in Settings first")
+	ErrNoTVDBKey = errors.New("add a TheTVDB API key in Settings first")
+)
 
 // Search finds Fix Match candidates. kind is "movie" or "show".
 func (s *Service) Search(ctx context.Context, kind, query string, year int) ([]SearchResult, error) {
@@ -84,10 +113,34 @@ func (s *Service) Search(ctx context.Context, kind, query string, year int) ([]S
 	return res, err
 }
 
-// Match points an item (movie or show) at a TMDB id and refreshes it.
+// SearchTVDB finds TheTVDB candidates for a show.
+func (s *Service) SearchTVDB(ctx context.Context, query string, year int) ([]SearchResult, error) {
+	tv := s.tvdb()
+	if tv == nil {
+		return nil, ErrNoTVDBKey
+	}
+	return tv.Search(ctx, query, year)
+}
+
+// MatchTVDB switches a show to TheTVDB with the given episode order and refreshes it.
+func (s *Service) MatchTVDB(ctx context.Context, id, tvdbID int64, order string) error {
+	if s.tvdb() == nil {
+		return ErrNoTVDBKey
+	}
+	if err := s.st.SetTVDBMatch(id, tvdbID, order); err != nil {
+		return err
+	}
+	return s.RefreshItem(ctx, id)
+}
+
+// Match points an item (movie or show) at a TMDB id and refreshes it. A
+// show that used TheTVDB goes back to TMDB.
 func (s *Service) Match(ctx context.Context, id, tmdbID int64) error {
 	if s.client() == nil {
 		return ErrNoKey
+	}
+	if err := s.st.SetTVDBMatch(id, 0, ""); err != nil {
+		return err
 	}
 	if err := s.st.SetMatch(id, tmdbID); err != nil {
 		return err
@@ -118,7 +171,16 @@ func (s *Service) ArtworkOptions(ctx context.Context, it *store.Item, imageType 
 	return []ImageOption{}, nil
 }
 
-func (s *Service) refresh(ctx context.Context, c *TMDB, it *store.Item) error {
+// refresh updates a movie or show. c or tv is nil when its key isn't set.
+func (s *Service) refresh(ctx context.Context, c *TMDB, tv *TVDB, it *store.Item) error {
+	if it.Kind == "show" {
+		if tvdbID, order, err := s.st.ShowTVDB(it.ID); err == nil && tvdbID > 0 && tv != nil {
+			return s.refreshTVDBShow(ctx, c, tv, it, tvdbID, order)
+		}
+	}
+	if c == nil {
+		return nil
+	}
 	switch it.Kind {
 	case "movie":
 		return s.refreshMovie(ctx, c, it)

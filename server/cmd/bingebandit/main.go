@@ -97,6 +97,7 @@ func main() {
 	srv.Plugins.Env = []string{"BINGEBANDIT_FFMPEG=" + cfg.FFmpeg, "BINGEBANDIT_FFPROBE=" + cfg.FFprobe}
 	srv.Plugins.ServerName = func() string { return st.Setting(store.SettingServerName) }
 	go srv.Plugins.Start(ctx)
+	go srv.RunNotifications(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
 

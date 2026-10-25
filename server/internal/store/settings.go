@@ -5,6 +5,8 @@ const (
 	SettingServerName        = "server_name"
 	SettingTMDBKey           = "tmdb_api_key"
 	SettingMetadataLanguage  = "metadata_language"
+	SettingTVDBKey           = "tvdb_api_key"     // TheTVDB v4 key, for shows set to use TheTVDB
+	SettingTVDBPin           = "tvdb_pin"         // subscriber PIN, needed with a user-supported key
 	SettingRatingsProvider   = "ratings_provider" // "" (off) | mdblist | omdb: IMDb and Rotten Tomatoes scores
 	SettingRatingsKey        = "ratings_api_key"
 	SettingHWEncoder         = "hw_encoder"
@@ -53,6 +55,8 @@ var SettingDefaults = map[string]string{
 	SettingServerName:        "BingeBandit",
 	SettingTMDBKey:           "",
 	SettingMetadataLanguage:  "en-US",
+	SettingTVDBKey:           "",
+	SettingTVDBPin:           "",
 	SettingRatingsProvider:   "",
 	SettingRatingsKey:        "",
 	SettingHWEncoder:         "none",

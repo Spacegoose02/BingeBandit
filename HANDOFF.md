@@ -18,6 +18,14 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 - **Web:** Admin → Plugins has a Catalogue section (Install / Update to x, Not built for this platform, Catalogues dialog, refresh) and Uninstall on installed rows.
 - **Tested:** host test (install, bad checksum, unsafe zip paths, wrong id, other platform, enable, update while running, uninstall, bundled not uninstallable), API test (admin only, listed catalogues only, address validation, missing official catalogue), the release script's catalogue step on fake zips, and install → turn on → uninstall of Watchlist RSS in Chromium. The workflow itself only runs on a tag, so it hasn't run in CI.
 
+## Notifications (M3)
+
+- **Table** `notifications` (migration 25): one row per user, with `kind`, `title`, `body`, `link` (a web app path), `image` (poster), `read_at`. Pruned after 60 days. API: `GET /api/notifications`, `POST /api/notifications/read`, `DELETE /api/notifications`.
+- **New episodes** (`api/notifications.go`, `Server.RunNotifications`, every 5 minutes from `main.go`): episodes with `added_at` past the watermark (internal setting `notify_episodes_since`; the first run only sets it to now, so an existing library doesn't notify) are grouped per show. Followers are users who started or finished any episode of the show or have it on their watchlist, who can still see it, haven't watched the new episode, and have pref `notifyEpisodes` on. One notification per show and user ("3 new episodes of …"; a single episode links to the episode).
+- **Recordings:** `Server.Emit` turns `recording.completed` / `recording.failed` into a notification for the recording's owner when pref `notifyRecordings` is on.
+- **Web:** a bell next to the user chip with an unread badge (polls every minute), list, mark all read, clear. Account → Playback has the two switches. The TV app doesn't show them yet.
+- **Tested:** API test (followers, hidden library, pref off, watched episode skipped, no repeats, recordings, read/clear) and the bell in Chromium at desktop and phone widths.
+
 ## Passkeys (M6)
 
 - **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 23): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
@@ -404,6 +412,13 @@ _Last updated: 2026-10-25, Watch Together (M3)._
 
 - **Edit dialog** (pencil on any item page, admins only): Details, Tags (genres, labels, collections), Artwork (TMDB picks, URL, upload) and Advanced (episode order, shows only). Editing a field locks it; the lock icon toggles it.
 - **Fix match** (magnifier on movies and shows): searches TMDB, re-points the item and refreshes it.
+- **TheTVDB per show** (`metadata/tvdb.go`, `tvdb_show.go`): with a TheTVDB v4 key (and subscriber PIN for user-supported keys) in Settings → Metadata, Fix match on a show can switch to TheTVDB and pick aired, DVD or absolute order (`items.tvdb_id`, `tvdb_order`).
+  - The show's text, poster, backdrop, cast, season posters and every episode come from TheTVDB, matched to files by season and episode number in that order.
+  - When TMDB is set up and knows the show (TheTVDB's remote id), TMDB adds the trailer, tagline, rating, and a logo, backdrop or cast if TheTVDB has none.
+  - Matching a TMDB result switches the show back. The login token is kept for a month and renewed on a 401.
+  - TheTVDB images are linked straight from artworks.thetvdb.com, not cached.
+  - Tested against a fake TheTVDB only (`TestTVDBShow`), so it needs a check with a real key.
+- **Detect intros and credits** can be turned off per library (`libraries.skip_markers`, the checkbox in the library editor). The nightly task skips those libraries; the Detect button still works.
 - **Collections:** a Collections tab on each library and `/collection/:id` pages. Smart collections take rules (genre, studio, a year range and/or a label; every set rule must match), and `/api/admin/libraries/{id}/facets` lists the values to pick from.
 - **Library access:** Users → "All libraries" or "N libraries" button per non-admin user.
 - Schema migration 2 adds these; it was tested upgrading a v1 database. Store tests cover locks, visibility and collections.

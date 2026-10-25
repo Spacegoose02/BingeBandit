@@ -64,6 +64,9 @@ Rules:
 | POST | `/me/trakt/connect`, `/me/trakt/poll` | Connect Trakt: show `userCode` and `verificationUrl`, then poll (202 while waiting, 200 when connected). |
 | POST | `/me/trakt/import`, `/me/trakt/push` | Import your Trakt history; send plays to Trakt (`{all: true}` includes plays from before connecting). |
 | PUT / DELETE | `/me/trakt` | `{autoSync}`; disconnect. |
+| GET | `/notifications` | `{notifications, unread}`: your newest 50 (`kind` is `episodes` or `recording`; `link` is a web app path). Kept for 60 days. |
+| POST | `/notifications/read` | `{ids: [...]}` marks those read; `{}` marks all read. |
+| DELETE | `/notifications` | Clears yours. |
 | GET | `/activity/friends` | What people who share are watching now. |
 | GET / PUT / DELETE | `/me/passcode` | Settings passcode: `{set, unlocked, unlockedUntil}`; PUT `{passcode}` (4–8 digits); DELETE removes it. |
 | POST | `/me/passcode/unlock`, `/me/passcode/lock` | `{passcode}` or `{password}` unlocks this session's settings for 15 minutes of use. While locked, `/admin/*`, account changes under `/me` and profile management answer **423**. |

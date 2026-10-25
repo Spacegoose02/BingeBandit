@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
 import { Icon } from './Icon'
+import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
 import { TogetherInvites } from './Together'
 
@@ -104,10 +105,13 @@ export default function Layout() {
           )}
         </nav>
         <div className="sidebar-user">
-          <button className="user-chip" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
-            <span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span>
-            <span className="user-name">{displayName}</span>
-          </button>
+          <div className="sidebar-user-row">
+            <button className="user-chip" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen}>
+              <span className="avatar">{displayName.slice(0, 1).toUpperCase()}</span>
+              <span className="user-name">{displayName}</span>
+            </button>
+            <NotificationBell />
+          </div>
           {menuOpen && (
             <div className="menu user-menu" role="menu">
               <button role="menuitem" onClick={() => nav('/profile')}>

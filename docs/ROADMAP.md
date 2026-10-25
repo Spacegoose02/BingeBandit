@@ -47,7 +47,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Download a backup, and restore from an uploaded file: in Admin → Tasks, or on a new server's first screen instead of creating an admin |
 | ✅ | True adaptive bitrate: an admin setting converts up to three qualities at once (master playlist), and the web and TV players switch between them |
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
-| | Metadata provider choice per show (TheTVDB), credits detection toggle |
+| ✅ | Metadata provider choice per show: TMDB or TheTVDB (aired, DVD or absolute episode order), from Fix match; a per-library switch for intro and credits detection |
 | ✅ | Smart collections by genre, studio, year range or label |
 | ✅ | Tone mapping algorithm choice (Hable, Möbius, Reinhard, clip, linear), GPU decoding, and which GPU to use (render node or NVIDIA GPU number) |
 | ✅ | IMDb, Rotten Tomatoes (critics and audience) and Metacritic scores on movie and show pages, from MDBList or OMDb, refreshed weekly by a task |
@@ -73,7 +73,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Recommendations from other users on Home: a Recommend button on movies and shows (with a note), a "Recommended for You" row for people who opt in under Account → Sharing |
 | | Discover: new shows and movie trailers (admin adds YouTube playlists) |
 | ✅ | Watch Together: start a watch party in the web player, invite people (or share the link); play, pause, seeking and the next episode stay in step for everyone |
-| | Notifications: new episodes, live sports starting, etc. |
+| ✅ | Notifications in the app: new episodes of shows you watch or have on your watchlist, and your recordings finishing or failing (a bell in the sidebar; each can be turned off under Account). Live sports alerts are with the sports tracker in M4 |
 
 ## M4: Live TV (Dispatcharr replacement) 🟡 (phase 1 done)
 
