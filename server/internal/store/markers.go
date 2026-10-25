@@ -67,9 +67,10 @@ func (s *Store) MarkMarkersScanned(itemIDs []int64) error {
 }
 
 // SeasonsNeedingMarkers lists seasons with at least two episodes and some
-// episode not yet analyzed.
+// episode not yet analyzed, in libraries where detection is on.
 func (s *Store) SeasonsNeedingMarkers() ([]int64, error) {
-	rows, err := s.db.Query(`SELECT parent_id FROM items WHERE kind = 'episode' GROUP BY parent_id
+	rows, err := s.db.Query(`SELECT parent_id FROM items WHERE kind = 'episode'
+		AND library_id IN (SELECT id FROM libraries WHERE skip_markers = 0) GROUP BY parent_id
 		HAVING COUNT(*) >= 2 AND SUM(markers_at = 0) > 0`)
 	if err != nil {
 		return nil, err
@@ -86,9 +87,11 @@ func (s *Store) SeasonsNeedingMarkers() ([]int64, error) {
 	return out, rows.Err()
 }
 
-// MoviesNeedingMarkers lists movies whose end credits haven't been looked for yet.
+// MoviesNeedingMarkers lists movies whose end credits haven't been looked for
+// yet, in libraries where detection is on.
 func (s *Store) MoviesNeedingMarkers() ([]int64, error) {
-	rows, err := s.db.Query(`SELECT id FROM items WHERE kind = 'movie' AND markers_at = 0 ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id FROM items WHERE kind = 'movie' AND markers_at = 0
+		AND library_id IN (SELECT id FROM libraries WHERE skip_markers = 0) ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}

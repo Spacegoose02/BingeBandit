@@ -97,6 +97,23 @@ export default function AdminSettings() {
             <input value={s.metadata_language ?? ''} onChange={set('metadata_language')} placeholder="en-US" />
           </label>
           <label>
+            TheTVDB API key (optional)
+            <input value={s.tvdb_api_key ?? ''} onChange={set('tvdb_api_key')} placeholder="Paste your key" autoComplete="off" spellCheck={false} />
+          </label>
+          {s.tvdb_api_key && (
+            <label>
+              TheTVDB subscriber PIN
+              <input value={s.tvdb_pin ?? ''} onChange={set('tvdb_pin')} placeholder="Only for a user-supported key" autoComplete="off" spellCheck={false} />
+            </label>
+          )}
+          <p className="muted small">
+            From{' '}
+            <a href="https://thetvdb.com/api-information" target="_blank" rel="noreferrer">
+              thetvdb.com/api-information
+            </a>
+            . Lets a show use TheTVDB instead of TMDB (Fix match on the show), for aired, DVD or absolute episode numbering.
+          </p>
+          <label>
             IMDb and Rotten Tomatoes ratings
             <select value={s.ratings_provider ?? ''} onChange={set('ratings_provider')}>
               <option value="">Off</option>

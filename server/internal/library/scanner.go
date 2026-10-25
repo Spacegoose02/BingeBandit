@@ -413,7 +413,7 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 }
 
 func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Status, force bool) error {
-	if !s.meta.Enabled() {
+	if !s.meta.AnyEnabled() {
 		return nil
 	}
 	s.update(st, func(st *Status) { st.Phase, st.Processed, st.Found = "metadata", 0, 0 })

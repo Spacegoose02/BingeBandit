@@ -453,6 +453,7 @@ export interface Library {
   createdAt: number
   lastScan: number
   itemCount: number
+  skipMarkers: boolean // intro and credits detection is off
 }
 
 export interface ItemDetail {
@@ -467,6 +468,8 @@ export interface ItemDetail {
   collectionNames?: string[] // admin only: explicit collection links
   markers?: Marker[]
   externalRatings?: ExternalRatings // movies and shows, when a ratings provider is set up
+  tvdbId?: number // shows that take their metadata from TheTVDB
+  tvdbOrder?: string // '' (aired) | dvd | absolute
 }
 
 export interface ExternalRatings {

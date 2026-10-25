@@ -118,8 +118,8 @@ func (d Deps) scanLibraries(ctx context.Context) (string, error) {
 }
 
 func (d Deps) refreshMetadata(ctx context.Context) (string, error) {
-	if d.Store.Setting(store.SettingTMDBKey) == "" {
-		return "skipped: no TMDB key", nil
+	if d.Store.Setting(store.SettingTMDBKey) == "" && d.Store.Setting(store.SettingTVDBKey) == "" {
+		return "skipped: no TMDB or TheTVDB key", nil
 	}
 	return d.eachLibrary(d.Scanner.RefreshMetadataWait)
 }
