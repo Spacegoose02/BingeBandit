@@ -6,7 +6,7 @@ _Last updated: 2026-10-25, passkeys (M6)._
 
 ## Passkeys (M6)
 
-- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 22): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
+- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 23): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
 - **Flows** (`api/passkeys.go`): begin/finish pairs keep the challenge in memory (`passkeyFlows`, 5 min, single use). The RP ID comes from the page's `Origin` only when that is the request's Host or the public URL, else from the request address; a flow begun on one address can't be finished on another.
 - **Sign-in** is discoverable (no username): Login → *Sign in with a passkey*. It skips the 2FA code (the passkey already checks the device and the person) and counts failures in the login rate limiter. Profiles sign in through their account and can't add passkeys.
 - **Account → Passkeys:** add (named), rename, remove; guarded by the settings passcode like other account changes. **Admin → Users:** *Remove passkeys* for a lost device.

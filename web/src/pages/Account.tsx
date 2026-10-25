@@ -63,7 +63,26 @@ function Sharing() {
         Show other people on this server what I'm watching right now
       </label>
       <p className="muted small">They see the title and how far in you are, never your device or location.</p>
+      <RecommendOptIn />
     </div>
+  )
+}
+
+function RecommendOptIn() {
+  const { data, reload } = useApi<{ accept: boolean }>('/api/me/recommendations')
+  if (!data) return null
+  const toggle = async (accept: boolean) => {
+    await api.put('/api/me/recommendations', { accept }).catch((e) => alert(e.message))
+    reload()
+  }
+  return (
+    <>
+      <label className="check">
+        <input type="checkbox" checked={data.accept} onChange={(e) => toggle(e.target.checked)} />
+        Let other people on this server recommend movies and shows to me
+      </label>
+      <p className="muted small">Recommendations show up in a “Recommended for You” row on Home.</p>
+    </>
   )
 }
 
