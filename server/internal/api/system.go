@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -10,12 +11,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"bingebandit/internal/s3"
+	"bingebandit/internal/store"
 	"bingebandit/internal/tasks"
 )
 
@@ -70,7 +74,7 @@ type backupFile struct {
 	Modified int64  `json:"modified"`
 }
 
-var backupName = regexp.MustCompile(`^bingebandit-[0-9]{8}-[0-9]{6}\.db$`)
+var backupName = tasks.BackupFileName
 
 // listBackups lists the database backups in the backup folder, newest first.
 func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +95,98 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
 	}
 	// Names carry the time, so they sort newest first in reverse.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
-	writeJSON(w, http.StatusOK, map[string]any{"dir": dir, "backups": out})
+	res := map[string]any{"dir": dir, "backups": out}
+	if remote := tasks.RemoteBackups(s.Store); remote.Configured() {
+		res["bucket"] = remote.Bucket
+		res["remote"], res["remoteError"] = remoteBackups(r.Context(), remote)
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// remoteBackups lists the backups in the bucket, newest first, or why it
+// couldn't.
+func remoteBackups(ctx context.Context, remote *s3.Client) ([]backupFile, string) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	objs, err := remote.List(ctx)
+	if err != nil {
+		return []backupFile{}, err.Error()
+	}
+	out := []backupFile{}
+	for i := len(objs) - 1; i >= 0; i-- {
+		if backupName.MatchString(objs[i].Name) {
+			out = append(out, backupFile{objs[i].Name, objs[i].Size, objs[i].Modified.Unix()})
+		}
+	}
+	return out, ""
+}
+
+// testRemoteBackups checks the storage settings in the body (not yet saved)
+// by writing, listing and deleting a small file.
+func (s *Server) testRemoteBackups(w http.ResponseWriter, r *http.Request) {
+	var in map[string]string
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	remote := &s3.Client{
+		Endpoint: strings.TrimSpace(in[store.SettingBackupS3Endpoint]), Region: strings.TrimSpace(in[store.SettingBackupS3Region]),
+		Bucket: strings.TrimSpace(in[store.SettingBackupS3Bucket]), Prefix: strings.TrimSpace(in[store.SettingBackupS3Prefix]),
+		AccessKey: strings.TrimSpace(in[store.SettingBackupS3AccessKey]), SecretKey: strings.TrimSpace(in[store.SettingBackupS3SecretKey]),
+	}
+	if !remote.Configured() {
+		writeErr(w, http.StatusBadRequest, "fill in the endpoint, bucket, access key and secret key")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	const probe = "bingebandit-connection-test.txt"
+	step := func(what string, err error) bool {
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, what+": "+err.Error())
+		}
+		return err == nil
+	}
+	if !step("could not upload", remote.PutBytes(ctx, probe, []byte("BingeBandit can write backups here.\n"))) {
+		return
+	}
+	objs, err := remote.List(ctx)
+	if !step("could not list the bucket", err) || !step("could not delete the test file", remote.Delete(ctx, probe)) {
+		return
+	}
+	n := 0
+	for _, o := range objs {
+		if backupName.MatchString(o.Name) {
+			n++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"backups": n})
+}
+
+// restoreRemoteBackup downloads a backup from the bucket and restores it.
+func (s *Server) restoreRemoteBackup(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	remote := tasks.RemoteBackups(s.Store)
+	if !backupName.MatchString(name) || !remote.Configured() {
+		writeErr(w, http.StatusBadRequest, "bad backup name")
+		return
+	}
+	f, err := os.CreateTemp(s.DataDir, "remote-*.db")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	path := f.Name()
+	defer os.Remove(path)
+	err = remote.Get(r.Context(), name, f)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "could not download the backup: "+err.Error())
+		return
+	}
+	s.restoreFrom(w, r, path, name+" from "+remote.Bucket)
 }
 
 // restoreBackup backs up the current database, then replaces its contents

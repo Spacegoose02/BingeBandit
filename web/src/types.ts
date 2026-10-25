@@ -394,6 +394,8 @@ export interface Recording {
   size: number
   error?: string
   itemId?: number
+  /** Upcoming only: why a provider connection may not be free then. */
+  conflict?: string
 }
 
 export interface RecordingRule {
@@ -405,6 +407,8 @@ export interface RecordingRule {
   title: string
   status: 'pending' | 'active'
   upcoming: number
+  /** Keep only the newest N recordings of the series; 0 keeps all. */
+  keepLast: number
 }
 
 export interface Marker {

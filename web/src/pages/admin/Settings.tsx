@@ -18,6 +18,14 @@ const encoders = [
   ['videotoolbox', 'Apple VideoToolbox'],
 ]
 
+const tonemapAlgorithms: [string, string][] = [
+  ['hable', 'Hable (default: filmic, keeps highlight detail)'],
+  ['mobius', 'Möbius (brighter, closer to the original colours)'],
+  ['reinhard', 'Reinhard (simple and soft)'],
+  ['clip', 'Clip (accurate midtones, blown-out highlights)'],
+  ['linear', 'Linear (darkest, no curve)'],
+]
+
 export default function AdminSettings() {
   useDocumentTitle('Settings')
   const { refresh } = useAuth()
@@ -104,6 +112,23 @@ export default function AdminSettings() {
             <button type="button" className="btn btn-glass btn-sm" onClick={testEncoder}>Test encoder</button>
           </div>
           {hwTest && <pre className={`hw-test ${hwTest.ok === false ? 'bad' : hwTest.ok ? 'ok' : ''}`}>{hwTest.text}</pre>}
+          {['vaapi', 'qsv', 'nvenc'].includes(s.hw_encoder ?? '') && (
+            <label>
+              Hardware device (for servers with more than one GPU)
+              <input
+                className="mono"
+                value={s.hw_device ?? ''}
+                onChange={set('hw_device')}
+                placeholder={s.hw_encoder === 'nvenc' ? 'GPU number, e.g. 1 (blank = first GPU)' : '/dev/dri/renderD129 (blank = renderD128)'}
+              />
+            </label>
+          )}
+          {(s.hw_encoder ?? 'none') !== 'none' && (
+            <label className="check">
+              <input type="checkbox" checked={s.hw_decode === 'true'} onChange={set('hw_decode')} />
+              Decode on the GPU too (less CPU when converting; falls back to the CPU for codecs the GPU can't decode)
+            </label>
+          )}
           <p className="muted small">
             If the hardware encoder fails during Live TV, channels are converted on the CPU for the next 30 minutes and Live TV → Activity says why.
             Channels that are already H.264 are passed through without converting, so they never use the encoder.
@@ -116,6 +141,16 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.tonemap_enabled === 'true'} onChange={set('tonemap_enabled')} />
             Tone map HDR to SDR when transcoding
           </label>
+          {s.tonemap_enabled === 'true' && (
+            <label>
+              Tone mapping algorithm
+              <select value={s.tonemap_algorithm ?? 'hable'} onChange={set('tonemap_algorithm')}>
+                {tonemapAlgorithms.map(([v, label]) => (
+                  <option key={v} value={v}>{label}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="check">
             <input type="checkbox" checked={s.transcode_throttle === 'true'} onChange={set('transcode_throttle')} />
             Throttle transcodes (stay about 2× ahead of playback instead of converting the whole file at full speed)
@@ -201,6 +236,10 @@ export default function AdminSettings() {
           <label className="check">
             <input type="checkbox" checked={s.dvr_require_approval === 'true'} onChange={set('dvr_require_approval')} />
             Ask an admin to approve users' recordings first
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_priority === 'true'} onChange={set('dvr_priority')} />
+            Recordings come first: when a provider is at its connection limit, stop a live channel someone is watching to record
           </label>
           <label>
             Recordings folder

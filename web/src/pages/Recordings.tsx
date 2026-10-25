@@ -14,6 +14,8 @@ interface DVR {
   canRecord: boolean
 }
 
+const keepChoices = [0, 1, 2, 3, 5, 7, 10, 14, 20, 30]
+
 const day = (unix: number) => new Date(unix * 1000).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
 
 const statusPill: Record<string, [string, string]> = {
@@ -60,8 +62,9 @@ export default function RecordingsPage() {
           <div className="muted small">
             {[r.channelName, r.ruleId ? 'series' : '', user?.isAdmin && r.username, r.size ? formatBytes(r.size) : '', r.error].filter(Boolean).join(' · ')}
           </div>
+          {r.conflict && <div className="small rec-conflict">May not record: {r.conflict}</div>}
         </div>
-        <span className={`pill ${cls}`}>{label}</span>
+        {r.conflict && r.status !== 'recording' ? <span className="pill warn">Conflict</span> : <span className={`pill ${cls}`}>{label}</span>}
         {r.status === 'pending' && user?.isAdmin && (
           <button className="btn btn-primary btn-sm" onClick={() => approve(`/api/admin/dvr/recordings/${r.id}/approve`)}>Approve</button>
         )}
@@ -107,6 +110,22 @@ export default function RecordingsPage() {
                 {[rule.channelName || 'any channel', `${rule.upcoming} upcoming`, user?.isAdmin && rule.username].filter(Boolean).join(' · ')}
               </div>
             </div>
+            <label className="rec-keep">
+              <span className="muted small">Keep</span>
+              <select
+                value={rule.keepLast}
+                onChange={async (e) => {
+                  const keep = Number(e.target.value)
+                  if (keep > 0 && !confirm(`Keep only the newest ${keep} recording${keep === 1 ? '' : 's'} of "${rule.title}"? Older ones and their files are deleted.`)) return
+                  await api.patch(`/api/dvr/rules/${rule.id}`, { keepLast: keep }).catch((err) => alert(err.message))
+                  reload()
+                }}
+              >
+                {[...new Set([...keepChoices, rule.keepLast])].sort((a, b) => a - b).map((n) => (
+                  <option key={n} value={n}>{n === 0 ? 'All' : `Newest ${n}`}</option>
+                ))}
+              </select>
+            </label>
             {rule.status === 'pending' && <span className="pill warn">Needs approval</span>}
             {rule.status === 'pending' && user?.isAdmin && (
               <button className="btn btn-primary btn-sm" onClick={() => approve(`/api/admin/dvr/rules/${rule.id}/approve`)}>Approve</button>

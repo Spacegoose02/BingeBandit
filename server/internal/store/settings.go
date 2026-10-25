@@ -8,6 +8,9 @@ const (
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
+	SettingTonemapAlgorithm  = "tonemap_algorithm" // hable | mobius | reinhard | clip | linear
+	SettingHWDecode          = "hw_decode"         // also decode on the GPU when converting video
+	SettingHWDevice          = "hw_device"         // VAAPI/QSV render node (/dev/dri/renderD129) or NVIDIA GPU number; empty = default
 	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
@@ -17,12 +20,20 @@ const (
 	SettingBackupDir         = "backup_dir"
 	SettingPreRollPaths      = "preroll_paths" // intro videos before movies: files or folders, one per line
 	SettingBackupKeep        = "backup_keep"
+	// S3-compatible storage that each backup is also uploaded to.
+	SettingBackupS3Endpoint  = "backup_s3_endpoint" // e.g. https://s3.us-west-002.backblazeb2.com; empty = off
+	SettingBackupS3Region    = "backup_s3_region"
+	SettingBackupS3Bucket    = "backup_s3_bucket"
+	SettingBackupS3Prefix    = "backup_s3_prefix" // folder inside the bucket
+	SettingBackupS3AccessKey = "backup_s3_access_key"
+	SettingBackupS3SecretKey = "backup_s3_secret_key"
 	SettingDVRFolder         = "dvr_folder"
 	SettingDVRNaming         = "dvr_naming" // library (Show/Season 01/…) | folder (one flat folder)
 	SettingDVRApproval       = "dvr_require_approval"
 	SettingDVRAllowUsers     = "dvr_allow_users"
 	SettingDVRPadBefore      = "dvr_padding_before" // minutes
 	SettingDVRPadAfter       = "dvr_padding_after"  // minutes
+	SettingDVRPriority       = "dvr_priority"       // true: a recording may take a provider connection from live viewers
 	SettingPublicURL         = "public_url"         // how people reach the server from outside, e.g. https://tv.example.com
 	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
 	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
@@ -42,6 +53,9 @@ var SettingDefaults = map[string]string{
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",
+	SettingTonemapAlgorithm:  "hable",
+	SettingHWDecode:          "false",
+	SettingHWDevice:          "",
 	SettingTranscodeThrottle: "true",
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
@@ -51,12 +65,19 @@ var SettingDefaults = map[string]string{
 	SettingBackupDir:         "",
 	SettingPreRollPaths:      "",
 	SettingBackupKeep:        "7",
+	SettingBackupS3Endpoint:  "",
+	SettingBackupS3Region:    "",
+	SettingBackupS3Bucket:    "",
+	SettingBackupS3Prefix:    "bingebandit",
+	SettingBackupS3AccessKey: "",
+	SettingBackupS3SecretKey: "",
 	SettingDVRFolder:         "",
 	SettingDVRNaming:         "library",
 	SettingDVRApproval:       "false",
 	SettingDVRAllowUsers:     "true",
 	SettingDVRPadBefore:      "1",
 	SettingDVRPadAfter:       "3",
+	SettingDVRPriority:       "false",
 	SettingPublicURL:         "",
 	SettingTrustedProxies:    "",
 	SettingLANNetworks:       "",

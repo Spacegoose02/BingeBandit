@@ -12,6 +12,13 @@ _Last updated: 2026-10-25, trailers and intro video before movies (M3)._
 - **TV app:** plays the intro only (no web view for YouTube), with a Start movie button. Typechecked only; **not tried on a device**.
 - **Tested:** API test (ratings, watched, hidden libraries, episodes, intro file serving, pref off) and the intro → movie flow in Chromium. YouTube trailers were **not** tried (no YouTube access from the build machine).
 
+## DVR keep-last-N and connection-limit conflicts (M4)
+
+- **Keep newest N** per series rule (`recording_rules.keep_last`, migration 20; 0 = keep all). Set from the Recordings page (Series → Keep) or `PATCH /api/dvr/rules/{id}`. `Recorder.Prune` deletes the oldest *completed* recordings beyond N (row and file, then empty Show/Season folders) after each recording completes, when the setting changes, and every 5 minutes with the rules. Files outside the recordings folder (`Recorder.InFolder`) are never deleted, only the row.
+- **Conflicts** (`livetv/conflicts.go`): upcoming recordings are walked in start order and each gets a connection from the first of its channel's providers with one free (same channel shares, custom channels need none). Ones that can't are returned with `conflict` in `/api/dvr` and the schedule response; the Recordings page shows a Conflict pill and the reason, the guide adds it to its note. Live viewers aren't counted.
+- **Recordings come first** (admin setting `dvr_priority`, off by default): when a relay that the DVR is watching finds every provider at its limit, `Manager.preemptForRecording` stops the live-only relay on that provider with the fewest viewers. Relays with a recording are never bumped. Recording failures now say why (the relay's last error, e.g. connection limit), and empty failed files are removed.
+- **Tested:** conflict rules, pruning (outside-folder files kept, keep 0), and preemption on and off against a fake provider. **Not tried** with a real provider.
+
 ## Logo library, your own channel categories, ThePosterDB search (after v0.6.0)
 
 - **Logo library** (Admin → Live TV → **Logos**): upload PNG/JPEG/SVG/WebP/GIF logos (2 MB each, many at once), stored content-addressed in `<data>/logos/` and listed in `channel_logos` (migration 18).
@@ -421,4 +428,4 @@ Code gaps:
 6. ~~Audio is always transcoded to AAC stereo.~~ Clients now say which audio they can play: the web player copies AC-3 (and E-AC-3 in Safari) or keeps 5.1 as AAC when the computer has surround output; the TV app gets AAC 5.1. Still to do: AC-3/E-AC-3 passthrough in the TV app, after testing on the onn box with a receiver.
 7. ~~Transcode sessions don't re-check library access after they start.~~ Done: running transcodes stop as soon as an admin takes the library away or deletes the user, profile or library, and re-check every 30 s otherwise.
 8. ~~True adaptive bitrate.~~ Done as an opt-in admin setting (Settings → Transcoding → Adaptive streaming). It only applies when the video is converted anyway; a copied stream stays single quality. Not yet tried with hardware encoders on real GPUs, where three encodes per viewer may hit NVENC session limits.
-9. Backups only go to a folder (no remote targets such as S3). Backups can be downloaded and restored from an uploaded file, including on a new server's setup screen.
+9. ~~Backups only go to a folder.~~ Backups can also go to S3-compatible storage (tested against a local MinIO, not yet against Backblaze or AWS). They can be downloaded and restored from an uploaded file, including on a new server's setup screen.
