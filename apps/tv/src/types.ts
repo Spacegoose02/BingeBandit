@@ -73,10 +73,35 @@ export interface ItemDetail {
   upNext?: Item
 }
 
+/** A row of titles on Home or a library's Recommended tab. */
+export interface HubRow {
+  id: string
+  title: string
+  items: Item[]
+  collectionId?: number
+}
+
 export interface HomeData {
   hero: Item[]
   continueWatching: Item[]
-  rows: { id: string; title: string; items: Item[] }[]
+  rows: HubRow[]
+}
+
+export interface Library {
+  id: number
+  name: string
+  kind: 'movies' | 'shows'
+  pinned: boolean // in this user's menu and on their Home
+  itemCount: number
+}
+
+export interface Collection {
+  id: number
+  name: string
+  overview?: string
+  poster?: string
+  backdrop?: string
+  itemCount: number
 }
 
 export interface GuideProgram {

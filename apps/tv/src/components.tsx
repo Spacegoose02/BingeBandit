@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
 import { scaled, colors, font, gutter, isPhone } from './theme'
-import type { Item } from './types'
+import type { Collection, Item } from './types'
 
 /** A remote-friendly button: grows and lights up when focused. */
 export function Button({
@@ -81,6 +81,20 @@ export function PosterCard({ item, onPress, onFocus, preferFocus }: { item: Item
   )
 }
 
+/** A collection's poster with its name and size under it. */
+export function CollectionCard({ collection, onPress, preferFocus }: { collection: Collection; onPress: () => void; preferFocus?: boolean }) {
+  const src = image(collection.poster, 'w342')
+  return (
+    <View>
+      <Focusable onPress={onPress} hasTVPreferredFocus={preferFocus} style={s.poster}>
+        {src ? <Image source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{collection.name}</Text></View>}
+        <View style={s.badge}><Text style={s.badgeText}>{collection.itemCount}</Text></View>
+      </Focusable>
+      <Text style={[s.cardTitle, s.posterTitle]} numberOfLines={1}>{collection.name}</Text>
+    </View>
+  )
+}
+
 export function WideCard({ item, onPress, onFocus, preferFocus }: { item: Item; onPress: () => void; onFocus?: () => void; preferFocus?: boolean }) {
   const src = image(item.backdrop || item.showBackdrop || item.poster, 'w780')
   const p = progress(item)
@@ -129,6 +143,7 @@ const s = StyleSheet.create(scaled({
   wide: { width: 420, height: 236, overflow: 'hidden', backgroundColor: colors.surface2 },
   wideImg: { width: '100%', height: '100%', borderRadius: 11 },
   cardTitle: { color: colors.text, fontSize: font.small, marginTop: 12, fontWeight: '600' },
+  posterTitle: { width: 230, marginBottom: 30 },
   fallback: { alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: colors.surface3 },
   fallbackText: { color: colors.muted, fontSize: font.small, textAlign: 'center' },
   badge: { position: 'absolute', top: 12, right: 12, minWidth: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
