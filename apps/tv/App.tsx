@@ -8,7 +8,7 @@ import Details from './src/screens/Details'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import Player from './src/screens/Player'
-import Profiles, { fetchHousehold } from './src/screens/Profiles'
+import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, isPhone } from './src/theme'
 import type { ServerInfo, User } from './src/types'
@@ -24,14 +24,15 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'loading' })
   const [stack, setStack] = useState<Route[]>([{ name: 'home' }])
 
-  // Reopen the last server; if the session was revoked, sign in again.
+  // Reopen the last server; if the session was revoked, sign in again. Like
+  // after signing in, ask who's watching unless the account says who.
   useEffect(() => {
     loadSession().then(async (s) => {
       if (!s) return setPhase({ name: 'connect' })
       try {
         const user = await api.get<User>('/api/me')
         await saveSession({ ...s, user })
-        setPhase({ name: 'app' })
+        setPhase((await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           await saveSession(null)
@@ -77,8 +78,7 @@ export default function App() {
     await saveSession(s)
     setStack([{ name: 'home' }])
     // An account with profiles asks who's watching first.
-    const members = await fetchHousehold().catch(() => [])
-    setPhase(members.length > 1 ? { name: 'profiles', cancelable: false } : { name: 'app' })
+    setPhase((await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
   }, [])
 
   const profileChosen = useCallback(() => {

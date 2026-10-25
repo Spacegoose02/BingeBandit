@@ -38,7 +38,7 @@ function RequireUser() {
   const { user } = useAuth()
   const loc = useLocation()
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname + loc.search }} />
-  if (profilePickPending()) return <Navigate to="/who" replace />
+  if (profilePickPending()) return <Navigate to="/who" replace state={{ from: loc.pathname + loc.search, opening: true }} />
   return <Outlet />
 }
 
