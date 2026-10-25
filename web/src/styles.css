@@ -294,6 +294,16 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .meta-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #c3c9d0; font-size: 14px; }
 .rating-pill { border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 6px; font-size: 12px; font-weight: 600; }
 .score { display: inline-flex; align-items: center; gap: 4px; color: #fcd34d; font-weight: 600; }
+.external-scores { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-weight: 600; font-size: 0.95rem; }
+.ext-score { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+a.ext-score:hover { text-decoration: underline; }
+.ext-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 5px; border-radius: 4px; font-size: 0.75rem; font-weight: 800; }
+.ext-badge.rt { padding: 0; font-size: 1rem; }
+.imdb .ext-badge { background: #f5c518; color: #000; }
+.ext-badge.mc { color: #fff; }
+.ext-badge.mc.good { background: #00ce7a; }
+.ext-badge.mc.mixed { background: #ffbd3f; color: #000; }
+.ext-badge.mc.bad { background: #ff6874; }
 
 /* ---------- rows & cards ---------- */
 .home .rows { position: relative; z-index: 2; padding: 32px 0 60px; }
@@ -1000,3 +1010,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 @media (max-width: 560px) {
   .logo-library { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+.preroll { cursor: default; }
+.preroll-yt, .preroll-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.preroll-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px clamp(16px, 3vw, 36px); background: linear-gradient(transparent, rgba(0, 0, 0, 0.75)); }
+.preroll-actions { display: flex; gap: 8px; }

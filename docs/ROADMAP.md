@@ -50,8 +50,9 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Metadata provider choice per show (TheTVDB), credits detection toggle |
 | ✅ | Smart collections by genre, studio, year range or label |
 | ✅ | Tone mapping algorithm choice (Hable, Möbius, Reinhard, clip, linear), GPU decoding, and which GPU to use (render node or NVIDIA GPU number) |
+| ✅ | IMDb, Rotten Tomatoes (critics and audience) and Metacritic scores on movie and show pages, from MDBList or OMDb, refreshed weekly by a task |
 
-- Metadata providers: TheTVDB, IMDb + Rotten Tomatoes ratings (OMDb or MDBList), user reviews.
+- Metadata providers: TheTVDB, user reviews.
 - Custom library types: TV, Movies, Kids, Kids TV, Christmas, 4K, YouTube.
 - Libraries pinned to the sidebar drive the merged Recently Added on Home; admins add collections to Home by right-clicking.
 
@@ -67,7 +68,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Auto-adjust quality user setting (done in M2) |
 | ✅ | **Intro and credits detection** (audio fingerprints compared across episodes) with Skip Intro / Next buttons; per-user skip settings (button / automatic / off); admins can set or fix times by hand |
 | | Credits detection for movies (no sibling episodes to compare; needs black-frame/text detection) |
-| | Trailers or a custom intro video before a movie (user setting) |
+| ✅ | Trailers or a custom intro video before a movie: per-user trailers of other unwatched movies (never rated above the movie; web player) and the admin's intro videos (web and TV app) |
 | ✅ | **Settings passcode**: a per-user 4–8 digit passcode locks Account changes and the Admin pages in the web UI until it (or the password) is entered; unlocks last 15 minutes of use; apps and API keys aren't affected; admins can clear a forgotten one |
 | | Recommendations from other users on Home (opt-in) |
 | | Discover: new shows and movie trailers (admin adds YouTube playlists) |

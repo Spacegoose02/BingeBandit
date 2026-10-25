@@ -6,13 +6,21 @@ _Last updated: 2026-10-25, passkeys (M6)._
 
 ## Passkeys (M6)
 
-- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 21 on this branch; meant to be 22 after the ratings PR): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
+- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 22): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
 - **Flows** (`api/passkeys.go`): begin/finish pairs keep the challenge in memory (`passkeyFlows`, 5 min, single use). The RP ID comes from the page's `Origin` only when that is the request's Host or the public URL, else from the request address; a flow begun on one address can't be finished on another.
 - **Sign-in** is discoverable (no username): Login → *Sign in with a passkey*. It skips the 2FA code (the passkey already checks the device and the person) and counts failures in the login rate limiter. Profiles sign in through their account and can't add passkeys.
 - **Account → Passkeys:** add (named), rename, remove; guarded by the settings passcode like other account changes. **Admin → Users:** *Remove passkeys* for a lost device.
 - Browsers only offer passkeys on secure pages: the server's https:// address (or localhost). On plain http:// LAN addresses the button is hidden and the Account section says why.
 - **Tested:** endpoint test (RP ID choice, single-use flows, own-only delete, admin remove) and the full add → sign in → removed-passkey-fails flow in Chromium with a virtual authenticator. **Not tried** with a real phone or password manager.
 - **TV app:** unchanged (signs in by code).
+
+## Trailers and intro video before movies (M3)
+
+- **Admin:** Settings → Library → *Intro videos before movies* (`preroll_paths`): files or folders (searched two levels deep for mp4/m4v/mov/webm/mkv), one per line. One is picked at random, served by `GET /api/preroll/intro/{n}` (index into the sorted list).
+- **Per user** (prefs `preRollTrailers` 0–5, default 0; `preRollIntro`, default on): `GET /api/items/{id}/preroll` returns trailers (YouTube keys from TMDB) of other movies the viewer can see and hasn't watched, a random pick of the 12 newest, never rated above the movie when it has a known US rating; plus the intro.
+- **Web player** (`components/PreRoll.tsx`): only for movies started from the beginning and not from a playlist. Trailers use YouTube's iframe API (skipped if it can't load in 8 s or the video errors), then the intro; Skip / Skip all / Esc. Intros fall back to muted autoplay when the browser blocks sound.
+- **TV app:** plays the intro only (no web view for YouTube), with a Start movie button. Typechecked only; **not tried on a device**.
+- **Tested:** API test (ratings, watched, hidden libraries, episodes, intro file serving, pref off) and the intro → movie flow in Chromium. YouTube trailers were **not** tried (no YouTube access from the build machine).
 
 ## DVR keep-last-N and connection-limit conflicts (M4)
 

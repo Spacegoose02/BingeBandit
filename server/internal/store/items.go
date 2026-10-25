@@ -225,6 +225,13 @@ func (s *Store) RecentlyReleased(uid int64, kind string, limit int) ([]*Item, er
 		uidArg(uid), sql.Named("kind", kind), sql.Named("today", today), sql.Named("limit", limit))
 }
 
+// TrailerCandidates are the newest movies the user can see, hasn't watched
+// and that have a trailer, other than exceptID.
+func (s *Store) TrailerCandidates(uid, exceptID int64, limit int) ([]*Item, error) {
+	return s.queryItems(itemSelect+` WHERE i.kind = 'movie' AND i.trailer != '' AND i.id != @except AND COALESCE(w.watched, 0) = 0 AND `+visible+`
+		ORDER BY i.added_at DESC LIMIT @limit`, uidArg(uid), sql.Named("except", exceptID), sql.Named("limit", limit))
+}
+
 // InProgress is everything the user started and has not finished.
 func (s *Store) InProgress(uid int64, limit int) ([]*Item, error) {
 	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode') AND `+visible+`

@@ -28,10 +28,58 @@ function sessionId() {
 }
 
 /**
+ * Plays the server's intro video first when a movie starts from the
+ * beginning and the viewer has it turned on. (Trailers are YouTube videos,
+ * which only the web player can show.)
+ */
+export default function Player({ id, start = 0 }: { id: number; start?: number }) {
+  const [intro, setIntro] = useState<string | null | undefined>(start > 0 ? null : undefined)
+  useEffect(() => {
+    if (start > 0) return
+    let stale = false
+    api
+      .get<{ intro?: { url: string } }>(`/api/items/${id}/preroll`)
+      .then((p) => !stale && setIntro(p.intro?.url ?? null))
+      .catch(() => !stale && setIntro(null))
+    return () => {
+      stale = true
+    }
+  }, [id, start])
+  const done = useCallback(() => setIntro(null), [])
+  if (intro === undefined) {
+    return (
+      <View style={st.screen}>
+        <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />
+      </View>
+    )
+  }
+  if (intro) return <IntroVideo uri={absolute(intro)} onDone={done} />
+  return <MediaPlayer id={id} start={start} />
+}
+
+function IntroVideo({ uri, onDone }: { uri: string; onDone: () => void }) {
+  useLandscape()
+  return (
+    <View style={st.screen}>
+      <Video
+        source={{ uri, headers: authHeaders() }}
+        style={StyleSheet.absoluteFill}
+        resizeMode="contain"
+        onEnd={onDone}
+        onError={onDone}
+      />
+      <View style={st.introSkip}>
+        <Button label="Start movie" small onPress={onDone} preferFocus />
+      </View>
+    </View>
+  )
+}
+
+/**
  * Plays a movie or episode. Direct play first (Android TV decodes most files
  * itself); if the device can't, the server converts it to HLS.
  */
-export default function Player({ id, start = 0 }: { id: number; start?: number }) {
+function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
   const nav = useNav()
   useLandscape()
   const insets = useSafeAreaInsets()
@@ -525,6 +573,7 @@ function SeekBar({ pct, duration, onSeek }: { pct: number; duration: number; onS
 
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
+  introSkip: { position: 'absolute', right: 60, bottom: 40 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { paddingRight: 24 },
   backText: { color: '#fff', fontSize: 64, fontWeight: '300', lineHeight: 70 },

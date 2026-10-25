@@ -5,6 +5,8 @@ const (
 	SettingServerName        = "server_name"
 	SettingTMDBKey           = "tmdb_api_key"
 	SettingMetadataLanguage  = "metadata_language"
+	SettingRatingsProvider   = "ratings_provider" // "" (off) | mdblist | omdb: IMDb and Rotten Tomatoes scores
+	SettingRatingsKey        = "ratings_api_key"
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
@@ -18,6 +20,7 @@ const (
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
 	SettingBackupDir         = "backup_dir"
+	SettingPreRollPaths      = "preroll_paths" // intro videos before movies: files or folders, one per line
 	SettingBackupKeep        = "backup_keep"
 	// S3-compatible storage that each backup is also uploaded to.
 	SettingBackupS3Endpoint  = "backup_s3_endpoint" // e.g. https://s3.us-west-002.backblazeb2.com; empty = off
@@ -49,6 +52,8 @@ var SettingDefaults = map[string]string{
 	SettingServerName:        "BingeBandit",
 	SettingTMDBKey:           "",
 	SettingMetadataLanguage:  "en-US",
+	SettingRatingsProvider:   "",
+	SettingRatingsKey:        "",
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",
@@ -62,6 +67,7 @@ var SettingDefaults = map[string]string{
 	SettingMaintenanceStart:  "2",
 	SettingMaintenanceEnd:    "5",
 	SettingBackupDir:         "",
+	SettingPreRollPaths:      "",
 	SettingBackupKeep:        "7",
 	SettingBackupS3Endpoint:  "",
 	SettingBackupS3Region:    "",
