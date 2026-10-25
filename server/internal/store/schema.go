@@ -569,12 +569,28 @@ CREATE TABLE IF NOT EXISTS passkeys (
 );
 CREATE INDEX IF NOT EXISTS passkeys_user ON passkeys(user_id);
 `,
-	// 25: a show can take its metadata and episode numbering from TheTVDB
+	// 24: a show can take its metadata and episode numbering from TheTVDB
 	// (tvdb_id set) in aired, DVD or absolute order. Libraries can turn off
 	// intro and credits detection.
 	`
 ALTER TABLE items ADD COLUMN tvdb_id INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE items ADD COLUMN tvdb_order TEXT NOT NULL DEFAULT '';
 ALTER TABLE libraries ADD COLUMN skip_markers INTEGER NOT NULL DEFAULT 0;
+`,
+	// 25: notifications in the app (new episodes of shows you follow,
+	// finished recordings). link is an app path such as /item/12.
+	`
+CREATE TABLE notifications (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	kind       TEXT NOT NULL,
+	title      TEXT NOT NULL,
+	body       TEXT NOT NULL DEFAULT '',
+	link       TEXT NOT NULL DEFAULT '',
+	image      TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	read_at    INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX notifications_user ON notifications(user_id, created_at);
 `,
 }
