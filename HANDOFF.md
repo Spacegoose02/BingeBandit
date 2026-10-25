@@ -2,7 +2,14 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, faster library and collection pages._
+_Last updated: 2026-10-25, quality / convert choice in both players and laggy direct play._
+
+## Quality choice and laggy direct play
+
+- **Server:** `Options.EncodeVideo` (`encodeVideo` in the transcode request) encodes H.264 that would otherwise be copied at its own size, so "Convert" gives a slow device something lighter. With it, the adaptive ladder is offered at original quality too.
+- **Web player:** the settings menu lists *Original · Direct Play* (when the browser can play the file), *Original · Convert*, and each smaller size · Convert. With Auto quality on, direct play (or a copied stream) that drops over 20% of frames in two 5-second checks in a row switches to *Original · Convert* with a toast. Buffering three times a minute still steps the quality down.
+- **TV app:** the player menu is now *Quality, audio & subtitles*, with the same choices. Before playing, `canDirectPlay` sends files ExoPlayer can't handle straight to the server: containers outside mp4/m4v/mov/mkv/webm/ts/m2ts/mts, video other than H.264/HEVC/VP9/AV1, and DTS/TrueHD audio (plus AC-3/E-AC-3 on phones). Picking an audio track it can't decode does the same. Direct play that buffers three times in a minute (not right after starting or seeking) switches to converting, with a notice.
+- **Tested:** transcode arg test for `encodeVideo`; in Chromium the menu shows both originals and *Convert* sends `encodeVideo`. The TV app is typechecked and linted only.
 
 ## Faster libraries and collections
 

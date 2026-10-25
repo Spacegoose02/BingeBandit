@@ -48,6 +48,13 @@ func TestBuildArgsBurnIn(t *testing.T) {
 	if !s.VideoCopy || s.BurnSubtitle != -1 || strings.Contains(args, "filter_complex") {
 		t.Errorf("text subtitle should not be burned: copy=%v burn=%d\n%s", s.VideoCopy, s.BurnSubtitle, args)
 	}
+
+	// The viewer asked for a conversion: H.264 is encoded, not copied.
+	s = &Session{dir: "out"}
+	args = strings.Join(m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: -1, EncodeVideo: true}), " ")
+	if s.VideoCopy || !strings.Contains(args, "-c:v libx264") {
+		t.Errorf("encodeVideo should encode: copy=%v\n%s", s.VideoCopy, args)
+	}
 }
 
 func TestAudioArgs(t *testing.T) {
