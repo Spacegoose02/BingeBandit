@@ -669,3 +669,49 @@ func (s *Store) SetChannelFavorite(uid, channelID int64, fav bool) error {
 	}
 	return err
 }
+
+// SeedSourceGroups records which groups of a new playlist to import before
+// its first refresh, so the refresh already honours them.
+func (s *Store) SeedSourceGroups(sourceID int64, newGroupsEnabled bool, enabled map[string]bool) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`UPDATE live_sources SET new_groups_enabled = ? WHERE id = ?`, boolInt(newGroupsEnabled), sourceID); err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO live_source_groups (source_id, name, enabled, streams) VALUES (?, ?, ?, 0)
+		ON CONFLICT (source_id, name) DO UPDATE SET enabled = excluded.enabled`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for name, on := range enabled {
+		if _, err := stmt.Exec(sourceID, name, boolInt(on)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// CreateChannel adds a channel with its streams in fallback order.
+func (s *Store) CreateChannel(c *Channel, streamIDs []int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`INSERT INTO channels (number, name, logo, grp, epg_id, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		c.Number, c.Name, c.Logo, c.Group, c.EPGID, boolInt(c.Enabled), now())
+	if err != nil {
+		return err
+	}
+	c.ID, _ = res.LastInsertId()
+	for i, sid := range streamIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO channel_streams (channel_id, stream_id, priority) VALUES (?, ?, ?)`, c.ID, sid, i); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

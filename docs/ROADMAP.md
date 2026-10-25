@@ -93,6 +93,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Logo library (upload your own logos, match them to channels by name), your own channel categories (start from your favourites) on the web and TV guide |
 | ✅ | DVR: conflicts shown when providers are at their connection limit (and an admin switch to let recordings bump live viewers), keep the newest N episodes per series |
 | ✅ | Buffering/proxy settings, live TV logs view, per-user API keys for the exported playlist |
+| ✅ | Import from Dispatcharr: provider accounts (Xtream too), guides, channels with numbers, groups, logos, guide matches and fallback streams |
 - Guides from local providers by ZIP (DirecTV, Comcast…) via Schedules Direct / similar.
 - Sports tracker with scores and alerts (ESPN API: college football/basketball, NBA, MLB, MLS, NHL, NFL); notifications when a game or show is about to start.
 - YouTube live channels plugin: an admin-managed list of channels that turn on and off automatically.

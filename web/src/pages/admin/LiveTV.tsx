@@ -9,6 +9,7 @@ import { formatBytes, formatClock, timeAgo } from '../../format'
 import type { AdminChannel, LiveSource, LiveStream, RelayStat } from '../../types'
 import { ChannelLogo, channelNo } from '../LiveGuide'
 import { CustomChannelEditor } from './CustomChannel'
+import { DispatcharrImport } from './DispatcharrImport'
 import { Logos } from './Logos'
 import { LogoField } from '../../components/ChannelLogos'
 
@@ -47,6 +48,7 @@ function Sources() {
   const { data, reload } = useApi<LiveSource[]>('/api/admin/live/sources', 5000)
   const [editing, setEditing] = useState<Partial<LiveSource> | null>(null)
   const [filtering, setFiltering] = useState<LiveSource | null>(null)
+  const [importing, setImporting] = useState(false)
   const [busy, setBusy] = useState<number | null>(null)
   const refresh = async (s: LiveSource) => {
     setBusy(s.id)
@@ -98,11 +100,20 @@ function Sources() {
 
   return (
     <>
+      <div className="panel list-row" style={{ marginBottom: 16 }}>
+        <Icon name="download" />
+        <div className="grow">
+          <div>Moving from Dispatcharr?</div>
+          <div className="muted small">Import its provider accounts, guides and channels in one go.</div>
+        </div>
+        <button className="btn btn-glass btn-sm" onClick={() => setImporting(true)}>Import from Dispatcharr</button>
+      </div>
       {section('m3u', 'M3U playlists', 'Your IPTV provider accounts. Set the connection limit to what your plan allows; BingeBandit shares one connection per channel between viewers and skips a provider when it is full.')}
       {section('epg', 'Guides (XMLTV)', 'Program guide data. Channels match guide entries by their tvg-id; you can change the match per channel.')}
       <h2 className="section-title">Use these channels in other apps</h2>
       <IPTVLinks />
       {editing && <SourceEditor source={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
+      {importing && <DispatcharrImport onClose={() => setImporting(false)} onChanged={reload} />}
       {filtering && <GroupFilter source={filtering} onClose={() => setFiltering(null)} onSaved={() => { setFiltering(null); reload() }} />}
     </>
   )

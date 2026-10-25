@@ -2,7 +2,15 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, Watch Together (M3)._
+_Last updated: 2026-10-25, Import from Dispatcharr (M4)._
+
+## Import from Dispatcharr (M4)
+
+- **Server** (`livetv/dispatcharr.go`): signs in to Dispatcharr's REST API (`POST /api/accounts/token/` with an admin's login, or an `X-API-Key`) and reads M3U accounts, user agents, EPG sources, channel groups, logos, channels (`?include_streams=true`, so each channel's streams come in fallback order; older versions that list stream ids are read through `streams/by-ids/`) and EPG data. Handles plain lists and DRF pages (following `next` by path only). Channel overrides are applied through the `effective_*` fields when present.
+- **Import** (background job, `DispatcharrJob`): each account becomes an M3U source (Xtream accounts become a `get.php?…&type=m3u_plus&output=ts` URL; connection limit, user agent string and refresh interval carry over). Its group filter is seeded before the first refresh (`SeedSourceGroups`) from Dispatcharr's enabled groups plus any group a channel uses; "new groups" follows `auto_enable_new_groups_live`. XMLTV sources with a URL become guides; uploaded files, Schedules Direct and dummy guides are skipped with a note. Then channels are created (`CreateChannel`) with number, name, group, logo, guide id (the matched EPG entry's tvg_id, else the channel's) and enabled = not hidden from output. Streams are matched in the new source by URL, then the Xtream stream id, then name within group, then a unique name. Channels without a found stream are skipped and listed. Taken numbers go to the end. Re-running skips sources with the same URL and channels with the same number and name. Logos uploaded to Dispatcharr point at its public logo cache.
+- **Web:** Admin → Live TV → Sources → Import from Dispatcharr: address, login or API key, a preview of what's imported or skipped, then progress and notes. The login isn't stored.
+- **`cmd/fakedispatcharr`** (`:9191`, admin / admin or key `fake-dispatcharr-key`) fronts `cmd/fakeiptv` with renumbered channels and a fallback stream.
+- **Tested:** unit test with a fake Dispatcharr (Xtream account whose playlist URLs differ, plain account, paging, overrides, uploaded logo, hidden channel, missing stream, group seeding, re-import), and the whole flow in Chromium against fakedispatcharr + fakeiptv. **Not tested against a real Dispatcharr**: the field names come from its source (main branch, Oct 2026).
 
 ## Watch Together (M3)
 
