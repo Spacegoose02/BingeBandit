@@ -18,3 +18,5 @@ server/internal/web/dist/*
 .idea/
 .DS_Store
 Thumbs.db
+# tsc output next to the sources shadows the .tsx files in Vite builds
+web/src/**/*.js
