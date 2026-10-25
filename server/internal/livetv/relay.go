@@ -326,6 +326,9 @@ type Relay struct {
 	lastError string
 	head      bytes.Buffer // first bytes of the current upstream, for probing
 	hls       *hlsOutput
+	pace      *pace                   // how the current upstream keeps up with real time
+	skip      context.CancelCauseFunc // ends the current upstream so run moves to the next stream
+	switched  time.Time               // when the last slow-stream switch happened
 
 	sourceID atomic.Int64
 	bytesIn  atomic.Int64
@@ -455,18 +458,31 @@ func (r *Relay) run() {
 	}
 }
 
-// pull copies one upstream into the relay until it errors, stalls or the relay stops.
+// pull copies one upstream into the relay until it errors, stalls, falls
+// too far behind real time, or the relay stops.
 func (r *Relay) pull(s store.ChannelStream) error {
-	ctx, cancel := context.WithCancel(r.ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(r.ctx)
+	defer cancel(nil)
+	pc := newPace()
+	r.mu.Lock()
+	r.pace, r.skip = pc, cancel
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		r.pace, r.skip = nil, nil
+		r.mu.Unlock()
+	}()
 	body, err := r.m.openStream(ctx, s.URL, s.UserAgent)
 	if err != nil {
 		return err
 	}
 	defer body.Close()
 
-	// Watchdog: cancel the request when no data arrives for the stall timeout.
+	// Watchdog: move on when no data arrives for the stall timeout, or when
+	// the stream plays slower than real time for that long (players would
+	// be buffering) and the channel has another stream to try.
 	stall := r.m.stallTimeout()
+	slowOK := len(r.channel.Streams) < 2
 	var last atomic.Int64
 	last.Store(time.Now().UnixNano())
 	go func() {
@@ -478,7 +494,11 @@ func (r *Relay) pull(s store.ChannelStream) error {
 				return
 			case <-t.C:
 				if time.Since(time.Unix(0, last.Load())) > stall {
-					cancel()
+					cancel(fmt.Errorf("no data for %s", stall))
+					return
+				}
+				if behind, ok := pc.behind(); ok && !slowOK && behind > stall.Seconds() {
+					cancel(fmt.Errorf("too slow: %.0fs behind real time", behind))
 					return
 				}
 			}
@@ -490,11 +510,12 @@ func (r *Relay) pull(s store.ChannelStream) error {
 		n, err := body.Read(buf)
 		if n > 0 {
 			last.Store(time.Now().UnixNano())
+			pc.feed(buf[:n])
 			r.broadcast(buf[:n])
 		}
 		if err != nil {
 			if ctx.Err() != nil && r.ctx.Err() == nil {
-				return fmt.Errorf("no data for %s", stall)
+				return context.Cause(ctx)
 			}
 			if err == io.EOF {
 				return errors.New("upstream closed the stream")
@@ -632,6 +653,7 @@ type RelayStat struct {
 	HWError    string       `json:"hwError,omitempty"` // why the configured hardware encoder isn't being used
 	Failovers  int          `json:"failovers"`
 	LastError  string       `json:"lastError,omitempty"`
+	Behind     float64      `json:"behind,omitempty"` // seconds the current stream is behind real time
 	Viewers    []ViewerStat `json:"viewers"`
 }
 
@@ -652,6 +674,11 @@ func (r *Relay) stat() RelayStat {
 		Stream: r.stream.Name, Source: r.stream.SourceName, Started: r.started.Unix(), Bytes: bytes,
 		AvgBps: float64(bytes) * 8 / max(now.Sub(r.started).Seconds(), 1), CurrentBps: cur,
 		Failovers: int(r.failures.Load()), LastError: r.lastError, Viewers: []ViewerStat{},
+	}
+	if r.pace != nil {
+		if b, ok := r.pace.behind(); ok && b >= 1 {
+			st.Behind = b
+		}
 	}
 	if r.hls != nil {
 		st.Video = r.hls.video
@@ -851,6 +878,10 @@ func (m *Manager) stallTimeout() time.Duration {
 	return time.Duration(secs) * time.Second
 }
 
+// StallSeconds is the stall timeout, for players deciding when to report
+// that they've been buffering too long.
+func (m *Manager) StallSeconds() int { return int(m.stallTimeout().Seconds()) }
+
 // BufferSeconds is how far behind live players sit, so hiccups upstream eat
 // into that cushion instead of stalling the picture.
 func (m *Manager) BufferSeconds() int {
@@ -958,4 +989,66 @@ func (r *Relay) lastErrorOr(def string) string {
 		return r.lastError
 	}
 	return def
+}
+
+// ReportBuffering is a player saying it has been buffering for secs. When
+// that passes the stall timeout and the channel has another stream, the relay
+// moves to it, but only if the server sees the problem too (the upstream is
+// behind real time, or the HLS output has stopped producing segments): a
+// viewer on bad Wi-Fi shouldn't switch the stream for everyone else.
+func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) {
+	var r *Relay
+	for _, rr := range m.snapshot() {
+		rr.mu.Lock()
+		_, ok := rr.viewers[viewerID]
+		rr.mu.Unlock()
+		if ok {
+			r = rr
+			break
+		}
+	}
+	if r == nil {
+		return false, "not watching"
+	}
+	stall := m.stallTimeout()
+	if secs < stall.Seconds() {
+		return false, "not long enough"
+	}
+	if len(r.channel.Streams) < 2 {
+		return false, "no other stream"
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.skip == nil {
+		return false, "already switching"
+	}
+	if time.Since(r.switched) < stall {
+		return false, "just switched"
+	}
+	behind, measured := 0.0, false
+	if r.pace != nil {
+		behind, measured = r.pace.behind()
+	}
+	segAge := time.Duration(0)
+	if r.hls != nil {
+		if st, err := os.Stat(filepath.Join(r.hls.dir, "live.m3u8")); err == nil {
+			segAge = time.Since(st.ModTime())
+		}
+	}
+	var why string
+	switch {
+	case measured && behind >= 3:
+		why = fmt.Sprintf("viewers buffering; the stream is %.0fs behind real time", behind)
+	case segAge > 3*hlsSegmentSecs*time.Second+2*time.Second:
+		why = fmt.Sprintf("viewers buffering; no new video for %.0fs", segAge.Seconds())
+	case !measured:
+		why = "viewers buffering" // can't measure this stream; trust the player
+	default:
+		log.Printf("live tv: channel %v %q: a viewer reports %.0fs of buffering, but the stream is keeping up (likely the viewer's network)",
+			r.channel.Number, r.channel.Name, secs)
+		return false, "stream is keeping up"
+	}
+	r.switched = time.Now()
+	r.skip(errors.New(why))
+	return true, why
 }

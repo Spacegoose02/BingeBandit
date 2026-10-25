@@ -219,6 +219,7 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"bufferSecs": s.Live.BufferSeconds(),
+		"stallSecs":  s.Live.StallSeconds(),
 		"viewerId":   v.ID,
 		"playlist":   fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),
 	})
@@ -270,6 +271,20 @@ func (s *Server) pingViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// viewerBuffering is a player reporting that it has been buffering for a
+// while; the relay may move the channel to its next stream.
+func (s *Server) viewerBuffering(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Seconds float64 `json:"seconds"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	switched, reason := s.Live.ReportBuffering(chi.URLParam(r, "viewer"), req.Seconds)
+	writeJSON(w, http.StatusOK, map[string]any{"switched": switched, "reason": reason})
 }
 
 // testEncoder tries the hardware encoder (the saved one, or ?encoder=) the

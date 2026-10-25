@@ -123,10 +123,11 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/live/channels` | Channels with what's on now and next. |
 | POST / DELETE | `/live/channels/{id}/favorite` | Favorite a channel. |
 | GET | `/live/guide?from=&to=` | Channels, programs and your recordings for a window (default: from 30 min ago, 6 h, at most 24 h). |
-| POST | `/live/channels/{id}/watch` | Start watching → `{viewerId, playlist, bufferSecs}` (HLS; `bufferSecs` is how far behind live to play). Answers once the first segments exist (up to ~25 s), or 503 with the reason. |
+| POST | `/live/channels/{id}/watch` | Start watching → `{viewerId, playlist, bufferSecs, stallSecs}` (HLS; `bufferSecs` is how far behind live to play, `stallSecs` how long buffering lasts before reporting it). Answers once the first segments exist (up to ~25 s), or 503 with the reason. |
 | GET | `/live/channels/{id}/stream.ts` | Raw MPEG-TS for IPTV players. |
 | DELETE | `/live/viewers/{viewer}` | Stop watching. |
 | POST | `/live/viewers/{viewer}/ping` | Keep a paused viewer counted (every 10 s). 410 once the viewer is gone. |
+| POST | `/live/viewers/{viewer}/buffering` | `{seconds}`: the player has been buffering this long. Past `stallSecs` (from `/watch`) the server may move the channel to its next stream → `{switched, reason}`. |
 | GET | `/live/playlist.m3u`, `/live/epg.xml` | M3U and XMLTV for other IPTV apps. Use `?token=<API key>`. |
 | GET | `/items/{id}/preroll` | What to play before a movie, from the viewer's settings: `{trailers: [{itemId, title, year, youtube}], intro?: {url, name}}`. Empty for anything but a movie. |
 | GET | `/preroll/intro/{n}` | An intro video (range requests work). |
