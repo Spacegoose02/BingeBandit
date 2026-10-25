@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
-import { api, current, image, saveSession } from '../api'
-import { Button, Center, Focusable, PosterCard, Row, WideCard } from '../components'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { api, cached, current, image, saveSession, writesDone } from '../api'
+import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
@@ -16,6 +16,10 @@ const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', liv
 
 // Survives the remount when Back returns here from the player or details.
 let lastTab: Tab = 'home'
+// Asked once per launch, not on every return to Home.
+let updateCheck: Promise<AppRelease | null> | null = null
+
+const pinnedOf = (libs: Library[] | undefined) => (libs ?? []).filter((l) => l.pinned)
 
 /** The main screen: a menu across the top and the chosen section below. */
 export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: () => void; onSwitchProfile: () => void }) {
@@ -25,12 +29,14 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     setTabState(t)
   }
   const [update, setUpdate] = useState<AppRelease | null>(null)
-  const [libraries, setLibraries] = useState<Library[]>([])
+  // The menu draws from the last list straight away, then refreshes.
+  const [libraries, setLibraries] = useState<Library[]>(() => pinnedOf(cached<Library[]>('/api/libraries')))
   // Look for a newer app once per launch; the Settings tab then shows a dot.
   useEffect(() => {
-    checkForUpdate().then(setUpdate, () => undefined)
+    updateCheck ??= checkForUpdate().catch(() => null)
+    updateCheck.then(setUpdate)
     api.get<Library[]>('/api/libraries').then((libs) => {
-      const pinned = libs.filter((l) => l.pinned)
+      const pinned = pinnedOf(libs)
       setLibraries(pinned)
       // The library this tab showed last time may have been unpinned since.
       if (lastTab.startsWith('lib:') && !pinned.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
@@ -38,7 +44,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   }, [])
   // An admin can turn Live TV off for someone; check on each launch, since
   // the saved sign-in may predate the change.
-  const [liveTV, setLiveTV] = useState(current()?.user.liveTV !== false)
+  const [liveTV, setLiveTV] = useState((cached<User>('/api/me') ?? current()?.user)?.liveTV !== false)
   useEffect(() => {
     api
       .get<User>('/api/me')
@@ -160,23 +166,21 @@ function Search() {
 
 function HomeRows() {
   const nav = useNav()
-  const [data, setData] = useState<HomeData | null>(null)
+  // Back from the player or details draws the last rows at once and refreshes behind them.
+  const [data, setData] = useState<HomeData | null>(() => cached<HomeData>('/api/home') ?? null)
   const [error, setError] = useState('')
-  const [hero, setHero] = useState<Item | null>(null)
+  const hero = useRef<((it: Item) => void) | null>(null)
 
   const load = useCallback(() => {
     setError('')
-    api.get<HomeData>('/api/home').then(
-      (d) => {
-        setData(d)
-        setHero(d.hero[0] ?? d.continueWatching[0] ?? d.rows[0]?.items[0] ?? null)
-      },
-      (e) => setError(e.message),
-    )
+    // Wait for the player's last report so Continue Watching has the new position.
+    writesDone()
+      .then(() => api.get<HomeData>('/api/home'))
+      .then(setData, (e) => setError(e.message))
   }, [])
   useEffect(load, [load])
 
-  if (error)
+  if (error && !data)
     return (
       <Center>
         <Text style={st.error}>{error}</Text>
@@ -189,44 +193,70 @@ function HomeRows() {
 
   const open = (it: Item) => nav.push({ name: 'details', id: it.id })
   const play = (it: Item) => nav.push({ name: 'player', id: it.id, start: it.watch?.position > 15 ? it.watch.position : 0 })
-  const bg = hero ? image(hero.backdrop || hero.showBackdrop, 'w1280') : undefined
+  const show = (it: Item) => hero.current?.(it)
 
   return (
-    <ImageBackground source={bg ?? {}} style={st.flex} imageStyle={st.heroImg}>
-      <View style={st.shade}>
-        {hero && (
-          <View style={st.hero}>
-            <Text style={st.heroTitle} numberOfLines={1}>{hero.kind === 'episode' ? hero.showTitle : hero.title}</Text>
-            <Text style={st.heroMeta} numberOfLines={1}>
-              {[hero.year, hero.contentRating, hero.genres?.slice(0, 3).join(', ')].filter(Boolean).join('  ·  ')}
-            </Text>
-            <Text style={st.heroOverview} numberOfLines={3}>{hero.overview}</Text>
-          </View>
+    <View style={st.flex}>
+      <Hero first={data.hero[0] ?? data.continueWatching[0] ?? data.rows[0]?.items[0] ?? null} feed={hero} />
+      <ScrollView style={st.flex} contentContainerStyle={st.rows}>
+        {data.continueWatching.length > 0 && (
+          <ItemRow
+            title="Continue Watching"
+            items={data.continueWatching}
+            renderItem={(it, i) => <WideCard item={it} preferFocus={i === 0} onFocus={() => show(it)} onPress={() => play(it)} />}
+          />
         )}
-        <ScrollView style={st.flex} contentContainerStyle={st.rows}>
-          {data.continueWatching.length > 0 && (
-            <Row title="Continue Watching">
-              {data.continueWatching.map((it, i) => (
-                <WideCard key={it.id} item={it} preferFocus={i === 0} onFocus={() => setHero(it)} onPress={() => play(it)} />
-              ))}
-            </Row>
-          )}
-          {data.rows.map((row, r) => (
-            <Row key={row.id} title={row.title}>
-              {row.items.map((it, i) => (
-                <PosterCard
-                  key={it.id}
-                  item={it}
-                  preferFocus={data.continueWatching.length === 0 && r === 0 && i === 0}
-                  onFocus={() => setHero(it)}
-                  onPress={() => open(it)}
-                />
-              ))}
-            </Row>
-          ))}
-        </ScrollView>
-      </View>
-    </ImageBackground>
+        {data.rows.map((row, r) => (
+          <ItemRow
+            key={row.id}
+            title={row.title}
+            items={row.items}
+            renderItem={(it, i) => (
+              <PosterCard
+                item={it}
+                preferFocus={data.continueWatching.length === 0 && r === 0 && i === 0}
+                onFocus={() => show(it)}
+                onPress={() => open(it)}
+              />
+            )}
+          />
+        ))}
+      </ScrollView>
+    </View>
+  )
+}
+
+/**
+ * The focused title's backdrop and blurb. It redraws on its own, once focus
+ * rests on a card, rather than redrawing every row on every remote press.
+ */
+function Hero({ first, feed }: { first: Item | null; feed: React.MutableRefObject<((it: Item) => void) | null> }) {
+  const [hero, setHero] = useState(first)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    feed.current = (it) => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => setHero(it), 200)
+    }
+    return () => {
+      if (timer) clearTimeout(timer)
+      feed.current = null
+    }
+  }, [feed])
+  const bg = hero ? image(hero.backdrop || hero.showBackdrop, 'w1280') : undefined
+  return (
+    <>
+      {bg && <Image source={bg} style={st.heroImg} resizeMethod="resize" fadeDuration={200} />}
+      {hero && (
+        <View style={st.hero}>
+          <Text style={st.heroTitle} numberOfLines={1}>{hero.kind === 'episode' ? hero.showTitle : hero.title}</Text>
+          <Text style={st.heroMeta} numberOfLines={1}>
+            {[hero.year, hero.contentRating, hero.genres?.slice(0, 3).join(', ')].filter(Boolean).join('  ·  ')}
+          </Text>
+          <Text style={st.heroOverview} numberOfLines={3}>{hero.overview}</Text>
+        </View>
+      )}
+    </>
   )
 }
 
@@ -244,8 +274,7 @@ const st = StyleSheet.create(scaled({
   tabActive: { borderTopColor: colors.accent },
   tabScroll: { flex: 0, paddingHorizontal: 34 },
   tabText: { color: colors.muted, fontSize: font.small, fontWeight: '700' },
-  heroImg: { opacity: 0.35 },
-  shade: { flex: 1 },
+  heroImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', opacity: 0.35 },
   hero: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 10, maxWidth: 1500 },
   heroTitle: { color: colors.text, fontSize: font.hero, fontWeight: '900' },
   heroMeta: { color: colors.muted, fontSize: font.body, marginTop: 6 },

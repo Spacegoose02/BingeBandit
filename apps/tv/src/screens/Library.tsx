@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { api } from '../api'
-import { Button, Center, CollectionCard, Focusable, PosterCard, Row } from '../components'
+import { api, cached } from '../api'
+import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
@@ -37,14 +37,15 @@ export default function LibraryTab({ library }: { library: Library }) {
 }
 
 function useLoad<T>(path: string) {
-  const [data, setData] = useState<T | null>(null)
+  // Draws the last copy at once (Back from details, or passing through the menu), then refreshes.
+  const [data, setData] = useState<T | null>(() => cached<T>(path) ?? null)
   const [error, setError] = useState('')
   const load = useCallback(() => {
     setError('')
     api.get<T>(path).then(setData, (e) => setError(e.message))
   }, [path])
   useEffect(load, [load])
-  return { data, error, load }
+  return { data, error: data ? '' : error, load }
 }
 
 function Problem({ error, retry }: { error: string; retry: () => void }) {
@@ -65,11 +66,7 @@ function Recommended({ library }: { library: Library }) {
   return (
     <ScrollView style={st.flex} contentContainerStyle={st.rows}>
       {data.map((row) => (
-        <Row key={row.id} title={row.title}>
-          {row.items.map((it) => (
-            <PosterCard key={it.id} item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
-          ))}
-        </Row>
+        <ItemRow key={row.id} title={row.title} items={row.items} renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />} />
       ))}
     </ScrollView>
   )

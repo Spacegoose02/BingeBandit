@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
-import { absolute, api, authHeaders } from '../api'
+import { absolute, api, authHeaders, trackWrite } from '../api'
 import { Button } from '../components'
 import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -159,7 +159,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
   const report = useCallback(
     (stopped = false, done = false) => {
       if (!item || !file) return
-      api
+      const sent = api
         .post('/api/progress', {
           playSessionId: playSession.current,
           itemId: item.id,
@@ -174,6 +174,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           played: Math.round(played.current),
         })
         .catch(() => undefined)
+      if (stopped) trackWrite(sent)
     },
     [item, file, duration, paused, mode],
   )

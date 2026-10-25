@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Image, Pressable, ScrollView, StyleSheet, Text, View, type PressableProps, type ViewStyle } from 'react-native'
+import React, { memo, useCallback, useRef, useState } from 'react'
+import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type ImageProps, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
 import { scaled, colors, font, gutter, isPhone } from './theme'
 import type { Collection, Item } from './types'
@@ -64,48 +64,111 @@ export function Focusable({ children, style, ...props }: PressableProps & { styl
 
 function progress(it: Item): number {
   const w = it.watch
-  if (!w || w.watched || !w.duration || w.position < 30) return 0
+  // A finished title that's being watched again shows its new position, so
+  // only the position decides (a finish resets it to 0 on the server).
+  if (!w || !w.duration || w.position < 30) return 0
   return Math.min(1, w.position / w.duration)
 }
 
-export function PosterCard({ item, onPress, onFocus, preferFocus }: { item: Item; onPress: () => void; onFocus?: () => void; preferFocus?: boolean }) {
+/**
+ * Artwork for cards. Android decodes at the size shown instead of the file's
+ * size (local posters can be thousands of pixels tall) and skips the fade.
+ */
+function Art(props: ImageProps) {
+  return <Image resizeMethod="resize" fadeDuration={120} {...props} />
+}
+
+/**
+ * Keeps a card's handlers current without re-rendering it: screens pass new
+ * arrow functions on every render (a focus move re-renders the whole grid),
+ * so the memoized inner card only redraws when what it shows changes.
+ */
+function useLatest<A extends unknown[]>(fn: ((...a: A) => void) | undefined) {
+  const ref = useRef(fn)
+  ref.current = fn
+  return useCallback((...a: A) => ref.current?.(...a), [])
+}
+
+interface CardProps {
+  item: Item
+  onPress: () => void
+  onFocus?: () => void
+  preferFocus?: boolean
+}
+
+export function PosterCard({ item, onPress, onFocus, preferFocus }: CardProps) {
+  return <PosterCardView item={item} preferFocus={preferFocus} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
+}
+
+const PosterCardView = memo(function Poster({ item, onPress, onFocus, preferFocus }: CardProps) {
   const src = image(item.poster || item.showPoster, 'w342')
   const p = progress(item)
   return (
     <Focusable onPress={onPress} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.poster}>
-      {src ? <Image source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{item.title}</Text></View>}
+      {src ? <Art source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{item.title}</Text></View>}
       {item.watch?.watched && item.kind !== 'show' && <View style={s.badge}><Text style={s.badgeText}>✓</Text></View>}
       {!!item.unwatchedCount && <View style={s.badge}><Text style={s.badgeText}>{item.unwatchedCount}</Text></View>}
       {p > 0 && <View style={s.progressTrack}><View style={[s.progressFill, { width: `${p * 100}%` }]} /></View>}
     </Focusable>
   )
-}
+})
 
 /** A collection's poster with its name and size under it. */
 export function CollectionCard({ collection, onPress, preferFocus }: { collection: Collection; onPress: () => void; preferFocus?: boolean }) {
+  return <CollectionCardView collection={collection} preferFocus={preferFocus} onPress={useLatest(onPress)} />
+}
+
+const CollectionCardView = memo(function CollectionPoster({ collection, onPress, preferFocus }: { collection: Collection; onPress: () => void; preferFocus?: boolean }) {
   const src = image(collection.poster, 'w342')
   return (
     <View>
       <Focusable onPress={onPress} hasTVPreferredFocus={preferFocus} style={s.poster}>
-        {src ? <Image source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{collection.name}</Text></View>}
+        {src ? <Art source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{collection.name}</Text></View>}
         <View style={s.badge}><Text style={s.badgeText}>{collection.itemCount}</Text></View>
       </Focusable>
       <Text style={[s.cardTitle, s.posterTitle]} numberOfLines={1}>{collection.name}</Text>
     </View>
   )
+})
+
+export function WideCard({ item, onPress, onFocus, preferFocus }: CardProps) {
+  return <WideCardView item={item} preferFocus={preferFocus} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
 }
 
-export function WideCard({ item, onPress, onFocus, preferFocus }: { item: Item; onPress: () => void; onFocus?: () => void; preferFocus?: boolean }) {
+const WideCardView = memo(function Wide({ item, onPress, onFocus, preferFocus }: CardProps) {
   const src = image(item.backdrop || item.showBackdrop || item.poster, 'w780')
   const p = progress(item)
   const label = item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title
   return (
     <View style={s.wideWrap}>
       <Focusable onPress={onPress} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.wide}>
-        {src ? <Image source={src} style={s.wideImg} /> : <View style={[s.wideImg, s.fallback]} />}
+        {src ? <Art source={src} style={s.wideImg} /> : <View style={[s.wideImg, s.fallback]} />}
         {p > 0 && <View style={s.progressTrack}><View style={[s.progressFill, { width: `${p * 100}%` }]} /></View>}
       </Focusable>
       <Text style={s.cardTitle} numberOfLines={1}>{label}</Text>
+    </View>
+  )
+})
+
+/**
+ * A titled row of items that only builds the cards near the screen, adding
+ * more as focus moves along it, instead of every card of every row at once.
+ */
+export function ItemRow({ title, items, renderItem }: { title: string; items: Item[]; renderItem: (it: Item, index: number) => React.ReactElement }) {
+  return (
+    <View style={s.row}>
+      <Text style={s.rowTitle}>{title}</Text>
+      <FlatList
+        horizontal
+        data={items}
+        keyExtractor={(it) => String(it.id)}
+        renderItem={({ item, index }) => renderItem(item, index)}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.rowBody}
+        initialNumToRender={8}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+      />
     </View>
   )
 }
