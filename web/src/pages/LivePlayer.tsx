@@ -204,6 +204,11 @@ export default function LivePlayer() {
     window.clearTimeout(hideTimer.current)
     hideTimer.current = window.setTimeout(() => setControls(false), 4000)
   }, [])
+  // Show the controls when a channel starts, then let them hide like any other time.
+  useEffect(() => {
+    poke()
+    return () => window.clearTimeout(hideTimer.current)
+  }, [id, poke])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
