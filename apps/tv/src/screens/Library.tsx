@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api } from '../api'
 import { Button, Center, CollectionCard, Focusable, PosterCard, Row } from '../components'
 import { useNav } from '../nav'
@@ -9,6 +9,13 @@ import type { Collection, HubRow, Item, Library } from '../types'
 type Section = 'recommended' | 'library' | 'collections'
 const sectionNames: Record<Section, string> = { recommended: 'Recommended', library: 'Library', collections: 'Collections' }
 const PAGE = 120
+const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+
+/** Where titles starting with a letter begin, from the server ("#" is everything before A). */
+interface Letter {
+  letter: string
+  offset: number
+}
 
 // Remembered per library so Back from details lands on the same section.
 const lastSection: Record<number, Section> = {}
@@ -79,17 +86,26 @@ function AllTitles({ library }: { library: Library }) {
   const nav = useNav()
   const [items, setItems] = useState<Item[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
+  const [letters, setLetters] = useState<Letter[]>([])
   const [total, setTotal] = useState(-1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // The title a letter jump lands on (focused and scrolled to), and the one focused now.
+  const [target, setTarget] = useState(-1)
+  const [focused, setFocused] = useState(-1)
+  const scroller = useRef<ScrollView>(null)
+  const starts = useRef<Record<number, number>>({}) // offset of a letter's first title → its y in the grid
   const more = useCallback(
     (offset: number) => {
       setBusy(true)
-      api.get<{ items: Item[]; total: number; collections?: Collection[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${offset}&limit=${PAGE}`).then(
+      api.get<{ items: Item[]; total: number; collections?: Collection[]; letters?: Letter[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${offset}&limit=${PAGE}`).then(
         (p) => {
           setItems((cur) => (offset === 0 ? p.items : [...cur, ...p.items]))
           // The server sends collections unless the library hides them; they go first.
-          if (offset === 0) setCollections(p.collections ?? [])
+          if (offset === 0) {
+            setCollections(p.collections ?? [])
+            setLetters(p.letters ?? [])
+          }
           setTotal(p.total)
           setBusy(false)
         },
@@ -102,27 +118,109 @@ function AllTitles({ library }: { library: Library }) {
     [library.id],
   )
   useEffect(() => more(0), [more])
+
+  // Jumping to a letter loads every page up to it, then focuses its first title.
+  const jump = async (l: Letter) => {
+    if (busy) return
+    let loaded = items
+    if (loaded.length <= l.offset) {
+      setBusy(true)
+      try {
+        while (loaded.length <= l.offset && loaded.length < total) {
+          const p = await api.get<{ items: Item[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${loaded.length}&limit=500`)
+          if (!p.items.length) break
+          loaded = [...loaded, ...p.items]
+        }
+        setItems(loaded)
+      } catch (e) {
+        setError((e as Error).message)
+      } finally {
+        setBusy(false)
+      }
+    }
+    if (l.offset >= loaded.length) return
+    // Clear first so picking the same letter again still moves focus there.
+    setTarget(-1)
+    requestAnimationFrame(() => setTarget(l.offset))
+    const y = starts.current[l.offset]
+    if (y !== undefined) scroller.current?.scrollTo({ y, animated: true })
+  }
+
   if (error) return <Problem error={error} retry={() => more(items.length)} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
   if (total === 0 && collections.length === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
+  const starting = new Set(letters.map((l) => l.offset))
+  const current = letters.filter((l) => l.offset <= Math.max(focused, 0)).pop()?.letter
   return (
-    <ScrollView style={st.flex} contentContainerStyle={st.grid}>
-      {collections.map((c) => (
-        <CollectionCard key={`c${c.id}`} collection={c} onPress={() => nav.push({ name: 'collection', id: c.id })} />
-      ))}
-      {items.map((it, i) => (
-        <View key={it.id}>
-          <PosterCard
-            item={it}
-            onPress={() => nav.push({ name: 'details', id: it.id })}
-            // Reaching the last rows loads the next page.
-            onFocus={() => !busy && items.length < total && i >= items.length - 12 && more(items.length)}
-          />
-          <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
-        </View>
-      ))}
-      {isPhone && items.length < total && <Button label="Load more" onPress={() => more(items.length)} />}
-    </ScrollView>
+    <View style={st.titles}>
+      <ScrollView ref={scroller} style={st.flex} contentContainerStyle={st.grid}>
+        {collections.map((c) => (
+          <CollectionCard key={`c${c.id}`} collection={c} onPress={() => nav.push({ name: 'collection', id: c.id })} />
+        ))}
+        {items.map((it, i) => (
+          <View
+            key={it.id}
+            // Only the first title of each letter is measured, for jumping there.
+            onLayout={
+              starting.has(i)
+                ? (e) => {
+                    starts.current[i] = e.nativeEvent.layout.y
+                    if (i === target) scroller.current?.scrollTo({ y: e.nativeEvent.layout.y, animated: true })
+                  }
+                : undefined
+            }
+          >
+            <PosterCard
+              item={it}
+              preferFocus={i === target}
+              onPress={() => nav.push({ name: 'details', id: it.id })}
+              onFocus={() => {
+                setFocused(i)
+                // Reaching the last rows loads the next page.
+                if (!busy && items.length < total && i >= items.length - 12) more(items.length)
+              }}
+            />
+            <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+          </View>
+        ))}
+        {isPhone && items.length < total && <Button label="Load more" onPress={() => more(items.length)} />}
+      </ScrollView>
+      {letters.length > 1 && <LetterBar letters={letters} current={current} onPick={jump} />}
+    </View>
+  )
+}
+
+/**
+ * Plex-style A–Z column beside the grid. Right from the last poster in a row
+ * reaches it; up and down move between letters (missing ones are skipped);
+ * OK jumps there.
+ */
+function LetterBar({ letters, current, onPick }: { letters: Letter[]; current?: string; onPick: (l: Letter) => void }) {
+  return (
+    <View style={st.bar}>
+      {ALPHABET.map((ch) => {
+        const l = letters.find((x) => x.letter === ch)
+        if (!l) {
+          return <View key={ch} style={st.letter}><Text style={[st.letterText, st.letterMissing]}>{ch}</Text></View>
+        }
+        return <LetterButton key={ch} letter={l} active={ch === current} onPick={onPick} />
+      })}
+    </View>
+  )
+}
+
+function LetterButton({ letter, active, onPick }: { letter: Letter; active: boolean; onPick: (l: Letter) => void }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <Pressable
+      onPress={() => onPick(letter)}
+      onFocus={() => setFocused(!isPhone)}
+      onBlur={() => setFocused(false)}
+      style={[st.letter, focused && st.letterFocused]}
+      accessibilityLabel={letter.letter === '#' ? 'Numbers and symbols' : letter.letter}
+    >
+      <Text style={[st.letterText, active && st.letterActive, focused && st.letterTextFocused]}>{letter.letter}</Text>
+    </Pressable>
   )
 }
 
@@ -174,6 +272,14 @@ const st = StyleSheet.create(scaled({
   chipTextActive: { color: colors.text },
   rows: { paddingBottom: 60, paddingTop: 10 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
+  titles: { flex: 1, flexDirection: 'row' },
+  bar: { justifyContent: 'center', alignItems: 'center', paddingVertical: 16, paddingRight: isPhone ? 8 : 30, paddingLeft: 4 },
+  letter: { width: 44, flex: 1, maxHeight: 34, minHeight: 20, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  letterFocused: { backgroundColor: colors.accent, transform: [{ scale: 1.3 }] },
+  letterText: { color: colors.muted, fontSize: 20, fontWeight: '800' },
+  letterTextFocused: { color: colors.accentText },
+  letterActive: { color: colors.accent },
+  letterMissing: { opacity: 0.25 },
   gridInner: { flexDirection: 'row', flexWrap: 'wrap' },
   gridTitle: { color: colors.text, fontSize: font.small, marginTop: 8, marginBottom: 30, width: 230 },
   collection: { paddingHorizontal: gutter, paddingTop: 50, paddingBottom: 60 },
