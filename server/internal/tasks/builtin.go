@@ -15,15 +15,17 @@ import (
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/media"
+	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
 
 type Deps struct {
-	Store   *store.Store
-	Scanner *library.Scanner
-	Markers *markers.Detector
-	DataDir string
-	FFprobe string
+	Store    *store.Store
+	Metadata *metadata.Service
+	Scanner  *library.Scanner
+	Markers  *markers.Detector
+	DataDir  string
+	FFprobe  string
 }
 
 // Builtin returns the standard task list.
@@ -34,6 +36,12 @@ func Builtin(d Deps) []*Task {
 			Description:    "Look for new, changed and removed files in every library.",
 			DefaultEnabled: true, DefaultHours: 6,
 			Run: d.scanLibraries,
+		},
+		{
+			ID: "refresh_ratings", Name: "Refresh IMDb and Rotten Tomatoes ratings",
+			Description:    "Look up scores from the ratings provider in Settings → Metadata: new titles first, then ones older than a week (up to 300 a run, to stay inside free daily limits).",
+			DefaultEnabled: true, DefaultHours: 12,
+			Run: d.refreshRatings,
 		},
 		{
 			ID: "refresh_live_tv", Name: "Refresh Live TV playlists and guides",
@@ -166,6 +174,36 @@ func (d Deps) backupDatabase(ctx context.Context) (string, error) {
 		size = st.Size()
 	}
 	return fmt.Sprintf("saved %s (%.1f MB), removed %d old", name, float64(size)/(1<<20), removed), nil
+}
+
+func (d Deps) refreshRatings(ctx context.Context) (string, error) {
+	if d.Metadata == nil || !d.Metadata.RatingsEnabled() {
+		return "skipped: no ratings provider", nil
+	}
+	targets, err := d.Store.ItemsNeedingRatings(time.Now().Add(-7*24*time.Hour).Unix(), 300)
+	if err != nil {
+		return "", err
+	}
+	done, failed := 0, 0
+	for _, t := range targets {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		err := d.Metadata.RefreshRatings(ctx, t)
+		if errors.Is(err, metadata.ErrRatingsAuth) {
+			return fmt.Sprintf("%d updated", done), err
+		}
+		if err != nil {
+			failed++
+		} else {
+			done++
+		}
+		time.Sleep(200 * time.Millisecond) // be gentle with free APIs
+	}
+	if failed > 0 {
+		return fmt.Sprintf("%d updated, %d failed", done, failed), nil
+	}
+	return fmt.Sprintf("%d updated", done), nil
 }
 
 func (d Deps) optimizeDatabase(ctx context.Context) (string, error) {

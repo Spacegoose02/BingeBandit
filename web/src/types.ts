@@ -444,6 +444,16 @@ export interface ItemDetail {
   collections?: { collection: Collection; items: Item[] }[]
   collectionNames?: string[] // admin only: explicit collection links
   markers?: Marker[]
+  externalRatings?: ExternalRatings // movies and shows, when a ratings provider is set up
+}
+
+export interface ExternalRatings {
+  imdbId?: string
+  imdb?: number
+  imdbVotes?: number
+  rottenTomatoes?: number
+  rottenTomatoesAudience?: number
+  metacritic?: number
 }
 
 export interface Collection {

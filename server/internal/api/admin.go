@@ -88,6 +88,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "unknown hardware encoder")
 		return
 	}
+	if v, ok := in[store.SettingRatingsProvider]; ok && v != "" && v != "mdblist" && v != "omdb" {
+		writeErr(w, http.StatusBadRequest, "ratings provider must be mdblist or omdb")
+		return
+	}
 	if v, ok := in[store.SettingDVRNaming]; ok && v != "library" && v != "folder" {
 		writeErr(w, http.StatusBadRequest, "recording naming must be library or folder")
 		return

@@ -5,6 +5,8 @@ const (
 	SettingServerName        = "server_name"
 	SettingTMDBKey           = "tmdb_api_key"
 	SettingMetadataLanguage  = "metadata_language"
+	SettingRatingsProvider   = "ratings_provider" // "" (off) | mdblist | omdb: IMDb and Rotten Tomatoes scores
+	SettingRatingsKey        = "ratings_api_key"
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
@@ -38,6 +40,8 @@ var SettingDefaults = map[string]string{
 	SettingServerName:        "BingeBandit",
 	SettingTMDBKey:           "",
 	SettingMetadataLanguage:  "en-US",
+	SettingRatingsProvider:   "",
+	SettingRatingsKey:        "",
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",
