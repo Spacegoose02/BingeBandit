@@ -83,7 +83,7 @@ func Builtin(d Deps) []*Task {
 		},
 		{
 			ID: "detect_markers", Name: "Detect intros and credits",
-			Description: "Compare the audio of episodes in each season to find intros and end credits for the Skip buttons.",
+			Description: "Compare the audio of episodes in each season to find intros and end credits, and look for the end credits of movies, for the Skip buttons.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.Markers.Pending,
 		},

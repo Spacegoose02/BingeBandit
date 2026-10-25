@@ -67,12 +67,12 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Admin statistics: plays per day, top movies, shows and viewers, direct play vs. transcode, clients (Tautulli replacement) |
 | ✅ | Auto-adjust quality user setting (done in M2) |
 | ✅ | **Intro and credits detection** (audio fingerprints compared across episodes) with Skip Intro / Next buttons; per-user skip settings (button / automatic / off); admins can set or fix times by hand |
-| | Credits detection for movies (no sibling episodes to compare; needs black-frame/text detection) |
+| ✅ | **Credits detection for movies**: a long run of dark, colourless frames near the end (text on black). A scene after the credits is kept, and Skip Credits jumps to it |
 | ✅ | Trailers or a custom intro video before a movie: per-user trailers of other unwatched movies (never rated above the movie; web player) and the admin's intro videos (web and TV app) |
 | ✅ | **Settings passcode**: a per-user 4–8 digit passcode locks Account changes and the Admin pages in the web UI until it (or the password) is entered; unlocks last 15 minutes of use; apps and API keys aren't affected; admins can clear a forgotten one |
-| | Recommendations from other users on Home (opt-in) |
+| ✅ | Recommendations from other users on Home: a Recommend button on movies and shows (with a note), a "Recommended for You" row for people who opt in under Account → Sharing |
 | | Discover: new shows and movie trailers (admin adds YouTube playlists) |
-| | Watch Together: invite a user and sync playback |
+| ✅ | Watch Together: start a watch party in the web player, invite people (or share the link); play, pause, seeking and the next episode stay in step for everyone |
 | | Notifications: new episodes, live sports starting, etc. |
 
 ## M4: Live TV (Dispatcharr replacement) 🟡 (phase 1 done)
@@ -121,7 +121,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | A documented public API ([API.md](API.md)) |
 | ✅ | Network settings: public URL, extra LAN networks, trusted reverse proxies, remote access on/off |
 | ✅ | **Profiles** under one account (Netflix / Plex Home style): "Who's watching?" after sign-in on the web and the TV app, separate history, Continue Watching, watchlist and preferences, a PIN per profile, and library limits for kids |
-| | Passkeys |
+| ✅ | Passkeys: add them under Account, sign in without a password or 2FA code (web, on the server's https:// address); admins can remove a user's passkeys |
 | | Plex/Tautulli account linking (with M7 import) |
 
 ## M7: Import ✅ (phases 1–2 done)

@@ -173,7 +173,8 @@ func (d *Detector) fp(ctx context.Context, ep *episode, p part) ([]uint32, error
 	return fp, err
 }
 
-// Pending analyzes every season that has new or unanalyzed episodes.
+// Pending analyzes every season that has new or unanalyzed episodes, and
+// every movie not yet checked for end credits.
 func (d *Detector) Pending(ctx context.Context) (string, error) {
 	seasons, err := d.st.SeasonsNeedingMarkers()
 	if err != nil {
@@ -187,5 +188,18 @@ func (d *Detector) Pending(ctx context.Context) (string, error) {
 		}
 		total += n
 	}
-	return fmt.Sprintf("analyzed %d seasons, set %d markers", len(seasons), total), nil
+	movies, err := d.st.MoviesNeedingMarkers()
+	if err != nil {
+		return "", err
+	}
+	for _, id := range movies {
+		found, err := d.Movie(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			total++
+		}
+	}
+	return fmt.Sprintf("analyzed %d seasons and %d movies, set %d markers", len(seasons), len(movies), total), nil
 }

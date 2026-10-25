@@ -89,6 +89,10 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
 | GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
 | GET | `/items/{id}` | A movie, show, season or episode, with files, streams, cast and children. Movies and shows include `externalRatings` (`imdb`, `imdbVotes`, `imdbId`, `rottenTomatoes`, `rottenTomatoesAudience`, `metacritic`) once a ratings provider has scores for them. |
+| GET | `/items/{id}/recommend` | People this movie or show can be recommended to (opted in, and able to see it): `[{id, name}]`. |
+| POST | `/items/{id}/recommend` | `{userIds, note}` → `{sent}`. Recommending again renews it. |
+| DELETE | `/recommendations/{itemId}` | Hide a title from your "Recommended for You" row. |
+| GET/PUT | `/me/recommendations` | `{accept}`: whether others may recommend titles to you (off by default). `/home` includes the row (`id: "recommended"`) and `recommendedBy` (item id → `{from, notes}`). |
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
@@ -127,6 +131,32 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | POST | `/dvr/recordings` | `{channelId, programId, series, keepLast}` (`keepLast`: series only, keep the newest N recordings, 0 = all). |
 | PATCH | `/dvr/rules/{id}` | `{keepLast}`; older recordings and their files are deleted right away. |
 | DELETE | `/dvr/recordings/{id}`, `/dvr/rules/{id}` | Cancel or delete. |
+
+### Watch Together
+
+| | | |
+|---|---|---|
+| POST | `/together` | `{itemId, position, paused}` starts a room → `{id, host, state, members, now}`. |
+| GET | `/together/{id}` | The room (404 once it has ended, or when you can't see what it plays). |
+| GET | `/together/{id}/events` | Server-sent events: the room as above after every change and join or leave. |
+| POST | `/together/{id}/state` | `{paused, position, itemId?}` play, pause, seek or move everyone to another movie or episode. |
+| GET / POST | `/together/{id}/people`, `/together/{id}/invite` | Who can be invited (people who accept recommendations and can see it); `{userIds}` invites them. |
+| GET | `/together/invites` | Your open invitations. `DELETE /together/{id}/invite` declines one. |
+
+`state.position` is seconds at `state.at` (server ms); while playing, add the time since, using `now` to correct for clock differences.
+
+### Passkeys
+
+| | | |
+|---|---|---|
+| POST | `/auth/passkey/begin` | No sign-in needed. → `{flow, options}` (WebAuthn request options, base64url). |
+| POST | `/auth/passkey/finish` | `{flow, credential, device}` with the browser's credential as JSON → `{token, user}` like `/auth/login` (no 2FA code asked). |
+| GET | `/me/passkeys` | Your passkeys: `[{id, name, createdAt, lastUsedAt}]`. |
+| POST | `/me/passkeys/begin` | → `{flow, options}` (WebAuthn creation options). |
+| POST | `/me/passkeys` | `{flow, credential, name}` adds the passkey. |
+| PUT / DELETE | `/me/passkeys/{id}` | Rename (`{name}`) or remove. |
+
+Passkeys belong to the address they were added on (the page's host), so add them on the address people sign in with, over https://.
 
 ## Admin
 

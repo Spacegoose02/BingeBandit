@@ -1,9 +1,10 @@
 import Hls from 'hls.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
+import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
 import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
@@ -19,13 +20,45 @@ export default function Player() {
   const { data: prefs } = useApi<Prefs>('/api/me/prefs')
   const startAt = Number(params.get('t')) || 0
   const playlistId = Number(params.get('playlist')) || 0
+  const nav = useNavigate()
+  const loc = useLocation()
+  // Watch Together: join the room first, so playback starts where everyone is
+  // (or follow the room to what it is playing now).
+  const roomParam = params.get('together')
+  const [joined, setJoined] = useState<{ roomId: string | null; start: number; announce: boolean; error?: string } | undefined>()
+  useEffect(() => {
+    setJoined(undefined)
+    if (!roomParam) {
+      setJoined({ roomId: null, start: 0, announce: false })
+      return
+    }
+    let stale = false
+    const moved = !!(loc.state as { togetherMove?: boolean } | null)?.togetherMove
+    api.get<TogetherRoom>(`/api/together/${roomParam}`).then(
+      (r) => {
+        if (stale) return
+        const here = r.state.itemId === Number(id)
+        if (!here && !moved) {
+          nav(`/play/${r.state.itemId}?together=${roomParam}`, { replace: true })
+          return
+        }
+        setJoined({ roomId: roomParam, start: here ? roomPosition(r.state, r.now - Date.now()) : 0, announce: !here })
+      },
+      (e) => !stale && setJoined({ roomId: null, start: 0, announce: false, error: (e as Error).message }),
+    )
+    return () => {
+      stale = true
+    }
+    // Only on arriving at an item: starting a room from the player adds the parameter without rejoining.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
   // Trailers and the intro video play only when a movie starts from the beginning.
   const [preRoll, setPreRoll] = useState<PreRollData | 'done' | undefined>()
   const isMovie = data?.item.kind === 'movie'
   useEffect(() => {
     setPreRoll(undefined)
     if (!prefs || !isMovie) return
-    if (startAt > 0 || playlistId || (!prefs.preRollTrailers && !prefs.preRollIntro)) {
+    if (startAt > 0 || playlistId || roomParam || (!prefs.preRollTrailers && !prefs.preRollIntro)) {
       setPreRoll('done')
       return
     }
@@ -41,16 +74,17 @@ export default function Player() {
   const preRollDone = useCallback(() => setPreRoll('done'), [])
   useDocumentTitle(data ? (data.item.kind === 'episode' ? `${data.item.showTitle} ${episodeLabel(data.item)}` : data.item.title) : 'Player')
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
-  if (!data || !prefs || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
+  if (!data || !prefs || !joined || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
   if (isMovie && preRoll && preRoll !== 'done') return <PreRoll data={preRoll} movieTitle={data.item.title} onDone={preRollDone} />
   return (
     <PlayerView
       key={id}
       detail={data}
       prefs={prefs}
-      startAt={startAt}
+      startAt={joined.roomId ? joined.start : startAt}
       fileId={Number(params.get('file')) || 0}
       playlistId={playlistId}
+      together={joined}
     />
   )
 }
@@ -180,12 +214,14 @@ function PlayerView({
   startAt,
   fileId,
   playlistId,
+  together,
 }: {
   detail: ItemDetail
   prefs: Prefs
   startAt: number
   fileId: number
   playlistId: number // continue through this playlist instead of the show
+  together: { roomId: string | null; announce: boolean; error?: string }
 }) {
   const { item, files = [] } = detail
   const file = files.find((f) => f.id === fileId) ?? files[0]
@@ -229,9 +265,9 @@ function PlayerView({
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
-  const [menu, setMenu] = useState<null | 'settings'>(null)
+  const [menu, setMenu] = useState<null | 'settings' | 'together'>(null)
   const [error, setError] = useState('')
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState(together.error ? `Couldn't join the watch party: ${together.error}` : '')
   const [upNext, setUpNext] = useState<Item | null>(null)
   const [countdown, setCountdown] = useState(10)
 
@@ -399,7 +435,7 @@ function PlayerView({
     }
   }, [subIndex, file])
 
-  const seek = (t: number) => {
+  const seekTo = (t: number) => {
     const video = videoRef.current
     if (!video) return
     t = Math.max(0, Math.min(t, Math.max(duration - 1, 0)))
@@ -431,11 +467,94 @@ function PlayerView({
     apply({ ...choiceRef.current, quality: lower })
   }
 
+  // Watch Together: everyone else's play, pause, seek and next item land
+  // here; this viewer's own go out through share().
+  const [, setParams] = useSearchParams()
+  const [roomId, setRoomId] = useState(together.roomId)
+  const roomJoined = useRef(false)
+  const pauseOnStart = useRef(false) // joined a paused room: stop once the first load starts playing
+  const tg = useTogether(roomId, (s, skew) => {
+    if (s.itemId !== item.id) {
+      nav(`/play/${s.itemId}?together=${roomId}`, { replace: true })
+      return
+    }
+    const v = videoRef.current
+    if (!v) return
+    const target = roomPosition(s, skew)
+    const wasPaused = v.paused
+    const jump = Math.abs(position() - target) > 2
+    if (jump) seekTo(target)
+    if (s.paused && !v.paused) v.pause()
+    else if (!s.paused && v.paused) v.play().catch(() => setToast('Press play to catch up with the others'))
+    const what = s.paused !== wasPaused ? (s.paused ? 'paused' : 'pressed play') : jump ? `skipped to ${formatClock(target)}` : ''
+    if (what && s.byName) setToast(`${s.byName} ${what}`)
+  })
+  const share = (paused: boolean, at = position()) => {
+    if (roomId) tg.send({ paused, position: at })
+  }
+  // On joining: match the room's play/pause, and tell the room when this viewer moved it to the next item.
+  useEffect(() => {
+    if (!tg.room || roomJoined.current) return
+    roomJoined.current = true
+    if (together.announce && roomId === together.roomId) tg.send({ itemId: item.id, paused: false, position: 0 })
+    else if (tg.room.state.paused) {
+      const v = videoRef.current
+      if (v && !v.paused && startedRef.current) v.pause()
+      else pauseOnStart.current = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tg.room])
+  // Stay within a few seconds of the room while it plays.
+  useEffect(() => {
+    if (!roomId) return
+    const t = window.setInterval(() => {
+      const v = videoRef.current
+      const r = tg.room
+      if (!v || !r || r.state.paused || v.paused || settlingRef.current) return
+      if (Math.abs(position() - tg.position()) > 3) seekTo(tg.position())
+    }, 5000)
+    return () => window.clearInterval(t)
+  })
+  useEffect(() => {
+    if (!tg.ended) return
+    setToast('The watch party has ended.')
+    setRoomId(null)
+  }, [tg.ended])
+  const startRoom = async () => {
+    const v = videoRef.current
+    const r = await api.post<TogetherRoom>('/api/together', { itemId: item.id, position: position(), paused: v?.paused ?? true })
+    roomJoined.current = true
+    setRoomId(r.id)
+    setParams((p) => {
+      p.set('together', r.id)
+      p.delete('t')
+      return p
+    }, { replace: true })
+  }
+  const leaveRoom = () => {
+    setRoomId(null)
+    setMenu(null)
+    setParams((p) => {
+      p.delete('together')
+      return p
+    }, { replace: true })
+  }
+
+  const seek = (t: number) => {
+    seekTo(t)
+    share(videoRef.current?.paused ?? true, Math.max(0, Math.min(t, Math.max(duration - 1, 0))))
+  }
+
   const togglePlay = () => {
     const v = videoRef.current
     if (!v) return
-    if (v.paused) v.play().catch(() => undefined)
-    else v.pause()
+    if (v.paused) {
+      v.play().catch(() => undefined)
+      share(false)
+    } else {
+      v.pause()
+      share(true)
+    }
   }
 
   const toggleFullscreen = () => {
@@ -501,7 +620,14 @@ function PlayerView({
       nav(-1)
     }
   }
-  const nextUrl = (next: Item) => `/play/${next.id}${playlistId ? `?playlist=${playlistId}` : ''}`
+  const nextUrl = (next: Item) => {
+    const q = new URLSearchParams()
+    if (playlistId) q.set('playlist', String(playlistId))
+    if (roomId) q.set('together', roomId)
+    return `/play/${next.id}${q.toString() ? `?${q}` : ''}`
+  }
+  // Moving on in a watch party takes everyone along.
+  const goNext = (next: Item) => nav(nextUrl(next), { replace: true, state: { togetherMove: !!roomId } })
 
   // Intro and credits markers: offer a button or act automatically, once per
   // visit, so seeking back into the intro doesn't skip it again.
@@ -516,9 +642,12 @@ function PlayerView({
     introDone.current = true
     if (intro) seek(intro.end)
   }
+  // A movie with a scene after the credits jumps to that scene instead of ending.
+  const afterCredits = !hasNext && !!credits && credits.end < duration - 5
   const skipCredits = () => {
     creditsDone.current = true
-    onEnded()
+    if (afterCredits && credits) seek(credits.end)
+    else onEnded()
   }
   useEffect(() => {
     if (inIntro && prefs.skipIntro === 'auto' && !introDone.current) {
@@ -526,14 +655,17 @@ function PlayerView({
       setToast('Skipped the intro')
       skipIntro()
     }
-    if (inCredits && prefs.skipCredits === 'auto' && !creditsDone.current && hasNext) skipCredits()
+    if (inCredits && prefs.skipCredits === 'auto' && !creditsDone.current && (hasNext || afterCredits)) {
+      if (afterCredits) setToast('Skipped to the scene after the credits')
+      skipCredits()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inIntro, inCredits])
 
   useEffect(() => {
     if (!upNext || !prefs.autoPlayNext) return
     if (countdown <= 0) {
-      nav(nextUrl(upNext), { replace: true })
+      goNext(upNext)
       return
     }
     const t = window.setTimeout(() => setCountdown((c) => c - 1), 1000)
@@ -587,6 +719,10 @@ function PlayerView({
         onPlaying={() => {
           // Report at once, so plugins following the player (Hue) see starts and resumes.
           if (!startedRef.current || paused) queueMicrotask(() => report())
+          if (pauseOnStart.current) {
+            pauseOnStart.current = false
+            videoRef.current?.pause()
+          }
           startedRef.current = true
           settlingRef.current = false
           retries.current = 0
@@ -694,7 +830,21 @@ function PlayerView({
             {mode === 'direct' ? 'Direct Play' : choice.quality ? `${resolutionLabel(choice.quality)} Transcode` : 'Transcode'}
           </span>
           <div className="menu-anchor">
-            <button className="icon-btn" onClick={() => setMenu(menu ? null : 'settings')} aria-label="Playback settings">
+            <button
+              className={`icon-btn ${roomId ? 'active' : ''}`}
+              onClick={() => setMenu(menu === 'together' ? null : 'together')}
+              aria-label="Watch together"
+              title={roomId ? `Watching together${tg.room ? ` (${tg.room.members.length})` : ''}` : 'Watch together'}
+            >
+              <Icon name="users" size={22} />
+              {roomId && tg.room && <span className="together-count">{tg.room.members.length}</span>}
+            </button>
+            {menu === 'together' && (
+              <TogetherPanel itemId={item.id} room={tg.room} roomId={roomId} onStart={startRoom} onLeave={leaveRoom} />
+            )}
+          </div>
+          <div className="menu-anchor">
+            <button className="icon-btn" onClick={() => setMenu(menu === 'settings' ? null : 'settings')} aria-label="Playback settings">
               <Icon name="sliders" size={22} />
             </button>
             {menu === 'settings' && (
@@ -745,7 +895,7 @@ function PlayerView({
               {upNext.kind === 'episode' ? `${upNext.showTitle} · ${episodeLabel(upNext)} · ${upNext.title}` : upNext.title}
             </div>
             <div className="actions">
-              <button className="btn btn-primary" onClick={() => nav(nextUrl(upNext), { replace: true })}>
+              <button className="btn btn-primary" onClick={() => goNext(upNext)}>
                 <Icon name="play" fill size={16} /> Play now
               </button>
               <button

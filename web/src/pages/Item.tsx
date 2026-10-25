@@ -7,6 +7,7 @@ import { AddToPlaylist, WatchlistButton } from '../components/AddToPlaylist'
 import { EditItem } from '../components/EditItem'
 import { MatchDialog } from '../components/MatchDialog'
 import { MetaLine } from '../components/Hero'
+import { RecommendButton } from '../components/Recommend'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
@@ -64,7 +65,9 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
 
   const detectMarkers = async () => {
     await api.post(`/api/admin/items/${item.id}/detect-markers`).catch((e) => alert(e.message))
-    alert('Detecting intros and credits in the background. It takes a few seconds per episode; open an episode afterwards to see the results.')
+    alert(item.kind === 'movie'
+      ? 'Looking for the end credits in the background. It takes a few seconds; play the movie afterwards to see the Skip Credits button.'
+      : 'Detecting intros and credits in the background. It takes a few seconds per episode; open an episode afterwards to see the results.')
   }
 
   const watchedNow = playable ? item.watch.watched : !!item.childCount && item.unwatchedCount === 0
@@ -138,6 +141,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               </button>
               {(item.kind === 'movie' || item.kind === 'show') && <WatchlistButton item={item} onChange={reload} />}
               <AddToPlaylist item={item} />
+              {(item.kind === 'movie' || item.kind === 'show') && <RecommendButton item={item} />}
               {canDownload && file && (
                 <a className="btn btn-glass icon-only" href={`/api/files/${file.id}/direct?download=1`} download title="Download original file">
                   <Icon name="download" size={18} />
@@ -153,7 +157,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="search" size={18} />
                 </button>
               )}
-              {user?.isAdmin && (item.kind === 'show' || item.kind === 'season') && (
+              {user?.isAdmin && (item.kind === 'show' || item.kind === 'season' || item.kind === 'movie') && (
                 <button className="btn btn-glass icon-only" onClick={detectMarkers} title="Detect intros and credits now">
                   <Icon name="activity" size={18} />
                 </button>

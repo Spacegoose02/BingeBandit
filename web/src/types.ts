@@ -1,5 +1,12 @@
 // Mirrors the JSON shapes in server/internal/store and server/internal/api.
 
+export interface Passkey {
+  id: number
+  name: string
+  createdAt: number
+  lastUsedAt: number
+}
+
 export interface User {
   id: number
   username: string
@@ -7,6 +14,8 @@ export interface User {
   createdAt: number
   allLibraries: boolean
   libraryIds?: number[]
+  /** How many passkeys (admin user list only). */
+  passkeys?: number
   profilePublic: boolean
   totpEnabled: boolean
   shareActivity: boolean
@@ -492,6 +501,14 @@ export interface HomeData {
   hero: Item[]
   continueWatching: Item[]
   rows: { id: string; title: string; items: Item[] }[]
+  recommendedBy?: Record<string, Recommendation> // item id → who recommended it
+}
+
+export interface Recommendation {
+  itemId: number
+  from: string[]
+  notes?: string[] // "Name: note"
+  at: number
 }
 
 export interface ScanStatus {

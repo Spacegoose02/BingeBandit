@@ -2,7 +2,24 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-25, trailers and intro video before movies (M3)._
+_Last updated: 2026-10-25, Watch Together (M3)._
+
+## Watch Together (M3)
+
+- **Server** (`api/together.go`): rooms live in memory (`togetherRooms`), keyed by a random id that doubles as the invite link (`/play/<item>?together=<id>`). State is item, paused, position at a server time, a revision and who changed it. Every change and every join/leave is pushed to everyone over SSE (`/together/{id}/events`, 20 s keep-alive, `X-Accel-Buffering: no`). Anyone in the room can control it. Rooms with nobody connected for 10 minutes are dropped; invites expire after 6 hours. Only people who can see what is playing can open a room.
+- **Invites:** to people who accept recommendations (the opt-in from the recommendations feature) and can see the item; they get a banner at the top of every page (`TogetherInvites`, polls every 20 s) with Join / Not now. Anyone else can be sent the link.
+- **Web player:** people icon → start a watch party / invite / copy link / leave. Joining fetches the room first and starts at the room's position (or follows it to what it plays now). Local play/pause/seek (buttons, keys, seek bar, skip intro) are sent; remote ones are applied with a toast ("Sam paused"). Every 5 s a playing viewer more than 3 s off the room jumps back in step. Next episode / playlist item moves everyone (`state: {togetherMove}` on the navigation, announced on arrival). Pre-roll is skipped in watch parties.
+- **Not in the TV app yet.** Tested: API test (access, invites, SSE updates, item change) and two Chromium browsers in one party (pause, seek while paused, the guest pressing play).
+
+## Passkeys (M6)
+
+- **Library:** `github.com/go-webauthn/webauthn`. Table `passkeys` (migration 23): the library's credential JSON per row, credential id unique. User handle = the user id as 8 big-endian bytes; sign-in checks the handle matches the credential's owner.
+- **Flows** (`api/passkeys.go`): begin/finish pairs keep the challenge in memory (`passkeyFlows`, 5 min, single use). The RP ID comes from the page's `Origin` only when that is the request's Host or the public URL, else from the request address; a flow begun on one address can't be finished on another.
+- **Sign-in** is discoverable (no username): Login → *Sign in with a passkey*. It skips the 2FA code (the passkey already checks the device and the person) and counts failures in the login rate limiter. Profiles sign in through their account and can't add passkeys.
+- **Account → Passkeys:** add (named), rename, remove; guarded by the settings passcode like other account changes. **Admin → Users:** *Remove passkeys* for a lost device.
+- Browsers only offer passkeys on secure pages: the server's https:// address (or localhost). On plain http:// LAN addresses the button is hidden and the Account section says why.
+- **Tested:** endpoint test (RP ID choice, single-use flows, own-only delete, admin remove) and the full add → sign in → removed-passkey-fails flow in Chromium with a virtual authenticator. **Not tried** with a real phone or password manager.
+- **TV app:** unchanged (signs in by code).
 
 ## Trailers and intro video before movies (M3)
 
@@ -345,6 +362,7 @@ _Last updated: 2026-10-25, trailers and intro video before movies (M3)._
 - Pure Go (no Chromaprint dependency): `internal/markers`. The **Detect intros and credits** scheduled task (nightly, maintenance window) analyzes seasons that have new episodes. A show or season page has a "Detect now" button (admins).
 - Tested with generated episodes that share theme and credits music at different offsets and bitrates. All markers landed within about 1s, with no false positives on unrelated audio. **Not yet tried on real TV episodes**: the thresholds `maxBitErrors`, `maxGapFrames` and `edgeFrames` may need tuning against a real season.
 - `markers` table (migration 6): `source` is `detected` or `manual`. Manual markers (Edit → Advanced on an episode or movie) are never overwritten.
+- **Movies** (`markers/credits.go`): no sibling episodes to compare, so the same task samples the picture in the last 15 minutes (or last fifth). Keyframes only (`-skip_frame nokey`); a file with too few keyframes falls back to one frame every 2s. ffmpeg `signalstats` gives each frame's average brightness and saturation, and dark, colourless frames count as credits. The longest run of 60s or more wins, bridging stretches of normal picture shorter than 8s. If it ends within 45s of the end, it runs to the end. Otherwise what follows is a post-credits scene: Skip Credits (and the automatic setting) jumps to it instead of ending the movie. Credits over footage or on coloured backgrounds aren't caught; admins can set those by hand or press Detect on the movie page. Tested with generated films only, not yet on real movies.
 - Player: Skip Intro, plus Next / Skip Credits. Skipping the credits counts as finishing the episode. User settings for each: button, automatic or off.
 - Movies get no automatic markers (there's nothing to compare against), but manual ones work.
 

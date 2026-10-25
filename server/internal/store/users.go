@@ -19,6 +19,7 @@ type User struct {
 	TOTPEnabled   bool    `json:"totpEnabled"`
 	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
+	Passkeys      int     `json:"passkeys,omitempty"`   // how many; only filled by ListUsers
 	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
 	HasPasscode   bool    `json:"hasPasscode"`          // settings are locked until the passcode is entered
 	OwnerID       int64   `json:"ownerId,omitempty"`    // set for a profile: the account it belongs to
@@ -167,6 +168,9 @@ func (s *Store) ListUsers() ([]*User, error) {
 	}
 	for _, u := range out {
 		if u.LibraryIDs, err = s.UserLibraryIDs(u.ID); err != nil {
+			return nil, err
+		}
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM passkeys WHERE user_id = ?`, u.ID).Scan(&u.Passkeys); err != nil {
 			return nil, err
 		}
 	}

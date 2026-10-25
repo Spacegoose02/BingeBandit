@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { PosterCard, WideCard } from '../components/Cards'
@@ -5,8 +6,8 @@ import { Hero } from '../components/Hero'
 import { Icon } from '../components/Icon'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
-import { img } from '../api'
-import type { FriendActivity, HomeData } from '../types'
+import { api, img } from '../api'
+import type { FriendActivity, HomeData, Item, Recommendation } from '../types'
 
 /** What people who chose to share are watching right now. */
 function FriendsRow() {
@@ -33,6 +34,34 @@ function FriendsRow() {
             <div className="card-title" title={f.title}>{f.title}</div>
             <div className="card-sub">{f.paused ? 'Paused' : f.subtitle || 'Watching now'}</div>
           </Link>
+        )
+      })}
+    </Row>
+  )
+}
+
+/** Titles people recommended to you, with who did; each can be dismissed. */
+function RecommendedRow({ title, items, by }: { title: string; items: Item[]; by: Record<string, Recommendation> }) {
+  const [hidden, setHidden] = useState<number[]>([])
+  const shown = items.filter((it) => !hidden.includes(it.id))
+  if (!shown.length) return null
+  const dismiss = (id: number) => {
+    setHidden((h) => [...h, id])
+    api.del(`/api/recommendations/${id}`).catch(() => undefined)
+  }
+  return (
+    <Row title={title}>
+      {shown.map((it) => {
+        const rec = by[it.id]
+        const from = rec ? `From ${rec.from.join(', ')}` : undefined
+        return (
+          <div key={it.id} className="recommended-card" title={rec?.notes?.join('\n')}>
+            <PosterCard item={it} subtitle={from} />
+            {!!rec?.notes?.length && <div className="rec-note">“{rec.notes[0].split(': ').slice(1).join(': ')}”</div>}
+            <button className="rec-dismiss" onClick={() => dismiss(it.id)} title="Not interested">
+              <Icon name="x" size={14} />
+            </button>
+          </div>
         )
       })}
     </Row>
@@ -82,13 +111,17 @@ export default function Home() {
           </Row>
         )}
         <FriendsRow />
-        {data.rows.map((row) => (
-          <Row key={row.id} title={row.title}>
-            {row.items.map((it) => (
-              <PosterCard key={it.id} item={it} />
-            ))}
-          </Row>
-        ))}
+        {data.rows.map((row) =>
+          row.id === 'recommended' ? (
+            <RecommendedRow key={row.id} title={row.title} items={row.items} by={data.recommendedBy ?? {}} />
+          ) : (
+            <Row key={row.id} title={row.title}>
+              {row.items.map((it) => (
+                <PosterCard key={it.id} item={it} />
+              ))}
+            </Row>
+          ),
+        )}
       </div>
     </div>
   )

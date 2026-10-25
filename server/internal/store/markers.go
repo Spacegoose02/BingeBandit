@@ -87,6 +87,26 @@ func (s *Store) SeasonsNeedingMarkers() ([]int64, error) {
 	return out, rows.Err()
 }
 
+// MoviesNeedingMarkers lists movies whose end credits haven't been looked for
+// yet, in libraries where detection is on.
+func (s *Store) MoviesNeedingMarkers() ([]int64, error) {
+	rows, err := s.db.Query(`SELECT id FROM items WHERE kind = 'movie' AND markers_at = 0
+		AND library_id IN (SELECT id FROM libraries WHERE skip_markers = 0) ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // SeasonIDs returns the seasons of a show, or the season itself.
 func (s *Store) SeasonIDs(id int64) ([]int64, error) {
 	rows, err := s.db.Query(`SELECT id FROM items WHERE kind = 'season' AND (id = ?1 OR parent_id = ?1) ORDER BY season_number`, id)
