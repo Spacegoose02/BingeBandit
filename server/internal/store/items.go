@@ -294,10 +294,11 @@ func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error
 		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
 }
 
-// TrailerCandidates are the newest movies the user can see, hasn't watched
-// and that have a trailer, other than exceptID.
+// TrailerCandidates are the newest movies the user can see and hasn't
+// watched, other than exceptID. The caller keeps the ones with a trailer
+// (a YouTube one, or a file in the movie's folder).
 func (s *Store) TrailerCandidates(uid, exceptID int64, limit int) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE i.kind = 'movie' AND i.trailer != '' AND i.id != @except AND COALESCE(w.watched, 0) = 0 AND `+visible+`
+	return s.queryItems(itemSelect+` WHERE i.kind = 'movie' AND i.id != @except AND COALESCE(w.watched, 0) = 0 AND `+visible+`
 		ORDER BY i.added_at DESC LIMIT @limit`, uidArg(uid), sql.Named("except", exceptID), sql.Named("limit", limit))
 }
 

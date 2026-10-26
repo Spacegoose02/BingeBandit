@@ -20,7 +20,10 @@ type PreRollTrailer struct {
 	ItemID  int64  `json:"itemId"`
 	Title   string `json:"title"`
 	Year    int    `json:"year,omitempty"`
-	YouTube string `json:"youtube"` // video key
+	YouTube string `json:"youtube,omitempty"` // video key
+	// URL is the movie's own trailer file, when its folder has one; players
+	// prefer it, and the TV app can only play these.
+	URL string `json:"url,omitempty"`
 }
 
 // usRatings orders US movie ratings, so trailers before a movie are never
@@ -49,8 +52,23 @@ func (s *Server) preRoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if prefs.PreRollTrailers > 0 {
-		if cands, err := s.Store.TrailerCandidates(u.ID, it.ID, 30); err == nil {
-			resp["trailers"] = pickTrailers(cands, it.ContentRating, prefs.PreRollTrailers)
+		if cands, err := s.Store.TrailerCandidates(u.ID, it.ID, 40); err == nil {
+			local := map[int64]string{}
+			var withTrailer []*store.Item
+			for _, c := range cands {
+				files, _ := s.Store.FilesForItem(c.ID)
+				if t := localTrailers(c.ID, files); len(t) > 0 {
+					local[c.ID] = t[0].URL
+				}
+				if c.Trailer != "" || local[c.ID] != "" {
+					withTrailer = append(withTrailer, c)
+				}
+			}
+			picked := pickTrailers(withTrailer, it.ContentRating, prefs.PreRollTrailers)
+			for i := range picked {
+				picked[i].URL = local[picked[i].ItemID]
+			}
+			resp["trailers"] = picked
 		}
 	}
 	if prefs.PreRollIntro {
@@ -137,20 +155,5 @@ func (s *Server) introVideo(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such intro video")
 		return
 	}
-	f, err := os.Open(files[n])
-	if err != nil {
-		writeErr(w, http.StatusNotFound, "the intro video is not available")
-		return
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "cannot read file")
-		return
-	}
-	if ct, ok := videoMime[strings.ToLower(filepath.Ext(files[n]))]; ok {
-		w.Header().Set("Content-Type", ct)
-	}
-	w.Header().Set("Cache-Control", "private, max-age=3600")
-	http.ServeContent(w, r, filepath.Base(files[n]), st.ModTime(), f)
+	serveVideoFile(w, r, files[n])
 }

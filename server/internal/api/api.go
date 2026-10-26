@@ -240,6 +240,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/libraries", s.libraries)
 			r.Get("/libraries/{id}/items", s.libraryItems)
 			r.Get("/items/{id}", s.item)
+			r.Get("/items/{id}/trailers/{n}", s.trailerFile)
 			r.Get("/items/{id}/next", s.nextEpisode)
 			r.Get("/items/{id}/preroll", s.preRoll)
 			r.Get("/preroll/intro/{n}", s.introVideo)

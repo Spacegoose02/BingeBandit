@@ -47,6 +47,8 @@ func (a *app) routes() http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("PUT /lights", admin(a.assign))
+	// Anyone signed in: the rooms and zones a device can pick for its lights.
+	mux.HandleFunc("GET /areas", a.areas)
 	mux.HandleFunc("POST /test", admin(a.test))
 	return mux
 }
@@ -72,6 +74,44 @@ func (a *app) status(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// areas lists the Hue rooms and zones that hold at least one chosen light,
+// for the "Hue lights" choice on each device.
+func (a *app) areas(w http.ResponseWriter, r *http.Request) {
+	if _, ok := bbplugin.UserOf(r); !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+		return
+	}
+	type area struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Type   string `json:"type"`
+		Lights int    `json:"lights"`
+	}
+	out := []area{}
+	conf := a.conf.get()
+	if conf.Username == "" {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	all, err := newBridge(conf.Bridge, conf.Username).Areas(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, ar := range all {
+		n := 0
+		for _, id := range ar.Lights {
+			if conf.Lights[id] != "" {
+				n++
+			}
+		}
+		if n > 0 {
+			out = append(out, area{ar.ID, ar.Name, ar.Type, n})
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *app) pair(w http.ResponseWriter, r *http.Request) {

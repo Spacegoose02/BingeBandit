@@ -18,7 +18,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "hue-sync",
 	Name:        "Hue Sync",
-	Version:     "1.0.0",
+	Version:     "1.1.0",
 	Description: "Philips Hue lights follow the colours on screen while movies and shows play.",
 	Author:      "BingeBandit",
 	Events:      []string{"player.play", "player.pause", "player.resume", "player.progress", "player.stop"},
