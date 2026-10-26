@@ -32,8 +32,9 @@ const (
 	clientBuffer   = 512              // chunks a raw-TS viewer may lag before being dropped
 	headBytes      = 3 << 20          // start of the stream kept for codec probing
 	maxPasses      = 3                // times to cycle through a channel's streams before giving up
-	goodRun        = 2 * time.Minute  // a stream that played this long resets the pass count
+	goodRun        = 30 * time.Second // a stream that played this long resets the pass count
 	benchFor       = 10 * time.Minute // a stream left for being slow is tried last for this long
+	quietFor       = 5 * time.Second  // a steady stream quiet this long (beyond its usual gaps) is reconnected
 	hlsSegmentSecs = 2
 	hlsMinSegments = 8 // playlist length when time-shift is off
 )
@@ -359,6 +360,7 @@ type Relay struct {
 	switched  time.Time               // when the last slow-stream switch happened
 
 	sourceID atomic.Int64
+	target   atomic.Int64 // the current HLS upstream's segment length (ns), 0 for plain TS
 	bytesIn  atomic.Int64
 	stopped  atomic.Bool
 	failures atomic.Int32 // upstream switches since start
@@ -473,6 +475,20 @@ func (r *Relay) run() {
 			pulls++
 			began := time.Now()
 			err := r.pull(s)
+			// A stream that went quiet after playing is usually the
+			// provider hiccuping: connecting again right away gets it back
+			// within the players' cushion, sooner than waiting out the stall
+			// timeout and moving to a stream that may be behind this one.
+			for retry := 0; retry < 2 && r.ctx.Err() == nil; retry++ {
+				var q quietError
+				if !errors.As(err, &q) {
+					break
+				}
+				r.failures.Add(1)
+				log.Printf("live tv: channel %v %q: stream %q %v; reconnecting", r.channel.Number, r.channel.Name, s.Name, err)
+				r.restartHLSSame()
+				err = r.pull(s)
+			}
 			r.sourceID.Store(0)
 			if r.ctx.Err() != nil {
 				return
@@ -514,6 +530,12 @@ type slowError struct{ why string }
 
 func (e slowError) Error() string { return e.why }
 
+// quietError is a stream that stopped sending for a few seconds after it
+// had been keeping up, worth connecting to again before giving up on it.
+type quietError struct{ secs float64 }
+
+func (e quietError) Error() string { return fmt.Sprintf("went quiet for %.0fs", e.secs) }
+
 // bench puts a stream that was too slow at the back of the queue for a while,
 // so the channel doesn't bounce back to it (and replay what viewers already
 // saw from the other stream).
@@ -550,9 +572,11 @@ func (r *Relay) passOrder() []store.ChannelStream {
 // canLeaveSlow reports whether there's somewhere better to go than the
 // current, slow stream: another stream that hasn't itself just been left for
 // being slow. Without one, staying put beats cycling between streams that
-// are each behind the other. Called with r.mu held.
-func (r *Relay) canLeaveSlow() bool {
-	if r.m.st.Setting(store.SettingLiveSwitchSlow) == "false" {
+// are each behind the other. switchSlow is the admin's setting, read before
+// taking r.mu so a busy database never holds up the relay. Called with r.mu
+// held.
+func (r *Relay) canLeaveSlow(switchSlow bool) bool {
+	if !switchSlow {
 		return false
 	}
 	for _, s := range r.channel.Streams {
@@ -595,7 +619,20 @@ func (r *Relay) pull(s store.ChannelStream) error {
 	// be buffering) and the channel has another stream to try.
 	stall := r.m.stallTimeout()
 	limit := r.m.slowLimit()
-	var last atomic.Int64
+	// An HLS upstream arrives a segment at a time, with a gap about as long
+	// as a segment (more when the provider is late updating its playlist)
+	// between each. That's normal, not a stall: ffmpeg starts a few segments
+	// back, so players have that much in hand.
+	quietMin := quietFor
+	r.target.Store(0)
+	if p, ok := body.(*procReader); ok && p.target > 0 {
+		r.target.Store(int64(p.target))
+		stall = max(stall, 2*p.target+stall/2)
+		limit += p.target.Seconds()
+		quietMin = stall // the stall timeout covers it
+	}
+	var last, maxGap atomic.Int64 // last data; the longest gap between data so far
+	var flowing atomic.Bool
 	last.Store(time.Now().UnixNano())
 	go func() {
 		t := time.NewTicker(2 * time.Second)
@@ -605,13 +642,24 @@ func (r *Relay) pull(s store.ChannelStream) error {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				if time.Since(time.Unix(0, last.Load())) > stall {
+				quiet := time.Since(time.Unix(0, last.Load()))
+				if quiet > stall {
 					cancel(fmt.Errorf("no data for %s", stall))
 					return
 				}
-				if behind, ok := pc.behind(); ok && behind > limit {
+				// Quiet for longer than this stream ever pauses: it has
+				// stopped, not just finished a burst. (An HLS upstream
+				// arrives a segment at a time, with gaps as long as its
+				// segments, so the limit grows with the gaps it has had.)
+				if flowing.Load() && quiet >= quietMin && quiet >= time.Duration(maxGap.Load())+2*time.Second {
+					cancel(quietError{quiet.Seconds()})
+					return
+				}
+				behind, measured := pc.behind()
+				if measured && behind > limit {
+					switchSlow := r.m.switchSlow()
 					r.mu.Lock()
-					leave := r.canLeaveSlow() && time.Since(r.switched) > stall
+					leave := r.canLeaveSlow(switchSlow) && time.Since(r.switched) > stall
 					if leave {
 						r.switched = time.Now()
 					}
@@ -629,7 +677,13 @@ func (r *Relay) pull(s store.ChannelStream) error {
 		buf := make([]byte, 64*1024)
 		n, err := body.Read(buf)
 		if n > 0 {
-			last.Store(time.Now().UnixNano())
+			now := time.Now().UnixNano()
+			if flowing.Swap(true) {
+				if gap := now - last.Load(); gap > maxGap.Load() {
+					maxGap.Store(gap)
+				}
+			}
+			last.Store(now)
 			pc.feed(buf[:n])
 			r.broadcast(buf[:n])
 		}
@@ -671,14 +725,20 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	final := resp.Request.URL // after redirects, which providers love
 	if strings.Contains(ct, "mpegurl") || strings.HasSuffix(strings.ToLower(final.Path), ".m3u8") {
+		target := hlsTargetDuration(ctx, resp, userAgent)
 		resp.Body.Close()
-		return m.remuxHLS(ctx, final.String(), userAgent)
+		rc, err := m.remuxHLS(ctx, final.String(), userAgent)
+		if err != nil {
+			return nil, err
+		}
+		rc.target = target
+		return rc, nil
 	}
 	return resp.Body, nil
 }
 
 // remuxHLS runs ffmpeg to follow a live HLS playlist and emit MPEG-TS.
-func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
+func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string) (*procReader, error) {
 	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, ffmpegProxyArgs()...)
 	args = append(args, "-user_agent", userAgent, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
 		"-i", url, "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-f", "mpegts", "pipe:1")
@@ -701,6 +761,56 @@ type procReader struct {
 	io.ReadCloser
 	cmd    *exec.Cmd
 	stderr *bytes.Buffer
+	target time.Duration // an HLS upstream's segment length, when known
+}
+
+// defaultHLSTarget is the segment length assumed for an HLS upstream whose
+// playlist doesn't say (IPTV providers commonly use 6 to 10 seconds).
+const defaultHLSTarget = 10 * time.Second
+
+var reTargetDuration = regexp.MustCompile(`#EXT-X-TARGETDURATION:\s*(\d+)`)
+
+// hlsTargetDuration reads an HLS upstream's segment length from its playlist
+// (the first variant's, for a master playlist).
+func hlsTargetDuration(ctx context.Context, resp *http.Response, userAgent string) time.Duration {
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if m := reTargetDuration.FindSubmatch(b); m != nil {
+		if secs, err := strconv.Atoi(string(m[1])); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	if !bytes.Contains(b, []byte("#EXT-X-STREAM-INF")) {
+		return defaultHLSTarget
+	}
+	var variant string
+	lines := strings.Split(string(b), "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(l, "#EXT-X-STREAM-INF") && i+1 < len(lines) {
+			variant = strings.TrimSpace(lines[i+1])
+			break
+		}
+	}
+	u, err := resp.Request.URL.Parse(variant)
+	if variant == "" || err != nil {
+		return defaultHLSTarget
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return defaultHLSTarget
+	}
+	req.Header.Set("User-Agent", userAgent)
+	vr, err := upstreamClient.Do(req)
+	if err != nil {
+		return defaultHLSTarget
+	}
+	defer vr.Body.Close()
+	b, _ = io.ReadAll(io.LimitReader(vr.Body, 1<<20))
+	if m := reTargetDuration.FindSubmatch(b); m != nil {
+		if secs, err := strconv.Atoi(string(m[1])); err == nil && secs > 0 {
+			return time.Duration(secs) * time.Second
+		}
+	}
+	return defaultHLSTarget
 }
 
 func (p *procReader) Read(b []byte) (int, error) {
@@ -795,6 +905,7 @@ func (r *Relay) stat() RelayStat {
 	}
 	cur := r.rateBps
 	r.rateMu.Unlock()
+	wantHW := r.m.st.Setting(store.SettingHWEncoder)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := RelayStat{
@@ -812,8 +923,8 @@ func (r *Relay) stat() RelayStat {
 		st.Video = r.hls.video
 		if st.Video == "transcode" {
 			st.Encoder = r.hls.encoder
-			if want := r.m.st.Setting(store.SettingHWEncoder); want != "none" && want != st.Encoder {
-				st.HWError = r.m.hw.lastFailure(want)
+			if wantHW != "none" && wantHW != st.Encoder {
+				st.HWError = r.m.hw.lastFailure(wantHW)
 			}
 		}
 	}
@@ -898,7 +1009,13 @@ func (h *hlsOutput) isStopped() bool {
 
 // restartHLS replaces the channel's HLS output, if one is running, with a
 // new one that carries on the same playlist after a discontinuity.
-func (r *Relay) restartHLS() {
+func (r *Relay) restartHLS() { r.restartHLSWith(false) }
+
+// restartHLSSame is restartHLS for a reconnect to the same stream: its video
+// is known, so the new output starts at once instead of probing it again.
+func (r *Relay) restartHLSSame() { r.restartHLSWith(true) }
+
+func (r *Relay) restartHLSWith(sameVideo bool) {
 	r.mu.Lock()
 	h := r.hls
 	if h == nil {
@@ -908,16 +1025,17 @@ func (r *Relay) restartHLS() {
 	r.hls = nil
 	r.mu.Unlock()
 	h.close(false)
-	r.ensureHLSAfter(h)
+	r.ensureHLSAfter(h, sameVideo)
 }
 
 // ensureHLS starts the channel's HLS output if it isn't running.
-func (r *Relay) ensureHLS() { r.ensureHLSAfter(nil) }
+func (r *Relay) ensureHLS() { r.ensureHLSAfter(nil, false) }
 
 // ensureHLSAfter starts the HLS output once prev (an output being replaced)
 // has exited. Every output of a relay writes to the same folder and playlist,
-// so players keep fetching the same URLs across upstream switches.
-func (r *Relay) ensureHLSAfter(prev *hlsOutput) {
+// so players keep fetching the same URLs across upstream switches. With
+// sameVideo, the new output carries on prev's choice of copying or converting.
+func (r *Relay) ensureHLSAfter(prev *hlsOutput, sameVideo bool) {
 	r.mu.Lock()
 	if r.hls != nil || r.stopped.Load() {
 		r.mu.Unlock()
@@ -940,8 +1058,9 @@ func (r *Relay) ensureHLSAfter(prev *hlsOutput) {
 		}
 		// Wait briefly for stream data so we can tell whether the browser can
 		// take the video as-is (H.264) or it needs converting.
-		codec := r.probeVideo()
-		if codec != "" && codec != "h264" {
+		if sameVideo && prev != nil {
+			h.video = prev.video
+		} else if codec := r.probeVideo(); codec != "" && codec != "h264" {
 			h.video = "transcode"
 		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -1071,6 +1190,21 @@ func (m *Manager) stallTimeout() time.Duration {
 		secs = 12
 	}
 	return time.Duration(secs) * time.Second
+}
+
+// switchSlow is whether the admin lets the relay leave a stream that falls
+// behind real time.
+func (m *Manager) switchSlow() bool { return m.st.Setting(store.SettingLiveSwitchSlow) != "false" }
+
+// ChannelBufferSeconds is how far behind live players of a channel should
+// sit: the usual cushion, plus a segment's worth when the channel's upstream
+// is HLS, which arrives a segment at a time with quiet in between.
+func (m *Manager) ChannelBufferSeconds(channelID int64) int {
+	secs := m.BufferSeconds()
+	if r := m.relay(channelID); r != nil {
+		secs += int(time.Duration(r.target.Load()).Seconds())
+	}
+	return secs
 }
 
 // StallSeconds is the stall timeout, for players deciding when to report
@@ -1209,9 +1343,10 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 	if secs < stall.Seconds() {
 		return false, "not long enough"
 	}
+	switchSlow, buffer := m.switchSlow(), float64(m.BufferSeconds())
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.canLeaveSlow() {
+	if !r.canLeaveSlow(switchSlow) {
 		return false, "no other stream to switch to"
 	}
 	if r.skip == nil {
@@ -1232,9 +1367,9 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 	}
 	var why string
 	switch {
-	case measured && behind >= max(3, float64(m.BufferSeconds())/2):
+	case measured && behind >= max(3, buffer/2):
 		why = fmt.Sprintf("viewers buffering; the stream is %.0fs behind real time", behind)
-	case segAge > 3*hlsSegmentSecs*time.Second+2*time.Second:
+	case segAge > 3*hlsSegmentSecs*time.Second+2*time.Second+time.Duration(r.target.Load()):
 		why = fmt.Sprintf("viewers buffering; no new video for %.0fs", segAge.Seconds())
 	default:
 		// One player buffering while the stream keeps up is that player's

@@ -30,16 +30,20 @@ type channel struct {
 	tone   int    // Hz, so channels sound different
 	flaky  bool   // stops after 20s, to exercise fallback
 	hls    bool   // served as a live HLS playlist instead of raw TS
+	segs   int    // HLS segment length in seconds (2 if unset)
 }
 
 var channels = []channel{
-	{1, "Bandit News", "News", "testsrc2=size=1280x720:rate=30", "h264", 440, false, false},
-	{2, "Bandit Sports", "Sports", "smptehdbars=size=1280x720:rate=30", "h264", 523, false, false},
-	{3, "Flaky Sports", "Sports", "testsrc=size=1280x720:rate=30", "h264", 587, true, false},
-	{4, "Retro Broadcast", "Entertainment", "smptebars=size=720x480:rate=30000/1001", "mpeg2", 659, false, false},
-	{5, "Kids Zone", "Kids", "mandelbrot=size=960x540:rate=25", "h264", 698, false, false},
-	{6, "Nature HD", "Entertainment", "life=size=1280x720:rate=30:mold=10:ratio=0.1", "h264", 784, false, false},
-	{7, "Stream Seven (HLS)", "News", "rgbtestsrc=size=1280x720:rate=30", "h264", 880, false, true},
+	{1, "Bandit News", "News", "testsrc2=size=1280x720:rate=30", "h264", 440, false, false, 0},
+	{2, "Bandit Sports", "Sports", "smptehdbars=size=1280x720:rate=30", "h264", 523, false, false, 0},
+	{3, "Flaky Sports", "Sports", "testsrc=size=1280x720:rate=30", "h264", 587, true, false, 0},
+	{4, "Retro Broadcast", "Entertainment", "smptebars=size=720x480:rate=30000/1001", "mpeg2", 659, false, false, 0},
+	{5, "Kids Zone", "Kids", "mandelbrot=size=960x540:rate=25", "h264", 698, false, false, 0},
+	{6, "Nature HD", "Entertainment", "life=size=1280x720:rate=30:mold=10:ratio=0.1", "h264", 784, false, false, 0},
+	{7, "Stream Seven (HLS)", "News", "rgbtestsrc=size=1280x720:rate=30", "h264", 880, false, true, 0},
+	// Long segments, as many IPTV providers use: the video arrives in
+	// 10-second bursts with quiet in between.
+	{8, "Long Segments (HLS)", "News", "testsrc2=size=1280x720:rate=30", "h264", 932, false, true, 10},
 }
 
 var shows = []string{"Morning Report", "The Big Game", "Cartoon Hour", "Nature Walk", "Late Night Talk", "Cooking Live", "Sports Center", "Movie Classics"}
@@ -143,11 +147,12 @@ func main() {
 		dir := filepath.Join(hlsDir, strconv.Itoa(c.n))
 		os.MkdirAll(dir, 0o755)
 		go func(c channel, dir string) {
+			segs := max(c.segs, 2)
 			for {
 				cmd := exec.Command(*ffmpeg, "-hide_banner", "-loglevel", "error", "-re",
 					"-f", "lavfi", "-i", c.source, "-f", "lavfi", "-i", fmt.Sprintf("sine=frequency=%d:sample_rate=48000", c.tone),
 					"-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-pix_fmt", "yuv420p", "-c:a", "aac",
-					"-f", "hls", "-hls_time", "2", "-hls_list_size", "6", "-hls_flags", "delete_segments",
+					"-f", "hls", "-hls_time", strconv.Itoa(segs), "-hls_list_size", "6", "-hls_flags", "delete_segments",
 					filepath.Join(dir, "index.m3u8"))
 				cmd.Run()
 				time.Sleep(time.Second)

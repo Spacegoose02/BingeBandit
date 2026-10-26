@@ -215,6 +215,18 @@ export default function LiveGuide() {
 
   // Only while the guide is on screen: watching a channel leaves the preview.
   const { active } = useScreen()
+  // Back from watching full screen: the preview carries on with the channel
+  // that was being watched (which may have been flipped to there), and the
+  // guide's selection moves to it.
+  const synced = useRef(lastChannel.id)
+  useEffect(() => {
+    if (!active || !guide || lastChannel.id === synced.current) return
+    synced.current = lastChannel.id
+    const c = guide.channels.find((ch) => ch.id === lastChannel.id)
+    if (!c) return
+    setTuned((t) => (t?.id === c.id ? t : c))
+    setSel((s) => (s?.channel.id === c.id ? s : { channel: c, seg: segments(c, guide.programs[c.epgId ?? ''], guide.from, guide.to)[0] }))
+  }, [active, guide])
   const preview = usePreview(active ? tuned?.id : undefined)
   // Built once per load so the memoized rows only redraw when something they show changes.
   const segsByChannel = useMemo(
