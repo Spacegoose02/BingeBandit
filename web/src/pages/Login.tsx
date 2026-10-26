@@ -4,6 +4,7 @@ import { api, ApiError } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { passkeysSupported } from '../passkeys'
+import { donePicking } from '../profilePick'
 import type { User } from '../types'
 import { AuthFrame } from './Setup'
 
@@ -144,9 +145,10 @@ function LinkCode({ onCancel }: { onCancel: () => void }) {
         setLink(l)
         const poll = async () => {
           try {
-            const res = await api.get<{ user: User } | undefined>(`/api/link/poll?web=1&token=${l.pollToken}`)
+            const res = await api.get<{ user: User; profileChosen?: boolean } | undefined>(`/api/link/poll?web=1&token=${l.pollToken}`)
             if (stopped) return
             if (res) {
+              if (res.profileChosen) donePicking() // linked straight to a profile: no "Who's watching?"
               signedIn(res.user)
               return
             }

@@ -162,6 +162,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/me/pins", s.setPins)
 			r.Put("/me/prefs", s.putPrefs)
 			r.Get("/me/history", s.myHistory)
+			r.Get("/link/info", s.linkInfo)
 			r.Post("/link/approve", s.linkApprove)
 			r.Post("/me/2fa/setup", s.setup2FA)
 			r.Post("/me/2fa/enable", s.enable2FA)

@@ -6,6 +6,8 @@ export interface Session {
   server: string // e.g. http://192.168.1.10:8484
   token: string
   user: User
+  /** Linked straight to a profile: opens as it without asking who's watching. */
+  profileChosen?: boolean
 }
 
 let session: Session | null = null

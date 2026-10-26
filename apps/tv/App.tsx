@@ -40,14 +40,15 @@ export default function App() {
   const [stack, setStack] = useState<Entry[]>(homeStack)
 
   // Reopen the last server; if the session was revoked, sign in again. Like
-  // after signing in, ask who's watching unless the account says who.
+  // after signing in, ask who's watching unless the account says who (or
+  // the TV was linked straight to a profile).
   useEffect(() => {
     loadSession().then(async (s) => {
       if (!s) return setPhase({ name: 'connect' })
       try {
         const user = await api.get<User>('/api/me')
         await saveSession({ ...s, user })
-        setPhase((await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
+        setPhase(!s.profileChosen && (await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           await saveSession(null)
@@ -107,8 +108,9 @@ export default function App() {
   const signedIn = useCallback(async (s: Session) => {
     await saveSession(s)
     setStack(homeStack())
-    // An account with profiles asks who's watching first.
-    setPhase((await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
+    // An account with profiles asks who's watching first, unless whoever
+    // linked this TV picked the profile it opens as.
+    setPhase(!s.profileChosen && (await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
   }, [])
 
   const profileChosen = useCallback(() => {
