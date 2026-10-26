@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { useNav, useScreen } from '../nav'
@@ -8,12 +8,14 @@ import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
-import Settings from './Settings'
+import Settings, { type HideableTab } from './Settings'
 import Sports from './Sports'
 
-// Pinned libraries sit between Search and Live TV, as `lib:<id>`. The rest
-// are under More; one opened from there joins the menu while it's open.
+// Pinned libraries sit between Search and Live TV, as `lib:<id>`. More lists
+// every library to open or pin; an unpinned one opened from there joins the
+// menu while it's open.
 type Tab = 'home' | 'search' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
+type MenuPrefs = { hiddenTabs?: HideableTab[] | null }
 const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
@@ -59,9 +61,41 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       setLibraries(libs)
       // The library this tab showed last time may be gone, or no longer shared.
       if (lastTab.startsWith('lib:') && !libs.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
-      if (lastTab === 'more' && libs.every((l) => l.pinned)) setTab('home')
+      if (lastTab === 'more' && libs.length === 0) setTab('home')
     }, () => undefined)
   }, [])
+  // Pinning from the app saves the whole order, as the web's pin editor does,
+  // and shows the change at once.
+  const togglePin = (l: Library) => {
+    const before = libraries
+    const next = libraries.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    setLibraries(next)
+    api
+      .put('/api/me/pins', { libraries: next.map((x) => ({ id: x.id, pinned: x.pinned })) })
+      .then(() => api.get<Library[]>('/api/libraries'))
+      .then(setLibraries, () => setLibraries(before))
+  }
+  // Tabs this person turned off, kept with their other preferences so they
+  // follow the profile to every TV and phone.
+  const [hidden, setHidden] = useState<HideableTab[]>(() => cached<MenuPrefs>('/api/me/prefs')?.hiddenTabs ?? [])
+  useEffect(() => {
+    api.get<MenuPrefs>('/api/me/prefs').then((p) => {
+      const h = p.hiddenTabs ?? []
+      setHidden(h)
+      if ((h as Tab[]).includes(lastTab)) setTab('home')
+    }, () => undefined)
+  }, [])
+  const toggleTab = (t: HideableTab) => {
+    const before = hidden
+    const next = hidden.includes(t) ? hidden.filter((x) => x !== t) : [...hidden, t]
+    setHidden(next)
+    // The rest of the preferences go back as they are.
+    api
+      .get<MenuPrefs>('/api/me/prefs')
+      .then((p) => api.put('/api/me/prefs', { ...p, hiddenTabs: next }))
+      .then(() => api.get('/api/me/prefs'))
+      .catch(() => setHidden(before))
+  }
   // An admin can turn Live TV off for someone; check on each launch, since
   // the saved sign-in may predate the change.
   const [liveTV, setLiveTV] = useState((cached<User>('/api/me') ?? current()?.user)?.liveTV !== false)
@@ -77,14 +111,16 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const names: Record<string, string> = { ...fixedNames }
   for (const l of libraries) names[`lib:${l.id}`] = l.name
   const library = libraries.find((l) => `lib:${l.id}` === tab)
-  const unpinned = libraries.filter((l) => !l.pinned)
+  // Holding OK (or a long tap) on a library drops down Pin/Unpin, like Plex.
+  const [pinMenu, setPinMenu] = useState<Library | null>(null)
+  const shows = (t: HideableTab) => !hidden.includes(t)
   const order: Tab[] = [
     'home',
     'search',
     ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
-    ...(unpinned.length ? (['more'] as Tab[]) : []),
-    'sports',
-    ...(liveTV ? (['live'] as Tab[]) : []),
+    ...(libraries.length && shows('more') ? (['more'] as Tab[]) : []),
+    ...(shows('sports') ? (['sports'] as Tab[]) : []),
+    ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
     'settings',
   ]
   const tabs = order.map((t) => {
@@ -95,8 +131,10 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       </Text>
     )
     // Phones: a bottom tab bar you tap. TVs: a top menu that switches as focus moves across it.
+    const lib = libraries.find((l) => `lib:${l.id}` === t)
+    const hold = lib ? () => setPinMenu(lib) : undefined
     return isPhone ? (
-      <Pressable key={t} onPress={() => setTab(t)} style={[st.tab, order.length > 5 && st.tabScroll, tab === t && st.tabActive]}>
+      <Pressable key={t} onPress={() => setTab(t)} onLongPress={hold} style={[st.tab, order.length > 5 && st.tabScroll, tab === t && st.tabActive]}>
         {label}
       </Pressable>
     ) : (
@@ -110,6 +148,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           settle()
           setTab(t)
         }}
+        onLongPress={hold}
         style={st.menuItem}
       >
         {label}
@@ -127,14 +166,15 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
         </View>
       )}
       {tab === 'home' && <HomeRows />}
-      {library && <LibraryTab key={library.id} library={library} />}
+      {library && <LibraryTab key={library.id} library={library} onTogglePin={() => togglePin(library)} />}
       {tab === 'search' && <Search />}
-      {tab === 'more' && <MoreLibraries libraries={unpinned} onOpen={(l) => setTab(`lib:${l.id}`)} />}
+      {tab === 'more' && <MoreLibraries libraries={libraries} onOpen={(l) => setTab(`lib:${l.id}`)} onHold={setPinMenu} onTogglePin={togglePin} />}
       {tab === 'sports' && <Sports />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
           update={update}
+          menu={{ libraries, hidden, tabs: liveTV ? ['sports', 'live', 'more'] : ['sports', 'more'], togglePin, toggleTab }}
           onSwitchProfile={onSwitchProfile}
           onSignOut={async () => {
             await api.post('/api/auth/logout').catch(() => undefined)
@@ -142,6 +182,16 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
             lastTab = 'home'
             onSignedOut()
           }}
+        />
+      )}
+      {pinMenu && (
+        <PinMenu
+          library={pinMenu}
+          onToggle={() => {
+            togglePin(pinMenu)
+            setPinMenu(null)
+          }}
+          onClose={() => setPinMenu(null)}
         />
       )}
       {isPhone &&
@@ -156,17 +206,59 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   )
 }
 
-/** Libraries this person can see that aren't pinned to the menu. */
-function MoreLibraries({ libraries, onOpen }: { libraries: Library[]; onOpen: (l: Library) => void }) {
+/**
+ * Every library this person can see, dropped down under the menu like Plex's:
+ * OK on a name opens it, and the button beside it pins it to the menu (and
+ * Home) or unpins it.
+ */
+function MoreLibraries({
+  libraries,
+  onOpen,
+  onHold,
+  onTogglePin,
+}: {
+  libraries: Library[]
+  onOpen: (l: Library) => void
+  onHold: (l: Library) => void
+  onTogglePin: (l: Library) => void
+}) {
   return (
     <ScrollView contentContainerStyle={st.more}>
-      <Text style={st.mutedLeft}>More libraries</Text>
-      <View style={st.moreList}>
+      <View style={st.dropdown}>
+        <Text style={st.mutedLeft}>Libraries</Text>
+        <Text style={st.hint}>Pinned libraries get a tab in the menu and fill your Home. {isPhone ? 'Hold a library' : 'Hold OK on a library, here or in the menu,'} to pin or unpin it too.</Text>
         {libraries.map((l) => (
-          <Button key={l.id} label={l.name} onPress={() => onOpen(l)} />
+          <View key={l.id} style={st.dropdownRow}>
+            <Focusable onPress={() => onOpen(l)} onLongPress={() => onHold(l)} style={st.dropdownName}>
+              <Text style={st.dropdownText} numberOfLines={1}>{l.name}</Text>
+              <Text style={st.hint}>{l.kind === 'movies' ? 'Movies' : 'Shows'}{l.pinned ? '  ·  Pinned' : ''}</Text>
+            </Focusable>
+            <Button small label={l.pinned ? 'Unpin' : 'Pin'} primary={!l.pinned} onPress={() => onTogglePin(l)} />
+          </View>
         ))}
       </View>
     </ScrollView>
+  )
+}
+
+/**
+ * The menu that holding OK on a library brings up. A Modal keeps focus inside
+ * it on a TV, and Back closes it.
+ */
+function PinMenu({ library, onToggle, onClose }: { library: Library; onToggle: () => void; onClose: () => void }) {
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={st.scrim} onPress={onClose}>
+        <View style={st.pinMenu}>
+          <Text style={st.dropdownText} numberOfLines={1}>{library.name}</Text>
+          <Text style={st.hint}>{library.pinned ? 'Pinned to the menu and on your Home.' : 'Not pinned, so only under More.'}</Text>
+          <View style={st.pinMenuButtons}>
+            <Button primary preferFocus label={library.pinned ? 'Unpin' : 'Pin to menu'} onPress={onToggle} style={st.gapRight} />
+            <Button label="Cancel" onPress={onClose} />
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
   )
 }
 
@@ -342,8 +434,16 @@ const st = StyleSheet.create(scaled({
   muted: { color: colors.muted, fontSize: font.body, textAlign: 'center' },
   dot: { color: colors.accent, fontSize: font.small },
   search: { paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
-  more: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 60 },
-  moreList: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 20 },
+  more: { paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
+  dropdown: { backgroundColor: colors.surface, borderRadius: 22, padding: 30, maxWidth: 1100, borderWidth: 1, borderColor: colors.border },
+  dropdownRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  dropdownName: { flex: 1, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 16, backgroundColor: colors.surface2, marginRight: 20 },
+  dropdownText: { color: colors.text, fontSize: font.heading, fontWeight: '700' },
+  hint: { color: colors.muted, fontSize: font.small, marginTop: 6 },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  pinMenu: { backgroundColor: colors.surface, borderRadius: 22, padding: 40, minWidth: 700, maxWidth: 1000, borderWidth: 1, borderColor: colors.border },
+  pinMenuButtons: { flexDirection: 'row', marginTop: 30 },
+  gapRight: { marginRight: 24 },
   searchInput: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 18, borderWidth: 2, borderColor: colors.border, maxWidth: 1100, marginBottom: 30 },
   mutedLeft: { color: colors.muted, fontSize: font.body },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },

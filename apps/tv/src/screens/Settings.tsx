@@ -4,10 +4,25 @@ import { api, current } from '../api'
 import { Button, Focusable } from '../components'
 import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
+import type { Library } from '../types'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
 import { fetchHousehold } from './Profiles'
 
-export default function Settings({ onSignOut, onSwitchProfile, update }: { onSignOut: () => void; onSwitchProfile: () => void; update: AppRelease | null }) {
+// The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
+// always show, so there's always a way back to turn them on.
+export type HideableTab = 'sports' | 'live' | 'more'
+export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', more: 'More' }
+
+/** What the menu shows, and how to change it; Home owns both. */
+export interface MenuChoices {
+  libraries: Library[]
+  hidden: HideableTab[]
+  tabs: HideableTab[] // the ones this person has at all (Live TV can be off for them)
+  togglePin: (l: Library) => void
+  toggleTab: (t: HideableTab) => void
+}
+
+export default function Settings({ onSignOut, onSwitchProfile, update, menu }: { onSignOut: () => void; onSwitchProfile: () => void; update: AppRelease | null; menu: MenuChoices }) {
   const s = current()
   const [hasProfiles, setHasProfiles] = useState(false)
   useEffect(() => {
@@ -107,6 +122,20 @@ export default function Settings({ onSignOut, onSwitchProfile, update }: { onSig
           </Text>
         </Focusable>
       )}
+      <Text style={st.section}>Menu</Text>
+      <Text style={st.hint}>Home, Search and Settings always show. {isPhone ? 'Tap' : 'Press OK on'} a library or tab to change it.</Text>
+      {menu.libraries.map((l) => (
+        <Focusable key={l.id} onPress={() => menu.togglePin(l)} style={st.option}>
+          <Text style={st.value}>{l.name}: {l.pinned ? 'Pinned' : 'Not pinned'}</Text>
+          <Text style={st.hint}>{l.pinned ? 'Has a tab in the menu and fills your Home.' : 'Only under More, and left out of Home.'}</Text>
+        </Focusable>
+      ))}
+      {menu.tabs.map((t) => (
+        <Focusable key={t} onPress={() => menu.toggleTab(t)} style={st.option}>
+          <Text style={st.value}>{hideableNames[t]} tab: {menu.hidden.includes(t) ? 'Hidden' : 'Shown'}</Text>
+          {t === 'more' && <Text style={st.hint}>Lists every library to open, pin or unpin.</Text>}
+        </Focusable>
+      ))}
       <View style={st.signOut}>
         {hasProfiles && <Button label="Switch profile" onPress={onSwitchProfile} style={st.gap} />}
         <Button label="Sign out" onPress={onSignOut} />
@@ -126,6 +155,7 @@ const st = StyleSheet.create(scaled({
   buttons: { flexDirection: 'row', marginTop: 28 },
   signOut: { flexDirection: 'row', marginTop: 48 },
   gap: { marginRight: 24 },
+  section: { color: colors.text, fontSize: font.title, fontWeight: '800', marginTop: 48 },
   msg: { color: colors.text, fontSize: font.body, marginTop: 18 },
   hint: { color: colors.muted, fontSize: font.small, marginTop: 14 },
 }))

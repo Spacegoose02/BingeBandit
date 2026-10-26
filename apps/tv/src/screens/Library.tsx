@@ -30,8 +30,8 @@ export function forgetSection(libraryId: number) {
   delete lastSection[libraryId]
 }
 
-/** One pinned library: its Recommended rows, every title, and its collections. */
-export default function LibraryTab({ library }: { library: Library }) {
+/** One library tab: its Recommended rows, every title, and its collections. */
+export default function LibraryTab({ library, onTogglePin }: { library: Library; onTogglePin: () => void }) {
   const [section, setSectionState] = useState<Section>(lastSection[library.id] ?? 'recommended')
   const setSection = (s: Section) => {
     lastSection[library.id] = s
@@ -47,6 +47,10 @@ export default function LibraryTab({ library }: { library: Library }) {
             <Text style={[st.chipText, section === s && st.chipTextActive]}>{sectionNames[s]}</Text>
           </Focusable>
         ))}
+        {/* An unpinned library opened from More stays in the menu while it's open, so this can pin it back. */}
+        <Focusable onPress={onTogglePin} style={{ ...st.chip, ...st.chipEnd }}>
+          <Text style={st.chipText}>{library.pinned ? 'Unpin from menu' : 'Pin to menu'}</Text>
+        </Focusable>
       </View>
       {section === 'recommended' && <Recommended library={library} />}
       {section === 'library' && <AllTitles library={library} />}
@@ -389,9 +393,10 @@ export function CollectionScreen({ id }: { id: number }) {
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: colors.bg },
-  sections: { flexDirection: 'row', paddingHorizontal: gutter, paddingTop: 10, paddingBottom: 10 },
+  sections: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12, paddingHorizontal: gutter, paddingTop: 10, paddingBottom: 10 },
   chip: { paddingHorizontal: 30, paddingVertical: 12, borderRadius: 40, marginRight: 16, backgroundColor: colors.surface2 },
   chipActive: { backgroundColor: colors.surface3 },
+  chipEnd: { marginLeft: 'auto', marginRight: 0 },
   chipText: { color: colors.muted, fontSize: font.body, fontWeight: '700' },
   chipTextActive: { color: colors.text },
   rows: { paddingBottom: 60, paddingTop: 10 },
