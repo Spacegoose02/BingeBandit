@@ -262,6 +262,9 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			writeStoreErr(w, err)
 			return
 		}
+		if it.Kind == "movie" {
+			resp["trailers"] = localTrailers(it.ID, files)
+		}
 		if !u.IsAdmin {
 			for _, f := range files {
 				f.Path = filepath.Base(f.Path)

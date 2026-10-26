@@ -49,37 +49,70 @@ function sessionId() {
   return `tv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+interface PreRollStep {
+  url: string
+  label: string
+}
+
 /**
- * Plays the server's intro video first when a movie starts from the
- * beginning and the viewer has it turned on. (Trailers are YouTube videos,
- * which only the web player can show.)
+ * Plays what the viewer turned on before a movie that starts from the
+ * beginning: trailer files of other movies, then the server's intro video.
+ * (YouTube trailers only play in the web player.)
  */
 export default function Player({ id, start = 0 }: { id: number; start?: number }) {
-  const [intro, setIntro] = useState<string | null | undefined>(start > 0 ? null : undefined)
+  const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 ? [] : undefined)
   useEffect(() => {
     if (start > 0) return
     let stale = false
     api
-      .get<{ intro?: { url: string } }>(`/api/items/${id}/preroll`)
-      .then((p) => !stale && setIntro(p.intro?.url ?? null))
-      .catch(() => !stale && setIntro(null))
+      .get<{ trailers?: { url?: string; title: string }[]; intro?: { url: string } }>(`/api/items/${id}/preroll`)
+      .then((p) => {
+        if (stale) return
+        const out: PreRollStep[] = []
+        for (const t of p.trailers ?? []) if (t.url) out.push({ url: t.url, label: `Trailer · ${t.title}` })
+        if (p.intro) out.push({ url: p.intro.url, label: '' })
+        setSteps(out)
+      })
+      .catch(() => !stale && setSteps([]))
     return () => {
       stale = true
     }
   }, [id, start])
-  const done = useCallback(() => setIntro(null), [])
-  if (intro === undefined) {
+  const next = useCallback(() => setSteps((s) => s?.slice(1)), [])
+  const skipAll = useCallback(() => setSteps([]), [])
+  if (steps === undefined) {
     return (
       <View style={st.screen}>
         <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />
       </View>
     )
   }
-  if (intro) return <IntroVideo uri={absolute(intro)} onDone={done} />
+  if (steps.length) {
+    const s = steps[0]
+    return <IntroVideo key={s.url} uri={absolute(s.url)} label={s.label} onDone={next} onSkipAll={steps.length > 1 ? skipAll : undefined} />
+  }
   return <MediaPlayer id={id} start={start} />
 }
 
-function IntroVideo({ uri, onDone }: { uri: string; onDone: () => void }) {
+/** A movie's own trailer file, from its details page. Back or the end returns. */
+export function TrailerScreen({ url, title }: { url: string; title: string }) {
+  const nav = useNav()
+  return <IntroVideo uri={absolute(url)} label={`Trailer · ${title}`} onDone={nav.back} doneLabel="Close" />
+}
+
+function IntroVideo({
+  uri,
+  label,
+  onDone,
+  onSkipAll,
+  doneLabel,
+}: {
+  uri: string
+  label?: string
+  onDone: () => void
+  onSkipAll?: () => void
+  doneLabel?: string
+}) {
   useLandscape()
   return (
     <View style={st.screen}>
@@ -90,8 +123,10 @@ function IntroVideo({ uri, onDone }: { uri: string; onDone: () => void }) {
         onEnd={onDone}
         onError={onDone}
       />
+      {!!label && <Text style={st.introLabel}>{label}</Text>}
       <View style={st.introSkip}>
-        <Button label="Start movie" small onPress={onDone} preferFocus />
+        {onSkipAll && <Button label="Skip all" small onPress={onSkipAll} />}
+        <Button label={doneLabel ?? (onSkipAll ? 'Skip' : 'Start movie')} small onPress={onDone} preferFocus />
       </View>
     </View>
   )
@@ -684,7 +719,8 @@ function SeekBar({ pct, duration, onSeek }: { pct: number; duration: number; onS
 
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
-  introSkip: { position: 'absolute', right: 60, bottom: 40 },
+  introSkip: { position: 'absolute', right: 60, bottom: 40, flexDirection: 'row' },
+  introLabel: { position: 'absolute', left: 60, bottom: 52, color: colors.text, fontSize: font.small, opacity: 0.85 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { paddingRight: 24 },
   backText: { color: '#fff', fontSize: 64, fontWeight: '300', lineHeight: 70 },

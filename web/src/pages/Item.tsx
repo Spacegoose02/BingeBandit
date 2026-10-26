@@ -25,7 +25,7 @@ export default function ItemPage() {
 }
 
 function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }) {
-  const { item, files = [], children = [], show, season, upNext, collections = [], canDownload } = detail
+  const { item, files = [], children = [], show, season, upNext, collections = [], canDownload, trailers = [] } = detail
   const { user } = useAuth()
   const nav = useNavigate()
   const [fileIdx, setFileIdx] = useState(0)
@@ -136,7 +136,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   {upNext.watch.position > 15 ? 'Resume' : 'Play'} {episodeLabel(upNext)}
                 </Link>
               )}
-              {item.trailer && (
+              {(item.trailer || trailers.length > 0) && (
                 <button className="btn btn-glass" onClick={() => setTrailer(true)}>
                   <Icon name="film" size={18} /> Trailer
                 </button>
@@ -264,7 +264,15 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
         />
       )}
 
-      {trailer && item.trailer && (
+      {trailer && trailers.length > 0 && (
+        <Modal title={`${item.title} — Trailer`} onClose={() => setTrailer(false)} wide>
+          {/* The movie's own trailer file, before the YouTube one. */}
+          <div className="video-embed">
+            <video src={trailers[0].url} controls autoPlay playsInline />
+          </div>
+        </Modal>
+      )}
+      {trailer && !trailers.length && item.trailer && (
         <Modal title={`${item.title} — Trailer`} onClose={() => setTrailer(false)} wide>
           <div className="video-embed">
             <iframe

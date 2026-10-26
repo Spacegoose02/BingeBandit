@@ -753,7 +753,8 @@ function PlaybackPrefs() {
       </label>
       <p className="muted small">
         Trailers are of movies here you haven't watched, newest first, never rated above the movie you're starting. They play only when a
-        movie starts from the beginning, in the web player; the TV app plays the intro.
+        movie starts from the beginning. A trailer file in the movie's folder (“-trailer” or a Trailers folder) is used first; the TV app
+        plays only those, and YouTube trailers play on the web.
       </p>
       <label className="check">
         <input type="checkbox" checked={p.autoQuality} onChange={(e) => set('autoQuality', e.target.checked)} />

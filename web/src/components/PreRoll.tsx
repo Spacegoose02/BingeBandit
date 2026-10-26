@@ -36,7 +36,7 @@ function loadYouTube(): Promise<boolean> {
   return ytReady
 }
 
-type Step = { kind: 'trailer'; title: string; youtube: string } | { kind: 'intro'; url: string }
+type Step = { kind: 'trailer'; title: string; youtube?: string; url?: string } | { kind: 'intro'; url: string }
 
 /**
  * Plays trailers of other movies and then the server's intro video before a
@@ -44,7 +44,7 @@ type Step = { kind: 'trailer'; title: string; youtube: string } | { kind: 'intro
  */
 export function PreRoll({ data, movieTitle, onDone }: { data: PreRollData; movieTitle: string; onDone: () => void }) {
   const steps: Step[] = [
-    ...data.trailers.map((t): Step => ({ kind: 'trailer', title: t.year ? `${t.title} (${t.year})` : t.title, youtube: t.youtube })),
+    ...data.trailers.map((t): Step => ({ kind: 'trailer', title: t.year ? `${t.title} (${t.year})` : t.title, youtube: t.youtube, url: t.url })),
     ...(data.intro ? [{ kind: 'intro', url: data.intro.url } as Step] : []),
   ]
   const [i, setI] = useState(0)
@@ -66,7 +66,8 @@ export function PreRoll({ data, movieTitle, onDone }: { data: PreRollData; movie
   }, [onDone])
 
   useEffect(() => {
-    if (step?.kind !== 'trailer') return
+    // A trailer file plays in the <video> below, like the intro.
+    if (step?.kind !== 'trailer' || step.url || !step.youtube) return
     let player: YTPlayer | undefined
     let gone = false
     loadYouTube().then((ok) => {
@@ -96,11 +97,11 @@ export function PreRoll({ data, movieTitle, onDone }: { data: PreRollData; movie
   if (!step) return <div className="player"><div className="spinner" /></div>
   return (
     <div className="player preroll show-controls">
-      {step.kind === 'trailer' ? (
+      {step.kind === 'trailer' && !step.url ? (
         <div className="preroll-yt" ref={ytHost} />
       ) : (
         <video
-          key={step.url}
+          key={`${i}:${step.url}`}
           className="player-video"
           src={step.url}
           playsInline

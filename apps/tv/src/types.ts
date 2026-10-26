@@ -72,6 +72,7 @@ export interface ItemDetail {
   show?: Item
   season?: Item
   upNext?: Item
+  trailers?: { url: string; name: string }[] // movies: trailer files from the movie's folder
 }
 
 /** A row of titles on Home or a library's Recommended tab. */

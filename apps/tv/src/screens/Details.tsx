@@ -73,6 +73,9 @@ export default function Details({ id }: { id: number }) {
           ) : (
             !d.children?.length && <Text style={st.muted}>Nothing to play here yet.</Text>
           )}
+          {!!d.trailers?.length && (
+            <Button label="Trailer" onPress={() => nav.push({ name: 'trailer', url: d.trailers![0].url, title: it.title })} />
+          )}
           {(it.kind === 'movie' || it.kind === 'show') && (
             <Button
               label={it.onWatchlist ? 'On your watchlist ✓' : 'Add to watchlist'}
