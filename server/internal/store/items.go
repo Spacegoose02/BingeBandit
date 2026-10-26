@@ -350,6 +350,24 @@ func (s *Store) NextEpisode(uid, showID int64, season, episode int) (*Item, erro
 		uidArg(uid), sql.Named("show", showID), sql.Named("s", season), sql.Named("e", episode)))
 }
 
+// UpNext is the episode Continue Watching offers after the given one: the
+// next unwatched one, or, when everything after it is already watched, the
+// very next episode, so a rewatch carries on through the show.
+func (s *Store) UpNext(uid, showID int64, season, episode int) (*Item, error) {
+	next, err := s.NextEpisode(uid, showID, season, episode)
+	if err != nil || !next.Watch.Watched {
+		return next, err
+	}
+	unwatched, err := scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0 AND `+visible+`
+		AND (i.season_number > @s OR (i.season_number = @s AND i.episode_number > @e)) AND COALESCE(w.watched, 0) = 0
+		ORDER BY i.season_number, i.episode_number LIMIT 1`,
+		uidArg(uid), sql.Named("show", showID), sql.Named("s", season), sql.Named("e", episode)))
+	if errors.Is(err, ErrNotFound) {
+		return next, nil
+	}
+	return unwatched, err
+}
+
 func (s *Store) Search(uid int64, q string, limit int) ([]*Item, error) {
 	like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
 	return s.queryItems(itemSelect+` WHERE i.kind IN ('movie','show') AND `+visible+`

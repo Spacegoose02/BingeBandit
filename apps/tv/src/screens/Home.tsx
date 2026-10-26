@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
-import { useNav, useScreen } from '../nav'
+import { homeBack, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -45,11 +45,59 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const settle = () => {
     if (focusTimer.current) clearTimeout(focusTimer.current)
   }
+  // Whether focus is in the menu. Focus coming up into it from the screen
+  // below never switches the tab: that threw away what you were doing when
+  // Up went one press too far. Only moving along the menu switches.
+  const inMenu = useRef(false)
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const focusTab = (t: Tab) => {
     settle()
-    focusTimer.current = setTimeout(() => setTab(t), 250)
+    if (leaveTimer.current) clearTimeout(leaveTimer.current)
+    const entering = !inMenu.current
+    inMenu.current = true
+    if (!entering) focusTimer.current = setTimeout(() => setTab(t), 250)
   }
-  useEffect(() => settle, [])
+  const blurTab = () => {
+    settle()
+    // Focus moving to the next tab blurs this one first.
+    leaveTimer.current = setTimeout(() => {
+      inMenu.current = false
+    }, 50)
+  }
+  useEffect(
+    () => () => {
+      settle()
+      if (leaveTimer.current) clearTimeout(leaveTimer.current)
+    },
+    [],
+  )
+  // The menu's tabs, so Up lands on the current one and Back can go to Home.
+  const tabViews = useRef(new Map<Tab, View>())
+  const [, setDrawn] = useState(false)
+  useEffect(() => setDrawn(true), []) // draw again once the tabs exist, for the focus guide
+  const tabRef = useRef(tab)
+  tabRef.current = tab
+  // Back on Home: from the screen below it goes up to the tab you're on,
+  // from another tab to Home, and only from Home may it leave the app.
+  useEffect(() => {
+    const back = () => {
+      const focus = (t: Tab) => setTimeout(() => tabViews.current.get(t)?.requestTVFocus?.(), 50)
+      if (!isPhone && !inMenu.current) {
+        focus(tabRef.current)
+        return true
+      }
+      if (tabRef.current !== 'home') {
+        setTab('home')
+        if (!isPhone) focus('home')
+        return true
+      }
+      return false
+    }
+    homeBack.current = back
+    return () => {
+      if (homeBack.current === back) homeBack.current = null
+    }
+  }, [])
   const [update, setUpdate] = useState<AppRelease | null>(null)
   // The menu draws from the last list straight away, then refreshes.
   const [libraries, setLibraries] = useState<Library[]>(() => cached<Library[]>('/api/libraries') ?? [])
@@ -123,6 +171,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
     'settings',
   ]
+  const activeTab = tabViews.current.get(tab)
   const tabs = order.map((t) => {
     const label = (
       <Text style={[isPhone ? st.tabText : st.menuText, tab === t && st.menuTextActive]} numberOfLines={1}>
@@ -140,10 +189,11 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ) : (
       <Focusable
         key={t}
+        viewRef={(v) => (v ? tabViews.current.set(t, v) : tabViews.current.delete(t))}
         hasTVPreferredFocus={t === initialTab && t !== 'home'}
         onFocus={() => focusTab(t)}
         // Moving down into the screen before it switched keeps the screen shown.
-        onBlur={settle}
+        onBlur={blurTab}
         onPress={() => {
           settle()
           setTab(t)
@@ -160,9 +210,12 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {!isPhone && (
         <View style={st.menu}>
           <Image source={require('../assets/mascot.png')} style={st.mascot} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.menuItems}>
-            {tabs}
-          </ScrollView>
+          {/* Up from anywhere below lands on the tab you're on, not the one above the focused card. */}
+          <TVFocusGuideView style={st.flex} destinations={activeTab ? [activeTab] : undefined}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.menuItems}>
+              {tabs}
+            </ScrollView>
+          </TVFocusGuideView>
         </View>
       )}
       {tab === 'home' && <HomeRows />}

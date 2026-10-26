@@ -423,9 +423,9 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		Src string `xml:"src,attr"`
 	}
 	type xmlChan struct {
-		ID   string   `xml:"id,attr"`
-		Name xmlText  `xml:"display-name"`
-		Icon *xmlIcon `xml:"icon,omitempty"`
+		ID    string    `xml:"id,attr"`
+		Names []xmlText `xml:"display-name"`
+		Icon  *xmlIcon  `xml:"icon,omitempty"`
 	}
 	type xmlProg struct {
 		Start    string   `xml:"start,attr"`
@@ -442,6 +442,7 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		}
 		return &xmlText{s}
 	}
+	token, base := requestToken(r), baseURL(r)
 	doc := struct {
 		XMLName  xml.Name  `xml:"tv"`
 		Gen      string    `xml:"generator-info-name,attr"`
@@ -454,9 +455,13 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[c.EPGID] = true
-		xc := xmlChan{ID: c.EPGID, Name: xmlText{c.Name}}
-		if c.Logo != "" {
-			xc.Icon = &xmlIcon{c.Logo}
+		// The number as a second name lets Plex match guide channels to the
+		// tuner lineup on its own.
+		xc := xmlChan{ID: c.EPGID, Names: []xmlText{{c.Name}, {strconv.FormatFloat(c.Number, 'f', -1, 64)}}}
+		if logo := c.Logo; strings.HasPrefix(logo, store.LibraryLogoPrefix) {
+			xc.Icon = &xmlIcon{base + logoURL(c.ID, logo) + "&token=" + token}
+		} else if logo != "" {
+			xc.Icon = &xmlIcon{logo}
 		}
 		doc.Channels = append(doc.Channels, xc)
 	}
