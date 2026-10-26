@@ -17,6 +17,7 @@ export default function AdminUsers() {
   const [linking, setLinking] = useState<User | null>(null)
   const [unlinking, setUnlinking] = useState<User | null>(null)
   const [emailing, setEmailing] = useState<User | null>(null)
+  const [naming, setNaming] = useState<User | null>(null)
 
   const remove = async (u: User) => {
     if (!confirm(`Delete ${u.username}? Their watch history is removed too.`)) return
@@ -59,10 +60,17 @@ export default function AdminUsers() {
       <div className="panel list">
         {users?.map((u) => (
           <div key={u.id} className="list-row">
-            <Avatar name={u.username} src={u.avatar} />
+            <Avatar name={u.profileName || u.username} src={u.avatar} />
             <div className="grow">
               <div>
-                {u.username} {u.id === me?.id && <span className="muted small">(you)</span>}{' '}
+                {!u.ownerId && u.profileName ? (
+                  <>
+                    {u.profileName} <span className="muted small">({u.username})</span>
+                  </>
+                ) : (
+                  u.username
+                )}{' '}
+                {u.id === me?.id && <span className="muted small">(you)</span>}{' '}
                 {u.ownerId ? (
                   <span className="pill" title="A profile under another account; it has no password of its own">
                     Profile of {users?.find((o) => o.id === u.ownerId)?.username ?? 'an account'}
@@ -116,6 +124,9 @@ export default function AdminUsers() {
                 Remove {u.passkeys === 1 ? 'passkey' : `${u.passkeys} passkeys`}
               </button>
             )}
+            <button className="btn btn-glass btn-sm" onClick={() => setNaming(u)} title="The name everyone else sees; sign-in keeps the username">
+              <Icon name="edit" size={16} /> Name
+            </button>
             <button className="btn btn-glass btn-sm" onClick={() => setEmailing(u)} title="Single sign-on with this email signs in as this user">
               {u.email ? 'Email' : 'Add email'}
             </button>
@@ -151,6 +162,7 @@ export default function AdminUsers() {
         <LinkUser user={linking} users={users} onClose={() => setLinking(null)} onSaved={() => { setLinking(null); reload() }} />
       )}
       {unlinking && <UnlinkUser user={unlinking} onClose={() => setUnlinking(null)} onSaved={() => { setUnlinking(null); reload() }} />}
+      {naming && <DisplayName user={naming} onClose={() => setNaming(null)} onSaved={() => { setNaming(null); reload() }} />}
       {emailing && <UserEmail user={emailing} onClose={() => setEmailing(null)} onSaved={() => { setEmailing(null); reload() }} />}
     </div>
   )
@@ -379,6 +391,40 @@ function UserEmail({ user, onClose, onSaved }: { user: User; onClose: () => void
         <label>
           Email
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function DisplayName({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(user.profileName ?? '')
+  const [error, setError] = useState('')
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await api.put(`/api/admin/users/${user.id}/display-name`, { name })
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={`Name for ${user.profileName || user.username}`} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <p className="muted small">
+          {user.ownerId
+            ? "The profile's name in Who's watching and everywhere others see it."
+            : `What everyone else sees, in Watch Together, activity, recommendations and Who's watching. Sign-in keeps the username ${user.username}. Leave it empty to show the username.`}
+        </p>
+        <label>
+          Display name
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={user.username} maxLength={30} required={!!user.ownerId} autoFocus />
         </label>
         {error && <div className="form-error">{error}</div>}
         <div className="actions end">

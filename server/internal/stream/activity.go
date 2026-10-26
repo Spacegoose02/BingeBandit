@@ -12,6 +12,7 @@ type NowPlaying struct {
 	ID          string  `json:"id"`
 	UserID      int64   `json:"userId"`
 	Username    string  `json:"username"`
+	Name        string  `json:"name"` // the display name others see
 	ItemID      int64   `json:"itemId"`
 	Title       string  `json:"title"`
 	Subtitle    string  `json:"subtitle,omitempty"`

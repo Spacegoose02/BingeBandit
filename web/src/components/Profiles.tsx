@@ -62,6 +62,7 @@ export function Profiles() {
         PIN for this main profile is your <strong>settings passcode</strong> below.
       </p>
       {account && <AvatarPicker memberId={account.id} name={account.name} src={account.avatar} onChange={changed} />}
+      <DisplayName onSaved={changed} />
       {profiles.length > 0 && (
         <div className="list">
           {profiles.map((p) => (
@@ -107,6 +108,41 @@ export function Profiles() {
       {error && <div className="form-error">{error}</div>}
       {editing && <EditProfile profile={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} onPicture={reload} />}
     </div>
+  )
+}
+
+/** The account's display name: what everyone else sees, while sign-in keeps the username. */
+function DisplayName({ onSaved }: { onSaved: () => void }) {
+  const { user } = useAuth()
+  const [name, setName] = useState(user?.profileName ?? '')
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  if (!user) return null
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    setMsg(null)
+    try {
+      await api.put('/api/me/display-name', { name })
+      setMsg({ ok: true, text: name.trim() ? 'Display name saved.' : `Everyone sees ${user.username} again.` })
+      onSaved()
+    } catch (err) {
+      setMsg({ ok: false, text: (err as Error).message })
+    }
+  }
+  return (
+    <form onSubmit={save}>
+      <label>
+        Display name
+        <div className="field-row">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={user.username} maxLength={30} />
+          <button className="btn btn-glass">Save</button>
+        </div>
+        <span className="muted small">
+          What everyone else sees, in Watch Together, activity, recommendations and Who's watching. You still sign in as <strong>{user.username}</strong>.
+          Leave it empty to show your username.
+        </span>
+      </label>
+      {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
+    </form>
   )
 }
 

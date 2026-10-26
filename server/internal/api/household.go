@@ -38,6 +38,8 @@ type member struct {
 	LibIDs  []int64 `json:"libraryIds,omitempty"`
 }
 
+// memberName is the name others see: a profile's name or an account's
+// display name, falling back to the username.
 func memberName(u *store.User) string {
 	if u.ProfileName != "" {
 		return u.ProfileName
@@ -466,7 +468,7 @@ func (s *Server) linkUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Name == "" {
-		req.Name = u.Username
+		req.Name = memberName(u)
 	}
 	name, err := validProfileName(req.Name)
 	if err != nil {
@@ -569,4 +571,86 @@ func (s *Server) setUserEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// renameUser sets the name others see for u: an account's display name ("" goes
+// back to its username), or a profile's name. Sign-in keeps the username.
+func (s *Server) renameUser(w http.ResponseWriter, u *store.User, name string) bool {
+	name = strings.TrimSpace(name)
+	if u.OwnerID == 0 && name == "" {
+		if err := s.Store.SetDisplayName(u.ID, ""); err != nil {
+			writeStoreErr(w, err)
+			return false
+		}
+		return true
+	}
+	name, err := validProfileName(name)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	if u.OwnerID == 0 {
+		err = s.Store.SetDisplayName(u.ID, name)
+	} else {
+		var owner *store.User
+		if owner, err = s.Store.UserByID(u.OwnerID); err == nil {
+			err = s.Store.RenameProfile(u.ID, name, owner.Username)
+		}
+	}
+	if errors.Is(err, store.ErrExists) {
+		writeErr(w, http.StatusConflict, "that account already has a profile with that name")
+		return false
+	} else if err != nil {
+		writeStoreErr(w, err)
+		return false
+	}
+	return true
+}
+
+// setDisplayName changes the signed-in account's display name.
+func (s *Server) setDisplayName(w http.ResponseWriter, r *http.Request) {
+	u := accountOnly(w, r)
+	if u == nil {
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if !s.renameUser(w, u, req.Name) {
+		return
+	}
+	u, err := s.Store.UserByID(u.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
+// adminSetDisplayName changes the name others see for any user or profile.
+func (s *Server) adminSetDisplayName(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u, err := s.Store.UserByID(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if s.renameUser(w, u, req.Name) {
+		w.WriteHeader(http.StatusNoContent)
+	}
 }

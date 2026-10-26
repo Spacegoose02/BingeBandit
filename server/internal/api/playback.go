@@ -402,7 +402,7 @@ func (s *Server) recordPlay(np stream.NowPlaying, it *store.Item, completed bool
 
 func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip string) stream.NowPlaying {
 	np := stream.NowPlaying{
-		ID: req.PlaySessionID, UserID: u.ID, Username: u.Username, ItemID: it.ID, Title: it.Title, Poster: it.Poster,
+		ID: req.PlaySessionID, UserID: u.ID, Username: u.Username, Name: memberName(u), ItemID: it.ID, Title: it.Title, Poster: it.Poster,
 		FileID: req.FileID, Mode: req.Mode, Position: req.Position, Duration: req.Duration, Paused: req.Paused,
 		IP: ip, Local: s.isLocal(ip), Client: req.Client, TranscodeID: req.TranscodeID, Watched: req.Played,
 		Lights: req.Lights == nil || *req.Lights, LightsArea: req.LightsArea,

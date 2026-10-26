@@ -23,8 +23,8 @@ function FriendsRow() {
             <div className="poster-frame">
               {poster ? <img src={poster} alt="" loading="lazy" /> : <div className="poster-fallback">{f.title}</div>}
               <span className="friend-badge">
-                <span className="avatar">{f.username.slice(0, 1).toUpperCase()}</span>
-                {f.username}
+                <span className="avatar">{(f.name || f.username).slice(0, 1).toUpperCase()}</span>
+                {f.name || f.username}
               </span>
               {f.duration > 0 && (
                 <div className="progress">
