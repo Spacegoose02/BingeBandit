@@ -5,7 +5,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'details'; id: number }
   | { name: 'collection'; id: number }
-  | { name: 'player'; id: number; start?: number }
+  | { name: 'player'; id: number; start?: number; together?: string } // together: a Watch Together room to join
   | { name: 'live'; channelId: number }
   | { name: 'trailer'; url: string; title: string }
 
