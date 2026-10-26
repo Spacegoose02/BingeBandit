@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, trackWrite } from '../api'
+import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn } from '../devicePrefs'
 import { Button } from '../components'
 import { backInterceptor, useNav } from '../nav'
@@ -20,16 +21,20 @@ const LADDER = [2160, 1080, 720, 480]
 // file extension; the rest are ffprobe codec names.
 const DIRECT_CONTAINERS = new Set(['mp4', 'm4v', 'mov', 'mkv', 'webm', 'ts', 'm2ts', 'mts'])
 const DIRECT_VIDEO = new Set(['h264', 'hevc', 'vp9', 'av1'])
-// DTS and TrueHD have no decoder in Android; phones mostly lack Dolby too
-// (TVs pass it through to the receiver or decode it).
-const NO_DECODER_AUDIO = new Set(isPhone ? ['dts', 'truehd', 'mlp', 'ac3', 'eac3'] : ['dts', 'truehd', 'mlp'])
+// Audio Android decodes in software on every device.
+const DIRECT_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac'])
+// Dolby and DTS play only with a decoder on the device or passthrough to the
+// TV/receiver. Without either ExoPlayer plays the video silently, so ask first.
+const SURROUND_AUDIO = new Set(['ac3', 'eac3', 'dts', 'truehd'])
 
 /** Whether this device can play the file as is with the chosen audio track. */
 function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
   const audios = (f.streams ?? []).filter((s) => s.type === 'audio')
   const a = audios.find((s) => s.index === audioIndex) ?? audios.find((s) => s.default) ?? audios[0]
-  return !a || !NO_DECODER_AUDIO.has(a.codec)
+  const codec = a?.codec ?? f.audioCodec
+  if (!codec) return true // no audio at all
+  return DIRECT_AUDIO.has(codec) || (SURROUND_AUDIO.has(codec) && surroundPlayable(codec))
 }
 
 function resolutionLabel(h: number): string {
@@ -177,7 +182,11 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
 
   // Load the item, its file and the viewer's track preferences, then start.
   useEffect(() => {
-    Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null)]).then(
+    Promise.all([
+      api.get<ItemDetail>(`/api/items/${id}`),
+      api.get<Prefs>('/api/me/prefs').catch(() => null),
+      refreshAudioSupport(),
+    ]).then(
       ([d, prefs]) => {
         setItem(d.item)
         const f = d.files?.[0]
