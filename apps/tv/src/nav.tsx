@@ -28,6 +28,13 @@ export function useNav() {
 export const backInterceptor: { current: (() => boolean) | null } = { current: null }
 
 /**
+ * Home's turn at Back, once nothing is left on the stack: it goes to the Home
+ * tab and up to the menu before Back can leave the app. Kept apart from
+ * backInterceptor because Home stays mounted under the player, which sets that one.
+ */
+export const homeBack: { current: (() => boolean) | null } = { current: null }
+
+/**
  * Screens under the top one stay mounted (hidden), so Back returns to the
  * same scroll position. Each screen learns whether it is on top, and how many
  * times it has come back to the top, to refresh what may have changed.
