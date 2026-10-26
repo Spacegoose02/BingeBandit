@@ -101,8 +101,8 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 		if activeShows[p.ShowID] {
 			continue
 		}
-		next, err := s.Store.NextEpisode(uid, p.ShowID, p.Season, p.Episode)
-		if errors.Is(err, store.ErrNotFound) || (err == nil && next.Watch.Watched) {
+		next, err := s.Store.UpNext(uid, p.ShowID, p.Season, p.Episode)
+		if errors.Is(err, store.ErrNotFound) {
 			continue
 		}
 		if err != nil {
