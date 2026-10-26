@@ -399,6 +399,7 @@ export interface AdminChannel {
   favorite: boolean
   custom: boolean
   streams?: ChannelStream[]
+  lost?: string[] // streams the provider stopped listing since the streams were last saved
 }
 
 export interface ContentSource {
