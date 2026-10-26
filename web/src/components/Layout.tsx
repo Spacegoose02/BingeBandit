@@ -118,6 +118,10 @@ export default function Layout() {
                 <Icon name="users" />
                 <span>Users</span>
               </NavLink>
+              <NavLink to="/admin/overlays" className="nav-item">
+                <Icon name="image" />
+                <span>Overlays</span>
+              </NavLink>
               <NavLink to="/admin/import" className="nav-item">
                 <Icon name="download" />
                 <span>Import</span>

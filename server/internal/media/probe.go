@@ -23,6 +23,9 @@ type probeOutput struct {
 		Height        int               `json:"height"`
 		PixFmt        string            `json:"pix_fmt"`
 		ColorTransfer string            `json:"color_transfer"`
+		CodecTag      string            `json:"codec_tag_string"`
+		Profile       string            `json:"profile"`
+		SideData      []sideData        `json:"side_data_list"`
 		Channels      int               `json:"channels"`
 		Tags          map[string]string `json:"tags"`
 		Disposition   map[string]int    `json:"disposition"`
@@ -31,6 +34,10 @@ type probeOutput struct {
 		Duration string `json:"duration"`
 		BitRate  string `json:"bit_rate"`
 	} `json:"format"`
+}
+
+type sideData struct {
+	Type string `json:"side_data_type"`
 }
 
 // Probe fills the technical fields of f from ffprobe.
@@ -67,6 +74,9 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 
 			HearingImpaired: s.Disposition["hearing_impaired"] == 1,
 		}
+		if s.CodecType == "audio" {
+			st.Profile = s.Profile
+		}
 		switch s.CodecType {
 		case "video":
 			// Cover art is stored as a video stream; skip it.
@@ -83,6 +93,15 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 				}
 				f.HDR = s.ColorTransfer == "smpte2084" || s.ColorTransfer == "arib-std-b67"
 			}
+			st.Range = "sdr"
+			switch {
+			case dolbyVision(s.CodecTag, s.SideData):
+				st.Range = "dv"
+			case s.ColorTransfer == "smpte2084":
+				st.Range = "hdr10"
+			case s.ColorTransfer == "arib-std-b67":
+				st.Range = "hlg"
+			}
 		case "audio", "subtitle":
 		default:
 			continue
@@ -94,6 +113,21 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 	}
 	f.ProbedAt = time.Now().Unix()
 	return nil
+}
+
+// dolbyVision spots Dolby Vision from the stream's DOVI configuration
+// record (MKV and MP4) or its dvhe/dvh1/dav1 tag (MP4).
+func dolbyVision(tag string, side []sideData) bool {
+	switch strings.ToLower(tag) {
+	case "dvhe", "dvh1", "dva1", "dvav", "dav1":
+		return true
+	}
+	for _, d := range side {
+		if strings.Contains(strings.ToLower(d.Type), "dovi") {
+			return true
+		}
+	}
+	return false
 }
 
 // DefaultAudio is the stream flagged default, else the first audio stream.

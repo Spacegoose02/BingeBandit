@@ -26,6 +26,7 @@ import AdminTasks from './pages/admin/Tasks'
 import AdminLogs from './pages/admin/Logs'
 import AdminImport from './pages/admin/Import'
 import AdminPlugins from './pages/admin/Plugins'
+import AdminOverlays from './pages/admin/Overlays'
 import { PasscodeGate } from './components/Passcode'
 import WhoIsWatching from './pages/WhoIsWatching'
 import { profilePickPending } from './profilePick'
@@ -101,6 +102,7 @@ export default function App() {
               <Route path="logs" element={<AdminLogs />} />
               <Route path="import" element={<AdminImport />} />
               <Route path="plugins" element={<AdminPlugins />} />
+              <Route path="overlays" element={<AdminOverlays />} />
             </Route>
           </Route>
         </Route>

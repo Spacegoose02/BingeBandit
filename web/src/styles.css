@@ -1129,3 +1129,23 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .warn-text { color: var(--warn); }
 .kometa-plan { max-height: 45vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; background: var(--bg-elev); }
 .kometa-plan ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+/* Admin → Overlays & collections */
+.overlay-settings { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.overlay-settings .grow { flex: 1 1 280px; min-width: 0; }
+.overlay-preview { flex: 0 0 220px; display: flex; flex-direction: column; gap: 8px; }
+.overlay-preview img { width: 220px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; background: var(--surface-2); }
+.overlay-pick { position: relative; }
+.overlay-pick input { width: 100%; }
+.overlay-pick-list { position: absolute; z-index: 5; left: 0; right: 0; top: 100%; margin-top: 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.overlay-pick-list button { display: block; width: 100%; text-align: left; padding: 8px 10px; background: none; border: 0; color: inherit; cursor: pointer; }
+.overlay-pick-list button:hover { background: var(--surface-3); }
+.overlay-thumb { width: 64px; height: 40px; object-fit: contain; border-radius: 4px; background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 12px 12px; }
+.overlay-upload { display: flex; align-items: center; gap: 16px; }
+.overlay-upload img, .overlay-empty { width: 120px; height: 72px; object-fit: contain; border-radius: 6px; display: grid; place-items: center; background: repeating-conic-gradient(var(--surface-3) 0 25%, var(--surface-2) 0 50%) 0 0 / 12px 12px; }
+.overlay-upload .btn { cursor: pointer; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rot90 { display: inline-flex; transform: rotate(90deg); }
+@media (max-width: 600px) {
+  .overlay-preview { flex-basis: 100%; align-items: center; }
+  .row-2 { grid-template-columns: 1fr; }
+}

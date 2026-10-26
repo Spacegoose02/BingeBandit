@@ -68,6 +68,7 @@ type Server struct {
 	dispatcharr livetv.DispatcharrJob
 	// ratingFetches holds items whose external ratings are being looked up.
 	ratingFetches sync.Map
+	overlays      overlayState
 	ctx           context.Context // server lifetime, for work that outlives a request
 }
 
@@ -249,6 +250,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/search", s.search)
 			r.Get("/images/tmdb/{file}", s.tmdbImage)
 			r.Get("/images/local/{file}", s.localImage)
+			r.Get("/images/poster/{file}", s.overlayPoster)
 			r.Get("/libraries/{id}/collections", s.libraryCollections)
 			r.Get("/libraries/{id}/hubs", s.libraryHubs)
 			r.Get("/collections/{id}", s.collection)
@@ -273,6 +275,13 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/activity", s.activity)
 				r.Delete("/activity/{id}", s.killActivity)
 				r.Get("/settings", s.getSettings)
+				r.Get("/overlays", s.adminOverlays)
+				r.Get("/overlays/preview", s.overlayPreview)
+				r.Post("/overlays/image", s.uploadOverlayImage)
+				r.Post("/overlays", s.saveOverlay)
+				r.Put("/overlays/order", s.orderOverlays)
+				r.Put("/overlays/{id}", s.saveOverlay)
+				r.Delete("/overlays/{id}", s.deleteOverlay)
 				r.Put("/settings", s.putSettings)
 				r.Get("/browse", s.browse)
 
