@@ -4,7 +4,7 @@ import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { Icon, type IconName } from '../icons'
-import { homeBack, useNav, useScreen } from '../nav'
+import { homeBack, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -54,6 +54,12 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   // that came late gave focus back to the tab just left, which switched to it
   // again, back and forth.
   const [initialTab] = useState(lastTab)
+  useEffect(() => {
+    showLiveGuide.current = () => setTab('live')
+    return () => {
+      showLiveGuide.current = null
+    }
+  })
   // The menu switches as focus moves across it, but only once focus rests on
   // a tab, so passing over one doesn't build its whole screen.
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

@@ -6,7 +6,7 @@ import { api, authHeaders, type ApiError } from '../api'
 import { Button } from '../components'
 import { DEFAULT_BUFFER_SECS, fmtBehind, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { useLock } from '../lock'
-import { backInterceptor } from '../nav'
+import { backInterceptor, showLiveGuide, useNav } from '../nav'
 import { useLandscape } from '../screen'
 import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import type { LiveChannel } from '../types'
@@ -172,8 +172,25 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     return () => clearInterval(t)
   }, [paused])
 
+  // Holding Select opens the guide (on the channel being watched). The key-up
+  // that ends the hold mustn't also pause.
+  const nav = useNav()
+  const held = useRef(false)
   useTVEventHandler((evt) => {
-    if (!evt || evt.eventKeyAction === 0) return // act on key up, as in Player
+    if (!evt) return
+    if (evt.eventType === 'longSelect') {
+      if (!held.current) {
+        held.current = true
+        showLiveGuide.current?.()
+        nav.back()
+      }
+      return
+    }
+    if (evt.eventKeyAction === 0) return // act on key up, as in Player
+    if (held.current && evt.eventType === 'select') {
+      held.current = false
+      return
+    }
     switch (evt.eventType) {
       case 'up':
         step(-1)
