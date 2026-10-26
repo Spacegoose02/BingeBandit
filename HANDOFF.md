@@ -2,9 +2,11 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-26, bug fixes from the feature board (season Mark watched, Cinemask 429s, TV Back position, built-in profile pictures)._
+_Last updated: 2026-10-26, feature board work (Hue rooms per device is the latest) (season Mark watched, Cinemask 429s, TV Back position, built-in profile pictures)._
 
 ## Board bug fixes (2026-10-26)
+
+- **Hue Sync rooms per device (plugin 1.1.0):** each device can pick a Hue room or zone (web: Account → Hue Sync; TV: Settings → Hue lights), stored on the device and sent as `lightsArea` with progress, passed to plugins in `player.*` events. The plugin's `GET /areas` (any signed-in user, via `/api/plugins/hue-sync/areas`) lists rooms and zones holding chosen lights. The engine now runs one session per player: each drives the chosen lights in its area, so rooms sync at the same time; a new `player.play` takes over lights another player was using. Saved light states and pause/stop handling are per session. Tested with a fake bridge (two rooms at once); not tried on real Hue hardware.
 
 - **Mark watched on seasons/shows:** `unwatchedCount` had `omitempty`, so a fully watched season never said 0 and every client kept offering *Mark watched* (and the web's watched tick on show cards never showed). The server now always sends it, and the web and TV clients treat a missing count as 0 for older servers.
 - **Cinemask 429s:** the Cinemask Upgrades plugin retries a 429 after `Retry-After` (or 15 s, 30 s, 1 min, 2 min), then gives a clear error. *Search all* doubles its pause between titles (up to 2 min) while Cinemask or its indexers report rate limits, and eases back after.

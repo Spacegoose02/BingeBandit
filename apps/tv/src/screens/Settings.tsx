@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, current } from '../api'
 import { Button, Focusable } from '../components'
-import { hueSyncOn, setHueSync } from '../devicePrefs'
+import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
 import { fetchHousehold } from './Profiles'
@@ -22,6 +22,20 @@ export default function Settings({ onSignOut, onSwitchProfile, update }: { onSig
   const toggleHue = () => {
     setHueSync(!hueOn)
     setHueOn(!hueOn)
+  }
+  // The Hue room or zone this TV is in, from the Hue app. OK steps through them.
+  const [areas, setAreas] = useState<{ id: string; name: string }[]>([])
+  const [area, setAreaState] = useState(hueArea)
+  useEffect(() => {
+    if (hue) api.get<{ id: string; name: string }[]>('/api/plugins/hue-sync/areas').then(setAreas, () => undefined)
+  }, [hue])
+  const options = [{ id: '', name: 'Every light' }, ...areas]
+  const areaName = options.find((a) => a.id === area)?.name ?? 'Every light'
+  const nextArea = () => {
+    const i = options.findIndex((a) => a.id === area)
+    const id = options[(i + 1) % options.length].id
+    setHueArea(id)
+    setAreaState(id)
   }
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
@@ -82,6 +96,14 @@ export default function Settings({ onSignOut, onSwitchProfile, update }: { onSig
           <Text style={st.value}>Hue Sync: {hueOn ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
             {hueOn ? 'The Hue lights follow what plays on this device.' : 'The Hue lights leave this device alone.'} {isPhone ? 'Tap' : 'Press OK'} to turn it {hueOn ? 'off' : 'on'}.
+          </Text>
+        </Focusable>
+      )}
+      {hue && hueOn && areas.length > 0 && (
+        <Focusable onPress={nextArea} style={st.option}>
+          <Text style={st.value}>Hue lights: {areaName}</Text>
+          <Text style={st.hint}>
+            The room or zone this {isPhone ? 'phone' : 'TV'} is in, so other rooms can sync their own lights. {isPhone ? 'Tap' : 'Press OK'} for the next one.
           </Text>
         </Focusable>
       )}

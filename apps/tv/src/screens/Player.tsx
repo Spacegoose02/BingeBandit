@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, trackWrite } from '../api'
-import { hueSyncOn } from '../devicePrefs'
+import { hueArea, hueSyncOn } from '../devicePrefs'
 import { Button } from '../components'
 import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -238,6 +238,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           transcodeId: transcodeId.current,
           client: isPhone ? 'Android' : 'Android TV',
           lights: hueSyncOn(),
+          lightsArea: hueArea(),
           played: Math.round(played.current),
         })
         .catch(() => undefined)

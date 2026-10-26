@@ -33,6 +33,8 @@ type NowPlaying struct {
 	Watched float64 `json:"watched"`
 	// Lights says whether the device lets plugins like Hue Sync follow it.
 	Lights bool `json:"-"`
+	// LightsArea is the Hue room or zone the device picked for those lights.
+	LightsArea string `json:"-"`
 	// PlayID is the play-history row, once the session is long enough to record.
 	PlayID int64 `json:"-"`
 }

@@ -116,6 +116,8 @@ type fakeBridge struct {
 	mu     sync.Mutex
 	states map[string]map[string]any
 	puts   []string
+	lights string // JSON for /lights and /groups; empty for the defaults
+	groups string
 }
 
 func (f *fakeBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -124,6 +126,10 @@ func (f *fakeBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "POST" && r.URL.Path == "/api":
 		io.WriteString(w, `[{"success":{"username":"u1"}}]`)
+	case r.Method == "GET" && r.URL.Path == "/api/u1/lights" && f.lights != "":
+		io.WriteString(w, f.lights)
+	case r.Method == "GET" && r.URL.Path == "/api/u1/groups" && f.groups != "":
+		io.WriteString(w, f.groups)
 	case r.Method == "GET" && r.URL.Path == "/api/u1/lights":
 		io.WriteString(w, `{"1":{"name":"Left lamp","type":"Extended color light","state":{"on":true,"bri":100,"xy":[0.45,0.41],"colormode":"xy"}},
 			"2":{"name":"Hall","type":"Dimmable light","state":{"on":false,"bri":10}}}`)
@@ -221,4 +227,66 @@ func TestEngineFollowsPlayer(t *testing.T) {
 		t.Error("should let go once Hue Sync is switched off")
 	}
 	waitFor(t, "restore again", func() bool { c, ok := bridge.xy("1"); return ok && math.Abs(c.X-0.45) < 0.001 })
+}
+
+func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
+	video := testVideo(t)
+	bridge := &fakeBridge{states: map[string]map[string]any{},
+		lights: `{"1":{"name":"Sofa","type":"Extended color light","state":{"on":true,"bri":100,"xy":[0.45,0.41]}},
+			"2":{"name":"Bed","type":"Extended color light","state":{"on":true,"bri":100,"xy":[0.30,0.30]}}}`,
+		groups: `{"1":{"name":"Living room","type":"Room","lights":["1"]},"2":{"name":"Bedroom","type":"Room","lights":["2"]},
+			"3":{"name":"Upstairs","type":"Zone","lights":["2","9"]},"4":{"name":"Hall","type":"Room","lights":["9"]}}`}
+	hb := httptest.NewServer(bridge)
+	defer hb.Close()
+
+	a := &app{ffmpeg: "ffmpeg", p: &bbplugin.Plugin{Manifest: manifest}}
+	a.settings = map[string]string{"updates_per_second": "10", "brightness": "100", "on_pause": "keep", "on_stop": "restore"}
+	a.conf = &configStore{dir: t.TempDir}
+	a.fileURL = func(int64) (string, string) { return video, "" }
+	a.engine = &Engine{a: a}
+	a.conf.set(Config{Bridge: hb.URL, Username: "u1", Lights: map[string]string{"1": "all", "2": "all"}})
+
+	// Devices see the rooms and zones with chosen lights in them (not the Hall).
+	req := httptest.NewRequest("GET", "/areas", nil)
+	req.Header.Set("X-BingeBandit-User-Id", "5")
+	rec := httptest.NewRecorder()
+	a.routes().ServeHTTP(rec, req)
+	var areas []struct{ ID, Name, Type string }
+	json.Unmarshal(rec.Body.Bytes(), &areas)
+	if len(areas) != 3 || areas[0].Name != "Bedroom" || areas[1].Name != "Living room" || areas[2].Name != "Upstairs" {
+		t.Fatalf("areas = %s", rec.Body)
+	}
+
+	ctx := context.Background()
+	send := func(event, session, area string, pos float64) {
+		d, _ := json.Marshal(playerEvent{SessionID: session, User: "ann", Client: "Android TV", ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Area: area})
+		a.engine.onEvent(ctx, bbplugin.Event{Event: event, Data: d})
+	}
+	// The living room TV drives only the sofa lamp.
+	send("player.play", "living", "1", 0.2)
+	waitFor(t, "sofa red", func() bool { c, ok := bridge.xy("1"); return ok && near(c, redXY[0], redXY[1]) })
+	if _, ok := bridge.xy("2"); ok {
+		t.Fatal("the bedroom light followed the living room TV")
+	}
+	// The bedroom TV, at the blue part, drives the bed lamp at the same time.
+	send("player.play", "bedroom", "2", 4.4)
+	waitFor(t, "bed blue", func() bool { c, ok := bridge.xy("2"); return ok && near(c, blueXY[0], blueXY[1]) })
+	if status, _ := a.engine.Status(); !strings.Contains(status, "\n") {
+		t.Errorf("status should list both players: %q", status)
+	}
+	// Stopping the bedroom puts back only the bed lamp; the living room keeps going.
+	send("player.stop", "bedroom", "2", 5)
+	waitFor(t, "bed restored", func() bool { c, ok := bridge.xy("2"); return ok && math.Abs(c.X-0.30) < 0.001 })
+	if _, active := a.engine.Status(); !active {
+		t.Fatal("the living room should still be syncing")
+	}
+	// A phone with every light (no area) on play takes the sofa lamp over.
+	send("player.play", "phone", "", 0.2)
+	a.engine.mu.Lock()
+	_, living := a.engine.sessions["living"]
+	a.engine.mu.Unlock()
+	if living {
+		t.Error("the living room player should have handed its lights to the new one")
+	}
+	send("player.stop", "phone", "", 1)
 }

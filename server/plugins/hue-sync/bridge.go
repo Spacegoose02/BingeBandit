@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -150,6 +151,36 @@ func (b *Bridge) Lights(ctx context.Context) ([]Light, error) {
 		out = append(out, l)
 	}
 	sortLights(out)
+	return out, nil
+}
+
+// Area is one of the Hue app's rooms or zones.
+type Area struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Type   string   `json:"type"` // Room or Zone
+	Lights []string `json:"lights"`
+}
+
+// Areas lists the bridge's rooms, then its zones, by name.
+func (b *Bridge) Areas(ctx context.Context) ([]Area, error) {
+	var groups map[string]Area
+	if err := b.do(ctx, http.MethodGet, "/"+b.Username+"/groups", nil, &groups); err != nil {
+		return nil, err
+	}
+	out := []Area{}
+	for id, g := range groups {
+		if g.Type == "Room" || g.Type == "Zone" {
+			g.ID = id
+			out = append(out, g)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Type != out[j].Type {
+			return out[i].Type == "Room"
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out, nil
 }
 

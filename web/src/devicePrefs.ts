@@ -10,3 +10,18 @@ export function hueSyncOn(): boolean {
 export function setHueSync(on: boolean) {
   localStorage.setItem(HUE_KEY, on ? "1" : "0");
 }
+
+const HUE_AREA_KEY = "bb.hueArea";
+
+/** The Hue room or zone this browser's lights are in; "" for every chosen light. */
+export function hueArea(): string {
+  try {
+    return localStorage.getItem(HUE_AREA_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function setHueArea(id: string) {
+  localStorage.setItem(HUE_AREA_KEY, id);
+}
