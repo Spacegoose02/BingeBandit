@@ -49,14 +49,22 @@ export function Button({
 }
 
 /** Wraps anything focusable with a teal ring and a slight zoom. */
-export function Focusable({ children, style, ...props }: PressableProps & { style?: ViewStyle; children: React.ReactNode }) {
+export function Focusable({
+  children,
+  style,
+  viewRef,
+  ...props
+}: PressableProps & { style?: ViewStyle; viewRef?: (view: View | null) => void; children: React.ReactNode }) {
   const [focused, setFocused] = useState(false)
   const ref = useRef<View>(null)
   const remember = useContext(FocusMemoryContext)
   return (
     <Pressable
       {...props}
-      ref={ref}
+      ref={(v) => {
+        ref.current = v
+        viewRef?.(v)
+      }}
       onFocus={(e) => {
         setFocused(!isPhone)
         remember(ref.current)

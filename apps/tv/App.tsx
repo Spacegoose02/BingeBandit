@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ApiError, api, loadSession, saveSession, type Session } from './src/api'
-import { backInterceptor, FocusMemoryContext, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
+import { backInterceptor, FocusMemoryContext, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
@@ -11,7 +11,7 @@ import LivePlayer from './src/screens/LivePlayer'
 import Player, { TrailerScreen } from './src/screens/Player'
 import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
-import { colors, isPhone } from './src/theme'
+import { colors, font, isPhone, scaled } from './src/theme'
 import type { ServerInfo, User } from './src/types'
 import { Toasts } from './src/toasts'
 
@@ -30,6 +30,8 @@ interface Entry {
 let nextKey = 0
 const entry = (route: Route): Entry => ({ route, key: nextKey++ })
 const homeStack = () => [entry({ name: 'home' })]
+// A second Back within this long leaves the app.
+const EXIT_WINDOW = 2500
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'loading' })
@@ -64,7 +66,17 @@ export default function App() {
     [],
   )
 
-  // The remote's Back button pops a screen; on Home it leaves the app.
+  // Leaving takes a second Back while the hint shows, so a stray press doesn't close the app.
+  const lastBack = useRef(0)
+  const [exitHint, setExitHint] = useState(false)
+  useEffect(() => {
+    if (!exitHint) return
+    const t = setTimeout(() => setExitHint(false), EXIT_WINDOW)
+    return () => clearTimeout(t)
+  }, [exitHint])
+
+  // The remote's Back button pops a screen; on Home it goes to the Home tab
+  // and the menu first, and only then, pressed twice, leaves the app.
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
       if (backInterceptor.current?.()) return true
@@ -80,7 +92,12 @@ export default function App() {
         nav.back()
         return true
       }
-      return false
+      if (phase.name === 'app' && homeBack.current?.()) return true
+      const now = Date.now()
+      if (now - lastBack.current < EXIT_WINDOW) return false
+      lastBack.current = now
+      setExitHint(true)
+      return true
     })
     return () => sub.remove()
   }, [phase, stack.length, nav])
@@ -136,6 +153,11 @@ export default function App() {
         <StatusBar hidden={fullScreen} translucent backgroundColor="transparent" barStyle="light-content" />
         <Insets enabled={!fullScreen}>{screen}</Insets>
         {phase.name === 'app' && <Toasts />}
+        {exitHint && (
+          <View style={styles.exitHint} pointerEvents="none">
+            <Text style={styles.exitHintText}>Press Back again to exit</Text>
+          </View>
+        )}
       </NavContext.Provider>
     </SafeAreaProvider>
   )
@@ -201,4 +223,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   hidden: { display: 'none' },
+  ...scaled({
+    exitHint: { position: 'absolute', bottom: 80, alignSelf: 'center', backgroundColor: 'rgba(20,24,29,0.94)', borderRadius: 20, paddingVertical: 20, paddingHorizontal: 36, borderWidth: 2, borderColor: colors.border },
+    exitHintText: { color: colors.text, fontSize: font.body, fontWeight: '700' },
+  }),
 })
