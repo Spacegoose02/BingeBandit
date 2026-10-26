@@ -762,4 +762,15 @@ CREATE TABLE sports_alerts (
 	PRIMARY KEY (user_id, game_id, kind)
 );
 `,
+	// 40: the streams a channel lost because its provider stopped listing
+	// them (or the provider was removed), one name per line, so the admin
+	// can see the channel needs a replacement. Cleared when the channel's
+	// streams are saved.
+	`
+ALTER TABLE channels ADD COLUMN lost_streams TEXT NOT NULL DEFAULT '';
+CREATE TRIGGER live_streams_lost BEFORE DELETE ON live_streams BEGIN
+	UPDATE channels SET lost_streams = lost_streams || OLD.name || char(10)
+	WHERE id IN (SELECT channel_id FROM channel_streams WHERE stream_id = OLD.id);
+END;
+`,
 }
