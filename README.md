@@ -44,6 +44,8 @@ docker compose up -d
 
 See [docker-compose.yml](docker-compose.yml) for media volumes and GPU passthrough. On Unraid, follow [docs/UNRAID.md](docs/UNRAID.md): it covers the container template, paths, hardware transcoding and the apps.
 
+To put the TV app on a friend's or family member's TV in another home, see [docs/TV-SETUP.md](docs/TV-SETUP.md).
+
 ### Options
 
 | Flag        | Env var       | Default                         |
