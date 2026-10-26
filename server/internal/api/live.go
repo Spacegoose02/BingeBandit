@@ -360,7 +360,7 @@ func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
 // requestToken recovers the caller's token so generated playlist URLs work
 // in apps that can't send headers or cookies.
 func requestToken(r *http.Request) string {
-	if t := r.URL.Query().Get("token"); t != "" {
+	if t, _, _ := strings.Cut(r.URL.Query().Get("token"), "?"); t != "" {
 		return t
 	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {

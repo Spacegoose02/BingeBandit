@@ -28,6 +28,9 @@ func (s *Server) tunerRoutes(r chi.Router) {
 	r.HandleFunc("/lineup.post", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 	r.Get("/epg.xml", s.liveEPG)
 	r.Get("/playlist.m3u", s.livePlaylist)
+	// Streams too, so the lineup's links carry the key in the path: Plex
+	// appends "?transcode=heavy" to them as if they had no query.
+	r.Get("/channels/{id}/stream.ts", s.liveTS)
 }
 
 // tunerKey hands the key in the path to requireAuth as a bearer token,
@@ -96,7 +99,7 @@ func (s *Server) tunerLineup(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	token, base := requestToken(r), baseURL(r)
+	base := tunerBase(r)
 	type entry struct {
 		GuideNumber string
 		GuideName   string
@@ -107,7 +110,7 @@ func (s *Server) tunerLineup(w http.ResponseWriter, r *http.Request) {
 		out = append(out, entry{
 			GuideNumber: strconv.FormatFloat(c.Number, 'f', -1, 64),
 			GuideName:   c.Name,
-			URL:         fmt.Sprintf("%s/api/live/channels/%d/stream.ts?token=%s", base, c.ID, token),
+			URL:         fmt.Sprintf("%s/channels/%d/stream.ts", base, c.ID),
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
