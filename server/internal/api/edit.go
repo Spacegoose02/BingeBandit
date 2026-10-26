@@ -534,6 +534,10 @@ type collectionReq struct {
 	Mode     string `json:"mode"` // "" follows the library
 	// ListURL is an MDBList list or RSS feed to follow; "" follows none.
 	ListURL string `json:"listUrl"`
+	// Sort is left as it is when missing (older web apps).
+	Sort *string `json:"sort"`
+	// SortTitle orders the collection among others ("" = its name); left as it is when missing.
+	SortTitle *string `json:"sortTitle"`
 	store.SmartRules
 }
 
@@ -551,6 +555,14 @@ func (c *collectionReq) clean() error {
 	case "", "show", "hide", "collapse":
 	default:
 		return errors.New("unknown collection mode")
+	}
+	if c.SortTitle != nil {
+		*c.SortTitle = strings.TrimSpace(*c.SortTitle)
+	}
+	if c.Sort != nil {
+		if _, ok := store.CollectionSorts[*c.Sort]; !ok {
+			return errors.New("unknown collection sort")
+		}
 	}
 	for _, y := range []int{c.YearFrom, c.YearTo} {
 		if y != 0 && (y < 1870 || y > 2200) {
@@ -587,6 +599,13 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	if req.Sort != nil && *req.Sort != "" {
+		if err := s.Store.SetCollectionSort(c.ID, *req.Sort); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		c.Sort = *req.Sort
+	}
 	if req.ListURL != "" {
 		if c, err = s.followList(r, c.ID, req.ListURL); err != nil {
 			writeStoreErr(w, err)
@@ -618,6 +637,18 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 		}
 		writeStoreErr(w, err)
 		return
+	}
+	if req.Sort != nil {
+		if err := s.Store.SetCollectionSort(id, *req.Sort); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
+	if req.SortTitle != nil {
+		if err := s.Store.SetCollectionSortTitle(id, *req.SortTitle); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
 	}
 	if _, err := s.followList(r, id, req.ListURL); err != nil {
 		writeStoreErr(w, err)

@@ -21,6 +21,12 @@ type Collection struct {
 	// Mode overrides the library's Collection Mode for this collection:
 	// "" (library default), "show", "hide" or "collapse".
 	Mode string `json:"mode"`
+	// Sort orders the titles: "" (release date), "release_desc", "title",
+	// "added" or "rating". Only filled by Collection.
+	Sort string `json:"sort"`
+	// SortTitle orders the collection among others; "" uses its name.
+	// Only filled by Collection.
+	SortTitle string `json:"sortTitle,omitempty"`
 	// ListURL is an MDBList list or RSS feed the collection follows.
 	ListURL      string `json:"listUrl,omitempty"`
 	ListSyncedAt int64  `json:"listSyncedAt,omitempty"`
@@ -125,7 +131,7 @@ func (s *Store) LibraryCollectionsHiding(libraryID int64, collapse func(*Collect
 func (s *Store) libraryCollectionMembers(libraryID int64, collapse func(*Collection) bool) ([]*Collection, map[int64]bool, error) {
 	collected := map[int64]bool{}
 	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, ''
-		FROM collections c WHERE c.library_id = ? ORDER BY c.name COLLATE NOCASE`, libraryID)
+		FROM collections c WHERE c.library_id = ? ORDER BY `+collectionOrder, libraryID)
 	if err != nil || len(cols) == 0 {
 		return cols, collected, err
 	}
@@ -214,16 +220,54 @@ func (s *Store) libraryCollectionMembers(libraryID int64, collapse func(*Collect
 }
 
 func (s *Store) Collection(id int64) (*Collection, error) {
-	return scanCollection(s.db.QueryRow(collectionSelect+` WHERE c.id = ?`, id))
+	c, err := scanCollection(s.db.QueryRow(collectionSelect+` WHERE c.id = ?`, id))
+	if err == nil {
+		c.Sort = s.collectionSort(id)
+		s.db.QueryRow(`SELECT sort_title FROM collections WHERE id = ?`, id).Scan(&c.SortTitle)
+	}
+	return c, err
+}
+
+// CollectionSorts maps each collection sort to its ORDER BY.
+var CollectionSorts = map[string]string{
+	"":             `i.release_date, i.sort_title COLLATE NOCASE, i.id`,
+	"release_desc": `i.release_date DESC, i.sort_title COLLATE NOCASE, i.id`,
+	"title":        `i.sort_title COLLATE NOCASE, i.year, i.id`,
+	"added":        `i.added_at DESC, i.id DESC`,
+	"rating":       `i.rating DESC, i.sort_title COLLATE NOCASE, i.id`,
+}
+
+func (s *Store) collectionSort(id int64) string {
+	var sort string
+	s.db.QueryRow(`SELECT sort FROM collections WHERE id = ?`, id).Scan(&sort)
+	if _, ok := CollectionSorts[sort]; !ok {
+		return ""
+	}
+	return sort
+}
+
+// SetCollectionSortTitle sets the title a collection is ordered by; "" uses its name.
+func (s *Store) SetCollectionSortTitle(id int64, sortTitle string) error {
+	_, err := s.db.Exec(`UPDATE collections SET sort_title = ? WHERE id = ?`, sortTitle, id)
+	return err
+}
+
+// collectionOrder lists collections by sort title, falling back to the name.
+const collectionOrder = `COALESCE(NULLIF(c.sort_title, ''), c.name) COLLATE NOCASE, c.name COLLATE NOCASE`
+
+// SetCollectionSort changes how a collection's titles are ordered.
+func (s *Store) SetCollectionSort(id int64, sort string) error {
+	_, err := s.db.Exec(`UPDATE collections SET sort = ? WHERE id = ?`, sort, id)
+	return err
 }
 
 // ItemCollections lists every collection an item is in, explicit or by label.
 func (s *Store) ItemCollections(itemID int64) ([]*Collection, error) {
 	return s.queryCollections(collectionSelect+` WHERE EXISTS (SELECT 1 FROM items i WHERE i.id = ? AND `+memberOf+`)
-		ORDER BY c.name COLLATE NOCASE`, itemID)
+		ORDER BY `+collectionOrder, itemID)
 }
 
-// CollectionMembers lists every title in a collection, in release order.
+// CollectionMembers lists every title in a collection, in its sort order.
 func (s *Store) CollectionMembers(uid, collectionID int64) ([]*Item, error) {
 	return s.CollectionPage(uid, collectionID, 0, -1)
 }
@@ -231,7 +275,7 @@ func (s *Store) CollectionMembers(uid, collectionID int64) ([]*Item, error) {
 // CollectionPage is a page of a collection's titles; a limit of -1 is all of them.
 func (s *Store) CollectionPage(uid, collectionID int64, offset, limit int) ([]*Item, error) {
 	return s.pagedItems(`JOIN collections c ON c.id = @c`, memberOf+` AND `+visible,
-		`i.release_date, i.sort_title COLLATE NOCASE, i.id`,
+		CollectionSorts[s.collectionSort(collectionID)],
 		uidArg(uid), sql.Named("c", collectionID), sql.Named("offset", offset), sql.Named("limit", limit))
 }
 

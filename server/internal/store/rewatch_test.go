@@ -27,3 +27,19 @@ func TestRewatchReturnsToContinueWatching(t *testing.T) {
 		t.Fatalf("rewatch not in Continue Watching: %+v", got)
 	}
 }
+
+func TestWatchedPercentSetting(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	id := addMovie(t, s, lib.ID, "Heat")
+	u, _ := s.CreateUser("dana", "x", false)
+
+	if done, _ := s.SaveProgress(u.ID, id, 85, 100); done {
+		t.Fatal("85% counted as watched with the 90% default")
+	}
+	s.SetSettings(map[string]string{SettingWatchedPercent: "80"})
+	if done, _ := s.SaveProgress(u.ID, id, 85, 100); !done {
+		t.Fatal("85% not watched with the setting at 80%")
+	}
+}

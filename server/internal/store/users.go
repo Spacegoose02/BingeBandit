@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+
+	"bingebandit/internal/avatars"
 )
 
 type User struct {
@@ -25,7 +27,8 @@ type User struct {
 	HasPasscode   bool    `json:"hasPasscode"`          // settings are locked until the passcode is entered
 	OwnerID       int64   `json:"ownerId,omitempty"`    // set for a profile: the account it belongs to
 	ProfileName   string  `json:"profileName,omitempty"`
-	Avatar        string  `json:"avatar,omitempty"`        // URL of the profile picture
+	Avatar        string  `json:"avatar,omitempty"`        // URL of the profile picture (a built-in one when none was uploaded)
+	AvatarCustom  bool    `json:"avatarCustom,omitempty"`  // Avatar is an uploaded picture, not a built-in one
 	AutoProfileID int64   `json:"autoProfileId,omitempty"` // an account's member to open as without asking
 	PasswordHash  string  `json:"-"`
 	PasscodeHash  string  `json:"-"`
@@ -33,7 +36,8 @@ type User struct {
 }
 
 // SetAvatar stores a user's profile picture as an artwork reference
-// ("local:/<file>"); "" removes it.
+// ("local:/<file>") or a built-in one ("avatar:/<name>"); "" goes back to
+// the built-in picture picked from the user's id.
 func (s *Store) SetAvatar(userID int64, ref string) error {
 	res, err := s.db.Exec(`UPDATE users SET avatar = ? WHERE id = ?`, ref, userID)
 	if err != nil {
@@ -162,8 +166,13 @@ func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.HasPassword = u.PasswordHash != ""
 	u.HasPasscode = u.PasscodeHash != ""
-	if avatar != "" {
+	switch {
+	case avatar == "":
+		u.Avatar = avatars.URL(avatars.ForUser(u.ID))
+	case strings.HasPrefix(avatar, avatars.RefPrefix):
 		u.Avatar = ImageURL(avatar)
+	default:
+		u.Avatar, u.AvatarCustom = ImageURL(avatar), true
 	}
 	u.LiveTV = u.LiveTV || u.IsAdmin
 	return &u, nil

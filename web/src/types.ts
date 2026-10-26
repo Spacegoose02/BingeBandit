@@ -176,6 +176,10 @@ export interface Playlist {
   poster?: string
   createdAt: number
   updatedAt: number
+  /** Who made it, for a playlist shared with you; empty for your own. */
+  owner?: string
+  /** How many people you shared it with. */
+  shares?: number
 }
 
 export interface Play {
@@ -501,6 +505,8 @@ export interface ExternalRatings {
   metacritic?: number
 }
 
+export type CollectionSort = '' | 'release_desc' | 'title' | 'added' | 'rating'
+
 export interface Collection {
   id: number
   libraryId: number
@@ -510,6 +516,10 @@ export interface Collection {
   backdrop?: string
   tmdbId?: number
   mode?: CollectionMode | ''
+  /** '' is release date, oldest first. */
+  sort?: CollectionSort
+  /** Orders the collection among the library's others; empty uses its name. */
+  sortTitle?: string
   listUrl?: string // MDBList list or RSS feed it follows
   listSyncedAt?: number
   listError?: string

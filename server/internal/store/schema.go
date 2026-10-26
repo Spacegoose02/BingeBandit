@@ -695,4 +695,22 @@ CREATE INDEX items_imdb ON items(library_id, imdb_id) WHERE imdb_id != '';
 ALTER TABLE show_aliases RENAME TO item_aliases;
 ALTER TABLE item_aliases RENAME COLUMN show_id TO item_id;
 `,
+	// 36: how a collection's titles are ordered (Plex's Collection Sort:
+	// '' release date, release_desc, title, added or rating), and the
+	// collection's own sort title, which orders it among the library's
+	// collections (Plex's "+_1A…" trick to put one first).
+	`
+ALTER TABLE collections ADD COLUMN sort TEXT NOT NULL DEFAULT '';
+ALTER TABLE collections ADD COLUMN sort_title TEXT NOT NULL DEFAULT '';
+`,
+	// 37: playlists shared with other people, who can play them but not
+	// change them.
+	`
+CREATE TABLE playlist_shares (
+	playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+	user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	PRIMARY KEY (playlist_id, user_id)
+);
+CREATE INDEX playlist_shares_user ON playlist_shares(user_id);
+`,
 }

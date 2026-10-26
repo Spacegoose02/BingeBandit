@@ -19,6 +19,7 @@ const (
 	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
+	SettingWatchedPercent    = "watched_percent" // how far into a movie or episode it counts as watched
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
@@ -71,6 +72,7 @@ var SettingDefaults = map[string]string{
 	SettingTranscodeThrottle: "true",
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
+	SettingWatchedPercent:    "90",
 	SettingWatchFolders:      "true",
 	SettingMaintenanceStart:  "2",
 	SettingMaintenanceEnd:    "5",

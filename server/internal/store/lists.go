@@ -30,6 +30,10 @@ type Playlist struct {
 	Poster    string  `json:"poster,omitempty"`
 	CreatedAt int64   `json:"createdAt"`
 	UpdatedAt int64   `json:"updatedAt"`
+	// Owner names who made a playlist shared with the viewer; empty for their own.
+	Owner string `json:"owner,omitempty"`
+	// Shares is how many people the owner shared it with.
+	Shares int `json:"shares"`
 }
 
 const playlistSelect = `SELECT p.id, p.user_id, p.name, p.created_at, p.updated_at,
@@ -38,12 +42,14 @@ const playlistSelect = `SELECT p.id, p.user_id, p.name, p.created_at, p.updated_
 		FROM playlist_items pi WHERE pi.playlist_id = p.id),
 	COALESCE((SELECT COALESCE(NULLIF(sh.poster, ''), it.poster) FROM playlist_items pi
 		JOIN items it ON it.id = pi.item_id LEFT JOIN items sh ON sh.id = it.show_id
-		WHERE pi.playlist_id = p.id ORDER BY pi.position LIMIT 1), '')
+		WHERE pi.playlist_id = p.id ORDER BY pi.position LIMIT 1), ''),
+	(SELECT COUNT(*) FROM playlist_shares ps WHERE ps.playlist_id = p.id),
+	COALESCE((SELECT CASE WHEN o.profile_name != '' THEN o.profile_name ELSE o.username END FROM users o WHERE o.id = p.user_id), '')
 FROM playlists p`
 
 func scanPlaylist(r interface{ Scan(...any) error }) (*Playlist, error) {
 	var p Playlist
-	err := r.Scan(&p.ID, &p.UserID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &p.ItemCount, &p.Duration, &p.Poster)
+	err := r.Scan(&p.ID, &p.UserID, &p.Name, &p.CreatedAt, &p.UpdatedAt, &p.ItemCount, &p.Duration, &p.Poster, &p.Shares, &p.Owner)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -52,7 +58,21 @@ func scanPlaylist(r interface{ Scan(...any) error }) (*Playlist, error) {
 }
 
 func (s *Store) Playlists(uid int64) ([]*Playlist, error) {
-	rows, err := s.db.Query(playlistSelect+` WHERE p.user_id = ? ORDER BY p.updated_at DESC`, uid)
+	lists, err := s.queryPlaylists(playlistSelect+` WHERE p.user_id = ? ORDER BY p.updated_at DESC`, uid)
+	for _, p := range lists {
+		p.Owner = ""
+	}
+	return lists, err
+}
+
+// SharedPlaylists lists other people's playlists shared with uid.
+func (s *Store) SharedPlaylists(uid int64) ([]*Playlist, error) {
+	return s.queryPlaylists(playlistSelect+` JOIN playlist_shares ps2 ON ps2.playlist_id = p.id AND ps2.user_id = ?
+		ORDER BY p.updated_at DESC`, uid)
+}
+
+func (s *Store) queryPlaylists(q string, args ...any) ([]*Playlist, error) {
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +90,57 @@ func (s *Store) Playlists(uid int64) ([]*Playlist, error) {
 
 // Playlist returns a playlist only if uid owns it.
 func (s *Store) Playlist(uid, id int64) (*Playlist, error) {
-	return scanPlaylist(s.db.QueryRow(playlistSelect+` WHERE p.id = ? AND p.user_id = ?`, id, uid))
+	p, err := scanPlaylist(s.db.QueryRow(playlistSelect+` WHERE p.id = ? AND p.user_id = ?`, id, uid))
+	if err == nil {
+		p.Owner = ""
+	}
+	return p, err
+}
+
+// ViewPlaylist returns a playlist uid owns or that was shared with them.
+func (s *Store) ViewPlaylist(uid, id int64) (*Playlist, error) {
+	p, err := scanPlaylist(s.db.QueryRow(playlistSelect+` WHERE p.id = ? AND (p.user_id = ?
+		OR EXISTS (SELECT 1 FROM playlist_shares ps2 WHERE ps2.playlist_id = p.id AND ps2.user_id = ?))`, id, uid, uid))
+	if err == nil && p.UserID == uid {
+		p.Owner = ""
+	}
+	return p, err
+}
+
+// PlaylistShares lists who a playlist is shared with.
+func (s *Store) PlaylistShares(id int64) ([]int64, error) {
+	rows, err := s.db.Query(`SELECT user_id FROM playlist_shares WHERE playlist_id = ? ORDER BY user_id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var n int64
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+// SetPlaylistShares replaces who a playlist is shared with.
+func (s *Store) SetPlaylistShares(id int64, userIDs []int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM playlist_shares WHERE playlist_id = ?`, id); err != nil {
+		return err
+	}
+	for _, u := range userIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO playlist_shares (playlist_id, user_id) VALUES (?, ?)`, id, u); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) CreatePlaylist(uid int64, name string) (*Playlist, error) {

@@ -134,6 +134,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingLiveTimeshift:     {0, 240},
 		store.SettingLiveBufferSeconds: {2, 60},
 		store.SettingLiveStallSeconds:  {3, 120},
+		store.SettingWatchedPercent:    {50, 100},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {

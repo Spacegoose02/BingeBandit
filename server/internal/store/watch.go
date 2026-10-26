@@ -1,12 +1,21 @@
 package store
 
-// CompletedFraction of the runtime after which an item counts as watched.
-const CompletedFraction = 0.9
+import "strconv"
 
-// SaveProgress records a playback position. Crossing CompletedFraction marks
+// WatchedFraction of the runtime after which an item counts as watched: the
+// admin's "count as watched after" setting, 90% unless changed.
+func (s *Store) WatchedFraction() float64 {
+	n, err := strconv.Atoi(s.Setting(SettingWatchedPercent))
+	if err != nil || n < 50 || n > 100 {
+		n = 90
+	}
+	return float64(n) / 100
+}
+
+// SaveProgress records a playback position. Crossing WatchedFraction marks
 // the item watched and resets the position so it leaves Continue Watching.
 func (s *Store) SaveProgress(uid, itemID int64, position, duration float64) (bool, error) {
-	completed := duration > 0 && position/duration >= CompletedFraction
+	completed := duration > 0 && position/duration >= s.WatchedFraction()
 	if completed {
 		position = 0
 	}

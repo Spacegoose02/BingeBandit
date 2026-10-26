@@ -95,4 +95,29 @@ func TestListPagesAreSlimAndOrdered(t *testing.T) {
 	if all, _ := s.CollectionMembers(0, c.ID); len(all) != n {
 		t.Errorf("all members = %d, want %d", len(all), n)
 	}
+
+	// The collection's own sort: by title, then newest release first.
+	s.SetCollectionSort(c.ID, "title")
+	if page, _ := s.CollectionPage(0, c.ID, 0, 2); len(page) != 2 || page[0].Title != "Movie 00" || page[1].Title != "Movie 01" {
+		t.Errorf("title sort starts %v", page)
+	}
+	s.SetCollectionSort(c.ID, "release_desc")
+	if page, _ := s.CollectionPage(0, c.ID, 0, 1); len(page) != 1 || page[0].Title != "Movie 00" {
+		t.Errorf("newest first starts %v", page)
+	}
+	if got, _ := s.Collection(c.ID); got.Sort != "release_desc" {
+		t.Errorf("collection sort = %q", got.Sort)
+	}
+
+	// A sort title moves a collection ahead of the others.
+	if _, err := s.CreateCollection(lib.ID, "Action", SmartRules{LabelRule: "all"}); err != nil {
+		t.Fatal(err)
+	}
+	s.SetCollectionSortTitle(c.ID, "+_1 Everything")
+	if cols, _ := s.ItemCollections(items[0].ID); len(cols) != 2 || cols[0].Name != "Everything" {
+		t.Errorf("collections in order: %v", cols)
+	}
+	if got, _ := s.Collection(c.ID); got.SortTitle != "+_1 Everything" {
+		t.Errorf("sort title = %q", got.SortTitle)
+	}
 }
