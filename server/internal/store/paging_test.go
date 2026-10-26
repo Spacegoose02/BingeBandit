@@ -108,4 +108,16 @@ func TestListPagesAreSlimAndOrdered(t *testing.T) {
 	if got, _ := s.Collection(c.ID); got.Sort != "release_desc" {
 		t.Errorf("collection sort = %q", got.Sort)
 	}
+
+	// A sort title moves a collection ahead of the others.
+	if _, err := s.CreateCollection(lib.ID, "Action", SmartRules{LabelRule: "all"}); err != nil {
+		t.Fatal(err)
+	}
+	s.SetCollectionSortTitle(c.ID, "+_1 Everything")
+	if cols, _ := s.ItemCollections(items[0].ID); len(cols) != 2 || cols[0].Name != "Everything" {
+		t.Errorf("collections in order: %v", cols)
+	}
+	if got, _ := s.Collection(c.ID); got.SortTitle != "+_1 Everything" {
+		t.Errorf("sort title = %q", got.SortTitle)
+	}
 }

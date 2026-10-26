@@ -10,16 +10,16 @@ import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import Settings from './Settings'
 
-// Pinned libraries sit between Search and Live TV, as `lib:<id>`.
-type Tab = 'home' | 'search' | 'live' | 'settings' | `lib:${number}`
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings' }
+// Pinned libraries sit between Search and Live TV, as `lib:<id>`. The rest
+// are under More; one opened from there joins the menu while it's open.
+type Tab = 'home' | 'search' | 'live' | 'settings' | 'more' | `lib:${number}`
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
 // Asked once per launch, not on every return to Home.
 let updateCheck: Promise<AppRelease | null> | null = null
 
-const pinnedOf = (libs: Library[] | undefined) => (libs ?? []).filter((l) => l.pinned)
 
 /** The main screen: a menu across the top and the chosen section below. */
 export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: () => void; onSwitchProfile: () => void }) {
@@ -49,16 +49,16 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   useEffect(() => settle, [])
   const [update, setUpdate] = useState<AppRelease | null>(null)
   // The menu draws from the last list straight away, then refreshes.
-  const [libraries, setLibraries] = useState<Library[]>(() => pinnedOf(cached<Library[]>('/api/libraries')))
+  const [libraries, setLibraries] = useState<Library[]>(() => cached<Library[]>('/api/libraries') ?? [])
   // Look for a newer app once per launch; the Settings tab then shows a dot.
   useEffect(() => {
     updateCheck ??= checkForUpdate().catch(() => null)
     updateCheck.then(setUpdate)
     api.get<Library[]>('/api/libraries').then((libs) => {
-      const pinned = pinnedOf(libs)
-      setLibraries(pinned)
-      // The library this tab showed last time may have been unpinned since.
-      if (lastTab.startsWith('lib:') && !pinned.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
+      setLibraries(libs)
+      // The library this tab showed last time may be gone, or no longer shared.
+      if (lastTab.startsWith('lib:') && !libs.some((l) => `lib:${l.id}` === lastTab)) setTab('home')
+      if (lastTab === 'more' && libs.every((l) => l.pinned)) setTab('home')
     }, () => undefined)
   }, [])
   // An admin can turn Live TV off for someone; check on each launch, since
@@ -75,8 +75,16 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   }, [])
   const names: Record<string, string> = { ...fixedNames }
   for (const l of libraries) names[`lib:${l.id}`] = l.name
-  const order: Tab[] = ['home', 'search', ...libraries.map((l) => `lib:${l.id}` as Tab), ...(liveTV ? (['live'] as Tab[]) : []), 'settings']
   const library = libraries.find((l) => `lib:${l.id}` === tab)
+  const unpinned = libraries.filter((l) => !l.pinned)
+  const order: Tab[] = [
+    'home',
+    'search',
+    ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
+    ...(unpinned.length ? (['more'] as Tab[]) : []),
+    ...(liveTV ? (['live'] as Tab[]) : []),
+    'settings',
+  ]
   const tabs = order.map((t) => {
     const label = (
       <Text style={[isPhone ? st.tabText : st.menuText, tab === t && st.menuTextActive]} numberOfLines={1}>
@@ -119,6 +127,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'home' && <HomeRows />}
       {library && <LibraryTab key={library.id} library={library} />}
       {tab === 'search' && <Search />}
+      {tab === 'more' && <MoreLibraries libraries={unpinned} onOpen={(l) => setTab(`lib:${l.id}`)} />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
@@ -141,6 +150,20 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           <View style={st.tabBar}>{tabs}</View>
         ))}
     </View>
+  )
+}
+
+/** Libraries this person can see that aren't pinned to the menu. */
+function MoreLibraries({ libraries, onOpen }: { libraries: Library[]; onOpen: (l: Library) => void }) {
+  return (
+    <ScrollView contentContainerStyle={st.more}>
+      <Text style={st.mutedLeft}>More libraries</Text>
+      <View style={st.moreList}>
+        {libraries.map((l) => (
+          <Button key={l.id} label={l.name} onPress={() => onOpen(l)} />
+        ))}
+      </View>
+    </ScrollView>
   )
 }
 
@@ -316,6 +339,8 @@ const st = StyleSheet.create(scaled({
   muted: { color: colors.muted, fontSize: font.body, textAlign: 'center' },
   dot: { color: colors.accent, fontSize: font.small },
   search: { paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
+  more: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 60 },
+  moreList: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 20 },
   searchInput: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 18, borderWidth: 2, borderColor: colors.border, maxWidth: 1100, marginBottom: 30 },
   mutedLeft: { color: colors.muted, fontSize: font.body },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },

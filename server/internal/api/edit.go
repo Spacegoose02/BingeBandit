@@ -536,6 +536,8 @@ type collectionReq struct {
 	ListURL string `json:"listUrl"`
 	// Sort is left as it is when missing (older web apps).
 	Sort *string `json:"sort"`
+	// SortTitle orders the collection among others ("" = its name); left as it is when missing.
+	SortTitle *string `json:"sortTitle"`
 	store.SmartRules
 }
 
@@ -553,6 +555,9 @@ func (c *collectionReq) clean() error {
 	case "", "show", "hide", "collapse":
 	default:
 		return errors.New("unknown collection mode")
+	}
+	if c.SortTitle != nil {
+		*c.SortTitle = strings.TrimSpace(*c.SortTitle)
 	}
 	if c.Sort != nil {
 		if _, ok := store.CollectionSorts[*c.Sort]; !ok {
@@ -635,6 +640,12 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Sort != nil {
 		if err := s.Store.SetCollectionSort(id, *req.Sort); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
+	if req.SortTitle != nil {
+		if err := s.Store.SetCollectionSortTitle(id, *req.SortTitle); err != nil {
 			writeStoreErr(w, err)
 			return
 		}

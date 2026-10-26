@@ -43,6 +43,7 @@ export function CollectionEditor({
 }) {
   const [name, setName] = useState(collection?.name ?? '')
   const [overview, setOverview] = useState(collection?.overview ?? '')
+  const [sortTitle, setSortTitle] = useState(collection?.sortTitle ?? '')
   const [listUrl, setListUrl] = useState(collection?.listUrl ?? '')
   const [mode, setMode] = useState<CollectionMode | ''>(collection?.mode ?? '')
   const [sort, setSort] = useState<CollectionSort>(collection?.sort ?? '')
@@ -59,7 +60,7 @@ export function CollectionEditor({
     setError('')
     const rules = { listUrl, sort, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
     try {
-      if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, ...rules })
+      if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, sortTitle, ...rules })
       else await api.post(`/api/admin/libraries/${libraryId}/collections`, { name, ...rules })
       onSaved()
     } catch (err) {
@@ -74,6 +75,13 @@ export function CollectionEditor({
           Name
           <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus placeholder="e.g. 80s Horror" />
         </label>
+        {collection && (
+          <label>
+            Sort title
+            <input value={sortTitle} onChange={(e) => setSortTitle(e.target.value)} placeholder={name} spellCheck={false} />
+            <span className="muted small">Orders this collection among the others. Start it with something like “+_1” to put it first.</span>
+          </label>
+        )}
         {collection && (
           <label>
             Summary

@@ -247,7 +247,7 @@ type collectionName struct {
 }
 
 func (s *Store) collectionNames(libraryID int64) ([]collectionName, error) {
-	rows, err := s.db.Query(`SELECT id, name FROM collections WHERE library_id = ? ORDER BY name COLLATE NOCASE`, libraryID)
+	rows, err := s.db.Query(`SELECT id, name FROM collections c WHERE library_id = ? ORDER BY `+collectionOrder, libraryID)
 	if err != nil {
 		return nil, err
 	}

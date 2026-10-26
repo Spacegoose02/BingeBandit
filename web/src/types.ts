@@ -514,6 +514,8 @@ export interface Collection {
   mode?: CollectionMode | ''
   /** '' is release date, oldest first. */
   sort?: CollectionSort
+  /** Orders the collection among the library's others; empty uses its name. */
+  sortTitle?: string
   listUrl?: string // MDBList list or RSS feed it follows
   listSyncedAt?: number
   listError?: string
