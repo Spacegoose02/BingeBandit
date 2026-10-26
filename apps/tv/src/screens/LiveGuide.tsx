@@ -5,7 +5,7 @@ import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Center } from '../components'
 import { joinChannel, leaveChannel } from '../live'
-import { useNav } from '../nav'
+import { useNav, useScreen } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 import { lastChannel } from './LivePlayer'
@@ -213,7 +213,9 @@ export default function LiveGuide() {
   const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all'
   const shown = useMemo(() => (guide ? filterChannels(guide, activeFilter) : []), [guide, activeFilter])
 
-  const preview = usePreview(tuned?.id)
+  // Only while the guide is on screen: watching a channel leaves the preview.
+  const { active } = useScreen()
+  const preview = usePreview(active ? tuned?.id : undefined)
   // Built once per load so the memoized rows only redraw when something they show changes.
   const segsByChannel = useMemo(
     () => new Map((guide?.channels ?? []).map((c) => [c.id, segments(c, guide!.programs[c.epgId ?? ''], guide!.from, guide!.to)])),

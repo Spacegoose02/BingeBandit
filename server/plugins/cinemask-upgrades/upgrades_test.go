@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -198,5 +199,53 @@ func TestRoutes(t *testing.T) {
 	a.settings["api_key"] = "nope"
 	if _, body := do("GET", "/report", "", true); !strings.Contains(body, "didn't accept the API key") {
 		t.Errorf("bad key: %s", body)
+	}
+}
+
+func TestRateLimitRetry(t *testing.T) {
+	old := rateLimitWaits
+	rateLimitWaits = []time.Duration{time.Millisecond, time.Millisecond}
+	defer func() { rateLimitWaits = old }()
+
+	var mu sync.Mutex
+	calls := 0
+	limitFor := 2
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		if n <= limitFor {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		io.Copy(io.Discard, r.Body)
+		w.Write([]byte(`{"user":{"username":"m","role":"admin"}}`))
+	}))
+	defer srv.Close()
+	c, _ := newCinemask(srv.URL, "k")
+	if user, _, err := c.Me(context.Background()); err != nil || user != "m" {
+		t.Fatalf("after two 429s: %q %v", user, err)
+	}
+	// Still limited after every retry: a clear error.
+	calls, limitFor = 0, 10
+	if _, _, err := c.Me(context.Background()); !rateLimited(err) || calls != 3 {
+		t.Fatalf("calls %d, err %v", calls, err)
+	}
+}
+
+func TestRetryAfter(t *testing.T) {
+	if got := retryAfter("7", time.Minute); got != 7*time.Second {
+		t.Errorf("seconds: %s", got)
+	}
+	if got := retryAfter("", 30*time.Second); got != 30*time.Second {
+		t.Errorf("fallback: %s", got)
+	}
+	if got := retryAfter("99999", time.Second); got != maxRetryAfter {
+		t.Errorf("cap: %s", got)
+	}
+	if !rateLimited(errors.New("Cinemask: indexer NZBgeek: 429 Too Many Requests")) || rateLimited(errors.New("Cinemask: not found")) {
+		t.Error("rateLimited")
 	}
 }

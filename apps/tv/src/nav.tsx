@@ -25,3 +25,30 @@ export function useNav() {
  * The function returns true when it handled Back.
  */
 export const backInterceptor: { current: (() => boolean) | null } = { current: null }
+
+/**
+ * Screens under the top one stay mounted (hidden), so Back returns to the
+ * same scroll position. Each screen learns whether it is on top, and how many
+ * times it has come back to the top, to refresh what may have changed.
+ */
+export interface ScreenState {
+  active: boolean
+  returns: number
+}
+
+export const ScreenContext = createContext<ScreenState>({ active: true, returns: 0 })
+
+export function useScreen() {
+  return useContext(ScreenContext)
+}
+
+export interface FocusTarget {
+  requestTVFocus?: () => void
+}
+
+/**
+ * Focusable controls report here as they take focus, so Back can put focus
+ * back on the last one. Kept apart from ScreenContext so it never changes and
+ * never redraws every card.
+ */
+export const FocusMemoryContext = createContext<(view: FocusTarget | null) => void>(() => {})

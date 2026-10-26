@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
-import { useNav } from '../nav'
+import { useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -14,7 +14,7 @@ import Settings from './Settings'
 type Tab = 'home' | 'search' | 'live' | 'settings' | `lib:${number}`
 const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings' }
 
-// Survives the remount when Back returns here from the player or details.
+// Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
 // Asked once per launch, not on every return to Home.
 let updateCheck: Promise<AppRelease | null> | null = null
@@ -26,7 +26,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const [tab, setTabState] = useState<Tab>(lastTab)
   const setTab = (t: Tab) => {
     // Coming to a library from the menu opens its Recommended section; Back
-    // from details remounts on the same tab and keeps the section.
+    // from details stays on the same tab and section.
     if (t !== lastTab && t.startsWith('lib:')) forgetSection(Number(t.slice(4)))
     lastTab = t
     setTabState(t)
@@ -208,7 +208,9 @@ function HomeRows() {
       .then(() => api.get<HomeData>('/api/home'))
       .then(setData, (e) => setError(e.message))
   }, [])
-  useEffect(load, [load])
+  // Again each time Back comes here, for the new Continue Watching.
+  const { returns } = useScreen()
+  useEffect(load, [load, returns])
 
   if (error && !data)
     return (

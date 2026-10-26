@@ -46,7 +46,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
   }
 
   const toggleWatched = async () => {
-    const fullyWatched = playable ? item.watch.watched : item.unwatchedCount === 0
+    const fullyWatched = playable ? item.watch.watched : !!item.childCount && !item.unwatchedCount
     await api.post(`/api/items/${item.id}/${fullyWatched ? 'unwatched' : 'watched'}`)
     reload()
   }
@@ -70,7 +70,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
       : 'Detecting intros and credits in the background. It takes a few seconds per episode; open an episode afterwards to see the results.')
   }
 
-  const watchedNow = playable ? item.watch.watched : !!item.childCount && item.unwatchedCount === 0
+  const watchedNow = playable ? item.watch.watched : !!item.childCount && !item.unwatchedCount
   const cast = (item.kind === 'season' || item.kind === 'episode' ? show?.credits : item.credits) ?? []
   const directors = cast.filter((c) => c.kind === 'crew')
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -40,48 +41,100 @@ func newCinemask(address, key string) (*Cinemask, error) {
 	return &Cinemask{base: address, key: strings.TrimSpace(key), http: &http.Client{Timeout: 2 * time.Minute}}, nil
 }
 
+// Cinemask (or the indexers behind it) answers 429 Too Many Requests when
+// asked too often. do waits as long as Retry-After says (or 15 s, 30 s, 60 s,
+// 120 s without it) and tries again before giving up.
+var rateLimitWaits = []time.Duration{15 * time.Second, 30 * time.Second, time.Minute, 2 * time.Minute}
+
+// maxRetryAfter caps a Retry-After so a bad header can't stall a search for hours.
+const maxRetryAfter = 5 * time.Minute
+
 func (c *Cinemask) do(ctx context.Context, method, path string, body, out any) error {
-	var rd io.Reader
+	var payload []byte
 	if body != nil {
-		b, _ := json.Marshal(body)
-		rd = bytes.NewReader(b)
+		payload, _ = json.Marshal(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Api-Key", c.key)
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("couldn't reach Cinemask: %w", err)
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if resp.StatusCode >= 300 {
-		var e struct {
-			Error string `json:"error"`
+	for attempt := 0; ; attempt++ {
+		var rd io.Reader
+		if payload != nil {
+			rd = bytes.NewReader(payload)
 		}
-		json.Unmarshal(b, &e)
-		switch {
-		case resp.StatusCode == http.StatusUnauthorized:
-			return errors.New("Cinemask didn't accept the API key")
-		case resp.StatusCode == http.StatusForbidden && method != "GET":
-			return fmt.Errorf("Cinemask refused (%s): the key needs full access and a manager or admin owner", orStatus(e.Error, resp))
-		case e.Error != "":
-			return fmt.Errorf("Cinemask: %s", e.Error)
+		req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("Cinemask answered %s", resp.Status)
-	}
-	if out != nil {
-		if err := json.Unmarshal(b, out); err != nil {
-			return fmt.Errorf("unexpected answer from Cinemask: %w", err)
+		req.Header.Set("X-Api-Key", c.key)
+		req.Header.Set("Accept", "application/json")
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
 		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return fmt.Errorf("couldn't reach Cinemask: %w", err)
+		}
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if attempt >= len(rateLimitWaits) {
+				return errRateLimited
+			}
+			wait := retryAfter(resp.Header.Get("Retry-After"), rateLimitWaits[attempt])
+			log.Printf("Cinemask is rate limiting %s %s; trying again in %s", method, path, wait)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+			continue
+		}
+		if resp.StatusCode >= 300 {
+			var e struct {
+				Error string `json:"error"`
+			}
+			json.Unmarshal(b, &e)
+			switch {
+			case resp.StatusCode == http.StatusUnauthorized:
+				return errors.New("Cinemask didn't accept the API key")
+			case resp.StatusCode == http.StatusForbidden && method != "GET":
+				return fmt.Errorf("Cinemask refused (%s): the key needs full access and a manager or admin owner", orStatus(e.Error, resp))
+			case e.Error != "":
+				return fmt.Errorf("Cinemask: %s", e.Error)
+			}
+			return fmt.Errorf("Cinemask answered %s", resp.Status)
+		}
+		if out != nil {
+			if err := json.Unmarshal(b, out); err != nil {
+				return fmt.Errorf("unexpected answer from Cinemask: %w", err)
+			}
+		}
+		return nil
 	}
-	return nil
+}
+
+var errRateLimited = errors.New("Cinemask kept answering 429 Too Many Requests; try again later or search fewer titles at once")
+
+// retryAfter reads a Retry-After header: seconds, or an HTTP date.
+func retryAfter(h string, fallback time.Duration) time.Duration {
+	wait := fallback
+	if n, err := strconv.Atoi(strings.TrimSpace(h)); err == nil && n >= 0 {
+		wait = time.Duration(n) * time.Second
+	} else if t, err := http.ParseTime(h); err == nil {
+		wait = time.Until(t)
+	}
+	return min(max(wait, 0), maxRetryAfter)
+}
+
+// rateLimited tells whether an error (ours, or one Cinemask passed on from an
+// indexer) is about asking too often.
+func rateLimited(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, errRateLimited) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "429") || strings.Contains(msg, "too many requests") || strings.Contains(msg, "rate limit")
 }
 
 func orStatus(msg string, resp *http.Response) string {
