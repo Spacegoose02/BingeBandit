@@ -28,7 +28,7 @@ async function squareJPEG(file: File): Promise<Blob> {
   )
 }
 
-/** Upload or remove a household member's picture. */
+/** Upload a household member's picture, roll for another built-in one, or remove an upload. */
 export function AvatarPicker({
   memberId,
   name,
@@ -38,7 +38,7 @@ export function AvatarPicker({
   memberId: number
   name: string
   src?: string
-  /** Called with the new picture's URL, or undefined once it's removed. */
+  /** Called with the new picture's URL (undefined if an older server removed it). */
   onChange: (src?: string) => void
 }) {
   const input = useRef<HTMLInputElement>(null)
@@ -59,19 +59,31 @@ export function AvatarPicker({
       setBusy(false)
     }
   }
+  // Back to a built-in picture (older servers answer with nothing: no picture).
   const remove = async () => {
     setError('')
-    await api.del(`/api/household/${memberId}/avatar`).then(() => onChange(undefined), (e) => setError(e.message))
+    await api.del<{ avatar?: string } | undefined>(`/api/household/${memberId}/avatar`).then((res) => onChange(res?.avatar), (e) => setError(e.message))
   }
+  const roll = async () => {
+    setError('')
+    await api.post<{ avatar: string }>(`/api/household/${memberId}/avatar/roll`).then((res) => onChange(res.avatar), (e) => setError(e.message))
+  }
+  // Everyone without an upload gets one of the server's built-in pictures.
+  const uploaded = !!src && !src.startsWith('/api/avatars/')
 
   return (
     <div className="avatar-picker">
       <Avatar name={name} src={src} className="big" />
       <div className="actions">
         <button type="button" className="btn btn-glass btn-sm" disabled={busy} onClick={() => input.current?.click()}>
-          <Icon name="image" size={16} /> {busy ? 'Uploading…' : src ? 'Change picture' : 'Upload picture'}
+          <Icon name="image" size={16} /> {busy ? 'Uploading…' : uploaded ? 'Change picture' : 'Upload picture'}
         </button>
-        {src && (
+        {!uploaded && (
+          <button type="button" className="btn btn-glass btn-sm" onClick={roll} title="Pick another built-in picture at random">
+            <Icon name="refresh" size={16} /> Another one
+          </button>
+        )}
+        {uploaded && (
           <button type="button" className="btn btn-glass btn-sm" onClick={remove}>
             Remove
           </button>

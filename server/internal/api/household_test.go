@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/avatars"
 	"bingebandit/internal/store"
 )
 
@@ -195,13 +196,38 @@ func TestProfilePicturesAndAutoSelect(t *testing.T) {
 	}
 	var members []member
 	call("kids-token", "GET", "/api/household", "", &members)
-	if len(members) != 2 || members[0].Auto || !members[1].Auto || !strings.HasPrefix(members[1].Avatar, "/api/images/local/") || members[0].Avatar != "" {
+	if len(members) != 2 || members[0].Auto || !members[1].Auto || !strings.HasPrefix(members[1].Avatar, "/api/images/local/") || !members[1].Custom ||
+		!strings.HasPrefix(members[0].Avatar, "/api/avatars/") || members[0].Custom {
 		t.Fatalf("household = %+v", members)
 	}
-	if c := call("kids-token", "DELETE", "/api/household/"+itoa(kids.ID)+"/avatar", "", nil); c != http.StatusNoContent {
+	if c := call("kids-token", "DELETE", "/api/household/"+itoa(kids.ID)+"/avatar", "", nil); c != http.StatusOK {
 		t.Fatalf("remove picture: %d", c)
 	}
-	if u, _ := st.UserByID(kids.ID); u.Avatar != "" {
+	// Back to the built-in picture picked from the id.
+	if u, _ := st.UserByID(kids.ID); u.Avatar != avatars.URL(avatars.ForUser(kids.ID)) || u.AvatarCustom {
 		t.Fatalf("picture after removing: %q", u.Avatar)
+	}
+
+	// Rolling picks another built-in picture, which is served without signing in.
+	var rolled map[string]string
+	if c := call("kids-token", "POST", "/api/household/"+itoa(kids.ID)+"/avatar/roll", "", &rolled); c != http.StatusOK ||
+		rolled["avatar"] == avatars.URL(avatars.ForUser(kids.ID)) || !strings.HasPrefix(rolled["avatar"], "/api/avatars/") {
+		t.Fatalf("roll: %d %v", c, rolled)
+	}
+	if u, _ := st.UserByID(kids.ID); u.Avatar != rolled["avatar"] || u.AvatarCustom {
+		t.Fatalf("picture after rolling: %q", u.Avatar)
+	}
+	if c := call("sam-token", "POST", "/api/household/"+itoa(kids.ID)+"/avatar/roll", "", nil); c != http.StatusNotFound {
+		t.Fatalf("other account rolls: %d", c)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", rolled["avatar"], nil))
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "image/webp" {
+		t.Fatalf("serve built-in picture: %d %s", rec.Code, rec.Header().Get("Content-Type"))
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/avatars/..%2fapi.go", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("serve unknown picture: %d", rec.Code)
 	}
 }

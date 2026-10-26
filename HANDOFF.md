@@ -2,13 +2,14 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-26, bug fixes from the feature board (season Mark watched, Cinemask 429s, TV Back position)._
+_Last updated: 2026-10-26, bug fixes from the feature board (season Mark watched, Cinemask 429s, TV Back position, built-in profile pictures)._
 
 ## Board bug fixes (2026-10-26)
 
 - **Mark watched on seasons/shows:** `unwatchedCount` had `omitempty`, so a fully watched season never said 0 and every client kept offering *Mark watched* (and the web's watched tick on show cards never showed). The server now always sends it, and the web and TV clients treat a missing count as 0 for older servers.
 - **Cinemask 429s:** the Cinemask Upgrades plugin retries a 429 after `Retry-After` (or 15 s, 30 s, 1 min, 2 min), then gives a clear error. *Search all* doubles its pause between titles (up to 2 min) while Cinemask or its indexers report rate limits, and eases back after.
 - **TV app Back position:** screens under the top one stay mounted, hidden with `display: none` (Android makes them invisible, so they can't take focus), instead of unmounting. Back returns to the same scroll position, and `StackScreen` in `App.tsx` puts focus back on the last focused `Button`/`Focusable` (`FocusMemoryContext`, `requestTVFocus`). `useScreen()` gives `active` and `returns`: Home rows and Details reload on each return, and the Live TV guide's preview stream stops while a channel plays over it. **Typechecked and linted only; not tried on a device.**
+- **Built-in profile pictures:** 134 animal pictures from Michael (`server/internal/avatars/images`, 256 px WebP, ~1.5 MB embedded), served without sign-in at `/api/avatars/<name>.webp`. Someone with no upload gets one picked from their user id (`avatars.ForUser`), so no migration. `POST /api/household/{id}/avatar/roll` stores another at random as `avatar:/<name>`; `DELETE …/avatar` now answers with the built-in picture. `User.avatarCustom` / `member.avatarCustom` tell uploads apart. The web picker shows *Another one* for built-in pictures and *Remove* for uploads.
 
 ## Quality choice and laggy direct play
 

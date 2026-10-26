@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"bingebandit/internal/avatars"
 	_ "modernc.org/sqlite"
 )
 
@@ -73,6 +74,9 @@ func ImageURL(ref string) string {
 	}
 	if strings.HasPrefix(ref, "local:/") {
 		return "/api/images/local/" + ref[len("local:/"):]
+	}
+	if name, ok := strings.CutPrefix(ref, avatars.RefPrefix); ok {
+		return avatars.URL(name)
 	}
 	return ref
 }

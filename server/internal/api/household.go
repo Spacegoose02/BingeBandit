@@ -3,12 +3,14 @@ package api
 import (
 	"errors"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"bingebandit/internal/avatars"
 	"bingebandit/internal/store"
 )
 
@@ -28,7 +30,8 @@ type member struct {
 	HasPIN  bool    `json:"hasPin"`
 	Current bool    `json:"current"`
 	Avatar  string  `json:"avatar,omitempty"`
-	Auto    bool    `json:"auto,omitempty"` // the account opens as this member without asking
+	Custom  bool    `json:"avatarCustom,omitempty"` // an uploaded picture, not a built-in one
+	Auto    bool    `json:"auto,omitempty"`         // the account opens as this member without asking
 	AllLibs bool    `json:"allLibraries"`
 	LibIDs  []int64 `json:"libraryIds,omitempty"`
 }
@@ -56,7 +59,7 @@ func (s *Server) household(w http.ResponseWriter, r *http.Request) {
 	out := make([]member, 0, len(users))
 	for _, m := range users {
 		mem := member{ID: m.ID, Name: memberName(m), IsOwner: m.OwnerID == 0, HasPIN: m.HasPasscode, Current: m.ID == u.ID,
-			Avatar: m.Avatar, Auto: m.ID == auto, AllLibs: m.IsAdmin || m.AllLibraries}
+			Avatar: m.Avatar, Custom: m.AvatarCustom, Auto: m.ID == auto, AllLibs: m.IsAdmin || m.AllLibraries}
 		// Only the account sees what each profile may browse.
 		if u.OwnerID == 0 && m.OwnerID != 0 && !m.AllLibraries {
 			mem.LibIDs, _ = s.Store.UserLibraryIDs(m.ID)
@@ -286,6 +289,21 @@ func (s *Server) setAvatar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"avatar": store.ImageURL(ref)})
 }
 
+// rollAvatar swaps a member's picture for another built-in one at random.
+func (s *Server) rollAvatar(w http.ResponseWriter, r *http.Request) {
+	m := s.householdMember(w, r)
+	if m == nil {
+		return
+	}
+	current := strings.TrimSuffix(path.Base(m.Avatar), ".webp")
+	ref := avatars.RefPrefix + avatars.Roll(current)
+	if err := s.Store.SetAvatar(m.ID, ref); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"avatar": store.ImageURL(ref)})
+}
+
 func (s *Server) removeAvatar(w http.ResponseWriter, r *http.Request) {
 	m := s.householdMember(w, r)
 	if m == nil {
@@ -295,7 +313,8 @@ func (s *Server) removeAvatar(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	// The built-in picture the member has again.
+	writeJSON(w, http.StatusOK, map[string]string{"avatar": avatars.URL(avatars.ForUser(m.ID))})
 }
 
 // setAutoProfile picks the member this account opens as on every device

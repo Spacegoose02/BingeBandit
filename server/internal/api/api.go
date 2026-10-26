@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"bingebandit/internal/avatars"
 	"bingebandit/internal/importer"
 	"bingebandit/internal/library"
 	"bingebandit/internal/livetv"
@@ -106,6 +107,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Get("/auth/oidc/callback", s.oidcCallback)
 		r.Get("/auth/oidc/{id}/login", s.oidcLogin)
 		r.Route("/plugin/v1", s.pluginAPI)
+		r.Handle("/avatars/*", avatars.Handler())
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
@@ -125,6 +127,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/household/autoselect", s.setAutoProfile)
 			r.Put("/household/{id}/avatar", s.setAvatar)
 			r.Delete("/household/{id}/avatar", s.removeAvatar)
+			r.Post("/household/{id}/avatar/roll", s.rollAvatar)
 			r.Get("/me", s.me)
 			r.Put("/me/password", s.changePassword)
 			r.Get("/me/recommendations", s.getRecommendOptIn)
