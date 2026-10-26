@@ -229,10 +229,10 @@ export default function LiveGuide() {
     if (lastChannel.id !== synced.current) {
       synced.current = lastChannel.id
       const c = guide.channels.find((ch) => ch.id === lastChannel.id)
+      if (c) setTuned(c) // even when the selection is already there: it moves as you browse, the preview doesn't
       if (c && selRef.current?.channel.id !== c.id) {
         const t = Date.now() / 1000
         const segs = segments(c, guide.programs[c.epgId ?? ''], guide.from, guide.to)
-        setTuned(c)
         setSel({ channel: c, seg: segs.find((s) => s.start <= t && t < s.stop) ?? segs[0] })
         setViewStart(clampStart(floorHalf(t)))
         if (!shown.some((x) => x.id === c.id)) setFilter('all') // flipped to a channel the filter hides
@@ -290,7 +290,7 @@ export default function LiveGuide() {
                 source={{ uri: preview, type: 'm3u8', headers: authHeaders() }}
                 style={StyleSheet.absoluteFill}
                 resizeMode="cover"
-                muted
+                muted={isPhone} // a TV plays the preview's sound, as a cable box does
                 controlsStyles={NO_LIVE_BADGE}
                 focusable={false}
               />

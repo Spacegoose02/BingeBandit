@@ -267,12 +267,17 @@ function SourceEditor({ source, onClose, onSaved }: { source: Partial<LiveSource
 
 // ---- Channels --------------------------------------------------------------
 
+// A provider channel that lost a stream, or has none left to play.
+const needsAttention = (c: AdminChannel) => !c.custom && (!!c.lost?.length || !c.streams?.length)
+
 function Channels() {
   const { data, reload } = useApi<AdminChannel[]>('/api/admin/live/channels')
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<AdminChannel | null>(null)
   const [custom, setCustom] = useState<AdminChannel | 'new' | null>(null)
   const [q, setQ] = useState('')
+  const [onlyAttention, setOnlyAttention] = useState(false)
+  const attention = data?.filter(needsAttention).length ?? 0
   const nextNumber = Math.floor(Math.max(0, ...(data ?? []).map((c) => c.number))) + 1
 
   const toggle = async (c: AdminChannel) => {
@@ -284,7 +289,9 @@ function Channels() {
     await api.del(`/api/admin/live/channels/${c.id}`)
     reload()
   }
-  const shown = data?.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()) || String(c.number).startsWith(q))
+  const shown = data?.filter(
+    (c) => (!q || c.name.toLowerCase().includes(q.toLowerCase()) || String(c.number).startsWith(q)) && (!onlyAttention || attention === 0 || needsAttention(c)),
+  )
 
   return (
     <>
@@ -297,6 +304,11 @@ function Channels() {
         </button>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a channel" style={{ width: 220 }} />
         <span className="muted small">{data?.length ?? 0} channels</span>
+        {attention > 0 && (
+          <button className={`btn btn-sm ${onlyAttention ? 'btn-primary' : 'btn-glass'}`} onClick={() => setOnlyAttention(!onlyAttention)}>
+            <span className="pill warn">{attention}</span> need{attention === 1 ? 's' : ''} a stream replaced
+          </button>
+        )}
       </div>
       <div className="panel list">
         {shown?.map((c) => (
@@ -311,6 +323,12 @@ function Channels() {
                   : [c.group, c.epgId ? `guide: ${c.epgId}` : 'no guide match', `${c.streams?.length ?? 0} stream${c.streams?.length === 1 ? '' : 's'}`]
                       .filter(Boolean)
                       .join(' · ')}
+                {!c.custom && !c.streams?.length && <span className="pill danger">No streams</span>}
+                {!!c.lost?.length && (
+                  <span className="pill warn" title={`No longer offered by the provider: ${c.lost.join(', ')}`}>
+                    Lost {c.lost.length === 1 ? `"${c.lost[0]}"` : `${c.lost.length} streams`}
+                  </span>
+                )}
               </div>
             </div>
             <label className="switch" title={c.enabled ? 'Enabled' : 'Hidden from viewers'}>
@@ -492,6 +510,12 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
         )}
 
         <div className="label">Streams, in fallback order</div>
+        {!!channel.lost?.length && (
+          <p className="small" style={{ margin: 0, color: 'var(--warn)' }}>
+            The provider no longer offers {channel.lost.map((n) => `"${n}"`).join(', ')}, so {channel.lost.length === 1 ? 'it was' : 'they were'} removed from this channel.
+            Add a replacement below; saving clears this notice.
+          </p>
+        )}
         <p className="muted small" style={{ margin: 0 }}>The first stream plays; if it fails or stalls, the next one takes over without viewers reconnecting.</p>
         <div className="panel list compact">
           {streams.map((s, i) => (

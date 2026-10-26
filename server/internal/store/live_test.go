@@ -103,3 +103,47 @@ func TestStreamImportWithConcurrentWrite(t *testing.T) {
 		t.Fatalf("the other write: %v", err)
 	}
 }
+
+// A channel remembers streams its provider stopped listing, or lost with the
+// provider itself, until the admin saves its streams again.
+func TestChannelLostStreams(t *testing.T) {
+	s := openTest(t)
+	src := &LiveSource{Kind: "m3u", Name: "IPTV", URL: "http://x", RefreshHours: 24, Enabled: true, NewGroupsEnabled: true}
+	if err := s.SaveLiveSource(src); err != nil {
+		t.Fatal(err)
+	}
+	importStreams(t, s, src.ID, StreamEntry{Name: "ESPN", URL: "http://x/1"}, StreamEntry{Name: "ESPN backup", URL: "http://x/2"})
+	streams, _, _ := s.LiveStreams(StreamQuery{Limit: 10})
+	ch := &Channel{Number: 1, Name: "ESPN", Enabled: true}
+	ids := []int64{}
+	for _, st := range streams {
+		ids = append(ids, st.ID)
+	}
+	if err := s.CreateChannel(ch, ids); err != nil {
+		t.Fatal(err)
+	}
+
+	importStreams(t, s, src.ID, StreamEntry{Name: "ESPN", URL: "http://x/1"}) // the backup is gone
+	got, err := s.Channel(0, ch.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Streams) != 1 || len(got.Lost) != 1 || got.Lost[0] != "ESPN backup" {
+		t.Fatalf("after the refresh: streams %+v, lost %q", got.Streams, got.Lost)
+	}
+
+	if err := s.DeleteLiveSource(src.ID); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := s.Channels(0, true)
+	if len(all) != 1 || len(all[0].Streams) != 0 || len(all[0].Lost) != 2 {
+		t.Fatalf("after removing the provider: %+v", all[0])
+	}
+
+	if err := s.UpdateChannel(all[0], []int64{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Channel(0, ch.ID); len(got.Lost) != 0 {
+		t.Errorf("saving the channel's streams should clear lost, got %q", got.Lost)
+	}
+}
