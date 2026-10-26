@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { useApi } from '../hooks'
-import type { Collection, CollectionMode } from '../types'
+import type { Collection, CollectionMode, CollectionSort } from '../types'
 import { Modal } from './Modal'
 
 interface Facets {
@@ -16,6 +16,15 @@ const modes: [CollectionMode | '', string][] = [
   ['collapse', 'Hide items in this collection'],
   ['show', 'Show this collection and its items'],
   ['hide', 'Hide this collection but show its items'],
+]
+
+// Plex's Collection Sort.
+const sorts: [CollectionSort, string][] = [
+  ['', 'Release date (oldest first)'],
+  ['release_desc', 'Release date (newest first)'],
+  ['title', 'Title'],
+  ['added', 'Recently added'],
+  ['rating', 'Rating'],
 ]
 
 const yearValue = (s: string) => (s ? Number(s) : 0)
@@ -36,6 +45,7 @@ export function CollectionEditor({
   const [overview, setOverview] = useState(collection?.overview ?? '')
   const [listUrl, setListUrl] = useState(collection?.listUrl ?? '')
   const [mode, setMode] = useState<CollectionMode | ''>(collection?.mode ?? '')
+  const [sort, setSort] = useState<CollectionSort>(collection?.sort ?? '')
   const [labelRule, setLabelRule] = useState(collection?.labelRule ?? '')
   const [genreRule, setGenreRule] = useState(collection?.genreRule ?? '')
   const [studioRule, setStudioRule] = useState(collection?.studioRule ?? '')
@@ -47,7 +57,7 @@ export function CollectionEditor({
   const save = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    const rules = { listUrl, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
+    const rules = { listUrl, sort, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
     try {
       if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, ...rules })
       else await api.post(`/api/admin/libraries/${libraryId}/collections`, { name, ...rules })
@@ -83,6 +93,16 @@ export function CollectionEditor({
             <span className="muted small">How this collection and its titles show on the library's Library tab.</span>
           </label>
         )}
+        <label>
+          Sort titles by
+          <select value={sort} onChange={(e) => setSort(e.target.value as CollectionSort)}>
+            {sorts.map(([v, label]) => (
+              <option key={v} value={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           Follow a list
           <input

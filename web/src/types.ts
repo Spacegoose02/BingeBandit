@@ -501,6 +501,8 @@ export interface ExternalRatings {
   metacritic?: number
 }
 
+export type CollectionSort = '' | 'release_desc' | 'title' | 'added' | 'rating'
+
 export interface Collection {
   id: number
   libraryId: number
@@ -510,6 +512,8 @@ export interface Collection {
   backdrop?: string
   tmdbId?: number
   mode?: CollectionMode | ''
+  /** '' is release date, oldest first. */
+  sort?: CollectionSort
   listUrl?: string // MDBList list or RSS feed it follows
   listSyncedAt?: number
   listError?: string

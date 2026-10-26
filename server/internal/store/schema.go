@@ -695,4 +695,7 @@ CREATE INDEX items_imdb ON items(library_id, imdb_id) WHERE imdb_id != '';
 ALTER TABLE show_aliases RENAME TO item_aliases;
 ALTER TABLE item_aliases RENAME COLUMN show_id TO item_id;
 `,
+	// 36: how a collection's titles are ordered (Plex's Collection Sort):
+	// '' release date, release_desc, title, added or rating.
+	`ALTER TABLE collections ADD COLUMN sort TEXT NOT NULL DEFAULT '';`,
 }
