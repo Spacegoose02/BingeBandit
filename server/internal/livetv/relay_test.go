@@ -1,6 +1,7 @@
 package livetv
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -351,5 +352,38 @@ func TestHLSTargetDuration(t *testing.T) {
 			t.Errorf("%s: got %s, want %s", path, got, want)
 		}
 		resp.Body.Close()
+	}
+}
+
+// An HLS upstream's segment-sized bursts reach ts viewers spread out over
+// the next segment's length, not all at once.
+func TestSmoothHLSBursts(t *testing.T) {
+	r := (&Manager{}).newRelay(&store.Channel{ID: 1, Name: "Smooth"})
+	defer r.cancel()
+	r.target.Store(int64(time.Second))
+	v := &Viewer{ID: "v", ch: make(chan []byte, clientBuffer), closed: make(chan struct{}), Connected: time.Now().Unix()}
+	v.ready = true // no keyframes in this test data
+	r.add(v)
+	go r.smooth()
+
+	burst := bytes.Repeat([]byte{0x47}, 1000*tsPacket)
+	r.broadcast(burst)
+	got, start := 0, time.Now()
+	var firstHalf int
+	for time.Since(start) < time.Second {
+		select {
+		case c := <-v.ch:
+			got += len(c)
+			if time.Since(start) < 500*time.Millisecond {
+				firstHalf = got
+			}
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	if firstHalf == 0 || firstHalf > len(burst)*3/4 || got < len(burst)/2 {
+		t.Errorf("got %d of %d bytes in the first half second, %d in a second; want them spread over the second", firstHalf, len(burst), got)
+	}
+	if smoothShare(10, 0) != 10 || smoothShare(0, time.Second) != 0 || smoothShare(100*tsPacket, time.Second)%tsPacket != 0 {
+		t.Error("smoothShare")
 	}
 }
