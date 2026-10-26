@@ -50,4 +50,8 @@ func TestCollectionsInPlexOrder(t *testing.T) {
 	if want := []string{"Family", "Trending", "Apple", "Horror"}; !reflect.DeepEqual(names, want) {
 		t.Fatalf("collections %v, want %v", names, want)
 	}
+	// Clients slot collections in among titles by sort title, so the list sends it.
+	if cols[0].SortTitle != "+_1Family" || cols[3].SortTitle != "" {
+		t.Errorf("sort titles %q, %q", cols[0].SortTitle, cols[3].SortTitle)
+	}
 }

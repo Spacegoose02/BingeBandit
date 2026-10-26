@@ -39,19 +39,21 @@ const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
 type Tile = { item: Item } | { collection: Collection }
 
 /**
- * Mixes collections into the titles. Sorted by title they slot in by name,
- * like Plex; any other sort puts them first. A collection that sorts after
- * every loaded title waits until the last page is in.
+ * Mixes collections into the titles. Sorted by title they slot in by their
+ * sort title (or name), like Plex; any other sort puts them first. A
+ * collection that sorts after every loaded title waits until the last page
+ * is in.
  */
 function tiles(items: Item[], collections: Collection[], sort: string, complete: boolean): Tile[] {
   if (!collections.length) return items.map((item) => ({ item }))
   if (sort !== 'title') return [...collections.map((collection) => ({ collection })), ...items.map((item) => ({ item }))]
   const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-  const cols = [...collections].sort((a, b) => byName(a.name, b.name))
+  const key = (c: Collection) => c.sortTitle || c.name
+  const cols = [...collections].sort((a, b) => byName(key(a), key(b)))
   const out: Tile[] = []
   let c = 0
   for (const item of items) {
-    while (c < cols.length && byName(cols[c].name, item.sortTitle || item.title) <= 0) out.push({ collection: cols[c++] })
+    while (c < cols.length && byName(key(cols[c]), item.sortTitle || item.title) <= 0) out.push({ collection: cols[c++] })
     out.push({ item })
   }
   if (complete) while (c < cols.length) out.push({ collection: cols[c++] })
