@@ -6,8 +6,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"bingebandit/internal/livetv"
 	"bingebandit/internal/store"
@@ -114,5 +116,20 @@ func TestFillGuide(t *testing.T) {
 	}
 	if got[0].Start != 1800 || got[len(got)-1].Stop != 14400 {
 		t.Fatalf("doesn't cover the window: %+v", got)
+	}
+}
+
+func TestEpisodeNums(t *testing.T) {
+	at := time.Date(2026, 10, 26, 18, 0, 0, 0, time.UTC).Unix()
+	got := episodeNums(store.GuideProgram{Start: at, Episode: "S1E2", Category: "Comedy"})
+	want := []xmlEpisode{{"onscreen", "S1E2"}, {"original-air-date", "2026-10-26 18:00:00"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("show: got %v, want %v", got, want)
+	}
+	if got := episodeNums(store.GuideProgram{Start: at, Episode: "0.1.", Category: "Movie"}); !reflect.DeepEqual(got, []xmlEpisode{{"xmltv_ns", "0.1."}}) {
+		t.Errorf("movie: got %v", got)
+	}
+	if got := episodeNums(store.GuideProgram{Start: at}); len(got) != 1 || got[0].System != "original-air-date" {
+		t.Errorf("filler: got %v", got)
 	}
 }
