@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo'
+import { normalizeServer } from './api'
 import type { ServerInfo } from './types'
 
 const PORT = 8484
@@ -17,6 +18,31 @@ export async function probe(url: string, timeoutMs = 1500): Promise<ServerInfo |
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * The addresses to try for what someone typed. A bare name like
+ * tv.example.com is usually a server reached from outside through a reverse
+ * proxy (https, no port), while 192.168.1.10 is the server itself on :8484,
+ * so a name tries https first and an IP tries :8484 first. Anything after
+ * the host is dropped, so pasting a /link address works too.
+ */
+export function addressCandidates(input: string): string[] {
+  const s = input.trim().replace(/^(https?:\/\/)?([^/?#]*).*$/i, (_, scheme = '', host) => scheme + host)
+  if (!s) return []
+  if (/^https?:\/\//i.test(s)) return [normalizeServer(s)]
+  if (/:\d+$/.test(s)) return [`http://${s}`, `https://${s}`]
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(s)) return [`http://${s}:${PORT}`, `http://${s}`]
+  return [`https://${s}`, `http://${s}:${PORT}`, `http://${s}`]
+}
+
+/** Tries each address for what someone typed; the first server to answer wins. */
+export async function probeTyped(input: string): Promise<ServerInfo | null> {
+  for (const url of addressCandidates(input)) {
+    const s = await probe(url, 4000)
+    if (s) return s
+  }
+  return null
 }
 
 /**

@@ -34,9 +34,14 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
         setLink(l)
         const poll = async () => {
           try {
-            const res = await request<{ token: string; user: User } | undefined>('GET', `/api/link/poll?token=${l.pollToken}`, undefined, server.url)
+            const res = await request<{ token: string; user: User; profileChosen?: boolean } | undefined>(
+              'GET',
+              `/api/link/poll?token=${l.pollToken}`,
+              undefined,
+              server.url,
+            )
             if (stopped) return
-            if (res) onSignedIn({ server: server.url, token: res.token, user: res.user })
+            if (res) onSignedIn({ server: server.url, token: res.token, user: res.user, profileChosen: res.profileChosen })
             else timer = setTimeout(poll, 2000)
           } catch (err) {
             if (!stopped) setError((err as Error).message)

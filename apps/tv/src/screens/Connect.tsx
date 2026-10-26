@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, View } from 'react-native'
-import { normalizeServer } from '../api'
 import { Button, Focusable } from '../components'
-import { probe, scan } from '../discovery'
+import { addressCandidates, probeTyped, scan } from '../discovery'
 import { scaled, colors, font, gutter } from '../theme'
 import type { ServerInfo } from '../types'
 
@@ -26,11 +25,11 @@ export default function Connect({ onChosen }: { onChosen: (s: ServerInfo) => voi
     if (!address.trim()) return
     setChecking(true)
     setError('')
-    const url = normalizeServer(address)
-    const s = await probe(url, 4000)
+    const s = await probeTyped(address)
     setChecking(false)
+    const tried = addressCandidates(address)[0]?.replace(/^https?:\/\//, '') ?? address
     if (s) onChosen(s)
-    else setError(`No BingeBandit server answered at ${url.replace(/^https?:\/\//, '')}. Check the address, and that the server is running.`)
+    else setError(`No BingeBandit server answered at ${tried}. Check the address, and that the server is running.`)
   }
 
   return (
@@ -39,12 +38,12 @@ export default function Connect({ onChosen }: { onChosen: (s: ServerInfo) => voi
       <Text style={st.title}>Choose your server</Text>
       {typing ? (
         <View style={st.form}>
-          <Text style={st.label}>Server address (shown in BingeBandit under Settings, or ask whoever runs it)</Text>
+          <Text style={st.label}>Server address (shown on the Link a device page in BingeBandit, or ask whoever runs it)</Text>
           <TextInput
             style={st.input}
             value={address}
             onChangeText={setAddress}
-            placeholder="192.168.1.10"
+            placeholder="192.168.1.10 or tv.example.com"
             placeholderTextColor={colors.muted}
             autoFocus
             autoCapitalize="none"

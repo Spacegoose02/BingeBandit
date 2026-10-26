@@ -24,6 +24,7 @@ type pendingLink struct {
 	device    string
 	expires   time.Time
 	userID    int64 // set when approved
+	profile   bool  // approved as a profile: the TV opens as it without asking who's watching
 }
 
 type linkManager struct {
@@ -123,13 +124,33 @@ func (s *Server) linkPoll(w http.ResponseWriter, r *http.Request) {
 			writeStoreErr(w, err)
 			return
 		}
+		token, err := s.newSession(r, u, p.device)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
 		// Apps take the token from the body; a TV's web browser gets the cookie.
-		s.startSessionFor(w, r, u, p.device, r.URL.Query().Get("web") == "1")
+		if r.URL.Query().Get("web") == "1" {
+			s.setSessionCookie(w, r, token)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"token": token, "user": u, "profileChosen": p.profile})
 	}
 }
 
-// linkApprove signs the device in as the current user, or — for admins —
-// as another user (to set up a family member's TV).
+// linkInfo tells the /link page which address to type on a TV that isn't
+// on the home network: the public URL when one is set, else this one.
+func (s *Server) linkInfo(w http.ResponseWriter, r *http.Request) {
+	addr := s.policy().publicURL
+	if addr == "" {
+		addr = baseURL(r)
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"serverUrl": addr})
+}
+
+// linkApprove signs the device in as the current user, as one of the
+// account's profiles (someone's own TV in the kids' room), or — for admins —
+// as anyone (to set up a family member's TV). Picking a profile makes the TV
+// open as it; picking an account keeps the usual "Who's watching?".
 func (s *Server) linkApprove(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code   string `json:"code"`
@@ -140,28 +161,33 @@ func (s *Server) linkApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	me := currentUser(r)
-	uid := me.ID
+	target := me
 	if req.UserID != 0 && req.UserID != me.ID {
-		if !me.IsAdmin {
-			writeErr(w, http.StatusForbidden, "only admins can link a TV for someone else")
-			return
-		}
-		if _, err := s.Store.UserByID(req.UserID); err != nil {
+		t, err := s.Store.UserByID(req.UserID)
+		if err != nil {
 			writeStoreErr(w, err)
 			return
 		}
-		uid = req.UserID
+		// An account may hand a TV to its own profiles. A profile can't pick
+		// the account or a sibling: that would skip their PINs.
+		ownProfile := me.OwnerID == 0 && t.OwnerID == me.ID
+		if !me.IsAdmin && !ownProfile {
+			writeErr(w, http.StatusForbidden, "you can link a TV for yourself or your profiles; ask an admin to set one up for someone else")
+			return
+		}
+		target = t
 	}
 	s.links.mu.Lock()
 	s.links.prune()
 	p := s.links.byCode[normalizeCode(req.Code)]
 	if p != nil {
-		p.userID = uid
+		p.userID = target.ID
+		p.profile = target.OwnerID != 0
 	}
 	s.links.mu.Unlock()
 	if p == nil {
 		writeErr(w, http.StatusNotFound, "that code isn't valid or has expired; check the TV for the current one")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"device": p.device})
+	writeJSON(w, http.StatusOK, map[string]string{"device": p.device, "name": memberName(target)})
 }
