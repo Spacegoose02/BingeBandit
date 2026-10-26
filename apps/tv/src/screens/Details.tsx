@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached, image, writesDone } from '../api'
-import { Button, Center, Focusable, PosterCard } from '../components'
+import { Button, Center, CollectionCard, Focusable, PosterCard } from '../components'
 import { useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
-import type { Item, ItemDetail } from '../types'
+import type { Credit, Item, ItemDetail } from '../types'
 
 function fmtDuration(min?: number) {
   if (!min) return ''
@@ -42,6 +42,8 @@ export default function Details({ id }: { id: number }) {
     .join('   ·   ')
   // Older servers leave out unwatchedCount when it is 0.
   const fullyWatched = playable ? !!it.watch?.watched : !!it.childCount && !it.unwatchedCount
+  // Seasons and episodes show their show's cast.
+  const cast = ((it.kind === 'season' || it.kind === 'episode' ? d.show?.credits : it.credits) ?? []).filter((c) => c.kind === 'cast').slice(0, 30)
   const heading = it.kind === 'episode' ? `${it.showTitle ?? d.show?.title ?? ''}` : it.kind === 'season' ? d.show?.title ?? '' : ''
 
   return (
@@ -122,9 +124,52 @@ export default function Details({ id }: { id: number }) {
             ))}
           </>
         )}
+        {cast.length > 0 && (
+          <>
+            <Text style={st.section}>Cast</Text>
+            <ScrollView horizontal contentContainerStyle={st.hlist}>
+              {cast.map((c, i) => (
+                <PersonCard key={`${c.name}-${i}`} person={c} />
+              ))}
+            </ScrollView>
+          </>
+        )}
+        {d.collections?.map(({ collection, items }) => (
+          <React.Fragment key={collection.id}>
+            <Text style={st.section}>{collection.name}</Text>
+            <ScrollView horizontal contentContainerStyle={st.hlist}>
+              {items.map((m) => (
+                <PosterCard key={m.id} item={m} onPress={() => nav.push({ name: 'details', id: m.id })} />
+              ))}
+              <CollectionCard collection={collection} onPress={() => nav.push({ name: 'collection', id: collection.id })} />
+            </ScrollView>
+          </React.Fragment>
+        ))}
       </ScrollView>
     </ImageBackground>
   )
+}
+
+// An actor's photo, name and character. Focusable so the D-pad can scroll the row.
+function PersonCard({ person }: { person: Credit }) {
+  const src = image(person.photo, 'w185')
+  return (
+    <Focusable focusable onPress={() => undefined} style={st.person}>
+      {src ? (
+        <ImageBackground source={src} style={st.personImg} imageStyle={st.thumbImg} resizeMethod="resize" />
+      ) : (
+        <View style={[st.personImg, st.thumbFallback, st.initials]}>
+          <Text style={st.initialsText}>{initials(person.name)}</Text>
+        </View>
+      )}
+      <Text style={st.personName} numberOfLines={1}>{person.name}</Text>
+      {!!person.role && <Text style={st.personRole} numberOfLines={1}>{person.role}</Text>}
+    </Focusable>
+  )
+}
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('')
 }
 
 // A non-focusable thumbnail (the row around it takes focus).
@@ -154,6 +199,12 @@ const st = StyleSheet.create(scaled({
   epThumb: { width: isPhone ? 240 : 320, height: isPhone ? 135 : 180, marginRight: isPhone ? 20 : 30 },
   thumbFallback: { backgroundColor: colors.surface3, borderRadius: 8 },
   thumbImg: { borderRadius: 8 },
+  person: { width: isPhone ? 150 : 200, marginRight: isPhone ? 16 : 24, padding: 4 },
+  personImg: { width: '100%', aspectRatio: 2 / 3 },
+  initials: { alignItems: 'center', justifyContent: 'center' },
+  initialsText: { color: colors.muted, fontSize: font.heading, fontWeight: '800' },
+  personName: { color: colors.text, fontSize: font.small, fontWeight: '700', marginTop: 10 },
+  personRole: { color: colors.muted, fontSize: font.small, marginTop: 2 },
   epTitle: { color: colors.text, fontSize: font.body, fontWeight: '700' },
   epOverview: { color: colors.muted, fontSize: font.small, marginTop: 8, lineHeight: 30 },
 }))
