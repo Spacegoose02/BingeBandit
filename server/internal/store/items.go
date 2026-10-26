@@ -309,8 +309,18 @@ func (s *Store) TrailerCandidates(uid, exceptID int64, limit int) ([]*Item, erro
 // InProgress is everything the user started and has not finished, in the
 // libraries they pinned.
 func (s *Store) InProgress(uid int64, limit int) ([]*Item, error) {
-	return s.queryItems(itemSelect+` WHERE w.position > 15 AND i.kind IN ('movie','episode') AND `+visible+` AND `+pinned+`
-		ORDER BY w.updated_at DESC LIMIT @limit`, uidArg(uid), sql.Named("limit", limit))
+	return s.queryItems(itemSelect+` WHERE w.position > 15 AND w.updated_at >= @since AND i.kind IN ('movie','episode') AND `+visible+` AND `+pinned+`
+		ORDER BY w.updated_at DESC LIMIT @limit`, uidArg(uid), sql.Named("limit", limit), sql.Named("since", s.continueSince()))
+}
+
+// continueSince is the oldest play that still counts for Continue
+// Watching (the continue_watching_days setting; 0 = any).
+func (s *Store) continueSince() int64 {
+	days, _ := strconv.Atoi(s.Setting(SettingContinueDays))
+	if days <= 0 {
+		return 0
+	}
+	return now() - int64(days)*86400
 }
 
 type ShowProgress struct {
@@ -324,9 +334,9 @@ type ShowProgress struct {
 func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, error) {
 	rows, err := s.db.Query(`SELECT e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
 		FROM watch_state w JOIN items e ON e.id = w.item_id
-		WHERE w.user_id = ? AND w.watched = 1 AND e.kind = 'episode'
+		WHERE w.user_id = ? AND w.watched = 1 AND e.kind = 'episode' AND w.updated_at >= ?
 			AND NOT EXISTS (SELECT 1 FROM library_pins lp WHERE lp.user_id = w.user_id AND lp.library_id = e.library_id AND lp.pinned = 0)
-		GROUP BY e.show_id ORDER BY MAX(w.updated_at) DESC LIMIT ?`, uid, limit)
+		GROUP BY e.show_id ORDER BY MAX(w.updated_at) DESC LIMIT ?`, uid, s.continueSince(), limit)
 	if err != nil {
 		return nil, err
 	}

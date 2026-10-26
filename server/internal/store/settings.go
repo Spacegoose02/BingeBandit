@@ -23,6 +23,7 @@ const (
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
 	SettingWatchedPercent    = "watched_percent" // how far into a movie or episode it counts as watched
+	SettingContinueDays      = "continue_watching_days" // titles not played for this long leave Continue Watching; 0 = never
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
@@ -93,6 +94,7 @@ var SettingDefaults = map[string]string{
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
 	SettingWatchedPercent:    "90",
+	SettingContinueDays:      "0",
 	SettingWatchFolders:      "true",
 	SettingMaintenanceStart:  "2",
 	SettingMaintenanceEnd:    "5",

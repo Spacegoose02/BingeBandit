@@ -86,3 +86,21 @@ func TestUpNextFollowsARewatch(t *testing.T) {
 		t.Fatalf("finale: want ErrNotFound, got %v", err)
 	}
 }
+
+func TestContinueWatchingDays(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	id := addMovie(t, s, lib.ID, "Heat")
+	u, _ := s.CreateUser("dana", "x", false)
+	s.SetUserLibraries(u.ID, true, nil)
+	s.SaveProgress(u.ID, id, 40, 100)
+	s.db.Exec(`UPDATE watch_state SET updated_at = ? WHERE item_id = ?`, now()-40*86400, id)
+	if got, _ := s.InProgress(u.ID, 10); len(got) != 1 {
+		t.Fatal("with no limit, an old start should stay")
+	}
+	s.SetSettings(map[string]string{SettingContinueDays: "30"})
+	if got, _ := s.InProgress(u.ID, 10); len(got) != 0 {
+		t.Fatal("a start 40 days ago stayed with a 30-day limit")
+	}
+}
