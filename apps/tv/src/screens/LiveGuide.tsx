@@ -1,11 +1,11 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
 import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Center } from '../components'
 import { joinChannel, leaveChannel } from '../live'
-import { useNav, useScreen } from '../nav'
+import { FocusMemoryContext, useNav, useScreen, type FocusTarget } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 import { lastChannel } from './LivePlayer'
@@ -163,6 +163,7 @@ export default function LiveGuide() {
   // reaches an edge of the visible window, slide the timeline to show what's next.
   const onFocusSeg = useCallback(
     (channel: LiveChannel, seg: Seg) => {
+      setFocusSel(0)
       setSel({ channel, seg })
       setViewStart((v) => {
         const atLeft = seg.start <= v && v > gridFrom
@@ -214,21 +215,43 @@ export default function LiveGuide() {
   const shown = useMemo(() => (guide ? filterChannels(guide, activeFilter) : []), [guide, activeFilter])
 
   // Only while the guide is on screen: watching a channel leaves the preview.
-  const { active } = useScreen()
+  const { active, returns } = useScreen()
   // Back from watching full screen: the preview carries on with the channel
   // that was being watched (which may have been flipped to there), and the
-  // guide's selection moves to it.
+  // guide's selection moves to it, with focus on what's on now. The menu
+  // can't do that: the guide's blocks aren't remembered like other buttons,
+  // so focus went back to the Live TV tab.
   const synced = useRef(lastChannel.id)
+  const restored = useRef(returns)
+  const [focusSel, setFocusSel] = useState(0)
   useEffect(() => {
-    if (!active || !guide || lastChannel.id === synced.current) return
-    synced.current = lastChannel.id
-    const c = guide.channels.find((ch) => ch.id === lastChannel.id)
-    if (!c) return
-    setTuned((t) => (t?.id === c.id ? t : c))
-    setSel((s) => (s?.channel.id === c.id ? s : { channel: c, seg: segments(c, guide.programs[c.epgId ?? ''], guide.from, guide.to)[0] }))
-  }, [active, guide])
+    if (!active || !guide) return
+    if (lastChannel.id !== synced.current) {
+      synced.current = lastChannel.id
+      const c = guide.channels.find((ch) => ch.id === lastChannel.id)
+      if (c && selRef.current?.channel.id !== c.id) {
+        const t = Date.now() / 1000
+        const segs = segments(c, guide.programs[c.epgId ?? ''], guide.from, guide.to)
+        setTuned(c)
+        setSel({ channel: c, seg: segs.find((s) => s.start <= t && t < s.stop) ?? segs[0] })
+        setViewStart(clampStart(floorHalf(t)))
+        if (!shown.some((x) => x.id === c.id)) setFilter('all') // flipped to a channel the filter hides
+      }
+    }
+    if (returns > restored.current) {
+      restored.current = returns
+      if (!isPhone) setFocusSel(returns)
+    }
+  }, [active, guide, returns, clampStart, setFilter, shown])
   const preview = usePreview(active ? tuned?.id : undefined)
   // Built once per load so the memoized rows only redraw when something they show changes.
+  // Bring the selected row into view so its block can take focus.
+  const list = useRef<FlatList<LiveChannel>>(null)
+  useEffect(() => {
+    if (!focusSel || !sel) return
+    const i = shown.findIndex((c) => c.id === sel.channel.id)
+    if (i >= 0) list.current?.scrollToIndex({ index: i, animated: false, viewPosition: 0.3 })
+  }, [focusSel, sel, shown])
   const segsByChannel = useMemo(
     () => new Map((guide?.channels ?? []).map((c) => [c.id, segments(c, guide!.programs[c.epgId ?? ''], guide!.from, guide!.to)])),
     [guide],
@@ -311,9 +334,10 @@ export default function LiveGuide() {
         <TVFocusGuideView style={st.flex} trapFocusLeft trapFocusRight>
           {shown.length === 0 && <Text style={[st.muted, st.noneShown]}>No channels in this category yet.</Text>}
           <FlatList
+            ref={list}
             data={shown}
             keyExtractor={(c) => String(c.id)}
-            extraData={`${viewStart}:${now}:${sel?.channel.id}:${sel?.seg.key}:${geo.gridW}`}
+            extraData={`${viewStart}:${now}:${sel?.channel.id}:${sel?.seg.key}:${geo.gridW}:${focusSel}`}
             getItemLayout={(_, i) => ({ length: px(ROW_H + ROW_GAP), offset: px(ROW_H + ROW_GAP) * i, index: i })}
             initialNumToRender={8}
             windowSize={5}
@@ -328,6 +352,7 @@ export default function LiveGuide() {
                 geo={geo}
                 active={sel?.channel.id === item.id}
                 selKey={sel?.channel.id === item.id ? sel.seg.key : undefined}
+                focusSel={sel?.channel.id === item.id ? focusSel : 0}
                 onFocusSeg={onFocusSeg}
                 onTapSeg={onTapSeg}
                 onWatch={watch}
@@ -349,6 +374,7 @@ const ChannelRow = memo(function Row({
   geo,
   active,
   selKey,
+  focusSel,
   onFocusSeg,
   onTapSeg,
   onWatch,
@@ -361,6 +387,7 @@ const ChannelRow = memo(function Row({
   geo: Geo
   active: boolean
   selKey?: string
+  focusSel: number
   onFocusSeg: (c: LiveChannel, s: Seg) => void
   onTapSeg: (c: LiveChannel, s: Seg) => void
   onWatch: (c: LiveChannel) => void
@@ -382,6 +409,7 @@ const ChannelRow = memo(function Row({
               perSec={geo.perSec}
               airing={seg.start <= now && now < seg.stop}
               selected={selKey === seg.key}
+              focusNow={selKey === seg.key ? focusSel : 0}
               onFocus={() => onFocusSeg(channel, seg)}
               onPress={() => (isPhone ? onTapSeg(channel, seg) : onWatch(channel))}
             />
@@ -435,6 +463,7 @@ function Cell({
   perSec,
   airing,
   selected,
+  focusNow,
   onFocus,
   onPress,
 }: {
@@ -444,10 +473,20 @@ function Cell({
   perSec: number
   airing: boolean
   selected: boolean
+  focusNow: number // when it changes, take focus
   onFocus: () => void
   onPress: () => void
 }) {
   const [focused, setFocused] = useState(false)
+  const ref = useRef<View>(null)
+  const remember = useContext(FocusMemoryContext)
+  useEffect(() => {
+    if (!focusNow) return
+    // After the screen's own focus restore, which lands on the block last
+    // focused rather than the channel flipped to.
+    const t = setTimeout(() => (ref.current as FocusTarget | null)?.requestTVFocus?.(), 120)
+    return () => clearTimeout(t)
+  }, [focusNow])
   const lit = isPhone ? selected : focused // a TV lights the focused block; a phone the tapped one
   const left = (seg.start - from) * perSec
   const width = (seg.stop - seg.start) * perSec
@@ -456,8 +495,10 @@ function Cell({
   const startedEarlier = seg.program && seg.program.start < seg.start
   return (
     <Pressable
+      ref={ref}
       onFocus={() => {
         setFocused(true)
+        remember(ref.current)
         onFocus()
       }}
       onBlur={() => setFocused(false)}
