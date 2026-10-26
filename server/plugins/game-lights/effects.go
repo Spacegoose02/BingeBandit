@@ -259,6 +259,8 @@ func effectSteps(key string, p Palette, reduced bool) []Step {
 		return alternate(amber, dim(amber, 38), 2, 500*time.Millisecond)
 	case "opp_score":
 		return []Step{{dim(red, 76), 700 * time.Millisecond}, {dim(red, 20), 700 * time.Millisecond}}
+	case "opp_colour": // the other team scores, for people who chose their colours over red
+		return []Step{{dim(P, 76), 700 * time.Millisecond}, {dim(P, 20), 700 * time.Millisecond}}
 	case "win":
 		return append(alternate(P, S, n(40, 12), hold), Step{P, 2 * time.Second})
 	}

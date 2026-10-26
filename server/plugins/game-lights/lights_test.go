@@ -140,6 +140,10 @@ func (b *fakeBridge) SetState(_ context.Context, id string, st map[string]any) e
 	return nil
 }
 
+func (b *fakeBridge) Areas(context.Context) ([]Area, error) {
+	return []Area{{ID: "10", Name: "Living room", Type: "Room", Lights: []string{"1", "2"}}, {ID: "11", Name: "Den", Type: "Room", Lights: []string{"3"}}}, nil
+}
+
 func (b *fakeBridge) Restore(_ context.Context, id string, s LightState) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -326,4 +330,70 @@ func TestStatusListsNotNull(t *testing.T) {
 			t.Errorf("%s = %q, want a list", k, s)
 		}
 	}
+}
+
+// Two people in one game, cheering for different teams in different rooms,
+// each with their own delay source and choices.
+func TestPeopleRoomsAndDelays(t *testing.T) {
+	a, fb := testApp(t)
+	a.conf.update(func(c *Config) {
+		c.People = map[string]Person{
+			"1": {Area: "10", Source: "YouTube TV", Delays: map[string]int{"YouTube TV": 0, "Cable or antenna": 60}, Opponent: "colour"},
+			"2": {Area: "11", Opponent: "off"},
+		}
+	})
+	a.settings["delay_seconds"] = "0"
+	b, _ := json.Marshal(map[string]any{
+		"sport": "hockey", "scorer": "2390",
+		"game": map[string]any{"id": "401", "league": "nhl", "shortName": "MIA @ VT", "state": "in",
+			"home": map[string]any{"id": "259", "shortName": "Hokies", "abbr": "VT", "color": "630031", "altColor": "cf4420", "score": "0"},
+			"away": map[string]any{"id": "2390", "shortName": "Hurricanes", "abbr": "MIA", "color": "005030", "altColor": "f47321", "score": "1"}},
+		"fans": []map[string]any{{"userId": 1, "user": "michael", "teamId": "259"}, {"userId": 2, "user": "dana", "teamId": "2390"}},
+	})
+	a.follower.onEvent(context.Background(), "sports.score", b)
+	// Michael (living room) sees Miami's goal as a dim pulse in Miami's
+	// colours; Dana (den) gets their team's touchdown effect.
+	wait(t, func() bool {
+		return logged(a, "Lights: MIA @ VT 1–0") && a.runnerFor("10").Idle() && a.runnerFor("11").Idle()
+	})
+	fb.mu.Lock()
+	rooms := map[string]bool{}
+	for _, s := range fb.sets {
+		rooms[s[:1]] = true
+	}
+	fb.mu.Unlock()
+	if !rooms["1"] || !rooms["3"] {
+		t.Errorf("lights changed: %v, want the living room (1, 2) and the den (3)", rooms)
+	}
+	if at, text := a.follower.Last("1"); at.IsZero() || !strings.Contains(text, "1–0") {
+		t.Errorf("last play for calibrating = %q", text)
+	}
+
+	// Calibrating sets the delay for the current source only.
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/me/calibrate", nil)
+	req.Header.Set("X-BingeBandit-User-Id", "1")
+	a.routes().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("calibrate: %d %s", rec.Code, rec.Body)
+	}
+	p := a.conf.get().People["1"]
+	if p.Delays["Cable or antenna"] != 60 || p.Area != "10" {
+		t.Errorf("calibrating changed other choices: %+v", p)
+	}
+	if d := p.delay(25); d > 20 || d == 25 {
+		t.Errorf("calibrated delay = %d", p.delay(25))
+	}
+
+	// Saving checks what it's given.
+	for body, code := range map[string]int{`{"opponent":"rainbow"}`: 400, `{"delays":{"Cable":999}}`: 400, `{"area":"11","opponent":"red"}`: 204} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("PUT", "/me/settings", strings.NewReader(body))
+		req.Header.Set("X-BingeBandit-User-Id", "2")
+		a.routes().ServeHTTP(rec, req)
+		if rec.Code != code {
+			t.Errorf("%s: %d, want %d", body, rec.Code, code)
+		}
+	}
+	a.resetAll()
 }

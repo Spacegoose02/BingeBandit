@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Game Lights</title>
+<style>
+  :root { --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #646a76; --line: #dde1e7; --accent: #0f9d8f; --danger: #c43d3d; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0f13; --panel: #171a21; --text: #e9ecf1; --muted: #9098a6; --line: #2a2f39; --accent: #2cc3b2; --danger: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); min-width: 0; }
+  input { flex: 1; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .6; cursor: default; }
+  .light { display: flex; gap: 12px; align-items: center; border-top: 1px solid var(--line); padding: 10px 0; }
+  .light:first-of-type { border-top: 0; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  .grow { flex: 1; min-width: 0; }
+  .error { color: var(--danger); }
+  .ok { color: var(--accent); }
+  .chip { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); vertical-align: middle; }
+  .effect { display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--line); padding: 8px 0; }
+  .effect:first-of-type { border-top: 0; }
+  input[type=checkbox] { flex: none; width: 18px; height: 18px; }
+  input[type=color] { flex: none; width: 44px; height: 32px; padding: 2px; }
+  .log { font-size: 13px; max-height: 260px; overflow-y: auto; }
+  .log div { border-top: 1px solid var(--line); padding: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>My Game Lights</h1>
+  <p class="muted">When your teams from the Sports page play, the Hue lights flash in their colours as they score.
+    These choices are yours alone; the TV app's Sports tab has them too.</p>
+  <p id="msg" class="small"></p>
+
+  <section>
+    <h2>Lights</h2>
+    <label class="effect"><input id="on" type="checkbox"><div class="grow">Light up for my teams</div></label>
+    <div class="row" style="margin-top:8px">
+      <span class="grow">Room or zone</span>
+      <select id="area" aria-label="Room or zone"></select>
+    </div>
+    <p class="small muted" style="margin-top:8px">Pick the room you watch in, so other rooms can follow their own games.
+      "The house's game lights" are the ones an admin ticked on the setup page.</p>
+  </section>
+
+  <section>
+    <h2>Sync delay</h2>
+    <p class="small muted">ESPN knows about a play before your TV shows it, so the lights wait. The delay is kept for each
+      way you watch, so switching is one choice.</p>
+    <div class="row">
+      <span class="grow">I'm watching on</span>
+      <select id="source" aria-label="Watching on"></select>
+      <button id="addSource" type="button">Other…</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="grow">Wait <b id="delayText"></b> seconds</span>
+      <input id="delay" type="range" min="0" max="120" style="flex:2" aria-label="Delay in seconds">
+    </div>
+    <p class="small muted" style="margin-top:10px">During a game, press this the moment a play shows on your TV and the delay
+      is measured for you. <span id="lastPlay"></span></p>
+    <div class="row"><button id="calibrate" class="primary" type="button">That play just showed on my TV</button></div>
+  </section>
+
+  <section>
+    <h2>When the other team scores</h2>
+    <select id="opponent" aria-label="When the other team scores">
+      <option value="red">A dim red pulse</option>
+      <option value="colour">A dim pulse in their colours</option>
+      <option value="off">Nothing</option>
+    </select>
+  </section>
+
+  <section>
+    <h2>My team colours</h2>
+    <p class="small muted">If two of your teams look alike, or a colour reads badly on your bulbs, pick your own.</p>
+    <div id="teams"></div>
+  </section>
+</main>
+<script>
+  const base = location.pathname.replace(/\/?$/, '/')
+  const call = async (method, path, body, root) => {
+    const res = await fetch((root || base) + path, {
+      method, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'BingeBandit', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    if (res.status === 204 || res.status === 202) return null
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new Error((data && data.error) || res.statusText)
+    return data
+  }
+  const $ = (id) => document.getElementById(id)
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) k.includes('-') ? n.setAttribute(k, v) : (n[k] = v)
+    n.append(...kids.filter((k) => k != null)); return n
+  }
+  const say = (text, cls = '') => { $('msg').textContent = text; $('msg').className = 'small ' + cls }
+  const fail = (e) => say(e.message, 'error')
+
+  let st, me
+  const save = () => call('PUT', 'settings', me).then(() => say('Saved.', 'ok'), fail)
+  function draw() {
+    $('on').checked = !me.off
+    $('area').replaceChildren(el('option', { value: '', textContent: "The house's game lights" }),
+      ...st.areas.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.type.toLowerCase()})` })))
+    $('area').value = me.area || ''
+    $('source').replaceChildren(...st.sources.map((s) => el('option', { value: s, textContent: s })))
+    $('source').value = me.source
+    const d = me.source in me.delays ? me.delays[me.source] : st.defaultDelay
+    $('delay').value = d; $('delayText').textContent = d
+    $('opponent').value = me.opponent || 'red'
+    $('lastPlay').textContent = st.lastPlay ? `Newest play (${st.lastPlay.secondsAgo} s ago): ${st.lastPlay.text}` : ''
+  }
+  async function load() {
+    st = await call('GET', 'state')
+    me = st.person
+    if (st.error) say(st.error, 'error')
+    else if (!st.paired) say('An admin still needs to pair the Hue bridge on the Game Lights setup page.', 'error')
+    draw()
+    // Your teams, with their colours, from the Sports page.
+    const sports = await call('GET', 'sports', null, '/api/')
+    $('teams').replaceChildren(...(sports.teams.length ? sports.teams.map((t) => {
+      const key = t.league + '/' + t.id
+      const own = me.colours[key]
+      const c1 = el('input', { type: 'color', value: own ? own[0] : '#' + (t.color || '888888'), 'aria-label': t.name + ' first colour' })
+      const c2 = el('input', { type: 'color', value: own ? own[1] : '#' + (t.altColor || t.color || '888888'), 'aria-label': t.name + ' second colour' })
+      const keep = el('button', { type: 'button', textContent: 'Save' })
+      keep.onclick = () => { me.colours = { ...me.colours, [key]: [c1.value, c2.value] }; save() }
+      const reset = el('button', { type: 'button', textContent: 'Default', hidden: !own })
+      reset.onclick = () => { const c = { ...me.colours }; delete c[key]; me.colours = c; save().then(load) }
+      const test = el('button', { type: 'button', textContent: 'Test' })
+      test.onclick = () => call('POST', 'test', { effect: 'touchdown', team: t }).then(() => say('Playing a touchdown in the ' + t.shortName + ' colours…', 'ok'), fail)
+      return el('div', { className: 'effect' }, el('div', { className: 'grow', textContent: t.name }), c1, c2, keep, test, reset)
+    }) : [el('p', { className: 'muted small', textContent: 'Pick teams on the Sports page first.' })]))
+  }
+
+  $('on').onchange = () => { me.off = !$('on').checked; save() }
+  $('area').onchange = () => { me.area = $('area').value; save() }
+  $('source').onchange = () => { me.source = $('source').value; draw(); save() }
+  $('addSource').onclick = () => {
+    const name = (prompt('What are you watching on? (for example Peacock)') || '').trim()
+    if (!name) return
+    if (!st.sources.includes(name)) st.sources.push(name)
+    me.source = name; draw(); save()
+  }
+  $('delay').oninput = () => { $('delayText').textContent = $('delay').value }
+  $('delay').onchange = () => { me.delays = { ...me.delays, [me.source]: Number($('delay').value) }; save() }
+  $('opponent').onchange = () => { me.opponent = $('opponent').value; save() }
+  $('calibrate').onclick = () => call('POST', 'calibrate').then((r) => { say(`Delay for ${r.source} set to ${r.delay} s from "${r.play}".`, 'ok'); return load() }, fail)
+
+  load().catch(fail)
+  setInterval(() => call('GET', 'state').then((s) => { st.lastPlay = s.lastPlay; $('lastPlay').textContent = s.lastPlay ? `Newest play (${s.lastPlay.secondsAgo} s ago): ${s.lastPlay.text}` : '' }).catch(() => {}), 5000)
+</script>
+</body>
+</html>

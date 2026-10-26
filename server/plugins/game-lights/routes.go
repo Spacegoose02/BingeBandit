@@ -78,9 +78,10 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /test", admin(a.test))
 	mux.HandleFunc("POST /sample", admin(a.sample))
 	mux.HandleFunc("POST /reset", admin(func(w http.ResponseWriter, r *http.Request) {
-		go a.runner.Reset()
+		go a.resetAll()
 		w.WriteHeader(http.StatusAccepted)
 	}))
+	a.meRoutes(mux)
 	return mux
 }
 

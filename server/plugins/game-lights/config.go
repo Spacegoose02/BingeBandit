@@ -32,6 +32,31 @@ type Config struct {
 	Off      []string             `json:"off,omitempty"`     // effects turned off
 	Colours  map[string][2]string `json:"colours,omitempty"` // team key → two hex colours
 	Teams    map[string]Team      `json:"teams,omitempty"`   // teams followed so far, for the setup page
+	People   map[string]Person    `json:"people,omitempty"`  // each person's own choices, by user id
+}
+
+// Person is what each person sets for themselves on My Game Lights (web) or
+// in the TV app's Sports tab.
+type Person struct {
+	Off    bool   `json:"off,omitempty"`    // no lights for this person's teams
+	Area   string `json:"area,omitempty"`   // Hue room or zone (group id); "" = the lights the admin ticked
+	Source string `json:"source,omitempty"` // how they're watching, which picks the delay
+	// Delays are seconds behind ESPN per source ("Cable", "YouTube TV"…), so
+	// switching providers is one choice; missing = the admin's delay.
+	Delays   map[string]int       `json:"delays,omitempty"`
+	Opponent string               `json:"opponent,omitempty"` // other team scores: "red" (default), "colour" (dim, in their colours) or "off"
+	Colours  map[string][2]string `json:"colours,omitempty"`  // team key → two hex colours, over the admin's
+}
+
+// Sources are offered for the delay; people can name their own too.
+var Sources = []string{"Cable or antenna", "YouTube TV", "Streaming app", "BingeBandit Live TV"}
+
+// delay is how long to hold this person's effects, given the admin's default.
+func (p Person) delay(def int) int {
+	if d, ok := p.Delays[p.Source]; ok {
+		return d
+	}
+	return def
 }
 
 type configStore struct {
@@ -61,6 +86,7 @@ func (s *configStore) load() Config {
 	c.Off = slices.Clone(c.Off)
 	c.Colours = maps.Clone(c.Colours)
 	c.Teams = maps.Clone(c.Teams)
+	c.People = maps.Clone(c.People) // a Person's maps are replaced, never changed in place
 	return c
 }
 
@@ -91,9 +117,17 @@ func (s *configStore) update(f func(*Config)) error {
 
 // palette is the team's light colours, with the admin's colours if set.
 func (c Config) palette(t Team) Palette {
+	return c.paletteFor(t, Person{})
+}
+
+// paletteFor is the team's colours for one person: theirs, else the
+// admin's, else ESPN's.
+func (c Config) paletteFor(t Team, p Person) Palette {
 	var custom *[2]string
-	if p, ok := c.Colours[t.key()]; ok {
-		custom = &p
+	if pc, ok := p.Colours[t.key()]; ok {
+		custom = &pc
+	} else if ac, ok := c.Colours[t.key()]; ok {
+		custom = &ac
 	}
 	return palette(teamHex(t.Abbr, t.Color, t.AltColor, custom))
 }

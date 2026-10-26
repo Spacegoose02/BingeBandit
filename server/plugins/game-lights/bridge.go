@@ -159,6 +159,36 @@ func (b *Bridge) Lights(ctx context.Context) ([]Light, error) {
 	return out, nil
 }
 
+// Area is a Hue room or zone.
+type Area struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Type   string   `json:"type"` // Room or Zone
+	Lights []string `json:"lights"`
+}
+
+// Areas lists the bridge's rooms and zones, rooms first.
+func (b *Bridge) Areas(ctx context.Context) ([]Area, error) {
+	var groups map[string]Area
+	if err := b.do(ctx, http.MethodGet, "/"+b.Username+"/groups", nil, &groups); err != nil {
+		return nil, err
+	}
+	out := []Area{}
+	for id, g := range groups {
+		if (g.Type == "Room" || g.Type == "Zone") && len(g.Lights) > 0 {
+			g.ID = id
+			out = append(out, g)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Type != out[j].Type {
+			return out[i].Type == "Room"
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out, nil
+}
+
 // SetState changes one light. transition is in tenths of a second.
 func (b *Bridge) SetState(ctx context.Context, id string, state map[string]any) error {
 	return b.do(ctx, http.MethodPut, "/"+b.Username+"/lights/"+id+"/state", state, nil)

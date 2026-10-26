@@ -13,6 +13,7 @@ type bridgeAPI interface {
 	Lights(ctx context.Context) ([]Light, error)
 	SetState(ctx context.Context, id string, state map[string]any) error
 	Restore(ctx context.Context, id string, s LightState) error
+	Areas(ctx context.Context) ([]Area, error)
 }
 
 // show is one effect waiting to run.
@@ -27,6 +28,7 @@ type show struct {
 // back and checks they took it.
 type Runner struct {
 	a      *app
+	area   string // Hue room or zone whose lights it plays on; "" = the admin's ticked lights
 	bridge func(Config) bridgeAPI
 	// gap is the least time per light change: the bridge takes about ten a second.
 	gap time.Duration
@@ -97,7 +99,7 @@ func (r *Runner) drain() {
 
 func (r *Runner) play(ctx context.Context, s show) {
 	conf := r.a.conf.get()
-	if conf.Username == "" || len(conf.Lights) == 0 {
+	if conf.Username == "" || (r.area == "" && len(conf.Lights) == 0) {
 		r.a.logf("%s: no lights chosen yet", s.label)
 		return
 	}
@@ -111,9 +113,27 @@ func (r *Runner) play(ctx context.Context, s show) {
 		r.a.logf("%s: %v", s.label, err)
 		return
 	}
+	ids := conf.Lights
+	if r.area != "" {
+		ids = nil
+		areas, err := b.Areas(ctx)
+		if err != nil {
+			r.a.logf("%s: %v", s.label, err)
+			return
+		}
+		for _, ar := range areas {
+			if ar.ID == r.area {
+				ids = ar.Lights
+			}
+		}
+		if ids == nil {
+			r.a.logf("%s: that Hue room or zone is gone; pick another on My Game Lights", s.label)
+			return
+		}
+	}
 	var chosen []Light
 	for _, l := range lights {
-		if slices.Contains(conf.Lights, l.ID) {
+		if slices.Contains(ids, l.ID) {
 			chosen = append(chosen, l)
 		}
 	}
