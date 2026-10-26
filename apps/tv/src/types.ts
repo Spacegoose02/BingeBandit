@@ -49,7 +49,15 @@ export interface Item {
   childCount?: number
   unwatchedCount?: number
   onWatchlist?: boolean
+  credits?: Credit[] // movies and shows, on the details endpoint
   watch: WatchState
+}
+
+export interface Credit {
+  name: string
+  role: string // the character for cast, the job for crew
+  kind: 'cast' | 'crew'
+  photo?: string
 }
 
 export interface MediaFile {
@@ -73,6 +81,7 @@ export interface ItemDetail {
   season?: Item
   upNext?: Item
   trailers?: { url: string; name: string }[] // movies: trailer files from the movie's folder
+  collections?: { collection: Collection; items: Item[] }[] // movies and shows: the collections they're in
 }
 
 /** A row of titles on Home or a library's Recommended tab. */
