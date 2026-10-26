@@ -762,4 +762,12 @@ CREATE TABLE sports_alerts (
 	PRIMARY KEY (user_id, game_id, kind)
 );
 `,
+	// 40: kid mode for Live TV. A kid only sees the channels an admin
+	// approved for kids, one by one (channels.kids) or a whole group at a
+	// time (kid_channel_groups, by the channel's group name).
+	`
+ALTER TABLE users ADD COLUMN kid INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE channels ADD COLUMN kids INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE kid_channel_groups (grp TEXT PRIMARY KEY);
+`,
 }

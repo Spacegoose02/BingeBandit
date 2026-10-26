@@ -32,6 +32,7 @@ type member struct {
 	Avatar  string  `json:"avatar,omitempty"`
 	Custom  bool    `json:"avatarCustom,omitempty"` // an uploaded picture, not a built-in one
 	Auto    bool    `json:"auto,omitempty"`         // the account opens as this member without asking
+	Kid     bool    `json:"kid,omitempty"` // only sees Live TV channels approved for kids
 	AllLibs bool    `json:"allLibraries"`
 	LibIDs  []int64 `json:"libraryIds,omitempty"`
 }
@@ -59,7 +60,7 @@ func (s *Server) household(w http.ResponseWriter, r *http.Request) {
 	out := make([]member, 0, len(users))
 	for _, m := range users {
 		mem := member{ID: m.ID, Name: memberName(m), IsOwner: m.OwnerID == 0, HasPIN: m.HasPasscode, Current: m.ID == u.ID,
-			Avatar: m.Avatar, Custom: m.AvatarCustom, Auto: m.ID == auto, AllLibs: m.IsAdmin || m.AllLibraries}
+			Avatar: m.Avatar, Custom: m.AvatarCustom, Auto: m.ID == auto, Kid: m.Kid, AllLibs: m.IsAdmin || m.AllLibraries}
 		// Only the account sees what each profile may browse.
 		if u.OwnerID == 0 && m.OwnerID != 0 && !m.AllLibraries {
 			mem.LibIDs, _ = s.Store.UserLibraryIDs(m.ID)
@@ -145,8 +146,8 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, member{ID: p.ID, Name: p.ProfileName, AllLibs: p.AllLibraries})
 }
 
-// updateProfile renames a profile and sets which libraries it sees, never
-// more than the account itself sees.
+// updateProfile renames a profile, sets which libraries it sees (never more
+// than the account itself sees) and whether it's a kid.
 func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	owner, p := s.ownProfile(w, r)
 	if p == nil {
@@ -156,6 +157,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		Name         *string `json:"name"`
 		AllLibraries *bool   `json:"allLibraries"`
 		LibraryIDs   []int64 `json:"libraryIds"`
+		Kid          *bool   `json:"kid"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -191,6 +193,15 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		if err := s.Store.SetUserLibraries(p.ID, all, ids); err != nil {
 			writeStoreErr(w, err)
 			return
+		}
+	}
+	if req.Kid != nil {
+		if err := s.Store.SetKid(p.ID, *req.Kid); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		if *req.Kid {
+			s.Live.KickUser(p.ID)
 		}
 	}
 	s.recheckTranscodes()

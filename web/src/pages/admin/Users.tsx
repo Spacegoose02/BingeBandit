@@ -35,6 +35,10 @@ export default function AdminUsers() {
     await api.put(`/api/admin/users/${u.id}/live-tv`, { on }).catch((e) => alert(e.message))
     reload()
   }
+  const setKid = async (u: User, on: boolean) => {
+    await api.put(`/api/admin/users/${u.id}/kid`, { on }).catch((e) => alert(e.message))
+    reload()
+  }
   const reset2FA = async (u: User) => {
     if (!confirm(`Turn off two-step sign-in for ${u.username}? They can sign in with just their password until they set it up again.`)) return
     await api.del(`/api/admin/users/${u.id}/2fa`).catch((e) => alert(e.message))
@@ -80,6 +84,15 @@ export default function AdminUsers() {
                 title={u.liveTV ? 'Turn off Live TV and recordings for this user' : 'Let this user watch Live TV again'}
               >
                 <Icon name="broadcast" size={16} /> {u.liveTV ? 'Live TV on' : 'Live TV off'}
+              </button>
+            )}
+            {!u.isAdmin && u.liveTV && (
+              <button
+                className={`btn btn-glass btn-sm${u.kid ? ' active' : ''}`}
+                onClick={() => setKid(u, !u.kid)}
+                title={u.kid ? 'Only sees channels approved for kids (Live TV → Kids). Click to show every channel.' : 'Only show this user the channels approved for kids'}
+              >
+                <Icon name="user" size={16} /> {u.kid ? 'Kid' : 'Not a kid'}
               </button>
             )}
             {u.hasPasscode && (

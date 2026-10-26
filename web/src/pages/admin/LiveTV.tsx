@@ -10,10 +10,11 @@ import type { AdminChannel, LiveSource, LiveStream, RelayStat } from '../../type
 import { ChannelLogo, channelNo } from '../LiveGuide'
 import { CustomChannelEditor } from './CustomChannel'
 import { DispatcharrImport } from './DispatcharrImport'
+import { KidChannels } from './KidChannels'
 import { Logos } from './Logos'
 import { LogoField } from '../../components/ChannelLogos'
 
-type Tab = 'channels' | 'logos' | 'sources' | 'activity'
+type Tab = 'channels' | 'kids' | 'logos' | 'sources' | 'activity'
 
 export default function AdminLiveTV() {
   useDocumentTitle('Live TV')
@@ -27,15 +28,16 @@ export default function AdminLiveTV() {
           <div className="muted">Playlists and guides from your IPTV providers, the channels built from them, and who's watching.</div>
         </div>
         <div className="segmented">
-          {(['activity', 'channels', 'logos', 'sources'] as Tab[]).map((t) => (
+          {(['activity', 'channels', 'kids', 'logos', 'sources'] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? 'active' : ''} onClick={() => setParams({ tab: t }, { replace: true })}>
-              {({ activity: 'Activity', channels: 'Channels', logos: 'Logos', sources: 'Sources' } as Record<Tab, string>)[t]}
+              {({ activity: 'Activity', channels: 'Channels', kids: 'Kids', logos: 'Logos', sources: 'Sources' } as Record<Tab, string>)[t]}
             </button>
           ))}
         </div>
       </header>
       {tab === 'sources' && <Sources />}
       {tab === 'channels' && <Channels />}
+      {tab === 'kids' && <KidChannels />}
       {tab === 'logos' && <Logos />}
       {tab === 'activity' && <Activity />}
     </div>
