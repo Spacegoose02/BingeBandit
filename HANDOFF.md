@@ -2,7 +2,16 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-26, chart lists (TMDB, Trakt, IMDb, Yamtrack) and Kometa collection import, on top of the feature board work (Hue rooms per device, trailers, board fixes)._
+_Last updated: 2026-10-26, the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+
+## Sports tracker and Game Lights (2026-10-26)
+
+- **ESPN** (`server/internal/sports`): the unofficial site API, no key. Leagues: NFL, college football (`groups=80`, every FBS game), NBA, men's and women's college basketball (`groups=50`), MLB, NHL, MLS. One scoreboard request per US Eastern day (ESPN rejects date ranges), cached 20 s while a game is on or about to start, 5 min for nearby days, 1 h otherwise; team lists for 12 h.
+- **Team picks** (migration 39, `sports_teams`): per user or profile, copied from ESPN when picked. API: `GET /api/sports`, `PUT /api/sports/teams`, `GET /api/sports/{league}/teams`, `GET /api/sports/{league}/scores?date=` (docs/API.md → Sports). Live and upcoming games link to Live TV channels whose guide entry around kick-off names both teams (nickname or place, whole words).
+- **Tracker** (`RunSports`): looks at the leagues people follow every 30 s while one of their games is on or within 30 min, else every 5 min, and right after someone changes teams. It sends `sports.game.start`, `sports.score`, `sports.game.end` (also webhooks) and `sports.game.live` (plugins only, every look) with the game, sport, scorer and fans. A game seen for the first time announces nothing, so restarts don't replay scores.
+- **Alerts:** prefs `gameAlertMinutes` (default 15, 0 = off) and `notifyGameScores` (default off), under Account → Playback. Notifications of kind `sports`; `sports_alerts` keeps each one from being sent twice. The TV app pops up new sports notifications in a corner for 10 s over anything, polling every minute (`apps/tv/src/toasts.tsx`); they stay unread for the web bell.
+- **Web:** `/sports` (nav: Sports) with live, coming up and results for your teams, a team picker by league with search, and every league's scores by day. **TV app:** a Sports tab with the same sections (OK on a game with a channel tunes to it) and a team picker. TV typechecked only.
+- **Game Lights plugin** (`server/plugins/game-lights`, bundled, off by default), ported from Michael's GameLights app (C:\code\gamelights-src): pairs its own Hue bridge (v1 API, like Hue Sync; the bridge code is copied from hue-sync), flashes the ticked lights and restores them, checking they took it. Football reads ESPN's play feed every 4 s (core API, then the site summary) and classifies plays as in the original; other sports use `sports.score` (goals, runs; not basketball baskets) and every sport gets a win effect. After 3 failed play reads football falls back to score changes. Settings: whose teams, TV delay (default 25 s), brightness, reduced flashing; the page has effect toggles and tests, team colour overrides (VT's official colours built in), a sample game and Reset lights. Tested end to end against a fake ESPN and a fake bridge; never tried on real Hue lights or a live game.
 
 ## Chart lists and Kometa import (2026-10-26)
 

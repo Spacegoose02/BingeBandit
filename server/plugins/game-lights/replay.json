@@ -1,0 +1,136 @@
+{
+ "team": {
+  "league": "college-football",
+  "id": "259",
+  "name": "Virginia Tech Hokies",
+  "shortName": "Hokies",
+  "abbr": "VT",
+  "color": "630031",
+  "altColor": "cf4420"
+ },
+ "plays": [
+  {
+   "id": "1",
+   "type": {
+    "text": "Pass Reception"
+   },
+   "text": "J.Smith pass complete for 8 yds",
+   "team": {
+    "id": "259"
+   },
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "statYardage": 8,
+   "waitMs": 2000
+  },
+  {
+   "id": "2",
+   "type": {
+    "text": "Passing Touchdown"
+   },
+   "text": "J.Smith pass complete to A.Jones for 34 yds for a TOUCHDOWN",
+   "scoringPlay": true,
+   "team": {
+    "id": "259"
+   },
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 4000
+  },
+  {
+   "id": "3",
+   "type": {
+    "text": "Pass Interception Return"
+   },
+   "text": "J.Smith pass intercepted by T.Brown at the VT 40",
+   "team": {
+    "id": "999"
+   },
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 4000
+  },
+  {
+   "id": "4",
+   "type": {
+    "text": "Sack"
+   },
+   "text": "J.Smith sacked by R.Lee for a loss of 7 yards",
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 3000
+  },
+  {
+   "id": "5",
+   "type": {
+    "text": "Fumble Recovery (Own)"
+   },
+   "text": "Fumbles, recovered by VT",
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 3000
+  },
+  {
+   "id": "6",
+   "type": {
+    "text": "Rush"
+   },
+   "text": "Turnover on downs",
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 3000
+  },
+  {
+   "id": "7",
+   "type": {
+    "text": "Field Goal Good"
+   },
+   "text": "A.Kicker 38 yd field goal GOOD",
+   "scoringPlay": true,
+   "team": {
+    "id": "259"
+   },
+   "start": {
+    "team": {
+     "id": "259"
+    }
+   },
+   "waitMs": 3000
+  },
+  {
+   "id": "8",
+   "type": {
+    "text": "Passing Touchdown"
+   },
+   "text": "Opponent pass complete for a TOUCHDOWN",
+   "scoringPlay": true,
+   "team": {
+    "id": "999"
+   },
+   "start": {
+    "team": {
+     "id": "999"
+    }
+   },
+   "waitMs": 3000
+  }
+ ]
+}

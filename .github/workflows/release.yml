@@ -38,7 +38,7 @@ jobs:
             out="bingebandit-${GITHUB_REF_NAME}-${os}-${arch}${ext}"
             GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o "../release/$out" ./cmd/bingebandit
             # Bundled plugins: unzip into a "plugins" folder next to the server.
-            for p in watchlist-rss hue-sync cinemask-upgrades; do
+            for p in watchlist-rss hue-sync cinemask-upgrades game-lights; do
               rm -rf "/tmp/pl/$p" && mkdir -p "/tmp/pl/$p"
               GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w" -o "/tmp/pl/$p/$p${ext}" "./plugins/$p"
               jq --arg v "${GITHUB_REF_NAME#v}" '.version = $v' "plugins/$p/plugin.json" > "/tmp/pl/$p/plugin.json"
@@ -50,7 +50,7 @@ jobs:
         run: |
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
           entries=()
-          for p in watchlist-rss hue-sync cinemask-upgrades; do
+          for p in watchlist-rss hue-sync cinemask-upgrades game-lights; do
             downloads='{}'
             for zip in release/plugin-$p-${GITHUB_REF_NAME}-*.zip; do
               platform="${zip#release/plugin-$p-${GITHUB_REF_NAME}-}"; platform="${platform%.zip}"

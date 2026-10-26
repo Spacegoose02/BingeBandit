@@ -7,7 +7,7 @@ import { Icon } from './Icon'
 
 type Notification = {
   id: number
-  kind: 'episodes' | 'recording'
+  kind: 'episodes' | 'recording' | 'sports'
   title: string
   body?: string
   link?: string
@@ -95,10 +95,10 @@ export function NotificationBell() {
             {data?.notifications.map((n) => (
               <button key={n.id} className={`notify-item${n.readAt ? '' : ' unread'}`} onClick={() => openOne(n)}>
                 {n.image ? (
-                  <img src={img(n.image, 'w92')} alt="" />
+                  <img src={img(n.image, 'w92')} alt="" className={`notify-img-${n.kind}`} />
                 ) : (
                   <span className={`notify-icon notify-${n.kind}`}>
-                    {n.kind === 'recording' ? <span className="nav-rec" /> : <Icon name="tv" size={18} />}
+                    {n.kind === 'recording' ? <span className="nav-rec" /> : <Icon name={n.kind === 'sports' ? 'trophy' : 'tv'} size={18} />}
                   </span>
                 )}
                 <span className="notify-text">
