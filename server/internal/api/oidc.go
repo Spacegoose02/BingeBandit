@@ -202,6 +202,18 @@ type oidcClaims struct {
 	PreferredUsername string `json:"preferred_username"`
 }
 
+// emailVerified reads the email_verified claim, which some providers send as
+// a string.
+func emailVerified(v any) bool {
+	switch v := v.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	}
+	return false
+}
+
 // oidcCallback finishes a sign-in or link.
 func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -265,6 +277,21 @@ func (s *Server) oidcCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, err := s.Store.UserByIdentity(prov.ID, idt.Subject, c.Email)
+	if errors.Is(err, store.ErrNotFound) && c.Email != "" {
+		// An admin attached this email to a user: link it on first use.
+		if byEmail, e := s.Store.UserByEmail(c.Email); e == nil {
+			if !emailVerified(c.EmailVerified) {
+				fail("/login", prov.Name+" hasn't confirmed "+c.Email+", so it can't be used to sign in here yet.")
+				return
+			}
+			if e := s.Store.LinkIdentity(byEmail.ID, prov.ID, idt.Subject, c.Email); e != nil {
+				writeStoreErr(w, e)
+				return
+			}
+			log.Printf("oidc: linked a %s sign-in to %q by email", prov.Name, byEmail.Username)
+			u, err = byEmail, nil
+		}
+	}
 	if errors.Is(err, store.ErrNotFound) && prov.AutoCreate {
 		u, err = s.createSSOUser(prov, idt.Subject, c)
 	}

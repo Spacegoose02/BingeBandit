@@ -93,6 +93,7 @@ func (t *TautulliAPI) loadUsers(ctx context.Context) ([]SourceUser, error) {
 		UserID   flexInt `json:"user_id"`
 		Username string  `json:"username"`
 		Friendly string  `json:"friendly_name"`
+		Email    string  `json:"email"`
 	}
 	if err := t.call(ctx, "get_users", nil, &users); err != nil {
 		return nil, err
@@ -108,7 +109,7 @@ func (t *TautulliAPI) loadUsers(ctx context.Context) ([]SourceUser, error) {
 			continue
 		}
 		t.names[strconv.FormatInt(int64(u.UserID), 10)] = name
-		out = append(out, SourceUser{Name: name})
+		out = append(out, SourceUser{Name: name, Email: u.Email})
 	}
 	return out, nil
 }
@@ -251,9 +252,9 @@ func (t *TautulliDB) Users(ctx context.Context) ([]SourceUser, error) {
 		return nil, err
 	}
 	defer db.Close()
-	rows, err := db.QueryContext(ctx, `SELECT COALESCE(NULLIF(u.username, ''), MAX(h.user)) AS name, COUNT(*) FROM session_history h
+	rows, err := db.QueryContext(ctx, `SELECT COALESCE(NULLIF(u.username, ''), MAX(h.user)) AS name, COALESCE(u.email, ''), COUNT(*) FROM session_history h
 		LEFT JOIN users u ON u.user_id = h.user_id
-		WHERE h.media_type IN ('movie', 'episode') GROUP BY h.user_id ORDER BY 2 DESC`)
+		WHERE h.media_type IN ('movie', 'episode') GROUP BY h.user_id ORDER BY 3 DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +262,7 @@ func (t *TautulliDB) Users(ctx context.Context) ([]SourceUser, error) {
 	var out []SourceUser
 	for rows.Next() {
 		var u SourceUser
-		if err := rows.Scan(&u.Name, &u.Plays); err != nil {
+		if err := rows.Scan(&u.Name, &u.Email, &u.Plays); err != nil {
 			return nil, err
 		}
 		if u.Name != "" {

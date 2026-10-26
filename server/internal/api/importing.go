@@ -61,7 +61,8 @@ func (q importReq) build() (importer.Source, error) {
 }
 
 // importConnect checks the source and lists its users, each with a suggested
-// BingeBandit user (same name, ignoring case).
+// BingeBandit user: the one with the same email, else the same name
+// (ignoring case).
 func (s *Server) importConnect(w http.ResponseWriter, r *http.Request) {
 	var req importReq
 	if err := readJSON(r, &req); err != nil {
@@ -91,7 +92,12 @@ func (s *Server) importConnect(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		var sug int64
 		for _, b := range bb {
-			if strings.EqualFold(b.Username, u.Name) {
+			if strings.EqualFold(b.Username, u.Name) || strings.EqualFold(b.ProfileName, u.Name) {
+				sug = b.ID
+			}
+		}
+		for _, b := range bb {
+			if u.Email != "" && strings.EqualFold(b.Email, u.Email) {
 				sug = b.ID
 			}
 		}
@@ -107,6 +113,8 @@ func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
 		importReq
 		importer.Options
 		// Users maps source user → BingeBandit user id; -1 creates a new user.
+		// Emails are the source users' emails, given to users it creates.
+		Emails map[string]string `json:"emails"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -135,6 +143,12 @@ func (s *Server) importStart(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			log.Printf("import: created user %q for %s user %q", u.Username, req.Source, name)
+			// So a single sign-on with the same email lands here later.
+			if e := strings.TrimSpace(req.Emails[name]); e != "" {
+				if err := s.Store.SetEmail(u.ID, e); err != nil {
+					log.Printf("import: email for %q: %v", u.Username, err)
+				}
+			}
 			users[name] = u.ID
 		case id == -1:
 			users[name] = -1 // dry run: count as mapped without creating anyone

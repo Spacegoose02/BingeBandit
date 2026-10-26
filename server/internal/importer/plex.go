@@ -22,13 +22,15 @@ type Plex struct {
 	Token   string
 	client  *http.Client
 
-	meta  map[string]*plexMeta // ratingKey → details, cached
-	owner string
-	users map[int]string // accountID → name
+	meta   map[string]*plexMeta // ratingKey → details, cached
+	owner  string
+	users  map[int]string // accountID → name
+	plexTV string         // plex.tv, for the users' emails
 }
 
 func NewPlex(baseURL, token string) *Plex {
-	return &Plex{BaseURL: strings.TrimRight(baseURL, "/"), Token: token, client: &http.Client{Timeout: 30 * time.Second}, meta: map[string]*plexMeta{}}
+	return &Plex{BaseURL: strings.TrimRight(baseURL, "/"), Token: token, client: &http.Client{Timeout: 30 * time.Second}, meta: map[string]*plexMeta{},
+		plexTV: "https://plex.tv"}
 }
 
 func (p *Plex) Kind() string { return "plex" }
@@ -139,11 +141,53 @@ func (p *Plex) Users(ctx context.Context) ([]SourceUser, error) {
 		}
 	}
 	sort.Ints(ids) // the owner (1) first
+	emails := p.emails(ctx)
 	var out []SourceUser
 	for _, id := range ids {
-		out = append(out, SourceUser{Name: p.users[id]})
+		out = append(out, SourceUser{Name: p.users[id], Email: emails[id]})
 	}
 	return out, nil
+}
+
+// emails asks plex.tv for the owner's and their friends' emails, by account
+// id on this server (the owner is 1 here). Managed users have none. It's
+// only for suggesting who's who, so any failure just means no emails.
+func (p *Plex) emails(ctx context.Context) map[int]string {
+	out := map[int]string{}
+	fetch := func(path string, v any) bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.plexTV+path, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-Plex-Token", p.Token)
+		req.Header.Set("X-Plex-Client-Identifier", "bingebandit-importer")
+		req.Header.Set("X-Plex-Product", "BingeBandit")
+		resp, err := p.client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(v) == nil
+	}
+	var me struct {
+		Email string `json:"email"`
+	}
+	if fetch("/api/v2/user", &me) && me.Email != "" {
+		out[1] = me.Email
+	}
+	var friends []struct {
+		ID    int    `json:"id"`
+		Email string `json:"email"`
+	}
+	if fetch("/api/v2/friends", &friends) {
+		for _, f := range friends {
+			if f.Email != "" && f.ID != 1 {
+				out[f.ID] = f.Email
+			}
+		}
+	}
+	return out
 }
 
 func (p *Plex) loadUsers(ctx context.Context) error {
