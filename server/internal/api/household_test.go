@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"bingebandit/internal/metadata"
 	"bingebandit/internal/avatars"
+	"bingebandit/internal/metadata"
 	"bingebandit/internal/store"
 )
 

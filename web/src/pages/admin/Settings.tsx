@@ -232,6 +232,13 @@ export default function AdminSettings() {
             Let users download original files
           </label>
           <label>
+            Count as watched after (% of the runtime)
+            <input type="number" min={50} max={100} value={s.watched_percent ?? '90'} onChange={set('watched_percent')} />
+          </label>
+          <p className="muted small">
+            Once someone plays this far, a movie or episode is marked watched and leaves Continue Watching. Skipping the credits counts too.
+          </p>
+          <label>
             Intro videos before movies
             <textarea
               className="mono"
