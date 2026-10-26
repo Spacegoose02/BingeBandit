@@ -8,6 +8,7 @@ import { EditItem } from '../components/EditItem'
 import { MatchDialog } from '../components/MatchDialog'
 import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
+import { KidsApproveButton } from '../components/KidsApprove'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
@@ -147,6 +148,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               {(item.kind === 'movie' || item.kind === 'show') && <WatchlistButton item={item} onChange={reload} />}
               <AddToPlaylist item={item} />
               {(item.kind === 'movie' || item.kind === 'show') && <RecommendButton item={item} />}
+              {(item.kind === 'movie' || item.kind === 'show') && <KidsApproveButton item={item} />}
               {canDownload && file && (
                 <a className="btn btn-glass icon-only" href={`/api/files/${file.id}/direct?download=1`} download title="Download original file">
                   <Icon name="download" size={18} />

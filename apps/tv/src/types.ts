@@ -6,6 +6,7 @@ export interface User {
   isAdmin: boolean
   profileName?: string // set for a profile under an account
   liveTV?: boolean // false when an admin turned Live TV off for this user
+  kid?: boolean // gets Kids Movies and Kids Shows: titles a parent approved
 }
 
 /** A person in the account's household: the account or one of its profiles. */

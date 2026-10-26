@@ -200,6 +200,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 			r.Get("/discover", s.discoverRows)
 			r.Get("/watchlist", s.watchlist)
+			r.Get("/kids/titles", s.kidTitles)
+			r.Get("/items/{id}/kids", s.itemKids)
+			r.Put("/items/{id}/kids", s.setItemKids)
 			r.Post("/watchlist/{id}", s.setWatchlist(true))
 			r.Delete("/watchlist/{id}", s.setWatchlist(false))
 

@@ -17,9 +17,9 @@ import Sports from './Sports'
 // Pinned libraries sit between Search and Live TV, as `lib:<id>`. More lists
 // every library to open or pin; an unpinned one opened from there joins the
 // menu while it's open.
-type Tab = 'home' | 'search' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
+type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
 type MenuPrefs = { hiddenTabs?: HideableTab[] | null }
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Kids Movies', kidsShows: 'Kids Shows', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -27,7 +27,7 @@ let lastTab: Tab = 'home'
 let updateCheck: Promise<AppRelease | null> | null = null
 
 
-const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', sports: 'sports', live: 'live', settings: 'settings', more: 'more' }
+const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', settings: 'settings', more: 'more' }
 
 /** What holding OK on a menu entry pins or unpins: a library, or the Sports or Live TV tab. */
 interface Pinnable {
@@ -180,12 +180,15 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   // An admin can turn Live TV off for someone; check on each launch, since
   // the saved sign-in may predate the change.
   const [liveTV, setLiveTV] = useState((cached<User>('/api/me') ?? current()?.user)?.liveTV !== false)
+  const [kid, setKid] = useState(!!(cached<User>('/api/me') ?? current()?.user)?.kid)
   useEffect(() => {
     api
       .get<User>('/api/me')
       .then((me) => {
         setLiveTV(me.liveTV !== false)
+        setKid(!!me.kid)
         if (me.liveTV === false && lastTab === 'live') setTab('home')
+        if (!me.kid && (lastTab === 'kidsMovies' || lastTab === 'kidsShows')) setTab('home')
       })
       .catch(() => undefined)
   }, [])
@@ -204,6 +207,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const order: Tab[] = [
     'home',
     'search',
+    ...(kid ? (['kidsMovies', 'kidsShows'] as Tab[]) : []),
     ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
     ...(shows('sports') ? (['sports'] as Tab[]) : []),
     ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
@@ -304,6 +308,8 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'home' && <HomeRows />}
       {library && <LibraryTab key={library.id} library={library} onTogglePin={() => togglePin(library)} />}
       {tab === 'search' && <Search />}
+      {tab === 'kidsMovies' && kid && <KidsTitles key="movie" kind="movie" />}
+      {tab === 'kidsShows' && kid && <KidsTitles key="show" kind="show" />}
       {tab === 'more' && (
         <More
           libraries={libraries}
@@ -528,6 +534,35 @@ function Search() {
       {results && results.length > 0 && (
         <View style={st.grid}>
           {results.map((it) => (
+            <View key={it.id} style={st.gridCell}>
+              <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
+              <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </ScrollView>
+  )
+}
+
+/** A kid's Kids Movies or Kids Shows: the titles a parent approved for them. */
+function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
+  const nav = useNav()
+  const path = `/api/kids/titles?kind=${kind}`
+  const [items, setItems] = useState<Item[] | null>(() => cached<Item[]>(path) ?? null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    api.get<Item[]>(path).then(setItems, (e) => setError(e.message))
+  }, [path])
+  return (
+    <ScrollView contentContainerStyle={st.search}>
+      {!!error && <Text style={st.error}>{error}</Text>}
+      {items && items.length === 0 && (
+        <Text style={st.mutedLeft}>Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</Text>
+      )}
+      {items && items.length > 0 && (
+        <View style={st.grid}>
+          {items.map((it) => (
             <View key={it.id} style={st.gridCell}>
               <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
               <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
