@@ -29,6 +29,13 @@ func TestTunerForPlex(t *testing.T) {
 	if err := st.CreateChannel(&store.Channel{Number: 7, Name: "News", EPGID: "news.us", Enabled: true}, nil); err != nil {
 		t.Fatal(err)
 	}
+	// No guide data at all, and a second channel on the same guide channel.
+	if err := st.CreateChannel(&store.Channel{Number: 8, Name: "Local Feed", Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateChannel(&store.Channel{Number: 9, Name: "News West", EPGID: "news.us", Enabled: true}, nil); err != nil {
+		t.Fatal(err)
+	}
 	s := &Server{Store: st}
 	h := s.Router(context.Background())
 	get := func(path string) *httptest.ResponseRecorder {
@@ -52,13 +59,20 @@ func TestTunerForPlex(t *testing.T) {
 	rec = get(base + "/lineup.json")
 	var lineup []struct{ GuideNumber, GuideName, URL string }
 	json.Unmarshal(rec.Body.Bytes(), &lineup)
-	if len(lineup) != 1 || lineup[0].GuideNumber != "7" || !strings.Contains(lineup[0].URL, "stream.ts?token="+key) {
+	if len(lineup) != 3 || lineup[0].GuideNumber != "7" || !strings.Contains(lineup[0].URL, "stream.ts?token="+key) {
 		t.Fatalf("lineup: %s", rec.Body)
 	}
 
 	rec = get(base + "/epg.xml")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `<display-name>7</display-name>`) {
 		t.Fatalf("guide: %d %s", rec.Code, rec.Body)
+	}
+	// Plex can't play a channel without a programme on now, so every
+	// channel is in the guide, filled with placeholders where there's none.
+	for _, want := range []string{`<channel id="news.us">`, `<channel id="bb.2">`, `<channel id="bb.3">`, `channel="bb.2">`, `<title>Local Feed</title>`, `channel="bb.3">`, `<title>News West</title>`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("guide is missing %s", want)
+		}
 	}
 
 	if c := get("/api/live/tuner/wrong-key/epg.xml").Code; c != http.StatusUnauthorized {
@@ -68,5 +82,28 @@ func TestTunerForPlex(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("POST", base+"/lineup.post?scan=start", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("lineup.post: %d", rec.Code)
+	}
+}
+
+func TestFillGuide(t *testing.T) {
+	progs := []store.GuideProgram{
+		{Start: 3600, Stop: 5400, Title: "A"},
+		{Start: 9000, Stop: 10800, Title: "B"}, // a gap from 5400 to 9000 before it
+	}
+	got := fillGuide(progs, "Ch", 1800, 14400)
+	var b strings.Builder
+	for _, p := range got {
+		b.WriteString(p.Title + " ")
+	}
+	if b.String() != "Ch A Ch Ch B Ch " {
+		t.Fatalf("got %q", b.String())
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].Start != got[i-1].Stop {
+			t.Fatalf("gap or overlap at %d: %+v", i, got)
+		}
+	}
+	if got[0].Start != 1800 || got[len(got)-1].Stop != 14400 {
+		t.Fatalf("doesn't cover the window: %+v", got)
 	}
 }

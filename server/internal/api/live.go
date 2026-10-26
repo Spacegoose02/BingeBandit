@@ -380,6 +380,7 @@ func (s *Server) livePlaylist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token, base := requestToken(r), baseURL(r)
+	ids := xmltvIDs(chans)
 	var b strings.Builder
 	fmt.Fprintf(&b, "#EXTM3U x-tvg-url=\"%s/api/live/epg.xml?token=%s\"\n", base, token)
 	clean := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ")
@@ -389,7 +390,7 @@ func (s *Server) livePlaylist(w http.ResponseWriter, r *http.Request) {
 			logo = base + logoURL(c.ID, logo) + "&token=" + token
 		}
 		fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n%s/api/live/channels/%d/stream.ts?token=%s\n",
-			clean.Replace(c.EPGID), strconv.FormatFloat(c.Number, 'f', -1, 64), clean.Replace(logo), clean.Replace(c.Group),
+			clean.Replace(ids[c.ID]), strconv.FormatFloat(c.Number, 'f', -1, 64), clean.Replace(logo), clean.Replace(c.Group),
 			clean.Replace(c.Name), base, c.ID, token)
 	}
 	w.Header().Set("Content-Type", "audio/x-mpegurl; charset=utf-8")
@@ -449,34 +450,82 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		Channels []xmlChan `xml:"channel"`
 		Programs []xmlProg `xml:"programme"`
 	}{Gen: "BingeBandit"}
-	seen := map[string]bool{}
+	// Every channel gets its own guide channel, and every hour of the guide
+	// has something on: Plex can't play a channel, or a time, it has no
+	// programme for ("item not known when attempting to build decision").
+	xids := xmltvIDs(chans)
+	byEPG := map[string][]store.GuideProgram{}
+	for _, p := range progs {
+		byEPG[p.EPGID] = append(byEPG[p.EPGID], p)
+	}
+	const layout = "20060102150405 -0700"
+	from, to := now.Add(-2*time.Hour).Truncate(time.Hour).Unix(), now.Add(72*time.Hour).Unix()
 	for _, c := range chans {
-		if c.EPGID == "" || seen[c.EPGID] {
-			continue
-		}
-		seen[c.EPGID] = true
 		// The number as a second name lets Plex match guide channels to the
 		// tuner lineup on its own.
-		xc := xmlChan{ID: c.EPGID, Names: []xmlText{{c.Name}, {strconv.FormatFloat(c.Number, 'f', -1, 64)}}}
+		xc := xmlChan{ID: xids[c.ID], Names: []xmlText{{c.Name}, {strconv.FormatFloat(c.Number, 'f', -1, 64)}}}
 		if logo := c.Logo; strings.HasPrefix(logo, store.LibraryLogoPrefix) {
 			xc.Icon = &xmlIcon{base + logoURL(c.ID, logo) + "&token=" + token}
 		} else if logo != "" {
 			xc.Icon = &xmlIcon{logo}
 		}
 		doc.Channels = append(doc.Channels, xc)
-	}
-	const layout = "20060102150405 -0700"
-	for _, p := range progs {
-		doc.Programs = append(doc.Programs, xmlProg{
-			Start: time.Unix(p.Start, 0).UTC().Format(layout), Stop: time.Unix(p.Stop, 0).UTC().Format(layout), Channel: p.EPGID,
-			Title: xmlText{p.Title}, SubTitle: opt(p.Subtitle), Desc: opt(p.Description), Category: opt(p.Category),
-		})
+		for _, p := range fillGuide(byEPG[c.EPGID], c.Name, from, to) {
+			doc.Programs = append(doc.Programs, xmlProg{
+				Start: time.Unix(p.Start, 0).UTC().Format(layout), Stop: time.Unix(p.Stop, 0).UTC().Format(layout), Channel: xids[c.ID],
+				Title: xmlText{p.Title}, SubTitle: opt(p.Subtitle), Desc: opt(p.Description), Category: opt(p.Category),
+			})
+		}
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.Write([]byte(xml.Header))
 	enc := xml.NewEncoder(w)
 	enc.Indent("", " ")
 	enc.Encode(doc)
+}
+
+// xmltvIDs is each channel's id in the exported guide and playlist: its
+// guide channel's id, or its own (bb.<id>) when it has none or an earlier
+// channel already uses that guide channel.
+func xmltvIDs(chans []*store.Channel) map[int64]string {
+	ids := make(map[int64]string, len(chans))
+	used := map[string]bool{}
+	for _, c := range chans {
+		id := c.EPGID
+		if id == "" || used[id] {
+			id = fmt.Sprintf("bb.%d", c.ID)
+		}
+		used[id] = true
+		ids[c.ID] = id
+	}
+	return ids
+}
+
+// fillGuide returns a channel's programmes (sorted by start) with every gap
+// between from and to filled by hour-long placeholders named after the
+// channel.
+func fillGuide(progs []store.GuideProgram, name string, from, to int64) []store.GuideProgram {
+	out := make([]store.GuideProgram, 0, len(progs)+8)
+	fill := func(start, stop int64) {
+		for start < stop {
+			end := min(stop, (start/3600+1)*3600)
+			out = append(out, store.GuideProgram{Start: start, Stop: end, Title: name})
+			start = end
+		}
+	}
+	at := from
+	for _, p := range progs {
+		if p.Stop <= at {
+			continue
+		}
+		if p.Start > at {
+			fill(at, p.Start)
+		}
+		out = append(out, p)
+		at = max(at, p.Stop)
+	}
+	fill(at, to)
+	return out
 }
 
 // ---- admin ------------------------------------------------------------------
