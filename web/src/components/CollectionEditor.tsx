@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { api, img } from '../api'
+import { chartsFor } from '../charts'
 import { useApi } from '../hooks'
 import type { Collection, CollectionMode, CollectionSort } from '../types'
 import { Modal } from './Modal'
@@ -25,6 +26,7 @@ const sorts: [CollectionSort, string][] = [
   ['title', 'Title'],
   ['added', 'Recently added'],
   ['rating', 'Rating'],
+  ['list', 'List order (the lists it follows)'],
 ]
 
 const yearValue = (s: string) => (s ? Number(s) : 0)
@@ -32,11 +34,13 @@ const yearValue = (s: string) => (s ? Number(s) : 0)
 /** Create (libraryId) or edit (collection) a collection. */
 export function CollectionEditor({
   libraryId,
+  libraryKind = 'movies',
   collection,
   onClose,
   onSaved,
 }: {
   libraryId: number
+  libraryKind?: string
   collection?: Collection
   onClose: () => void
   onSaved: () => void
@@ -53,6 +57,9 @@ export function CollectionEditor({
   const [yearFrom, setYearFrom] = useState(collection?.yearFrom ? String(collection.yearFrom) : '')
   const [yearTo, setYearTo] = useState(collection?.yearTo ? String(collection.yearTo) : '')
   const [error, setError] = useState('')
+  const [poster, setPoster] = useState(collection?.poster ?? '')
+  const [posterUrl, setPosterUrl] = useState('')
+  const [posterBusy, setPosterBusy] = useState(false)
   const { data: facets } = useApi<Facets>(`/api/admin/libraries/${libraryId}/facets`)
 
   const save = async (e: FormEvent) => {
@@ -65,6 +72,34 @@ export function CollectionEditor({
       onSaved()
     } catch (err) {
       setError((err as Error).message)
+    }
+  }
+
+  const addChart = (url: string) => {
+    if (!url) return
+    setListUrl((cur) => (cur.trim() ? `${cur.trim()}\n${url}` : url))
+    if (!collection && !listUrl.trim() && sort === '') setSort('list')
+  }
+
+  const changePoster = async (body: { url: string } | File) => {
+    if (!collection) return
+    setError('')
+    setPosterBusy(true)
+    try {
+      let c: Collection
+      if (body instanceof File) {
+        const form = new FormData()
+        form.append('file', body)
+        c = await api.post<Collection>(`/api/admin/collections/${collection.id}/artwork?type=poster`, form)
+      } else {
+        c = await api.put<Collection>(`/api/admin/collections/${collection.id}/artwork`, { type: 'poster', url: body.url })
+      }
+      setPoster(c.poster ?? '')
+      setPosterUrl('')
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setPosterBusy(false)
     }
   }
 
@@ -111,18 +146,69 @@ export function CollectionEditor({
             ))}
           </select>
         </label>
+        {collection && (
+          <div className="collection-poster">
+            {poster && <img src={img(poster, 'w185')} alt="" width={92} />}
+            <div className="grow">
+              <div className="label">Poster</div>
+              <div className="actions">
+                <input
+                  type="url"
+                  value={posterUrl}
+                  onChange={(e) => setPosterUrl(e.target.value)}
+                  placeholder="Image or ThePosterDB link"
+                  spellCheck={false}
+                />
+                <button type="button" className="btn btn-glass btn-sm" disabled={!posterUrl.trim() || posterBusy} onClick={() => changePoster({ url: posterUrl })}>
+                  Use link
+                </button>
+                <label className="btn btn-glass btn-sm">
+                  Upload
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={posterBusy}
+                    onChange={(e) => e.target.files?.[0] && changePoster(e.target.files[0])}
+                  />
+                </label>
+                {poster && collection.poster && (
+                  <button type="button" className="btn btn-glass btn-sm" disabled={posterBusy} onClick={() => changePoster({ url: '' })}>
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
         <label>
-          Follow a list
-          <input
-            type="url"
+          Follow lists
+          <textarea
+            rows={Math.min(6, Math.max(2, listUrl.split('\n').length + 1))}
             value={listUrl}
             onChange={(e) => setListUrl(e.target.value)}
-            placeholder="https://mdblist.com/lists/… or an RSS feed"
+            placeholder={'https://mdblist.com/lists/…\nhttps://trakt.tv/movies/trending?limit=40'}
             spellCheck={false}
+            className="mono"
           />
+          <select value="" onChange={(e) => addChart(e.target.value)}>
+            <option value="">Add a chart…</option>
+            {(['TMDB', 'Trakt', 'IMDb'] as const).map((source) => (
+              <optgroup key={source} label={source}>
+                {chartsFor(libraryKind)
+                  .filter((c) => c.source === source)
+                  .map((c) => (
+                    <option key={c.url} value={c.url}>
+                      {c.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
           <span className="muted small">
-            An MDBList list or an RSS feed (Letterboxd lists have one). Its titles in this library join the collection, and the “Sync list
-            collections” task keeps them up to date. Private MDBList lists need your key in Settings → Metadata.
+            One link per line: an MDBList list, a TMDB, Trakt or IMDb chart or list, a Yamtrack list, or an RSS feed (Letterboxd lists have one).
+            Add <code>?limit=40</code> to keep a chart's top 40. With several lists their titles are taken in turn. Titles in this library join the
+            collection, and the “Sync list collections” task keeps them up to date. Keys and sign-ins go in Settings → Metadata.
           </span>
           {collection?.listUrl && collection.listUrl === listUrl && (
             <span className={collection.listError ? 'form-error' : 'muted small'}>

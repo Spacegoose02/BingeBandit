@@ -104,6 +104,7 @@ export default function CollectionPage() {
       {editing && (
         <CollectionEditor
           libraryId={collection.libraryId}
+          libraryKind={items[0]?.kind === 'show' ? 'shows' : 'movies'}
           collection={collection}
           onClose={() => setEditing(false)}
           onSaved={() => {

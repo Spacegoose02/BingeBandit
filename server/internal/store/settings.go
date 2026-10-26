@@ -10,6 +10,9 @@ const (
 	SettingRatingsProvider   = "ratings_provider" // "" (off) | mdblist | omdb: IMDb and Rotten Tomatoes scores
 	SettingRatingsKey        = "ratings_api_key"
 	SettingMDBListKey        = "mdblist_api_key" // for collections that follow MDBList lists
+	SettingYamtrackURL       = "yamtrack_url"    // the Yamtrack server whose lists collections follow
+	SettingYamtrackUser      = "yamtrack_username"
+	SettingYamtrackPassword  = "yamtrack_password"
 	SettingHWEncoder         = "hw_encoder"
 	SettingTranscodeDir      = "transcode_dir"
 	SettingTonemap           = "tonemap_enabled"
@@ -63,6 +66,9 @@ var SettingDefaults = map[string]string{
 	SettingRatingsProvider:   "",
 	SettingRatingsKey:        "",
 	SettingMDBListKey:        "",
+	SettingYamtrackURL:       "",
+	SettingYamtrackUser:      "",
+	SettingYamtrackPassword:  "",
 	SettingHWEncoder:         "none",
 	SettingTranscodeDir:      "",
 	SettingTonemap:           "true",

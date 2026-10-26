@@ -2,7 +2,16 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-26, feature board work (Hue rooms per device is the latest) (season Mark watched, Cinemask 429s, TV Back position, built-in profile pictures)._
+_Last updated: 2026-10-26, chart lists (TMDB, Trakt, IMDb, Yamtrack) and Kometa collection import, on top of the feature board work (Hue rooms per device, trailers, board fixes)._
+
+## Chart lists and Kometa import (2026-10-26)
+
+- **More list sources** (`server/internal/importer/charts.go`): a collection's `list_url` may now hold several links, one per line, and their titles are taken in turn without repeats. Besides MDBList and RSS: TMDB charts (`themoviedb.org/movie`, `/movie/top-rated`, `/trending/movie/week`, `/tv/…`, `/list/<id>`; uses the TMDB key), Trakt charts and lists (`trakt.tv/movies/trending`, `/shows/anticipated`, `/users/<u>/lists/<l>`; uses `trakt_client_id`), IMDb charts and lists (`imdb.com/chart/top`, `/chart/moviemeter`, `/list/ls…`; IMDb's GraphQL API like Kometa, falling back to the title links on the page), and Yamtrack lists (the Yamtrack host in Settings → Metadata, or any `/list/<x>` link; scraped like Kometa's `yamtrack_list`, signing in with `yamtrack_username`/`yamtrack_password` when the list is private). `?limit=N` keeps the first N. **None of these were reachable from the sandbox, so they're tested only against fakes of their responses.**
+- **Matching:** `IndexItem`, `Record` and the `Matcher` now use IMDb ids (`items.imdb_id`) and shows' TVDB ids too.
+- **List order:** `collection_items.from_list` now holds each title's place on the list (1 = first; 0 = added by hand), and the new `list` collection sort orders by it. No migration.
+- **Plex-style sort titles:** `PLEXSORT` (`store/plexsort.go`) is a SQLite collation in the Unicode collation order Plex uses: punctuation with `_` before `+`, then digits, then letters ignoring case. `collectionOrder` uses it, so Kometa's `+_` / `++_` / `+++_` tiers come out as on Plex.
+- **Kometa import** (`importer/kometa.go`, `POST /api/admin/libraries/{id}/kometa`, YAML body, `?dryRun=1`, `?recommended=1`): maps `mdblist_list`, `trakt_*`, `tmdb_*`, `imdb_chart`, `imdb_list`, `yamtrack_list`, `summary`, `sort_title`, `url_poster`/`url_background` (downloaded in the background, ThePosterDB links too), `collection_order`/`smart_label`/`sort_by` (to a collection sort), `collection_mode` and `visible_*`. Radarr/Sonarr and Kometa-only settings are ignored; other builders and `file_poster` are reported as skipped. Collections match by name, so importing again updates them. Imported rows are placed in sort-title order. Posters and list syncs run in the background.
+- **Web:** *Add chart rows* (Recommended and Collections tabs) makes chart collections that show on Recommended and, optionally, Home. *Import Kometa file* on the Collections tab previews, then imports. The collection editor takes several lists with an *Add a chart* picker, a *List order* sort, and a poster link or upload (`PUT`/`POST /api/admin/collections/{id}/artwork`).
 
 ## Board bug fixes (2026-10-26)
 

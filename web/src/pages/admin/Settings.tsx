@@ -125,6 +125,28 @@ export default function AdminSettings() {
             . Collections can follow an MDBList list (Edit collection → Follow a list). Public lists work without a key; with MDBList as the ratings
             provider its key is used too.
           </p>
+          <p className="muted small">
+            Collections can also follow TMDB charts (with the TMDB key above), IMDb charts and lists (no key), and Trakt charts and lists (with the
+            client ID under Trakt below).
+          </p>
+          <label>
+            Yamtrack server for list collections (optional)
+            <input className="mono" value={s.yamtrack_url ?? ''} onChange={set('yamtrack_url')} placeholder="https://yamtrack.example.com" spellCheck={false} />
+          </label>
+          <div className="field-grid">
+            <label>
+              Yamtrack username
+              <input value={s.yamtrack_username ?? ''} onChange={set('yamtrack_username')} autoComplete="off" spellCheck={false} />
+            </label>
+            <label>
+              Yamtrack password
+              <input type="password" value={s.yamtrack_password ?? ''} onChange={set('yamtrack_password')} autoComplete="new-password" />
+            </label>
+          </div>
+          <p className="muted small">
+            Lets a collection follow a Yamtrack list (https://yamtrack…/list/…), in the list's own order. The sign-in is only needed for lists
+            that aren't public.
+          </p>
           <label>
             IMDb and Rotten Tomatoes ratings
             <select value={s.ratings_provider ?? ''} onChange={set('ratings_provider')}>
@@ -336,7 +358,8 @@ export default function AdminSettings() {
         <section className="panel form">
           <h3>Trakt</h3>
           <p className="muted small">
-            Lets people sync their watch history with Trakt from their Account page. Create an app at{' '}
+            Lets people sync their watch history with Trakt from their Account page, and collections follow Trakt charts and lists (that only needs the
+            client ID). Create an app at{' '}
             <a href="https://trakt.tv/oauth/applications/new" target="_blank" rel="noreferrer">trakt.tv/oauth/applications</a> with the redirect URI{' '}
             <code>urn:ietf:wg:oauth:2.0:oob</code>, then paste its keys here.
           </p>

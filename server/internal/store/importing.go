@@ -14,6 +14,8 @@ type IndexItem struct {
 	Title     string
 	Year      int
 	TMDBID    int64
+	IMDBID    string // movies and shows
+	TVDBID    int64  // shows
 	ShowID    int64
 	Season    int
 	Episode   int
@@ -22,7 +24,7 @@ type IndexItem struct {
 
 // ImportIndex loads every movie, show, season and episode with its file names.
 func (s *Store) ImportIndex() ([]*IndexItem, error) {
-	rows, err := s.db.Query(`SELECT id, library_id, kind, title, year, tmdb_id, COALESCE(show_id, 0),
+	rows, err := s.db.Query(`SELECT id, library_id, kind, title, year, tmdb_id, imdb_id, tvdb_id, COALESCE(show_id, 0),
 		COALESCE(season_number, 0), COALESCE(episode_number, 0) FROM items`)
 	if err != nil {
 		return nil, err
@@ -31,7 +33,7 @@ func (s *Store) ImportIndex() ([]*IndexItem, error) {
 	var out []*IndexItem
 	for rows.Next() {
 		var it IndexItem
-		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Kind, &it.Title, &it.Year, &it.TMDBID, &it.ShowID, &it.Season, &it.Episode); err != nil {
+		if err := rows.Scan(&it.ID, &it.LibraryID, &it.Kind, &it.Title, &it.Year, &it.TMDBID, &it.IMDBID, &it.TVDBID, &it.ShowID, &it.Season, &it.Episode); err != nil {
 			rows.Close()
 			return nil, err
 		}

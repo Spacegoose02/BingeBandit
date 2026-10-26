@@ -532,7 +532,7 @@ type collectionReq struct {
 	Name     string `json:"name"`
 	Overview string `json:"overview"`
 	Mode     string `json:"mode"` // "" follows the library
-	// ListURL is an MDBList list or RSS feed to follow; "" follows none.
+	// ListURL is the lists to follow, one link per line (see importer.Lists); "" follows none.
 	ListURL string `json:"listUrl"`
 	// Sort is left as it is when missing (older web apps).
 	Sort *string `json:"sort"`
@@ -543,10 +543,13 @@ type collectionReq struct {
 
 func (c *collectionReq) clean() error {
 	c.Name, c.LabelRule = strings.TrimSpace(c.Name), strings.TrimSpace(c.LabelRule)
-	c.ListURL = strings.TrimSpace(c.ListURL)
-	if c.ListURL != "" && !strings.HasPrefix(c.ListURL, "https://") && !strings.HasPrefix(c.ListURL, "http://") {
-		return errors.New("the list must be an http:// or https:// link")
+	links := importer.ListURLs(c.ListURL)
+	for _, l := range links {
+		if !strings.HasPrefix(l, "https://") && !strings.HasPrefix(l, "http://") {
+			return errors.New("each list must be an http:// or https:// link, one per line")
+		}
 	}
+	c.ListURL = strings.Join(links, "\n")
 	c.GenreRule, c.StudioRule = strings.TrimSpace(c.GenreRule), strings.TrimSpace(c.StudioRule)
 	if c.Name == "" {
 		return errors.New("name is required")

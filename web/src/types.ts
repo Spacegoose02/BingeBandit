@@ -512,7 +512,7 @@ export interface ExternalRatings {
   metacritic?: number
 }
 
-export type CollectionSort = '' | 'release_desc' | 'title' | 'added' | 'rating'
+export type CollectionSort = '' | 'release_desc' | 'title' | 'added' | 'rating' | 'list'
 
 export interface Collection {
   id: number
@@ -527,7 +527,7 @@ export interface Collection {
   sort?: CollectionSort
   /** Orders the collection among the library's others; empty uses its name. */
   sortTitle?: string
-  listUrl?: string // MDBList list or RSS feed it follows
+  listUrl?: string // the lists it follows, one link per line (MDBList, TMDB, Trakt, IMDb, Yamtrack or RSS)
   listSyncedAt?: number
   listError?: string
   labelRule?: string
