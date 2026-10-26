@@ -437,13 +437,15 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		Icon  *xmlIcon  `xml:"icon,omitempty"`
 	}
 	type xmlProg struct {
-		Start    string   `xml:"start,attr"`
-		Stop     string   `xml:"stop,attr"`
-		Channel  string   `xml:"channel,attr"`
-		Title    xmlText  `xml:"title"`
-		SubTitle *xmlText `xml:"sub-title,omitempty"`
-		Desc     *xmlText `xml:"desc,omitempty"`
-		Category *xmlText `xml:"category,omitempty"`
+		Start    string       `xml:"start,attr"`
+		Stop     string       `xml:"stop,attr"`
+		Channel  string       `xml:"channel,attr"`
+		Title    xmlText      `xml:"title"`
+		SubTitle *xmlText     `xml:"sub-title,omitempty"`
+		Desc     *xmlText     `xml:"desc,omitempty"`
+		Category *xmlText     `xml:"category,omitempty"`
+		Icon     *xmlIcon     `xml:"icon,omitempty"`
+		Episodes []xmlEpisode `xml:"episode-num"`
 	}
 	opt := func(s string) *xmlText {
 		if s == "" {
@@ -479,10 +481,15 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		}
 		doc.Channels = append(doc.Channels, xc)
 		for _, p := range fillGuide(byEPG[c.EPGID], c.Name, from, to) {
-			doc.Programs = append(doc.Programs, xmlProg{
+			xp := xmlProg{
 				Start: time.Unix(p.Start, 0).UTC().Format(layout), Stop: time.Unix(p.Stop, 0).UTC().Format(layout), Channel: xids[c.ID],
 				Title: xmlText{p.Title}, SubTitle: opt(p.Subtitle), Desc: opt(p.Description), Category: opt(p.Category),
-			})
+				Episodes: episodeNums(p),
+			}
+			if p.Icon != "" {
+				xp.Icon = &xmlIcon{p.Icon}
+			}
+			doc.Programs = append(doc.Programs, xp)
 		}
 	}
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -490,6 +497,31 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", " ")
 	enc.Encode(doc)
+}
+
+// episodeNums tells Plex a programme is an episode of a show. Without an
+// episode number Plex takes every programme for a movie (its guide showed
+// "Friends" as a movie), so anything not marked as a film also gets its air
+// time as an original-air-date, the number Plex uses for news, sports and
+// other shows without seasons.
+func episodeNums(p store.GuideProgram) []xmlEpisode {
+	var out []xmlEpisode
+	switch e := strings.TrimSpace(p.Episode); {
+	case e == "":
+	case strings.Count(e, ".") == 2:
+		out = append(out, xmlEpisode{"xmltv_ns", e})
+	default:
+		out = append(out, xmlEpisode{"onscreen", e})
+	}
+	if c := strings.ToLower(p.Category); !strings.Contains(c, "movie") && !strings.Contains(c, "film") {
+		out = append(out, xmlEpisode{"original-air-date", time.Unix(p.Start, 0).UTC().Format("2006-01-02 15:04:05")})
+	}
+	return out
+}
+
+type xmlEpisode struct {
+	System string `xml:"system,attr"`
+	Value  string `xml:",chardata"`
 }
 
 // xmltvIDs is each channel's id in the exported guide and playlist: its
