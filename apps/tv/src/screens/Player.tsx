@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
-import { absolute, api, authHeaders, trackWrite } from '../api'
+import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn } from '../devicePrefs'
 import { Button } from '../components'
@@ -9,6 +9,7 @@ import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
 import { useLandscape } from '../screen'
+import { roomPosition, TogetherPanel, useTogether } from '../together'
 import { px, scaled, colors, font, gutter, isPhone } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
@@ -64,10 +65,11 @@ interface PreRollStep {
  * beginning: trailer files of other movies, then the server's intro video.
  * (YouTube trailers only play in the web player.)
  */
-export default function Player({ id, start = 0 }: { id: number; start?: number }) {
-  const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 ? [] : undefined)
+export default function Player({ id, start = 0, together }: { id: number; start?: number; together?: string }) {
+  // Watching together skips the trailers and intro, to stay with the others.
+  const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 || together ? [] : undefined)
   useEffect(() => {
-    if (start > 0) return
+    if (start > 0 || together) return
     let stale = false
     api
       .get<{ trailers?: { url?: string; title: string }[]; intro?: { url: string } }>(`/api/items/${id}/preroll`)
@@ -82,7 +84,7 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     return () => {
       stale = true
     }
-  }, [id, start])
+  }, [id, start, together])
   const next = useCallback(() => setSteps((s) => s?.slice(1)), [])
   const skipAll = useCallback(() => setSteps([]), [])
   if (steps === undefined) {
@@ -96,7 +98,7 @@ export default function Player({ id, start = 0 }: { id: number; start?: number }
     const s = steps[0]
     return <IntroVideo key={s.url} uri={absolute(s.url)} label={s.label} onDone={next} onSkipAll={steps.length > 1 ? skipAll : undefined} />
   }
-  return <MediaPlayer id={id} start={start} />
+  return <MediaPlayer id={id} start={start} together={together} />
 }
 
 /** A movie's own trailer file, from its details page. Back or the end returns. */
@@ -141,7 +143,7 @@ function IntroVideo({
  * Plays a movie or episode. Direct play first (Android TV decodes most files
  * itself); if the device can't, the server converts it to HLS.
  */
-function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
+function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; together?: string }) {
   const nav = useNav()
   useLandscape()
   const insets = useSafeAreaInsets()
@@ -165,6 +167,10 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
   const [quality, setQuality] = useState(-1)
   const qualityRef = useRef(-1)
   const [notice, setNotice] = useState('')
+  const say = (text: string) => {
+    setNotice(text)
+    setTimeout(() => setNotice((n) => (n === text ? '' : n)), 5000)
+  }
 
   const audioRef = useRef(-1) // what the transcoder is told
   const burnRef = useRef(-1) // image subtitle stream burned in by the server
@@ -413,7 +419,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
     if (item?.kind === 'episode') {
       const next = await api.get<Item | undefined>(`/api/items/${item.id}/next`).catch(() => undefined)
       if (next?.id) {
-        nav.replace({ name: 'player', id: next.id, start: 0 })
+        playNext(next.id)
         return
       }
     }
@@ -427,6 +433,45 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
     lastSeek.current = Date.now()
     if (mode === 'direct') video.current?.seek(t)
     else transcode(t) // the server converts from the new point
+  }
+
+  // Watch Together: everyone else's play, pause, seek and next episode
+  // arrive here; this viewer's own go out through userPause and userSeek.
+  const [roomId, setRoomId] = useState<string | null>(together ?? null)
+  const [togetherOpen, setTogetherOpen] = useState(false)
+  const pausedRef = useRef(paused)
+  pausedRef.current = paused
+  const me = current()?.user.id
+  const tg = useTogether(roomId, (s, skew) => {
+    const want = roomPosition(s, skew)
+    if (s.itemId !== id) {
+      nav.replace({ name: 'player', id: s.itemId, start: Math.max(1, want), together: roomId ?? undefined })
+      return
+    }
+    if (Math.abs(want - posRef.current) > 2) seekTo(want)
+    setPaused(s.paused)
+    if (s.by !== me && s.byName) say(`${s.byName} ${s.paused ? 'paused' : 'played'}`)
+  })
+  useEffect(() => {
+    if (!tg.ended) return
+    setRoomId(null)
+    say('The watch party has ended.')
+  }, [tg.ended])
+  const userPause = (p: boolean) => {
+    setPaused(p)
+    tg.send({ paused: p, position: posRef.current })
+  }
+  const userSeek = (t: number) => {
+    seekTo(t)
+    tg.send({ paused: pausedRef.current, position: posRef.current })
+  }
+  const playNext = (nextId: number) => {
+    tg.send({ itemId: nextId, paused: false, position: 0 })
+    nav.replace({ name: 'player', id: nextId, start: 0, together: roomId ?? undefined })
+  }
+  const startTogether = async () => {
+    const r = await api.post<{ id: string }>('/api/together', { itemId: id, position: posRef.current, paused: pausedRef.current })
+    setRoomId(r.id)
   }
 
   // Controls: hidden; "seek" (just the progress bar, after ◀/▶ while hidden);
@@ -455,6 +500,10 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
   useEffect(() => {
     backInterceptor.current = () => {
       if (lock.handleBack()) return true
+      if (togetherOpen) {
+        setTogetherOpen(false)
+        return true
+      }
       if (menu) {
         setMenu(false)
         return true
@@ -474,11 +523,11 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0) return
-    if (menu) return // the menu's buttons handle the keys
+    if (menu || togetherOpen) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
       if (!paused) showControls('full')
-      if (evt.eventType === 'playPause') setPaused((p) => !p)
+      if (evt.eventType === 'playPause') userPause(!pausedRef.current)
       return
     }
     switch (evt.eventType) {
@@ -490,24 +539,24 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
         showControls('full')
         break
       case 'playPause':
-        setPaused((p) => !p)
+        userPause(!pausedRef.current)
         showControls('full')
         break
       case 'play':
-        setPaused(false)
+        userPause(false)
         break
       case 'pause':
-        setPaused(true)
+        userPause(true)
         showControls('full')
         break
       case 'left':
       case 'rewind':
-        seekTo(posRef.current - 10)
+        userSeek(posRef.current - 10)
         showControls('seek')
         break
       case 'right':
       case 'fastForward':
-        seekTo(posRef.current + 30)
+        userSeek(posRef.current + 30)
         showControls('seek')
         break
     }
@@ -565,8 +614,8 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           Phone: tapping the picture shows or hides the controls. */}
       <Pressable
         style={StyleSheet.absoluteFill}
-        hasTVPreferredFocus={!menu && controls !== 'full'}
-        focusable={!menu && controls !== 'full'}
+        hasTVPreferredFocus={!menu && !togetherOpen && controls !== 'full'}
+        focusable={!menu && !togetherOpen && controls !== 'full'}
         onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
       />
       {!!cue && (
@@ -581,7 +630,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && !lock.locked && (
+      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !lock.locked && (
         <Pressable style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
@@ -597,7 +646,7 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           <View>
             {isPhone ? (
               <SeekBar pct={pct} duration={duration} onSeek={(t) => {
-                seekTo(t)
+                userSeek(t)
                 showControls('full')
               }} />
             ) : (
@@ -614,11 +663,19 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
             </View>
             {controls === 'full' ? (
               <View style={st.controlRow}>
-                <Button small label="⟲ 10s" onPress={() => seekTo(posRef.current - 10)} />
-                <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => setPaused((p) => !p)} />
-                <Button small label="30s ⟳" onPress={() => seekTo(posRef.current + 30)} />
-                {next && <Button small label="Next episode  ▶▶" onPress={() => nav.replace({ name: 'player', id: next.id, start: 0 })} />}
+                <Button small label="⟲ 10s" onPress={() => userSeek(posRef.current - 10)} />
+                <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => userPause(!pausedRef.current)} />
+                <Button small label="30s ⟳" onPress={() => userSeek(posRef.current + 30)} />
+                {next && <Button small label="Next episode  ▶▶" onPress={() => playNext(next.id)} />}
                 <Button small label="Quality, audio & subtitles" onPress={() => setMenu(true)} />
+                <Button
+                  small
+                  label={roomId ? `Together (${tg.room?.members.length ?? 1})` : 'Watch together'}
+                  onPress={() => {
+                    setControls('hidden')
+                    setTogetherOpen(true)
+                  }}
+                />
                 {isPhone && (
                   <Button
                     small
@@ -690,6 +747,18 @@ function MediaPlayer({ id, start = 0 }: { id: number; start?: number }) {
           {subs.length === 0 && <Text style={st.hint}>This file has no subtitles.</Text>}
           {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} style={st.done} /> : <Text style={st.hint}>Back closes this menu</Text>}
         </View>
+      )}
+      {togetherOpen && (
+        <TogetherPanel
+          roomId={roomId}
+          room={tg.room}
+          onStart={startTogether}
+          onLeave={() => {
+            setRoomId(null)
+            setTogetherOpen(false)
+          }}
+          onClose={() => setTogetherOpen(false)}
+        />
       )}
       {lock.layer}
     </View>

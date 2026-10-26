@@ -261,6 +261,13 @@ export default function AdminSettings() {
             Once someone plays this far, a movie or episode is marked watched and leaves Continue Watching. Skipping the credits counts too.
           </p>
           <label>
+            Keep titles in Continue Watching for (days)
+            <input type="number" min={0} max={3650} value={s.continue_watching_days ?? '0'} onChange={set('continue_watching_days')} />
+          </label>
+          <p className="muted small">
+            Movies and shows nobody has played for this long drop out of Continue Watching and On Deck. 0 keeps them until they're finished.
+          </p>
+          <label>
             Intro videos before movies
             <textarea
               className="mono"

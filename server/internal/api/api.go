@@ -305,6 +305,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/scan", s.scanStatus)
 				r.Post("/items/{id}/refresh", s.refreshItem)
 				r.Put("/items/{id}", s.editItem)
+				r.Get("/items/{id}/collections", s.itemCollections)
+				r.Put("/items/{id}/collections", s.setItemCollections)
 				r.Get("/items/{id}/artwork", s.artworkOptions)
 				r.Put("/items/{id}/artwork", s.setArtwork)
 				r.Post("/items/{id}/artwork/upload", s.uploadArtwork)

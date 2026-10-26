@@ -75,14 +75,14 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 // continueWatching merges in-progress items with the next episode of shows
 // the user recently finished an episode of (Plex's "On Deck").
 func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
-	inProgress, err := s.Store.InProgress(uid, limit)
+	inProgress, err := s.Store.InProgress(uid, limit*2) // room for the repeats dropped below
 	if err != nil {
 		return nil, err
 	}
-	activeShows := map[int64]bool{}
+	activeShows := map[string]bool{}
 	for _, it := range inProgress {
 		if it.ShowID != 0 {
-			activeShows[it.ShowID] = true
+			activeShows[cwKey(it)] = true
 		}
 	}
 	finished, err := s.Store.RecentlyFinishedShows(uid, limit)
@@ -98,9 +98,6 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 		all = append(all, entry{it, it.Watch.UpdatedAt})
 	}
 	for _, p := range finished {
-		if activeShows[p.ShowID] {
-			continue
-		}
 		next, err := s.Store.UpNext(uid, p.ShowID, p.Season, p.Episode)
 		if errors.Is(err, store.ErrNotFound) {
 			continue
@@ -108,17 +105,38 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 		if err != nil {
 			return nil, err
 		}
+		if activeShows[cwKey(next)] {
+			continue
+		}
 		all = append(all, entry{next, p.UpdatedAt})
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].at > all[j].at })
+	// One card per show: two started episodes, or the same show in two
+	// libraries (Kids TV and TV, say), show only the latest.
 	out := []*store.Item{}
+	seen := map[string]bool{}
 	for _, e := range all {
 		if len(out) == limit {
 			break
 		}
-		out = append(out, e.item)
+		if k := cwKey(e.item); !seen[k] {
+			seen[k] = true
+			out = append(out, e.item)
+		}
 	}
 	return out, nil
+}
+
+// cwKey is what Continue Watching shows one card for: an episode's show
+// (by name, so copies in different libraries count once), or the title.
+func cwKey(it *store.Item) string {
+	if it.Kind == "episode" {
+		if t := strings.ToLower(strings.TrimSpace(it.ShowTitle)); t != "" {
+			return "show:" + t
+		}
+		return "show:" + strconv.FormatInt(it.ShowID, 10)
+	}
+	return "item:" + strconv.FormatInt(it.ID, 10)
 }
 
 func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {

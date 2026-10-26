@@ -134,6 +134,16 @@ func TestWatchTogether(t *testing.T) {
 	if len(left) != 0 {
 		t.Errorf("invite should clear on joining: %v", left)
 	}
+	// The TV app reads the room instead of streaming it, and still counts as in it.
+	if _, r := call("host-token", "GET", "/api/together/"+id, ""); len(r["members"].([]any)) != 1 {
+		t.Errorf("a plain look shouldn't join: %v", r["members"])
+	}
+	if _, r := call("host-token", "GET", "/api/together/"+id+"?watching=1", ""); len(r["members"].([]any)) != 2 {
+		t.Errorf("a polling viewer should be a member: %v", r["members"])
+	}
+	if m := next(); len(m["members"].([]any)) != 2 {
+		t.Errorf("the others should hear the polling viewer join: %v", m)
+	}
 	if code, _ := call("host-token", "POST", "/api/together/nope/state", `{}`); code != http.StatusNotFound {
 		t.Errorf("unknown room: %d", code)
 	}

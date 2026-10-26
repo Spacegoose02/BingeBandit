@@ -14,6 +14,8 @@ import SignIn from './src/screens/SignIn'
 import { colors, font, isPhone, scaled } from './src/theme'
 import type { ServerInfo, User } from './src/types'
 import { Toasts } from './src/toasts'
+import { ItemMenuHost } from './src/itemMenu'
+import { TogetherInvites } from './src/together'
 
 type Phase =
   | { name: 'loading' }
@@ -151,8 +153,11 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         <StatusBar hidden={fullScreen} translucent backgroundColor="transparent" barStyle="light-content" />
-        <Insets enabled={!fullScreen}>{screen}</Insets>
+        <ItemMenuHost>
+          <Insets enabled={!fullScreen}>{screen}</Insets>
+        </ItemMenuHost>
         {phase.name === 'app' && <Toasts />}
+        {phase.name === 'app' && <TogetherInvites />}
         {exitHint && (
           <View style={styles.exitHint} pointerEvents="none">
             <Text style={styles.exitHintText}>Press Back again to exit</Text>
@@ -172,7 +177,7 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
     case 'collection':
       return <CollectionScreen id={r.id} />
     case 'player':
-      return <Player id={r.id} start={r.start} />
+      return <Player id={r.id} start={r.start} together={r.together} />
     case 'live':
       return <LivePlayer channelId={r.channelId} />
     case 'trailer':

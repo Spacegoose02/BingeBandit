@@ -1,6 +1,9 @@
 package store
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func importStreams(t *testing.T, s *Store, src int64, entries ...StreamEntry) int {
 	t.Helper()
@@ -71,5 +74,32 @@ func TestSourceGroupFilter(t *testing.T) {
 	got, _ := s.LiveSource(src.ID)
 	if got.NewGroupsEnabled {
 		t.Error("newGroupsEnabled should be false")
+	}
+}
+
+// A refresh's import used to read in a deferred transaction and write later;
+// if anything else wrote in between, its first insert failed at once with
+// "database is locked (517)" whatever the busy timeout.
+func TestStreamImportWithConcurrentWrite(t *testing.T) {
+	s := openTest(t)
+	src := &LiveSource{Kind: "m3u", Name: "IPTV", URL: "http://x", RefreshHours: 24, Enabled: true}
+	if err := s.SaveLiveSource(src); err != nil {
+		t.Fatal(err)
+	}
+	im, err := s.BeginStreamImport(src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.SetSourceRefreshed(src.ID, 0, nil) }() // waits for the import
+	time.Sleep(200 * time.Millisecond)
+	if err := im.Add(StreamEntry{Name: "ESPN", URL: "http://x/1", Group: "US"}); err != nil {
+		t.Fatalf("add while another write waits: %v", err)
+	}
+	if n, err := im.Finish(); err != nil || n != 1 {
+		t.Fatalf("finish = %d, %v", n, err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("the other write: %v", err)
 	}
 }

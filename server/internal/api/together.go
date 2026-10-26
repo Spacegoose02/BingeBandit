@@ -51,7 +51,18 @@ type togetherRoom struct {
 	idleSince time.Time
 	invited   map[int64]time.Time // user id → when
 	inviter   string
+	// polled are viewers who read the room instead of streaming it (the TV
+	// app: React Native has no EventSource), by user id, with their last look.
+	polled map[int64]polledMember
 }
+
+type polledMember struct {
+	TogetherMember
+	at time.Time
+}
+
+// pollGone is how long after its last look a polling viewer counts as left.
+const pollGone = 10 * time.Second
 
 func (rm *togetherRoom) members() []TogetherMember {
 	seen := map[int64]bool{}
@@ -60,6 +71,12 @@ func (rm *togetherRoom) members() []TogetherMember {
 		if !seen[m.UserID] {
 			seen[m.UserID] = true
 			out = append(out, m)
+		}
+	}
+	for id, m := range rm.polled {
+		if !seen[id] && time.Since(m.at) < pollGone {
+			seen[id] = true
+			out = append(out, m.TogetherMember)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -193,6 +210,9 @@ func (s *Server) room(w http.ResponseWriter, r *http.Request) *togetherRoom {
 	return rm
 }
 
+// getTogether is the room as it is now. With ?watching=1 the viewer is in
+// it, polling instead of streaming: they count as a member (and keep the
+// room open) while they keep looking.
 func (s *Server) getTogether(w http.ResponseWriter, r *http.Request) {
 	rm := s.room(w, r)
 	if rm == nil {
@@ -200,6 +220,19 @@ func (s *Server) getTogether(w http.ResponseWriter, r *http.Request) {
 	}
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
+	if r.URL.Query().Get("watching") == "1" {
+		u := currentUser(r)
+		if rm.polled == nil {
+			rm.polled = map[int64]polledMember{}
+		}
+		prev, ok := rm.polled[u.ID]
+		rm.polled[u.ID] = polledMember{TogetherMember{UserID: u.ID, Name: displayName(u)}, time.Now()}
+		delete(rm.invited, u.ID)
+		rm.idleSince = time.Now()
+		if !ok || time.Since(prev.at) >= pollGone {
+			rm.broadcast() // someone joined
+		}
+	}
 	writeJSON(w, http.StatusOK, rm.snapshot())
 }
 

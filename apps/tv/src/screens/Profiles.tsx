@@ -114,7 +114,7 @@ export default function Profiles({ onDone, onCancel }: { onDone: (s: Session) =>
 }
 
 /** A remote-friendly number pad for a 4 to 8 digit PIN. */
-function PinPad({ title, error, onEnter, onCancel }: { title: string; error: string; onEnter: (pin: string) => void; onCancel: () => void }) {
+export function PinPad({ title, error, onEnter, onCancel }: { title: string; error: string; onEnter: (pin: string) => void; onCancel: () => void }) {
   const [digits, setDigits] = useState('')
   useEffect(() => {
     if (error) setDigits('')

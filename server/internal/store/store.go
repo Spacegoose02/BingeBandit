@@ -22,7 +22,11 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	dsn := path + "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)"
+	// _txlock=immediate: transactions take the write lock when they begin.
+	// A deferred one that reads first and then writes fails at once with
+	// SQLITE_BUSY (or BUSY_SNAPSHOT, 517) if another connection wrote in
+	// between; the busy timeout can't help it.
+	dsn := path + "?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err

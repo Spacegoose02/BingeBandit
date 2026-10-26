@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useContext, useRef, useState } from 'react'
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type ImageProps, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
-import { FocusMemoryContext } from './nav'
+import { FocusMemoryContext, ItemMenuContext } from './nav'
 import { scaled, colors, font, gutter, isPhone } from './theme'
 import type { Collection, Item } from './types'
 
@@ -122,8 +122,9 @@ export function PosterCard({ item, onPress, onFocus, preferFocus }: CardProps) {
 const PosterCardView = memo(function Poster({ item, onPress, onFocus, preferFocus }: CardProps) {
   const src = image(item.poster || item.showPoster, 'w342')
   const p = progress(item)
+  const menu = useContext(ItemMenuContext)
   return (
-    <Focusable onPress={onPress} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.poster}>
+    <Focusable onPress={onPress} onLongPress={() => menu(item)} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.poster}>
       {src ? <Art source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{item.title}</Text></View>}
       {item.watch?.watched && item.kind !== 'show' && <View style={s.badge}><Text style={s.badgeText}>✓</Text></View>}
       {!!item.unwatchedCount && <View style={s.badge}><Text style={s.badgeText}>{item.unwatchedCount}</Text></View>}
@@ -158,9 +159,10 @@ const WideCardView = memo(function Wide({ item, onPress, onFocus, preferFocus }:
   const src = image(item.backdrop || item.showBackdrop || item.poster, 'w780')
   const p = progress(item)
   const label = item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title
+  const menu = useContext(ItemMenuContext)
   return (
     <View style={s.wideWrap}>
-      <Focusable onPress={onPress} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.wide}>
+      <Focusable onPress={onPress} onLongPress={() => menu(item)} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.wide}>
         {src ? <Art source={src} style={s.wideImg} /> : <View style={[s.wideImg, s.fallback]} />}
         {p > 0 && <View style={s.progressTrack}><View style={[s.progressFill, { width: `${p * 100}%` }]} /></View>}
       </Focusable>

@@ -149,7 +149,7 @@ An admin can turn Live TV off for a user (`PUT /api/admin/users/{id}/live-tv {on
 | | | |
 |---|---|---|
 | POST | `/together` | `{itemId, position, paused}` starts a room → `{id, host, state, members, now}`. |
-| GET | `/together/{id}` | The room (404 once it has ended, or when you can't see what it plays). |
+| GET | `/together/{id}` | The room (404 once it has ended, or when you can't see what it plays). `?watching=1` joins it by polling (the TV app): you count as a member while you look at least every 10 s. |
 | GET | `/together/{id}/events` | Server-sent events: the room as above after every change and join or leave. |
 | POST | `/together/{id}/state` | `{paused, position, itemId?}` play, pause, seek or move everyone to another movie or episode. |
 | GET / POST | `/together/{id}/people`, `/together/{id}/invite` | Who can be invited (people who accept recommendations and can see it); `{userIds}` invites them. |

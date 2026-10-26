@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import { api, current } from '../api'
+import React, { useCallback, useEffect, useState } from 'react'
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ApiError, api, current } from '../api'
 import { Button, Focusable } from '../components'
-import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
-import { scaled, colors, font, gutter, isPhone } from '../theme'
-import type { Library } from '../types'
+import { hueArea, hueSyncOn, setHueArea, setHueSync, type MenuPosition } from '../devicePrefs'
+import { Icon } from '../icons'
+import { scaled, colors, font, gutter, isPhone, px } from '../theme'
+import type { Library, Member } from '../types'
 import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
-import { fetchHousehold } from './Profiles'
+import { fetchHousehold, PinPad } from './Profiles'
 
 // The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
 // always show, so there's always a way back to turn them on.
@@ -20,9 +21,83 @@ export interface MenuChoices {
   tabs: HideableTab[] // the ones this person has at all (Live TV can be off for them)
   togglePin: (l: Library) => void
   toggleTab: (t: HideableTab) => void
+  position: MenuPosition
+  setPosition: (p: MenuPosition) => void
+}
+
+type Section = 'device' | 'menu' | 'profiles' | 'admin'
+
+/**
+ * Runs a settings change, asking for the settings passcode first when the
+ * server says this session is locked (423), then trying again.
+ */
+function useGuard() {
+  const [ask, setAsk] = useState<{ retry: () => Promise<unknown>; error: string } | null>(null)
+  const guard = useCallback(async (change: () => Promise<unknown>): Promise<boolean> => {
+    try {
+      await change()
+      return true
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 423) {
+        setAsk({ retry: change, error: '' })
+        return false
+      }
+      throw e
+    }
+  }, [])
+  const prompt = ask && (
+    <Modal transparent animationType="fade" onRequestClose={() => setAsk(null)}>
+      <View style={st.modal}>
+        <PinPad
+          title="Enter your settings passcode"
+          error={ask.error}
+          onEnter={async (passcode) => {
+            try {
+              await api.post('/api/me/passcode/unlock', { passcode })
+              await ask.retry()
+              setAsk(null)
+            } catch (e) {
+              setAsk({ ...ask, error: (e as Error).message })
+            }
+          }}
+          onCancel={() => setAsk(null)}
+        />
+      </View>
+    </Modal>
+  )
+  return { guard, prompt }
 }
 
 export default function Settings({ onSignOut, onSwitchProfile, update, menu }: { onSignOut: () => void; onSwitchProfile: () => void; update: AppRelease | null; menu: MenuChoices }) {
+  const admin = !!current()?.user.isAdmin
+  const [section, setSection] = useState<Section>('device')
+  const names: [Section, string][] = [
+    ['device', isPhone ? 'This phone' : 'This TV'],
+    ['menu', 'Menu'],
+    ['profiles', 'Profiles & PINs'],
+    ...(admin ? ([['admin', 'Server']] as [Section, string][]) : []),
+  ]
+  const { guard, prompt } = useGuard()
+  return (
+    <ScrollView contentContainerStyle={st.screen}>
+      {/* Only OK switches, so moving down from the menu doesn't change the section. */}
+      <View style={st.sections}>
+        {names.map(([s, name]) => (
+          <Focusable key={s} onPress={() => setSection(s)} style={StyleSheet.flatten([st.chip, section === s && st.chipActive])}>
+            <Text style={[st.chipText, section === s && st.chipTextActive]}>{name}</Text>
+          </Focusable>
+        ))}
+      </View>
+      {section === 'device' && <Device update={update} menu={menu} onSignOut={onSignOut} onSwitchProfile={onSwitchProfile} />}
+      {section === 'menu' && <MenuSection menu={menu} />}
+      {section === 'profiles' && <ProfilesSection guard={guard} />}
+      {section === 'admin' && admin && <AdminSection guard={guard} />}
+      {prompt}
+    </ScrollView>
+  )
+}
+
+function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelease | null; menu: MenuChoices; onSignOut: () => void; onSwitchProfile: () => void }) {
   const s = current()
   const [hasProfiles, setHasProfiles] = useState(false)
   useEffect(() => {
@@ -39,10 +114,14 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
     setHueOn(!hueOn)
   }
   // The Hue room or zone this TV is in, from the Hue app. OK steps through them.
-  const [areas, setAreas] = useState<{ id: string; name: string }[]>([])
+  const [areas, setAreas] = useState<{ id: string; name: string; type?: string }[]>([])
   const [area, setAreaState] = useState(hueArea)
   useEffect(() => {
-    if (hue) api.get<{ id: string; name: string }[]>('/api/plugins/hue-sync/areas').then(setAreas, () => undefined)
+    if (hue)
+      api.get<{ id: string; name: string; type: string }[]>('/api/plugins/hue-sync/areas').then(
+        (list) => setAreas(list.map((a) => ({ ...a, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))),
+        () => undefined,
+      )
   }, [hue])
   const options = [{ id: '', name: 'Every light' }, ...areas]
   const areaName = options.find((a) => a.id === area)?.name ?? 'Every light'
@@ -81,7 +160,7 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
   }
 
   return (
-    <ScrollView contentContainerStyle={st.screen}>
+    <>
       <View style={st.facts}>
         <Text style={st.label}>Signed in as</Text>
         <Text style={st.value}>{s?.user.profileName ?? s?.user.username}</Text>
@@ -90,7 +169,6 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
         <Text style={st.label}>App version</Text>
         <Text style={st.value}>{installed.name}</Text>
       </View>
-      {/* The update comes first and full width, so Down from the tabs lands on it rather than Sign out. */}
       {found ? (
         <Focusable onPress={install} style={st.update}>
           <Text style={st.value}>
@@ -106,6 +184,17 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
         </View>
       )}
       {!!msg && <Text style={st.msg}>{msg}</Text>}
+      {!isPhone && (
+        <Focusable onPress={() => menu.setPosition(menu.position === 'side' ? 'top' : 'side')} style={st.option}>
+          <Text style={st.value}>Menu: {menu.position === 'side' ? 'Down the side' : 'Across the top'}</Text>
+          <Text style={st.hint}>
+            {menu.position === 'side'
+              ? 'Shows just icons until you press Left into it, like Plex.'
+              : 'Always shows every name across the top.'}{' '}
+            Press OK to switch.
+          </Text>
+        </Focusable>
+      )}
       {hue && (
         <Focusable onPress={toggleHue} style={st.option}>
           <Text style={st.value}>Hue Sync: {hueOn ? 'On' : 'Off'}</Text>
@@ -118,30 +207,227 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
         <Focusable onPress={nextArea} style={st.option}>
           <Text style={st.value}>Hue lights: {areaName}</Text>
           <Text style={st.hint}>
-            The room or zone this {isPhone ? 'phone' : 'TV'} is in, so other rooms can sync their own lights. {isPhone ? 'Tap' : 'Press OK'} for the next one.
+            The room or zone this {isPhone ? 'phone' : 'TV'} is in: all its lights follow the picture, and other rooms can sync their own. {isPhone ? 'Tap' : 'Press OK'} for the next one.
           </Text>
         </Focusable>
       )}
-      <Text style={st.section}>Menu</Text>
-      <Text style={st.hint}>Home, Search and Settings always show. {isPhone ? 'Tap' : 'Press OK on'} a library or tab to change it.</Text>
-      {menu.libraries.map((l) => (
-        <Focusable key={l.id} onPress={() => menu.togglePin(l)} style={st.option}>
-          <Text style={st.value}>{l.name}: {l.pinned ? 'Pinned' : 'Not pinned'}</Text>
-          <Text style={st.hint}>{l.pinned ? 'Has a tab in the menu and fills your Home.' : 'Only under More, and left out of Home.'}</Text>
-        </Focusable>
-      ))}
-      {menu.tabs.map((t) => (
-        <Focusable key={t} onPress={() => menu.toggleTab(t)} style={st.option}>
-          <Text style={st.value}>{hideableNames[t]} tab: {menu.hidden.includes(t) ? 'Hidden' : 'Shown'}</Text>
-          {t === 'more' && <Text style={st.hint}>Lists every library to open, pin or unpin.</Text>}
-        </Focusable>
-      ))}
       <View style={st.signOut}>
         {hasProfiles && <Button label="Switch profile" onPress={onSwitchProfile} style={st.gap} />}
         <Button label="Sign out" onPress={onSignOut} />
       </View>
-      <Text style={st.hint}>Signing out also lets you pick a different server.</Text>
-    </ScrollView>
+      <Text style={st.hint}>Signing out also lets you pick a different server or sign in as someone else.</Text>
+    </>
+  )
+}
+
+function MenuSection({ menu }: { menu: MenuChoices }) {
+  return (
+    <>
+      <Text style={st.hint}>Home, Search and Settings always show. {isPhone ? 'Tap' : 'Press OK on'} a library or tab to pin or unpin it.</Text>
+      {menu.libraries.map((l) => (
+        <Focusable key={l.id} onPress={() => menu.togglePin(l)} style={StyleSheet.flatten([st.option, st.optionRow])}>
+          <Icon name={l.pinned ? 'pinned' : 'pin'} size={px(44)} color={l.pinned ? colors.accent : colors.muted} />
+          <View style={st.optionText}>
+            <Text style={st.value}>{l.name}</Text>
+            <Text style={st.hint}>{l.pinned ? 'Has a tab in the menu and fills your Home.' : 'Only under More, and left out of Home.'}</Text>
+          </View>
+        </Focusable>
+      ))}
+      {menu.tabs.map((t) => (
+        <Focusable key={t} onPress={() => menu.toggleTab(t)} style={StyleSheet.flatten([st.option, st.optionRow])}>
+          <Icon name={menu.hidden.includes(t) ? 'pin' : 'pinned'} size={px(44)} color={menu.hidden.includes(t) ? colors.muted : colors.accent} />
+          <View style={st.optionText}>
+            <Text style={st.value}>{hideableNames[t]}</Text>
+            <Text style={st.hint}>{t === 'more' ? 'Lists every library and tab to open, pin or unpin.' : menu.hidden.includes(t) ? 'Only under More.' : 'Has a tab in the menu.'}</Text>
+          </View>
+        </Focusable>
+      ))}
+    </>
+  )
+}
+
+type Guard = (change: () => Promise<unknown>) => Promise<boolean>
+
+/**
+ * Who's watching, PINs and the settings passcode. The account manages its
+ * profiles' PINs and which member the app opens as; a profile sees only its
+ * own passcode.
+ */
+function ProfilesSection({ guard }: { guard: Guard }) {
+  const [members, setMembers] = useState<Member[] | null>(null)
+  const [passcode, setPasscode] = useState<{ set: boolean; unlocked: boolean } | null>(null)
+  const [msg, setMsg] = useState('')
+  const [entering, setEntering] = useState<{ title: string; save: (pin: string) => Promise<unknown> } | null>(null)
+  const load = useCallback(() => {
+    fetchHousehold().then(setMembers, (e) => setMsg(e.message))
+    api.get<{ set: boolean; unlocked: boolean }>('/api/me/passcode').then(setPasscode, () => undefined)
+  }, [])
+  useEffect(load, [load])
+  const run = (change: () => Promise<unknown>, done: string) =>
+    guard(change).then(
+      (ok) => {
+        if (ok) setMsg(done)
+        load()
+      },
+      (e) => setMsg((e as Error).message),
+    )
+  const me = members?.find((m) => m.current)
+  const owner = !!me?.isOwner
+  const auto = members?.find((m) => m.auto)
+  // OK steps through "Ask who's watching" and each member.
+  const nextAuto = () => {
+    if (!members) return
+    const order = [null, ...members]
+    const i = order.findIndex((m) => (m?.id ?? 0) === (auto?.id ?? 0))
+    const next = order[(i + 1) % order.length]
+    run(() => api.put('/api/household/autoselect', { memberId: next?.id ?? 0 }), next ? `Opens as ${next.name} now.` : "Asks who's watching now.")
+  }
+  if (entering)
+    return (
+      <PinPad
+        title={entering.title}
+        error=""
+        onEnter={(pin) => {
+          const save = entering.save
+          setEntering(null)
+          run(() => save(pin), 'Saved.')
+        }}
+        onCancel={() => setEntering(null)}
+      />
+    )
+  return (
+    <>
+      {!!msg && <Text style={st.msg}>{msg}</Text>}
+      {owner && members && members.length > 1 && (
+        <Focusable onPress={nextAuto} style={st.option}>
+          <Text style={st.value}>When the app opens: {auto ? `sign in as ${auto.name}` : "ask who's watching"}</Text>
+          <Text style={st.hint}>
+            Signs straight in as one profile on every device{auto?.hasPin ? ' (it still asks for its PIN)' : ''}. {isPhone ? 'Tap' : 'Press OK'} for the next choice.
+          </Text>
+        </Focusable>
+      )}
+      {owner &&
+        members
+          ?.filter((m) => !m.isOwner)
+          .map((m) => (
+            <View key={m.id} style={st.option}>
+              <Text style={st.value}>{m.name}</Text>
+              <Text style={st.hint}>{m.hasPin ? 'Has a PIN to switch to it.' : 'No PIN: anyone can switch to it.'}</Text>
+              <View style={st.buttons}>
+                <Button small label={m.hasPin ? 'Change PIN' : 'Add a PIN'} onPress={() => setEntering({ title: `A 4 to 8 digit PIN for ${m.name}`, save: (pin) => api.put(`/api/household/${m.id}/pin`, { pin }) })} />
+                {m.hasPin && <Button small label="Remove PIN" onPress={() => run(() => api.put(`/api/household/${m.id}/pin`, { pin: '' }), `${m.name} has no PIN now.`)} />}
+              </View>
+            </View>
+          ))}
+      {passcode && (
+        <View style={st.option}>
+          <Text style={st.value}>Settings passcode: {passcode.set ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {owner ? 'Also the PIN for switching to you. ' : ''}
+            {passcode.set
+              ? 'Changing settings, profiles and the server asks for it first.'
+              : 'Ask for a code before anyone changes settings on this account, so kids can\'t.'}
+          </Text>
+          <View style={st.buttons}>
+            <Button small label={passcode.set ? 'Change passcode' : 'Turn on'} onPress={() => setEntering({ title: 'Choose a 4 to 8 digit passcode', save: (code) => api.put('/api/me/passcode', { passcode: code }) })} />
+            {passcode.set && <Button small label="Turn off" onPress={() => run(() => api.del('/api/me/passcode'), 'The passcode is off.')} />}
+            {passcode.set && passcode.unlocked && <Button small label="Lock now" onPress={() => run(() => api.post('/api/me/passcode/lock'), 'Locked.')} />}
+          </View>
+        </View>
+      )}
+      {!owner && members && members.length > 1 && <Text style={st.hint}>The account that owns this profile manages the profiles' PINs.</Text>}
+    </>
+  )
+}
+
+interface LiveSource {
+  id: number
+  kind: string
+  name: string
+  lastRefresh: number
+  lastError?: string
+  entryCount: number
+}
+
+function ago(t: number) {
+  if (!t) return 'never'
+  const m = Math.round((Date.now() / 1000 - t) / 60)
+  if (m < 2) return 'just now'
+  if (m < 120) return `${m} min ago`
+  return `${Math.round(m / 60)} h ago`
+}
+
+/** A few server settings worth changing from the couch; the rest are on the web. */
+function AdminSection({ guard }: { guard: Guard }) {
+  const [settings, setSettings] = useState<Record<string, string> | null>(null)
+  const [sources, setSources] = useState<LiveSource[]>([])
+  const [libraries, setLibraries] = useState<Library[]>([])
+  const [msg, setMsg] = useState('')
+  const load = useCallback(() => {
+    guard(() => api.get<Record<string, string>>('/api/admin/settings').then(setSettings)).catch((e) => setMsg(e.message))
+    api.get<LiveSource[]>('/api/admin/live/sources').then(setSources, () => undefined)
+    api.get<Library[]>('/api/libraries').then(setLibraries, () => undefined)
+  }, [guard])
+  useEffect(load, [load])
+  const run = (change: () => Promise<unknown>, done: string) =>
+    guard(change).then(
+      (ok) => {
+        if (ok) setMsg(done)
+        load()
+      },
+      (e) => setMsg((e as Error).message),
+    )
+  const num = (key: string, def: number) => Number(settings?.[key] ?? def) || 0
+  const step = (key: string, value: number) => run(() => api.put('/api/admin/settings', { [key]: String(value) }), 'Saved.')
+  const days = num('continue_watching_days', 0)
+  const pct = num('watched_percent', 90)
+  return (
+    <>
+      {!!msg && <Text style={st.msg}>{msg}</Text>}
+      <Text style={st.hint}>Everything else is under Admin on the web.</Text>
+      {settings && (
+        <>
+          <View style={st.option}>
+            <Text style={st.value}>Keep titles in Continue Watching: {days ? `${days} days` : 'until finished'}</Text>
+            <Text style={st.hint}>Titles nobody has played for this long drop out of Continue Watching and On Deck.</Text>
+            <View style={st.buttons}>
+              {[0, 14, 30, 60, 90, 180].map((d) => (
+                <Button small key={d} primary={d === days} label={d ? `${d} days` : 'Never'} onPress={() => step('continue_watching_days', d)} />
+              ))}
+            </View>
+          </View>
+          <View style={st.option}>
+            <Text style={st.value}>Count as watched after {pct}%</Text>
+            <View style={st.buttons}>
+              <Button small label="− 5" onPress={() => step('watched_percent', Math.max(50, pct - 5))} />
+              <Button small label="+ 5" onPress={() => step('watched_percent', Math.min(100, pct + 5))} />
+            </View>
+          </View>
+        </>
+      )}
+      {sources.length > 0 && <Text style={st.section}>Live TV sources</Text>}
+      {sources.map((src) => (
+        <View key={src.id} style={StyleSheet.flatten([st.option, st.optionRow])}>
+          <View style={st.optionText}>
+            <Text style={st.value}>{src.name}</Text>
+            <Text style={st.hint}>
+              {src.kind === 'epg' ? 'Guide' : 'Playlist'} · {src.entryCount} {src.kind === 'epg' ? 'programmes' : 'streams'} · refreshed {ago(src.lastRefresh)}
+            </Text>
+            {!!src.lastError && <Text style={st.error}>Last refresh failed: {src.lastError}</Text>}
+          </View>
+          <Button small label="Refresh" onPress={() => run(() => api.post(`/api/admin/live/sources/${src.id}/refresh`), `Refreshing ${src.name}…`)} />
+        </View>
+      ))}
+      {libraries.length > 0 && <Text style={st.section}>Libraries</Text>}
+      {libraries.map((l) => (
+        <View key={l.id} style={StyleSheet.flatten([st.option, st.optionRow])}>
+          <View style={st.optionText}>
+            <Text style={st.value}>{l.name}</Text>
+          </View>
+          <Button small label="Scan for new files" onPress={() => run(() => api.post(`/api/admin/libraries/${l.id}/scan`), `Scanning ${l.name}…`)} />
+        </View>
+      ))}
+    </>
   )
 }
 
@@ -158,4 +444,13 @@ const st = StyleSheet.create(scaled({
   section: { color: colors.text, fontSize: font.title, fontWeight: '800', marginTop: 48 },
   msg: { color: colors.text, fontSize: font.body, marginTop: 18 },
   hint: { color: colors.muted, fontSize: font.small, marginTop: 14 },
+  error: { color: colors.danger, fontSize: font.small, marginTop: 8 },
+  sections: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 24 },
+  chip: { paddingHorizontal: 30, paddingVertical: 12, borderRadius: 40, marginRight: 16, marginBottom: 8, backgroundColor: colors.surface2 },
+  chipActive: { backgroundColor: colors.surface3 },
+  chipText: { color: colors.muted, fontSize: font.body, fontWeight: '700' },
+  chipTextActive: { color: colors.text },
+  optionRow: { flexDirection: 'row', alignItems: 'center' },
+  optionText: { flex: 1, marginLeft: 24, marginRight: 24 },
+  modal: { flex: 1, backgroundColor: colors.bg },
 }))

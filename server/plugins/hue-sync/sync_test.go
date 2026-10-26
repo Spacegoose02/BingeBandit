@@ -244,16 +244,17 @@ func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
 	a.conf = &configStore{dir: t.TempDir}
 	a.fileURL = func(int64) (string, string) { return video, "" }
 	a.engine = &Engine{a: a}
-	a.conf.set(Config{Bridge: hb.URL, Username: "u1", Lights: map[string]string{"1": "all", "2": "all"}})
+	// The bed lamp isn't chosen on the setup page: picking its room is enough.
+	a.conf.set(Config{Bridge: hb.URL, Username: "u1", Lights: map[string]string{"1": "all"}})
 
-	// Devices see the rooms and zones with chosen lights in them (not the Hall).
+	// Devices see every room, then every zone.
 	req := httptest.NewRequest("GET", "/areas", nil)
 	req.Header.Set("X-BingeBandit-User-Id", "5")
 	rec := httptest.NewRecorder()
 	a.routes().ServeHTTP(rec, req)
 	var areas []struct{ ID, Name, Type string }
 	json.Unmarshal(rec.Body.Bytes(), &areas)
-	if len(areas) != 3 || areas[0].Name != "Bedroom" || areas[1].Name != "Living room" || areas[2].Name != "Upstairs" {
+	if len(areas) != 4 || areas[0].Name != "Bedroom" || areas[1].Name != "Hall" || areas[2].Name != "Living room" || areas[3].Type != "Zone" {
 		t.Fatalf("areas = %s", rec.Body)
 	}
 

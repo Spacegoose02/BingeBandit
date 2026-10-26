@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Image, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
 import { Button, Center, Focusable } from '../components'
 import { useNav, useScreen } from '../nav'
@@ -20,6 +20,12 @@ export default function Sports() {
   const [data, setData] = useState<SportsHome | null>(null)
   const [error, setError] = useState('')
   const [picking, setPicking] = useState(false)
+  // The Game Lights button only shows when the server runs the plugin.
+  const [lightsPlugin, setLightsPlugin] = useState(false)
+  const [lights, setLights] = useState(false)
+  useEffect(() => {
+    api.get<{ id: string }[]>('/api/plugins').then((ps) => setLightsPlugin(ps.some((p) => p.id === 'game-lights')), () => undefined)
+  }, [])
   const load = useCallback(() => {
     api.get<SportsHome>('/api/sports').then(
       (d) => {
@@ -60,10 +66,12 @@ export default function Sports() {
     <ScrollView contentContainerStyle={st.screen}>
       <View style={st.head}>
         <Button label={data.teams.length ? 'Change teams' : 'Pick your teams'} primary={!data.teams.length} preferFocus onPress={() => setPicking(true)} />
+        {lightsPlugin && data.teams.length > 0 && <Button label="Game Lights" onPress={() => setLights(true)} />}
         <Text style={st.teams} numberOfLines={2}>
           {data.teams.map((t) => t.shortName || t.name).join(' · ')}
         </Text>
       </View>
+      {lights && <GameLights teams={data.teams} onClose={() => setLights(false)} />}
       {!!error && <Text style={st.error}>{error}</Text>}
       {data.teams.length === 0 && (
         <Text style={st.muted}>
@@ -86,6 +94,134 @@ export default function Sports() {
           ),
       )}
     </ScrollView>
+  )
+}
+
+interface LightsPerson {
+  off?: boolean
+  area?: string
+  source: string
+  delays: Record<string, number>
+  opponent?: string
+  colours: Record<string, [string, string]>
+}
+
+interface LightsState {
+  paired: boolean
+  person: LightsPerson
+  delay: number
+  defaultDelay: number
+  sources: string[]
+  areas: { id: string; name: string; type: string }[]
+  lastPlay?: { text: string; secondsAgo: number }
+  error?: string
+}
+
+const opponentNames: Record<string, string> = { red: 'a dim red pulse', colour: 'a dim pulse in their colours', off: 'nothing' }
+
+/**
+ * This person's Game Lights: on or off, the room, how they're watching and
+ * its delay (measured by pressing OK as a play shows on the TV), and what
+ * the other team's scores do. Team colours are on My Game Lights on the web.
+ */
+function GameLights({ teams, onClose }: { teams: SportsTeam[]; onClose: () => void }) {
+  const base = '/api/plugins/game-lights/me'
+  const [state, setState] = useState<LightsState | null>(null)
+  const [msg, setMsg] = useState('')
+  const load = useCallback(() => {
+    api.get<LightsState>(`${base}/state`).then(
+      (s) => {
+        setState(s)
+        if (s.error) setMsg(s.error)
+        else if (!s.paired) setMsg('An admin still needs to pair the Hue bridge on the Game Lights setup page.')
+      },
+      (e) => setMsg(e.message),
+    )
+  }, [])
+  useEffect(() => {
+    load()
+    const t = setInterval(load, 5000) // the newest play, for measuring the delay
+    return () => clearInterval(t)
+  }, [load])
+  const save = (p: LightsPerson) => {
+    setState((s) => (s ? { ...s, person: p, delay: p.delays[p.source] ?? s.defaultDelay } : s))
+    api.put(`${base}/settings`, p).then(() => setMsg('Saved.'), (e) => setMsg(e.message))
+  }
+  const cycle = <T,>(list: T[], now: T) => list[(list.indexOf(now) + 1) % list.length]
+  if (!state)
+    return (
+      <Modal transparent onRequestClose={onClose}>
+        <View style={st.scrim}>
+          <Text style={st.muted}>{msg || 'Loading…'}</Text>
+          <Button label="Close" preferFocus onPress={onClose} />
+        </View>
+      </Modal>
+    )
+  const p = state.person
+  const areas = [{ id: '', name: "The house's game lights" }, ...state.areas.map((a) => ({ id: a.id, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))]
+  const areaName = areas.find((a) => a.id === (p.area ?? ''))?.name ?? areas[0].name
+  const setDelay = (d: number) => save({ ...p, delays: { ...p.delays, [p.source]: Math.max(0, Math.min(300, d)) } })
+  const team = teams[0]
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <View style={st.scrim}>
+        <ScrollView style={st.lightsBox} contentContainerStyle={st.lightsBody}>
+          <Text style={st.sectionTitle}>Game Lights</Text>
+          {!!msg && <Text style={st.small}>{msg}</Text>}
+          <Focusable hasTVPreferredFocus onPress={() => save({ ...p, off: !p.off })} style={st.lightsOption}>
+            <Text style={st.name}>Lights for my teams: {p.off ? 'Off' : 'On'}</Text>
+          </Focusable>
+          <Focusable onPress={() => save({ ...p, area: cycle(areas.map((a) => a.id), p.area ?? '') })} style={st.lightsOption}>
+            <Text style={st.name}>Room: {areaName}</Text>
+            <Text style={st.small}>The room you watch in. OK for the next one.</Text>
+          </Focusable>
+          <Focusable onPress={() => save({ ...p, source: cycle(state.sources, p.source) })} style={st.lightsOption}>
+            <Text style={st.name}>Watching on: {p.source}</Text>
+            <Text style={st.small}>Each way of watching keeps its own delay. OK for the next one.</Text>
+          </Focusable>
+          <View style={st.lightsOption}>
+            <Text style={st.name}>Wait {state.delay} seconds after ESPN</Text>
+            <View style={st.lightsButtons}>
+              <Button small label="− 5" onPress={() => setDelay(state.delay - 5)} />
+              <Button small label="− 1" onPress={() => setDelay(state.delay - 1)} />
+              <Button small label="+ 1" onPress={() => setDelay(state.delay + 1)} />
+              <Button small label="+ 5" onPress={() => setDelay(state.delay + 5)} />
+            </View>
+            <Text style={st.small}>
+              {state.lastPlay ? `Newest play, ${state.lastPlay.secondsAgo} s ago: ${state.lastPlay.text}` : 'During a game, the newest play shows here.'}
+            </Text>
+            <Button
+              small
+              primary
+              label="That play just showed on my TV"
+              onPress={() =>
+                api.post<{ delay: number; source: string }>(`${base}/calibrate`).then(
+                  (r) => {
+                    setMsg(`Delay for ${r.source} set to ${r.delay} s.`)
+                    load()
+                  },
+                  (e) => setMsg(e.message),
+                )
+              }
+            />
+          </View>
+          <Focusable onPress={() => save({ ...p, opponent: cycle(['red', 'colour', 'off'], p.opponent || 'red') })} style={st.lightsOption}>
+            <Text style={st.name}>When the other team scores: {opponentNames[p.opponent || 'red']}</Text>
+          </Focusable>
+          <View style={st.lightsButtons}>
+            {team && (
+              <Button
+                small
+                label={`Test a ${team.shortName || team.name} touchdown`}
+                onPress={() => api.post(`${base}/test`, { effect: 'touchdown', team }).then(() => setMsg('Watch the lights…'), (e) => setMsg(e.message))}
+              />
+            )}
+            <Button small label="Close" onPress={onClose} />
+          </View>
+          <Text style={st.small}>Your own team colours are on My Game Lights, under Account on the web.</Text>
+        </ScrollView>
+      </View>
+    </Modal>
   )
 }
 
@@ -194,6 +330,11 @@ function TeamPicker({ leagues, chosen, onDone }: { leagues: SportsLeague[]; chos
 }
 
 const st = StyleSheet.create(scaled({
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center' },
+  lightsBox: { flexGrow: 0, width: 1100, maxHeight: '92%', backgroundColor: colors.surface, borderRadius: 22, borderWidth: 1, borderColor: colors.border },
+  lightsBody: { padding: 40 },
+  lightsOption: { backgroundColor: colors.surface2, borderRadius: 18, padding: 24, marginTop: 18 },
+  lightsButtons: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginVertical: 14 },
   screen: { paddingHorizontal: gutter, paddingTop: 30, paddingBottom: isPhone ? 160 : 60 },
   head: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 20 },
   teams: { color: colors.muted, fontSize: font.small, flex: 1, marginVertical: 10 },

@@ -20,7 +20,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "game-lights",
 	Name:        "Game Lights",
-	Version:     "1.0.0",
+	Version:     "1.1.0",
 	Description: "Philips Hue lights flash in your team's colours when it scores, from the teams people follow on the Sports page.",
 	Author:      "BingeBandit",
 	Events:      []string{"sports.game.start", "sports.game.live", "sports.score", "sports.game.end"},
@@ -32,7 +32,7 @@ var manifest = bbplugin.Manifest{
 		{Key: "reduced_flashing", Label: "Reduced flashing", Type: "select", Options: []string{"off", "on"}, Default: "off",
 			Help: "on: slower, gentler flashes for anyone sensitive to flashing lights"},
 	},
-	Pages: []bbplugin.Page{{Title: "Game Lights setup", Path: "/", Admin: true}},
+	Pages: []bbplugin.Page{{Title: "Game Lights setup", Path: "/", Admin: true}, {Title: "My Game Lights", Path: "/me"}},
 }
 
 type app struct {
@@ -44,6 +44,39 @@ type app struct {
 	mu       sync.Mutex
 	settings map[string]string
 	log      []logLine
+	runners  map[string]*Runner // more rooms and zones than the default one, which is runner
+}
+
+// runnerFor is the runner for a Hue room or zone ("" = the ticked lights).
+// Each plays its own effects, so two rooms can cheer for different teams.
+func (a *app) runnerFor(area string) *Runner {
+	if area == "" {
+		return a.runner
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.runners == nil {
+		a.runners = map[string]*Runner{}
+	}
+	r := a.runners[area]
+	if r == nil {
+		r = &Runner{a: a, area: area, gap: a.runner.gap, bridge: a.runner.bridge}
+		a.runners[area] = r
+	}
+	return r
+}
+
+// resetAll stops every effect and puts all the lights back.
+func (a *app) resetAll() {
+	a.mu.Lock()
+	rs := []*Runner{a.runner}
+	for _, r := range a.runners {
+		rs = append(rs, r)
+	}
+	a.mu.Unlock()
+	for _, r := range rs {
+		r.Reset()
+	}
 }
 
 type logLine struct {
@@ -91,7 +124,7 @@ func (a *app) sweep(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			a.runner.Reset()
+			a.resetAll()
 			return
 		case <-t.C:
 			a.follower.sweep()
