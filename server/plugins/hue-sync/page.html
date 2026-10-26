@@ -39,7 +39,7 @@
   <h1>Hue Sync</h1>
   <p class="muted">Your lights follow the colours on screen while something plays. Choose what each light follows; the
     rest (who and which devices, brightness, delay) is under Admin → Plugins → Hue Sync → Settings.</p>
-  <p id="status" class="small"></p>
+  <p id="status" class="small" style="white-space: pre-line"></p>
 
   <section id="bridge">
     <h2>Bridge</h2>
@@ -63,6 +63,8 @@
     <h2>Lights</h2>
     <p class="muted small">Point each light at the part of the screen nearest it: a lamp left of the TV follows the left
       edge, and so on. Lights left on "Not used" are never touched.</p>
+    <p class="muted small">Each device can keep to one room or zone from the Hue app (on the web: Account → Playback; on the TV:
+      Settings → Hue lights), so TVs in different rooms each sync their own lights at the same time.</p>
     <div id="lights"></div>
     <div class="row" style="margin-top:12px">
       <button id="save" class="primary" type="button">Save</button>

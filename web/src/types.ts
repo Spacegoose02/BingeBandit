@@ -268,7 +268,8 @@ export interface Prefs {
 }
 
 export interface PreRoll {
-  trailers: { itemId: number; title: string; year?: number; youtube: string }[]
+  /** url: the movie's own trailer file, preferred over the YouTube one. */
+  trailers: { itemId: number; title: string; year?: number; youtube?: string; url?: string }[]
   intro?: { url: string; name: string }
 }
 
@@ -494,6 +495,12 @@ export interface ItemDetail {
   externalRatings?: ExternalRatings // movies and shows, when a ratings provider is set up
   tvdbId?: number // shows that take their metadata from TheTVDB
   tvdbOrder?: string // '' (aired) | dvd | absolute
+  trailers?: LocalTrailer[] // movies: trailer files from the movie's folder
+}
+
+export interface LocalTrailer {
+  url: string
+  name: string
 }
 
 export interface ExternalRatings {

@@ -102,7 +102,7 @@ func sidecars(videoPath string) []store.Stream {
 			}
 			continue
 		}
-		if isVideo(name) && !isSample(name) {
+		if isVideo(name) && !isSample(name) && !isExtraFile(name) {
 			videos++
 		}
 		if !isSubtitleFile(name) {

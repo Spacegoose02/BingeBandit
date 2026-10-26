@@ -172,7 +172,7 @@ func walk(lib *store.Library, root, start string) (files []found, complete bool)
 			}
 			return nil
 		}
-		if isVideo(d.Name()) && !isSample(d.Name()) {
+		if isVideo(d.Name()) && !isSample(d.Name()) && !isExtraFile(d.Name()) {
 			files = append(files, found{root, p})
 		}
 		return nil

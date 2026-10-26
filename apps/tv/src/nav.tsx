@@ -7,6 +7,7 @@ export type Route =
   | { name: 'collection'; id: number }
   | { name: 'player'; id: number; start?: number }
   | { name: 'live'; channelId: number }
+  | { name: 'trailer'; url: string; title: string }
 
 export interface Nav {
   push: (r: Route) => void

@@ -8,7 +8,7 @@ import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
-import { hueSyncOn, setHueSync } from '../devicePrefs'
+import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
 import { createPasskey, passkeyErrorMessage, passkeysSupported } from '../passkeys'
 import type { APIKey, DeviceSession, Identity, Passkey, PluginLinks, Prefs } from '../types'
 
@@ -58,9 +58,16 @@ function PluginPages() {
 /** Hue Sync's switch for this browser; the TV app has its own in Settings. */
 function HueSync() {
   const [on, setOn] = useState(hueSyncOn)
+  const [area, setArea] = useState(hueArea)
+  // Rooms and zones from the Hue app; missing when the plugin isn't running.
+  const { data: areas } = useApi<{ id: string; name: string; type: string }[]>('/api/plugins/hue-sync/areas')
   const toggle = (v: boolean) => {
     setHueSync(v)
     setOn(v)
+  }
+  const pickArea = (id: string) => {
+    setHueArea(id)
+    setArea(id)
   }
   return (
     <div className="panel form" style={{ marginBottom: 20 }}>
@@ -69,6 +76,20 @@ function HueSync() {
         <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
         Let the Hue lights follow what plays in this browser
       </label>
+      {on && !!areas?.length && (
+        <label>
+          Lights in
+          <select value={area} onChange={(e) => pickArea(e.target.value)}>
+            <option value="">Every light Hue Sync uses</option>
+            {areas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.type === 'Zone' ? 'zone' : 'room'})
+              </option>
+            ))}
+          </select>
+          <span className="muted small">Pick the room this screen is in, so a TV in another room can sync its own lights at the same time.</span>
+        </label>
+      )}
       <p className="muted small">This only changes this browser. Your other devices each have their own switch.</p>
     </div>
   )
@@ -753,7 +774,8 @@ function PlaybackPrefs() {
       </label>
       <p className="muted small">
         Trailers are of movies here you haven't watched, newest first, never rated above the movie you're starting. They play only when a
-        movie starts from the beginning, in the web player; the TV app plays the intro.
+        movie starts from the beginning. A trailer file in the movie's folder (“-trailer” or a Trailers folder) is used first; the TV app
+        plays only those, and YouTube trailers play on the web.
       </p>
       <label className="check">
         <input type="checkbox" checked={p.autoQuality} onChange={(e) => set('autoQuality', e.target.checked)} />

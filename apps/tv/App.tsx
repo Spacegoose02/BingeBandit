@@ -8,7 +8,7 @@ import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
-import Player from './src/screens/Player'
+import Player, { TrailerScreen } from './src/screens/Player'
 import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, isPhone } from './src/theme'
@@ -128,7 +128,7 @@ export default function App() {
       ))
   }
 
-  const fullScreen = !isPhone || top.name === 'player' || top.name === 'live'
+  const fullScreen = !isPhone || top.name === 'player' || top.name === 'live' || top.name === 'trailer'
   return (
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
@@ -151,6 +151,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <Player id={r.id} start={r.start} />
     case 'live':
       return <LivePlayer channelId={r.channelId} />
+    case 'trailer':
+      return <TrailerScreen url={r.url} title={r.title} />
   }
 }
 
