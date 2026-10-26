@@ -71,6 +71,18 @@ export default function Layout() {
               </NavLink>
             </>
           )}
+          {user?.kid && (
+            <>
+              <NavLink to="/kids/movies" className="nav-item">
+                <Icon name="film" />
+                <span>Kids Movies</span>
+              </NavLink>
+              <NavLink to="/kids/shows" className="nav-item">
+                <Icon name="tv" />
+                <span>Kids Shows</span>
+              </NavLink>
+            </>
+          )}
           <NavLink to="/watchlist" className="nav-item">
             <Icon name="bookmark" />
             <span>Watchlist</span>

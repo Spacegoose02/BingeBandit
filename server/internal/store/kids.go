@@ -1,7 +1,11 @@
 package store
 
-// Kid mode for Live TV: a user marked as a kid only sees the channels an
-// admin approved for kids, either one at a time or by the channel's group.
+import "database/sql"
+
+// Kid mode: a user marked as a kid only sees the Live TV channels an admin
+// approved for kids, either one at a time or by the channel's group. Parents
+// can also approve single movies and shows for a kid from libraries the kid
+// can't browse (kid_titles, honoured by visible in items.go).
 
 // kidChannels is a condition on channels c for the user bound to its one
 // parameter: anyone who isn't a kid gets every channel (so does uid 0, used
@@ -76,5 +80,40 @@ func (s *Store) SetKidGroup(name string, on bool) error {
 		q = `INSERT OR IGNORE INTO kid_channel_groups (grp) VALUES (?)`
 	}
 	_, err := s.db.Exec(q, name)
+	return err
+}
+
+// KidTitles lists the movies or shows (kind) approved for a kid, by title.
+func (s *Store) KidTitles(uid int64, kind string) ([]*Item, error) {
+	return s.queryItems(listSelect+` WHERE i.kind = @kind AND i.id IN (SELECT item_id FROM kid_titles WHERE user_id = @uid)
+		ORDER BY i.sort_title COLLATE NOCASE, i.id`, uidArg(uid), sql.Named("kind", kind))
+}
+
+// KidTitleUsers lists the users a title is approved for.
+func (s *Store) KidTitleUsers(itemID int64) (map[int64]bool, error) {
+	rows, err := s.db.Query(`SELECT user_id FROM kid_titles WHERE item_id = ?`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+// SetKidTitle approves a movie or show for a kid (by is who approved it),
+// or takes the approval away.
+func (s *Store) SetKidTitle(userID, itemID, by int64, on bool) error {
+	if !on {
+		_, err := s.db.Exec(`DELETE FROM kid_titles WHERE user_id = ? AND item_id = ?`, userID, itemID)
+		return err
+	}
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_titles (user_id, item_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, itemID, by, now())
 	return err
 }

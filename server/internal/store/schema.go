@@ -781,4 +781,17 @@ ALTER TABLE users ADD COLUMN kid INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE channels ADD COLUMN kids INTEGER NOT NULL DEFAULT 0;
 CREATE TABLE kid_channel_groups (grp TEXT PRIMARY KEY);
 `,
+	// 42: movies and shows a parent (or an admin) approved for a kid, from
+	// libraries the kid can't otherwise see. The kid gets just those titles
+	// (a show with all its episodes), under Kids Movies and Kids Shows.
+	`
+CREATE TABLE kid_titles (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_by   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+CREATE INDEX kid_titles_item ON kid_titles(item_id);
+`,
 }

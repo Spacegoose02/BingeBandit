@@ -33,6 +33,29 @@ export function WatchlistPage() {
   )
 }
 
+/** A kid's Kids Movies or Kids Shows: the titles a parent approved for them. */
+export function KidsTitlesPage({ kind }: { kind: 'movie' | 'show' }) {
+  const title = kind === 'movie' ? 'Kids Movies' : 'Kids Shows'
+  useDocumentTitle(title)
+  const { data } = useApi<Item[]>(`/api/kids/titles?kind=${kind}`)
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>{title}</h1>
+          <div className="muted">{kind === 'movie' ? 'Movies' : 'Shows'} a grown-up picked for you.</div>
+        </div>
+      </header>
+      {data?.length === 0 && <div className="empty">Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</div>}
+      <div className="poster-grid">
+        {data?.map((it) => (
+          <PosterCard key={it.id} item={it} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function PlaylistsPage() {
   useDocumentTitle('Playlists')
   const { data, reload } = useApi<Playlist[]>('/api/playlists')

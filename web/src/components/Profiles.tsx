@@ -179,7 +179,7 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
         )}
         <label className="check">
           <input type="checkbox" checked={kid} onChange={(e) => setKid(e.target.checked)} />
-          Kid: only Live TV channels the admin approved for kids
+          Kid: only Live TV channels approved for kids, plus Kids Movies and Kids Shows you pick (the smiley button on a movie or show)
         </label>
         <label>
           {profile.hasPin ? 'New PIN (leave empty to keep it)' : 'PIN (optional, 4 to 8 digits)'}
