@@ -121,18 +121,33 @@ export default function LivePlayer() {
 
   // Buffering for longer than the server's stall time: tell it, so it can
   // move the channel to its next stream (it checks the stream really is the
-  // problem first). Repeats every stall period while it lasts.
+  // problem first). If it didn't switch, the stream is fine and the player is
+  // what's stuck, so start the player over; if it did, give the new stream
+  // one more stall period before doing the same.
   useEffect(() => {
     if (!buffering || paused || reconnecting) return
     const started = Date.now()
     let next = stallSecs.current
+    let switched = false
+    let done = false
+    const reload = () => {
+      if (done) return
+      done = true
+      setAttempt((n) => n + 1)
+    }
     const t = window.setInterval(() => {
       const secs = (Date.now() - started) / 1000
       if (secs < next || !viewerRef.current) return
       next += stallSecs.current
-      api.post(`/api/live/viewers/${viewerRef.current}/buffering`, { seconds: Math.round(secs) }).catch(() => undefined)
+      if (switched) return reload()
+      api
+        .post<{ switched?: boolean }>(`/api/live/viewers/${viewerRef.current}/buffering`, { seconds: Math.round(secs) })
+        .then((r) => (r?.switched ? (switched = true) : reload()), () => undefined)
     }, 1000)
-    return () => window.clearInterval(t)
+    return () => {
+      done = true
+      window.clearInterval(t)
+    }
   }, [buffering, paused, reconnecting, attempt])
 
   const onPlaying = () => {

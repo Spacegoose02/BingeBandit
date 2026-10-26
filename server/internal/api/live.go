@@ -218,7 +218,7 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"bufferSecs": s.Live.BufferSeconds(),
+		"bufferSecs": s.Live.ChannelBufferSeconds(ch.ID),
 		"stallSecs":  s.Live.StallSeconds(),
 		"viewerId":   v.ID,
 		"playlist":   fmt.Sprintf("/api/live/channels/%d/hls/live.m3u8?viewer=%s", ch.ID, v.ID),

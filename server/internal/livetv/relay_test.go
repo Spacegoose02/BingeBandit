@@ -1,6 +1,7 @@
 package livetv
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -180,7 +181,7 @@ func TestSlowStreamFailsOver(t *testing.T) {
 		t.Errorf("the slow stream should be tried last, got %v first", order[0].Name)
 	}
 	r.mu.Lock()
-	leave := r.canLeaveSlow()
+	leave := r.canLeaveSlow(true)
 	r.mu.Unlock()
 	if leave {
 		t.Error("would leave the good stream for the one just found too slow")
@@ -256,5 +257,99 @@ func TestBufferingReport(t *testing.T) {
 	}
 	if bConns.Load() != 0 {
 		t.Error("switched to the second stream without cause")
+	}
+}
+
+// A stream that goes quiet after playing is connected to again within the
+// players' cushion, rather than waiting out the stall timeout and moving on.
+func TestQuietStreamReconnects(t *testing.T) {
+	var conns, backupConns atomic.Int32
+	quiet := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := conns.Add(1)
+		w.WriteHeader(http.StatusOK)
+		media := 10.0
+		for i := 0; ; i++ {
+			if n == 1 && i == 30 {
+				<-r.Context().Done() // the provider stops sending but keeps the connection
+				return
+			}
+			chunk := tsWithPCR(256, media)
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+			media += 0.1
+		}
+	}))
+	defer quiet.Close()
+	backup := pcrServer(1, &backupConns)
+	defer backup.Close()
+
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	m := &Manager{st: st, ffmpeg: "ffmpeg", ffprobe: "ffprobe", dataDir: t.TempDir(), relays: map[int64]*Relay{}}
+	ch := &store.Channel{ID: 1, Number: 5, Name: "Test", Streams: []store.ChannelStream{
+		{StreamID: 1, Name: "main", SourceID: 1, URL: quiet.URL},
+		{StreamID: 2, Name: "backup", SourceID: 2, URL: backup.URL},
+	}}
+	v, err := m.Join(ch, &store.User{ID: 1, Username: "a"}, "127.0.0.1", "ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Stop(1)
+	go func() {
+		for range v.Chunks() {
+		}
+	}()
+	began := time.Now()
+	for conns.Load() < 2 && time.Since(began) < 15*time.Second {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if conns.Load() < 2 {
+		t.Fatal("the stream that went quiet was never connected to again")
+	}
+	// 3 s of playing, then quiet: reconnected well before the 12 s stall timeout.
+	if took := time.Since(began); took > 10*time.Second {
+		t.Errorf("reconnecting took %s", took)
+	}
+	time.Sleep(2 * time.Second)
+	if backupConns.Load() != 0 {
+		t.Error("moved to the backup stream instead of reconnecting")
+	}
+}
+
+func TestHLSTargetDuration(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/master.m3u8":
+			w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=5000000\nhi/index.m3u8\n"))
+		case "/hi/index.m3u8":
+			w.Write([]byte("#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6.0,\ns1.ts\n"))
+		case "/plain.m3u8":
+			w.Write([]byte("#EXTM3U\n#EXTINF:6.0,\ns1.ts\n"))
+		}
+	}))
+	defer srv.Close()
+	for path, want := range map[string]time.Duration{
+		"/master.m3u8":   6 * time.Second,
+		"/hi/index.m3u8": 6 * time.Second,
+		"/plain.m3u8":    defaultHLSTarget,
+	} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := hlsTargetDuration(context.Background(), resp, "test"); got != want {
+			t.Errorf("%s: got %s, want %s", path, got, want)
+		}
+		resp.Body.Close()
 	}
 }

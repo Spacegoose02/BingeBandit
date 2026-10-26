@@ -210,18 +210,32 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
 
   // Buffering for longer than the server's stall time: tell it, so it can
   // move the channel to its next stream (it checks the stream really is the
-  // problem first). Repeats every stall period while it lasts.
+  // problem first). If it didn't switch, the stream is fine and the player is
+  // what's stuck (ExoPlayer can sit buffering for good after a gap in the
+  // stream), so start the player over; if it did, give the new stream one
+  // more stall period before doing the same.
   useEffect(() => {
     if (!buffering || paused || reconnecting || !src) return
     const started = Date.now()
     let next = stallSecs.current
+    let switched = false
+    let done = false
+    const reload = () => {
+      if (done) return
+      done = true
+      setAttempt((n) => n + 1)
+    }
     const t = setInterval(() => {
       const secs = (Date.now() - started) / 1000
       if (secs < next) return
       next += stallSecs.current
-      reportBuffering(viewer.current, secs)
+      if (switched) return reload()
+      reportBuffering(viewer.current, secs).then((s) => (s ? (switched = true) : reload()))
     }, 1000)
-    return () => clearInterval(t)
+    return () => {
+      done = true
+      clearInterval(t)
+    }
   }, [buffering, paused, reconnecting, src])
 
   const playing = () => {
