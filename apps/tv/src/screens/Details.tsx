@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
-import { useNav } from '../nav'
+import { useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Item, ItemDetail } from '../types'
 
@@ -15,7 +15,6 @@ function fmtDuration(min?: number) {
 /** A movie, show, season or episode, with Play and its seasons/episodes. */
 export default function Details({ id }: { id: number }) {
   const nav = useNav()
-  // Coming back from the player shows the last copy at once, then the new resume point.
   const [d, setD] = useState<ItemDetail | null>(() => cached<ItemDetail>(`/api/items/${id}`) ?? null)
   const [error, setError] = useState('')
 
@@ -24,7 +23,9 @@ export default function Details({ id }: { id: number }) {
       .then(() => api.get<ItemDetail>(`/api/items/${id}`))
       .then(setD, (e) => setError(e.message))
   }, [id])
-  useEffect(load, [load])
+  // Again each time Back comes here (from the player: the new resume point).
+  const { returns } = useScreen()
+  useEffect(load, [load, returns])
 
   if (error) return <Center><Text style={st.error}>{error}</Text></Center>
   if (!d) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
@@ -39,6 +40,8 @@ export default function Details({ id }: { id: number }) {
   const meta = [it.year, it.contentRating, fmtDuration(it.runtime), it.rating ? `★ ${it.rating.toFixed(1)}` : '', it.genres?.slice(0, 3).join(', ')]
     .filter(Boolean)
     .join('   ·   ')
+  // Older servers leave out unwatchedCount when it is 0.
+  const fullyWatched = playable ? !!it.watch?.watched : !!it.childCount && !it.unwatchedCount
   const heading = it.kind === 'episode' ? `${it.showTitle ?? d.show?.title ?? ''}` : it.kind === 'season' ? d.show?.title ?? '' : ''
 
   return (
@@ -80,10 +83,9 @@ export default function Details({ id }: { id: number }) {
             />
           )}
           <Button
-            label={it.watch?.watched || (it.childCount && it.unwatchedCount === 0) ? 'Mark unwatched' : 'Mark watched'}
+            label={fullyWatched ? 'Mark unwatched' : 'Mark watched'}
             onPress={async () => {
-              const watched = it.watch?.watched || (it.childCount && it.unwatchedCount === 0)
-              await api.post(`/api/items/${it.id}/${watched ? 'unwatched' : 'watched'}`).catch(() => undefined)
+              await api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`).catch(() => undefined)
               load()
             }}
           />

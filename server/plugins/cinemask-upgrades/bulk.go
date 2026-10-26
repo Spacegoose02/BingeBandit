@@ -22,8 +22,13 @@ type bulkState struct {
 	cancel  context.CancelFunc
 }
 
-// pause between titles in a bulk search.
-var bulkPause = 5 * time.Second
+// pause between titles in a bulk search. It doubles (up to maxBulkPause)
+// while Cinemask or its indexers say we're asking too often, and eases back
+// after titles that go through.
+var (
+	bulkPause    = 5 * time.Second
+	maxBulkPause = 2 * time.Minute
+)
 
 type bulkTitle struct {
 	kind   string
@@ -58,12 +63,13 @@ func (a *app) runBulk(ctx context.Context, c *Cinemask, titles []bulkTitle) {
 		a.mu.Unlock()
 		log.Printf("search all: %d titles, %d grabbed, %d skipped, %d errors", b.Done, b.Grabbed, b.Skipped, len(b.Errors))
 	}()
+	pause := bulkPause
 	for i, t := range titles {
 		if i > 0 {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(bulkPause):
+			case <-time.After(pause):
 			}
 		}
 		a.mu.Lock()
@@ -82,6 +88,12 @@ func (a *app) runBulk(ctx context.Context, c *Cinemask, titles []bulkTitle) {
 		a.mu.Unlock()
 		if ctx.Err() != nil {
 			return
+		}
+		if rateLimited(err) {
+			pause = min(pause*2, maxBulkPause)
+			log.Printf("search all: rate limited, waiting %s between titles", pause)
+		} else if pause > bulkPause {
+			pause = max(pause/2, bulkPause)
 		}
 	}
 }

@@ -26,7 +26,7 @@ function Art({ src, label }: { src?: string; label: string }) {
 
 function Badge({ item }: { item: Item }) {
   if (item.kind === 'show' || item.kind === 'season') {
-    if (item.childCount && item.unwatchedCount === 0) return <span className="badge-watched"><Icon name="check" size={14} /></span>
+    if (item.childCount && !item.unwatchedCount) return <span className="badge-watched"><Icon name="check" size={14} /></span>
     if (item.unwatchedCount) return <span className="badge-count">{item.unwatchedCount}</span>
     return null
   }

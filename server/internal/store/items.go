@@ -66,7 +66,7 @@ type Item struct {
 	AddedAt        int64      `json:"addedAt"`
 	Watch          WatchState `json:"watch"`
 	ChildCount     int        `json:"childCount,omitempty"`
-	UnwatchedCount int        `json:"unwatchedCount,omitempty"`
+	UnwatchedCount int        `json:"unwatchedCount"` // sent as 0 too: shows and seasons are fully watched at 0
 	ShowTitle      string     `json:"showTitle,omitempty"`
 	ShowPoster     string     `json:"showPoster,omitempty"`
 	ShowBackdrop   string     `json:"showBackdrop,omitempty"`

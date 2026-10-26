@@ -1,6 +1,7 @@
-import React, { memo, useCallback, useRef, useState } from 'react'
+import React, { memo, useCallback, useContext, useRef, useState } from 'react'
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type ImageProps, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
+import { FocusMemoryContext } from './nav'
 import { scaled, colors, font, gutter, isPhone } from './theme'
 import type { Collection, Item } from './types'
 
@@ -21,10 +22,16 @@ export function Button({
   style?: ViewStyle
 }) {
   const [focused, setFocused] = useState(false)
+  const ref = useRef<View>(null)
+  const remember = useContext(FocusMemoryContext)
   return (
     <Pressable
+      ref={ref}
       onPress={onPress}
-      onFocus={() => setFocused(!isPhone)} // phones can hold focus too, but show touch feedback instead
+      onFocus={() => {
+        setFocused(!isPhone) // phones can hold focus too, but show touch feedback instead
+        remember(ref.current)
+      }}
       onBlur={() => setFocused(false)}
       hasTVPreferredFocus={preferFocus}
       style={({ pressed }) => [
@@ -44,11 +51,15 @@ export function Button({
 /** Wraps anything focusable with a teal ring and a slight zoom. */
 export function Focusable({ children, style, ...props }: PressableProps & { style?: ViewStyle; children: React.ReactNode }) {
   const [focused, setFocused] = useState(false)
+  const ref = useRef<View>(null)
+  const remember = useContext(FocusMemoryContext)
   return (
     <Pressable
       {...props}
+      ref={ref}
       onFocus={(e) => {
         setFocused(!isPhone)
+        remember(ref.current)
         props.onFocus?.(e)
       }}
       onBlur={(e) => {
