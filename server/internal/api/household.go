@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -420,4 +421,152 @@ func (s *Server) switchProfile(w http.ResponseWriter, r *http.Request) {
 		s.setSessionCookie(w, r, newToken)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": newToken, "user": target})
+}
+
+// linkUser (admin) moves an account under another account as a profile, so
+// they share one sign-in and it shows in that account's "Who's watching?".
+// Its watch history and settings stay; its own password, two-step sign-in
+// and passkeys go, and it's signed out everywhere. Single sign-on and an
+// attached email keep working and land in the profile. Profiles
+// it already had come along. Admins can't be linked, so switching profiles
+// never leads to admin rights.
+func (s *Server) linkUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		AccountID int64  `json:"accountId"`
+		Name      string `json:"name"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u, err := s.Store.UserByID(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	switch {
+	case u.OwnerID != 0:
+		writeErr(w, http.StatusBadRequest, "that's already a profile; unlink it first")
+		return
+	case u.IsAdmin:
+		writeErr(w, http.StatusBadRequest, "admins can't become profiles")
+		return
+	case u.ID == req.AccountID:
+		writeErr(w, http.StatusBadRequest, "pick another account")
+		return
+	}
+	owner, err := s.Store.UserByID(req.AccountID)
+	if err != nil || owner.OwnerID != 0 {
+		writeErr(w, http.StatusBadRequest, "pick an account, not a profile")
+		return
+	}
+	if req.Name == "" {
+		req.Name = u.Username
+	}
+	name, err := validProfileName(req.Name)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	theirs, err := s.Store.Household(u.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	members, err := s.Store.Household(owner.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if len(members)-1+len(theirs) > maxProfiles {
+		writeErr(w, http.StatusBadRequest, "an account can have up to "+strconv.Itoa(maxProfiles)+" profiles")
+		return
+	}
+	if err := s.Store.LinkUser(u, owner, name); errors.Is(err, store.ErrExists) {
+		writeErr(w, http.StatusConflict, owner.Username+" already has a profile with that name")
+		return
+	} else if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// unlinkUser (admin) makes a profile an account of its own again, with the
+// username and password given. Everything else it had stays.
+func (s *Server) unlinkUser(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req credentials
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := validCredentials(req); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	p, err := s.Store.UserByID(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if p.OwnerID == 0 {
+		writeErr(w, http.StatusBadRequest, "that's not a profile")
+		return
+	}
+	username := strings.TrimSpace(req.Username)
+	if other, err := s.Store.UserByUsername(username); err == nil && other.ID != p.ID {
+		writeErr(w, http.StatusConflict, "that username is taken")
+		return
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err := s.Store.UnlinkProfile(p, username, string(hash)); errors.Is(err, store.ErrExists) {
+		writeErr(w, http.StatusConflict, "that username is taken")
+		return
+	} else if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+var emailFormat = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+// setUserEmail (admin) attaches an email to a user: signing in with single
+// sign-on as that email then lands in this user, profile or account.
+func (s *Server) setUserEmail(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	email := strings.TrimSpace(req.Email)
+	if email != "" && !emailFormat.MatchString(email) {
+		writeErr(w, http.StatusBadRequest, "that doesn't look like an email address")
+		return
+	}
+	if err := s.Store.SetEmail(id, email); errors.Is(err, store.ErrExists) {
+		writeErr(w, http.StatusConflict, "another user already has that email")
+		return
+	} else if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -794,4 +794,10 @@ CREATE TABLE kid_titles (
 );
 CREATE INDEX kid_titles_item ON kid_titles(item_id);
 `,
+	// 43: an email an admin attaches to a user, so a single sign-on with
+	// that (verified) email lands in that user, even as a profile.
+	`
+ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX users_email ON users(email COLLATE NOCASE) WHERE email != '';
+`,
 }

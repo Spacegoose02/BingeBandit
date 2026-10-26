@@ -14,6 +14,9 @@ export default function AdminUsers() {
   const [adding, setAdding] = useState(false)
   const [resetting, setResetting] = useState<User | null>(null)
   const [access, setAccess] = useState<User | null>(null)
+  const [linking, setLinking] = useState<User | null>(null)
+  const [unlinking, setUnlinking] = useState<User | null>(null)
+  const [emailing, setEmailing] = useState<User | null>(null)
 
   const remove = async (u: User) => {
     if (!confirm(`Delete ${u.username}? Their watch history is removed too.`)) return
@@ -68,7 +71,10 @@ export default function AdminUsers() {
                   !u.hasPassword && <span className="pill" title="Made by single sign-on; no password yet">SSO only</span>
                 )}
               </div>
-              <div className="muted small">Joined {new Date(u.createdAt * 1000).toLocaleDateString()}</div>
+              <div className="muted small">
+                Joined {new Date(u.createdAt * 1000).toLocaleDateString()}
+                {u.email && <> · {u.email}</>}
+              </div>
             </div>
             {u.isAdmin ? (
               <span className="pill ok">Admin · all libraries</span>
@@ -110,6 +116,21 @@ export default function AdminUsers() {
                 Remove {u.passkeys === 1 ? 'passkey' : `${u.passkeys} passkeys`}
               </button>
             )}
+            <button className="btn btn-glass btn-sm" onClick={() => setEmailing(u)} title="Single sign-on with this email signs in as this user">
+              {u.email ? 'Email' : 'Add email'}
+            </button>
+            {u.ownerId ? (
+              <button className="btn btn-glass btn-sm" onClick={() => setUnlinking(u)} title="Give this profile its own sign-in again">
+                Unlink
+              </button>
+            ) : (
+              !u.isAdmin &&
+              u.id !== me?.id && (
+                <button className="btn btn-glass btn-sm" onClick={() => setLinking(u)} title="Move this user under another account as a profile">
+                  <Icon name="link" size={16} /> Link to account
+                </button>
+              )
+            )}
             {!u.ownerId && (
               <button className="btn btn-glass btn-sm" onClick={() => setResetting(u)}>
                 <Icon name="key" size={16} /> Reset password
@@ -126,6 +147,11 @@ export default function AdminUsers() {
       {adding && <AddUser onClose={() => setAdding(false)} onSaved={() => { setAdding(false); reload() }} />}
       {resetting && <ResetPassword user={resetting} onClose={() => setResetting(null)} />}
       {access && <LibraryAccess user={access} onClose={() => setAccess(null)} onSaved={() => { setAccess(null); reload() }} />}
+      {linking && users && (
+        <LinkUser user={linking} users={users} onClose={() => setLinking(null)} onSaved={() => { setLinking(null); reload() }} />
+      )}
+      {unlinking && <UnlinkUser user={unlinking} onClose={() => setUnlinking(null)} onSaved={() => { setUnlinking(null); reload() }} />}
+      {emailing && <UserEmail user={emailing} onClose={() => setEmailing(null)} onSaved={() => { setEmailing(null); reload() }} />}
     </div>
   )
 }
@@ -239,6 +265,125 @@ function ResetPassword({ user, onClose }: { user: User; onClose: () => void }) {
         <div className="actions end">
           <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary">Reset password</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function LinkUser({ user, users, onClose, onSaved }: { user: User; users: User[]; onClose: () => void; onSaved: () => void }) {
+  const accounts = users.filter((u) => !u.ownerId && u.id !== user.id)
+  const profiles = users.filter((u) => u.ownerId === user.id)
+  const [accountId, setAccountId] = useState(accounts[0]?.id ?? 0)
+  const [name, setName] = useState(user.username.replace(/[()]/g, '').slice(0, 30))
+  const [error, setError] = useState('')
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await api.post(`/api/admin/users/${user.id}/link`, { accountId, name })
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={`Link ${user.username} to an account`} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <p className="muted small">
+          {user.username} becomes a profile in that account's "Who's watching?". Their watch history, ratings, lists and settings
+          stay. Their password, two-step sign-in and passkeys are removed and they're signed out everywhere; single sign-on and
+          their settings passcode (now their profile PIN) keep working.
+          {profiles.length > 0 && ` Their ${profiles.length === 1 ? 'profile moves' : `${profiles.length} profiles move`} along with them.`}
+        </p>
+        <label>
+          Account
+          <select value={accountId} onChange={(e) => setAccountId(Number(e.target.value))} required>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.username}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Profile name
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={30} />
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!accountId}>Link</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function UnlinkUser({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
+  const [username, setUsername] = useState(user.profileName ?? '')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await api.post(`/api/admin/users/${user.id}/unlink`, { username, password })
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={`Unlink ${user.profileName ?? user.username}`} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <p className="muted small">
+          This profile becomes its own account, with its watch history and settings. It leaves "Who's watching?" and is signed out
+          on its devices.
+        </p>
+        <label>
+          Username
+          <input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={2} autoFocus />
+        </label>
+        <label>
+          Password
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} autoComplete="new-password" />
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary">Unlink</button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function UserEmail({ user, onClose, onSaved }: { user: User; onClose: () => void; onSaved: () => void }) {
+  const [email, setEmail] = useState(user.email ?? '')
+  const [error, setError] = useState('')
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    try {
+      await api.put(`/api/admin/users/${user.id}/email`, { email })
+      onSaved()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  return (
+    <Modal title={`Email for ${user.profileName || user.username}`} onClose={onClose}>
+      <form className="form" onSubmit={submit}>
+        <p className="muted small">
+          The first time someone signs in with single sign-on using this email, they land in this user{user.ownerId ? ' (this profile)' : ''}.
+          The provider has to have confirmed the email. Leave it empty to remove it.
+        </p>
+        <label>
+          Email
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <div className="actions end">
+          <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary">Save</button>
         </div>
       </form>
     </Modal>

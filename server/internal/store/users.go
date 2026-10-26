@@ -31,6 +31,7 @@ type User struct {
 	Avatar        string  `json:"avatar,omitempty"`        // URL of the profile picture (a built-in one when none was uploaded)
 	AvatarCustom  bool    `json:"avatarCustom,omitempty"`  // Avatar is an uploaded picture, not a built-in one
 	AutoProfileID int64   `json:"autoProfileId,omitempty"` // an account's member to open as without asking
+	Email         string  `json:"email,omitempty"`         // a single sign-on with this email signs in as this user
 	PasswordHash  string  `json:"-"`
 	PasscodeHash  string  `json:"-"`
 	TOTPSecret    string  `json:"-"`
@@ -153,13 +154,13 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv, kid`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv, kid, email`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var avatar string
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV, &u.Kid); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV, &u.Kid, &u.Email); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -207,6 +208,29 @@ func (s *Store) SetLiveTV(userID int64, on bool) error {
 
 func (s *Store) UserByUsername(username string) (*User, error) {
 	return scanUser(s.db.QueryRow(`SELECT `+userCols+` FROM users WHERE username = ?`, username))
+}
+
+// UserByEmail finds the user an admin attached email to.
+func (s *Store) UserByEmail(email string) (*User, error) {
+	if email == "" {
+		return nil, ErrNotFound
+	}
+	return scanUser(s.db.QueryRow(`SELECT `+userCols+` FROM users WHERE email = ? COLLATE NOCASE`, email))
+}
+
+// SetEmail attaches an email to a user for single sign-on; "" removes it.
+func (s *Store) SetEmail(userID int64, email string) error {
+	res, err := s.db.Exec(`UPDATE users SET email = ? WHERE id = ?`, email, userID)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return ErrExists
+		}
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) UserByID(id int64) (*User, error) {

@@ -27,6 +27,7 @@ export interface User {
   profileName?: string
   avatar?: string // URL of the profile picture
   autoProfileId?: number // an account's member to open as without asking who's watching
+  email?: string // a single sign-on with this email signs in as this user
 }
 
 /** A person in the signed-in account's household: the account or one of its profiles. */

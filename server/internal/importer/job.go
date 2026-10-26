@@ -17,6 +17,7 @@ import (
 // SourceUser is an account on the source server.
 type SourceUser struct {
 	Name  string `json:"name"`
+	Email string `json:"email,omitempty"` // when the source knows it
 	Plays int    `json:"plays,omitempty"` // when the source can count cheaply
 }
 

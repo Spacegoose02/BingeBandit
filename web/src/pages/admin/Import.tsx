@@ -7,6 +7,7 @@ type Source = 'plex' | 'tautulli' | 'tautulli-db' | 'cinemask'
 
 interface SourceUser {
   name: string
+  email?: string
   plays?: number
   suggest: number
 }
@@ -112,6 +113,7 @@ export default function AdminImport() {
         labels: opts.labels && !!connected?.labels,
         dryRun,
         users: map,
+        emails: Object.fromEntries((connected?.users ?? []).filter((u) => u.email).map((u) => [u.name, u.email])),
       })
       setStatus(s)
       if (!dryRun && Object.values(map).includes(-1)) {
@@ -219,7 +221,9 @@ export default function AdminImport() {
                     <div key={u.name} className="list-row">
                       <div className="grow">
                         <div>{u.name}</div>
-                        {u.plays !== undefined && <div className="muted small">{u.plays} plays</div>}
+                        {(u.email || u.plays !== undefined) && (
+                          <div className="muted small">{[u.email, u.plays !== undefined && `${u.plays} plays`].filter(Boolean).join(' · ')}</div>
+                        )}
                       </div>
                       <select
                         value={map[u.name] ?? 0}
