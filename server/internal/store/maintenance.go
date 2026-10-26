@@ -240,7 +240,11 @@ func (s *Store) Restore(ctx context.Context, path, keepToken string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.loadOverlayTag()
+	return nil
 }
 
 // checkBackup migrates the copy at path and makes sure it is a sound

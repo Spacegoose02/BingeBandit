@@ -33,6 +33,7 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	s.loadOverlayTag()
 	return s, nil
 }
 

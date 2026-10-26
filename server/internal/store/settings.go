@@ -55,6 +55,20 @@ const (
 	SettingLiveStallSeconds  = "live_stall_seconds"     // no data this long → switch to the next stream
 	SettingLiveSwitchSlow    = "live_switch_slow"       // false: only switch streams when one fails, not when it falls behind
 	SettingLiveProxy         = "live_proxy"             // proxy for provider traffic; empty = HTTP(S)_PROXY environment
+	// Poster overlays (Kometa's): badges drawn on movie and show posters as
+	// they're served. The master switch also covers uploaded overlays.
+	SettingOverlays          = "overlays_enabled"
+	SettingOverlayResolution = "overlay_resolution" // 4K / 1080P / 720P / SD
+	SettingOverlayHDR        = "overlay_hdr"        // Dolby Vision / HDR
+	SettingOverlayAudio      = "overlay_audio"      // Atmos, DTS:X, TrueHD, DTS-HD, 7.1, 5.1
+	SettingOverlayRatings    = "overlay_ratings"    // IMDb, Rotten Tomatoes and TMDB scores
+	// Default collections (Kometa's defaults), built in every movie and show
+	// library by the "Build default collections" task.
+	SettingDefaultStudios = "default_collections_studios" // studios (networks for shows)
+	SettingDefaultDecades = "default_collections_decades"
+	SettingDefaultGenres  = "default_collections_genres"
+	SettingDefaultAwards  = "default_collections_awards"  // award winners, from Wikidata
+	SettingDefaultMinimum = "default_collections_minimum" // titles a studio, decade or genre needs for a collection
 )
 
 var SettingDefaults = map[string]string{
@@ -110,6 +124,16 @@ var SettingDefaults = map[string]string{
 	SettingLiveStallSeconds:  "12",
 	SettingLiveSwitchSlow:    "true",
 	SettingLiveProxy:         "",
+	SettingOverlays:          "false",
+	SettingOverlayResolution: "true",
+	SettingOverlayHDR:        "true",
+	SettingOverlayAudio:      "true",
+	SettingOverlayRatings:    "true",
+	SettingDefaultStudios:    "false",
+	SettingDefaultDecades:    "false",
+	SettingDefaultGenres:     "false",
+	SettingDefaultAwards:     "false",
+	SettingDefaultMinimum:    "5",
 }
 
 func (s *Store) Setting(key string) string {
@@ -154,5 +178,9 @@ func (s *Store) SetSettings(values map[string]string) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.loadOverlayTag()
+	return nil
 }

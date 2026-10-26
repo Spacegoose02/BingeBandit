@@ -96,6 +96,18 @@ func Builtin(d Deps) []*Task {
 			Run: d.Markers.Pending,
 		},
 		{
+			ID: "build_default_collections", Name: "Build default collections",
+			Description:    "Make the default collections turned on in Admin → Overlays (studios, decades, genres, award winners) in every movie and show library, and remove ones turned off.",
+			DefaultEnabled: true, DefaultHours: 24,
+			Run: func(ctx context.Context) (string, error) { return importer.NewDefaults(d.Store).Build(ctx) },
+		},
+		{
+			ID: "detect_hdr_audio", Name: "Detect Dolby Vision and Atmos",
+			Description:    "Look again at files analyzed before BingeBandit told Dolby Vision from HDR10 and spotted Atmos and DTS:X, for poster overlays (up to 1,000 files a run, only while overlays are on).",
+			DefaultEnabled: true, DefaultHours: 6,
+			Run: d.detectHDRAudio,
+		},
+		{
 			ID: "analyze_media", Name: "Analyze media",
 			Description: "Retry codec and stream analysis for files that couldn't be read during a scan.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
@@ -350,6 +362,33 @@ func (d Deps) cleanCache(ctx context.Context) (string, error) {
 		return nil
 	})
 	return fmt.Sprintf("removed %d files, freed %.1f MB", removed, float64(freed)/(1<<20)), nil
+}
+
+func (d Deps) detectHDRAudio(ctx context.Context) (string, error) {
+	if d.Store.Setting(store.SettingOverlays) != "true" {
+		return "poster overlays are off", nil
+	}
+	files, err := d.Store.FilesNeedingRange(1000)
+	if err != nil {
+		return "", err
+	}
+	ok := 0
+	for _, f := range files {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		if err := media.Probe(ctx, d.FFprobe, f); err != nil {
+			// To the back of the queue, so one unreadable file can't
+			// hold up the rest.
+			f.ProbedAt = time.Now().Unix()
+			d.Store.UpdateProbe(f)
+			continue
+		}
+		if err := d.Store.UpdateProbe(f); err == nil {
+			ok++
+		}
+	}
+	return fmt.Sprintf("looked again at %d of %d files", ok, len(files)), nil
 }
 
 func (d Deps) analyzeMedia(ctx context.Context) (string, error) {

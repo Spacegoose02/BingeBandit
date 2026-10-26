@@ -160,7 +160,11 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	json.Unmarshal([]byte(credits), &it.Credits)
 	json.Unmarshal([]byte(labels), &it.Labels)
 	json.Unmarshal([]byte(locked), &it.Locked)
-	it.Poster = ImageURL(it.Poster)
+	if u := overlayPosterURL(it.ID, it.Poster); u != "" && (it.Kind == "movie" || it.Kind == "show") {
+		it.Poster = u
+	} else {
+		it.Poster = ImageURL(it.Poster)
+	}
 	it.Backdrop = ImageURL(it.Backdrop)
 	it.Logo = ImageURL(it.Logo)
 	it.ShowPoster = ImageURL(it.ShowPoster)

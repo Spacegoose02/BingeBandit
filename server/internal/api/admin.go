@@ -135,6 +135,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingLiveBufferSeconds: {2, 60},
 		store.SettingLiveStallSeconds:  {3, 120},
 		store.SettingWatchedPercent:    {50, 100},
+		store.SettingDefaultMinimum:    {1, 1000},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {
@@ -186,9 +187,20 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Default collections follow their switches right away rather than at
+	// the task's next run.
+	defaultsChanged := false
+	for _, k := range []string{store.SettingDefaultStudios, store.SettingDefaultDecades, store.SettingDefaultGenres, store.SettingDefaultAwards, store.SettingDefaultMinimum} {
+		if v, ok := in[k]; ok && v != s.Store.Setting(k) {
+			defaultsChanged = true
+		}
+	}
 	if err := s.Store.SetSettings(in); err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if defaultsChanged && s.Tasks != nil {
+		s.Tasks.RunNow(s.ctx, "build_default_collections")
 	}
 	if v, ok := in[store.SettingLiveProxy]; ok {
 		livetv.SetProxy(v) // already validated

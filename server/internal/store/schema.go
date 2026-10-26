@@ -713,4 +713,28 @@ CREATE TABLE playlist_shares (
 );
 CREATE INDEX playlist_shares_user ON playlist_shares(user_id);
 `,
+	// 38: poster overlays and Kometa-style default collections. Overlays an
+	// admin uploads (their own badges and frames) are drawn on posters when
+	// they're served, with the built-in ones (resolution, HDR, audio,
+	// ratings); the stored artwork is never changed. builtin marks the
+	// collections BingeBandit made itself (studio:<name>, decade:1980,
+	// genre:<name>, award:<id>), so turning a group off removes only those.
+	`
+CREATE TABLE poster_overlays (
+	id         INTEGER PRIMARY KEY,
+	name       TEXT NOT NULL,
+	image      TEXT NOT NULL,                  -- local:/<file>
+	position   TEXT NOT NULL DEFAULT 'top-left',
+	size       INTEGER NOT NULL DEFAULT 25,    -- width, % of the poster's
+	margin     INTEGER NOT NULL DEFAULT 3,     -- % of the poster's width
+	condition  TEXT NOT NULL DEFAULT 'always', -- see overlay.Conditions
+	kind       TEXT NOT NULL DEFAULT '',       -- '' (both), movie or show
+	library_id INTEGER NOT NULL DEFAULT 0,     -- 0 = every library
+	enabled    INTEGER NOT NULL DEFAULT 1,
+	sort       INTEGER NOT NULL DEFAULT 0,
+	updated_at INTEGER NOT NULL
+);
+ALTER TABLE collections ADD COLUMN builtin TEXT NOT NULL DEFAULT '';
+CREATE INDEX collections_builtin ON collections(library_id, builtin) WHERE builtin != '';
+`,
 }

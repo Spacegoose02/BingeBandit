@@ -19,6 +19,12 @@ type Stream struct {
 	Default         bool   `json:"default,omitempty"`
 	Forced          bool   `json:"forced,omitempty"`
 	HearingImpaired bool   `json:"hearingImpaired,omitempty"`
+	// Range is a video stream's dynamic range: sdr, hdr10, hlg or dv (Dolby
+	// Vision). Empty: probed before BingeBandit looked for it.
+	Range string `json:"range,omitempty"`
+	// Profile is ffprobe's codec profile, which names DTS-HD MA, DTS:X
+	// and Atmos (e.g. "Dolby TrueHD + Dolby Atmos").
+	Profile string `json:"profile,omitempty"`
 	// External is the file name of a subtitle stored next to the video
 	// (e.g. "Movie.en.srt"); empty for streams inside the file. External
 	// streams get indexes from ExternalIndexBase up.
