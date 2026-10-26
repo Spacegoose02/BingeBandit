@@ -81,13 +81,24 @@ function HueSync() {
           Lights in
           <select value={area} onChange={(e) => pickArea(e.target.value)}>
             <option value="">Every light Hue Sync uses</option>
-            {areas.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.type === 'Zone' ? 'zone' : 'room'})
-              </option>
-            ))}
+            {(['Room', 'Zone'] as const).map((type) => {
+              const list = areas.filter((a) => (a.type === 'Zone') === (type === 'Zone'))
+              return (
+                !!list.length && (
+                  <optgroup key={type} label={type === 'Zone' ? 'Zones' : 'Rooms'}>
+                    {list.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+              )
+            })}
           </select>
-          <span className="muted small">Pick the room this screen is in, so a TV in another room can sync its own lights at the same time.</span>
+          <span className="muted small">
+            Pick the room or zone this screen is in: all of its lights follow the picture, and a TV in another room can sync its own lights at the same time.
+          </span>
         </label>
       )}
       <p className="muted small">This only changes this browser. Your other devices each have their own switch.</p>

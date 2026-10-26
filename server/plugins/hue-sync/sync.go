@@ -152,12 +152,14 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 	}
 }
 
-// lightsFor is the chosen lights a device's area covers: all of them when
-// it picked none, or when its room or zone is gone. err says why there are none.
+// lightsFor is the lights a device's area covers: every light in its room
+// or zone (a chosen light keeps its part of the picture; the rest follow the
+// whole picture), or every chosen light when it picked none or its room or
+// zone is gone. err says why there are none.
 func (a *app) lightsFor(ctx context.Context, area string) (lights [][2]string, err string) {
 	conf := a.conf.get()
 	lights = conf.assigned()
-	if conf.Username == "" || len(lights) == 0 {
+	if conf.Username == "" || (len(lights) == 0 && area == "") {
 		return nil, "Not set up: pair a bridge and choose lights"
 	}
 	if area == "" {
@@ -172,15 +174,20 @@ func (a *app) lightsFor(ctx context.Context, area string) (lights [][2]string, e
 			continue
 		}
 		var in [][2]string
-		for _, l := range lights {
-			if slices.Contains(ar.Lights, l[0]) {
-				in = append(in, l)
+		for _, id := range ar.Lights {
+			zone := conf.Lights[id]
+			if zone == "" {
+				zone = "all"
 			}
+			in = append(in, [2]string{id, zone})
 		}
 		if len(in) == 0 {
-			return nil, "None of the chosen lights are in " + ar.Name
+			return nil, ar.Name + " has no lights"
 		}
 		return in, ""
+	}
+	if len(lights) == 0 {
+		return nil, "That Hue room or zone is gone; pick another"
 	}
 	return lights, ""
 }

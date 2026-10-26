@@ -39,10 +39,14 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
     setHueOn(!hueOn)
   }
   // The Hue room or zone this TV is in, from the Hue app. OK steps through them.
-  const [areas, setAreas] = useState<{ id: string; name: string }[]>([])
+  const [areas, setAreas] = useState<{ id: string; name: string; type?: string }[]>([])
   const [area, setAreaState] = useState(hueArea)
   useEffect(() => {
-    if (hue) api.get<{ id: string; name: string }[]>('/api/plugins/hue-sync/areas').then(setAreas, () => undefined)
+    if (hue)
+      api.get<{ id: string; name: string; type: string }[]>('/api/plugins/hue-sync/areas').then(
+        (list) => setAreas(list.map((a) => ({ ...a, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))),
+        () => undefined,
+      )
   }, [hue])
   const options = [{ id: '', name: 'Every light' }, ...areas]
   const areaName = options.find((a) => a.id === area)?.name ?? 'Every light'

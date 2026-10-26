@@ -76,8 +76,8 @@ func (a *app) status(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// areas lists the Hue rooms and zones that hold at least one chosen light,
-// for the "Hue lights" choice on each device.
+// areas lists the Hue rooms and zones, for the "Hue lights" choice on each
+// device. Picking one syncs every light in it, chosen on the setup page or not.
 func (a *app) areas(w http.ResponseWriter, r *http.Request) {
 	if _, ok := bbplugin.UserOf(r); !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
@@ -101,14 +101,8 @@ func (a *app) areas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, ar := range all {
-		n := 0
-		for _, id := range ar.Lights {
-			if conf.Lights[id] != "" {
-				n++
-			}
-		}
-		if n > 0 {
-			out = append(out, area{ar.ID, ar.Name, ar.Type, n})
+		if len(ar.Lights) > 0 {
+			out = append(out, area{ar.ID, ar.Name, ar.Type, len(ar.Lights)})
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
