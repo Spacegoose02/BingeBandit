@@ -21,6 +21,7 @@ type User struct {
 	TOTPEnabled   bool    `json:"totpEnabled"`
 	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LiveTV        bool    `json:"liveTV"`               // may watch Live TV and use the DVR (admins always can)
+	Kid           bool    `json:"kid"`                  // only sees Live TV channels approved for kids (never an admin)
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
 	Passkeys      int     `json:"passkeys,omitempty"`   // how many; only filled by ListUsers
 	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
@@ -152,13 +153,13 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv, kid`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var avatar string
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV, &u.Kid); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -175,7 +176,21 @@ func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 		u.Avatar, u.AvatarCustom = ImageURL(avatar), true
 	}
 	u.LiveTV = u.LiveTV || u.IsAdmin
+	u.Kid = u.Kid && !u.IsAdmin
 	return &u, nil
+}
+
+// SetKid marks a user as a kid (or not): kids only see the Live TV channels
+// approved for kids.
+func (s *Store) SetKid(userID int64, on bool) error {
+	res, err := s.db.Exec(`UPDATE users SET kid = ? WHERE id = ?`, boolInt(on), userID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetLiveTV turns Live TV on or off for a user and the profiles under it.

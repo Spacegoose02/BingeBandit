@@ -71,7 +71,10 @@ export function Profiles() {
                 <div>
                   {p.name} {p.hasPin && <Icon name="lock" size={13} className="muted" />}
                 </div>
-                <div className="muted small">{p.allLibraries ? 'All your libraries' : `${p.libraryIds?.length ?? 0} libraries`}</div>
+                <div className="muted small">
+                  {p.allLibraries ? 'All your libraries' : `${p.libraryIds?.length ?? 0} libraries`}
+                  {p.kid ? ' · Kid: Live TV channels for kids only' : ''}
+                </div>
               </div>
               <button type="button" className="btn btn-glass btn-sm" onClick={() => setEditing(p)}>
                 <Icon name="edit" size={16} /> Edit
@@ -113,6 +116,7 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
   const [name, setName] = useState(profile.name)
   const [all, setAll] = useState(profile.allLibraries)
   const [ids, setIds] = useState<Set<number>>(new Set(profile.libraryIds ?? []))
+  const [kid, setKid] = useState(!!profile.kid)
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
 
@@ -120,7 +124,7 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
     e.preventDefault()
     setError('')
     try {
-      await api.put(`/api/household/${profile.id}`, { name, allLibraries: all, libraryIds: [...ids] })
+      await api.put(`/api/household/${profile.id}`, { name, allLibraries: all, libraryIds: [...ids], kid })
       if (pin) await api.put(`/api/household/${profile.id}/pin`, { pin })
       onSaved()
     } catch (err) {
@@ -173,6 +177,10 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
             ))}
           </div>
         )}
+        <label className="check">
+          <input type="checkbox" checked={kid} onChange={(e) => setKid(e.target.checked)} />
+          Kid: only Live TV channels the admin approved for kids
+        </label>
         <label>
           {profile.hasPin ? 'New PIN (leave empty to keep it)' : 'PIN (optional, 4 to 8 digits)'}
           <input

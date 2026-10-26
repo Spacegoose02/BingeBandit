@@ -519,11 +519,12 @@ func splitLost(s string) []string {
 }
 
 // Channels lists channels in number order, with each one's fallback streams
-// and the user's favourites. Disabled channels are only included for admins.
+// and the user's favourites. Disabled channels are only included for admins,
+// and a kid only gets the channels approved for kids.
 func (s *Store) Channels(uid int64, includeDisabled bool) ([]*Channel, error) {
 	rows, err := s.db.Query(`SELECT c.id, c.number, c.name, c.logo, c.grp, c.epg_id, c.enabled,
 			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?), c.custom, c.lost_streams
-		FROM channels c WHERE ? OR c.enabled = 1 ORDER BY c.number, c.name COLLATE NOCASE`, uid, includeDisabled)
+		FROM channels c WHERE (? OR c.enabled = 1) AND `+kidChannels+` ORDER BY c.number, c.name COLLATE NOCASE`, uid, includeDisabled, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +562,7 @@ func (s *Store) Channel(uid, id int64) (*Channel, error) {
 	var lost string
 	err := s.db.QueryRow(`SELECT c.id, c.number, c.name, c.logo, c.grp, c.epg_id, c.enabled,
 			EXISTS (SELECT 1 FROM channel_favorites f WHERE f.channel_id = c.id AND f.user_id = ?), c.custom, c.lost_streams
-		FROM channels c WHERE c.id = ?`, uid, id).
+		FROM channels c WHERE c.id = ? AND `+kidChannels, uid, id, uid).
 		Scan(&c.ID, &c.Number, &c.Name, &c.Logo, &c.Group, &c.EPGID, &c.Enabled, &c.Favorite, &c.Custom, &lost)
 	c.Lost = splitLost(lost)
 	if errors.Is(err, sql.ErrNoRows) {
