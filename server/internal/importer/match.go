@@ -22,6 +22,8 @@ type Record struct {
 	Season    int
 	Episode   int
 	TMDB      int64  // the movie's, or for episodes and shows the show's
+	IMDB      string // a movie's or show's IMDb id (tt…), from lists
+	TVDB      int64  // a show's TheTVDB id, from lists
 	File      string // base name of the media file, if known
 
 	ViewedAt  int64 // when the play ended (or the item was last viewed)
@@ -89,6 +91,8 @@ type Matcher struct {
 	episodes   map[epKey]*store.IndexItem
 	seasons    map[epKey]*store.IndexItem // episode 0
 	byID       map[int64]*store.IndexItem
+	imdb       map[string][]*store.IndexItem // movies and shows
+	showTVDB   map[int64][]*store.IndexItem
 }
 
 func NewMatcher(items []*store.IndexItem) *Matcher {
@@ -96,11 +100,18 @@ func NewMatcher(items []*store.IndexItem) *Matcher {
 		files: map[string]*store.IndexItem{}, movieTMDB: map[int64][]*store.IndexItem{}, showTMDB: map[int64][]*store.IndexItem{},
 		movieTitle: map[string][]*store.IndexItem{}, showTitle: map[string][]*store.IndexItem{}, episodes: map[epKey]*store.IndexItem{},
 		seasons: map[epKey]*store.IndexItem{}, byID: map[int64]*store.IndexItem{},
+		imdb: map[string][]*store.IndexItem{}, showTVDB: map[int64][]*store.IndexItem{},
 	}
 	for _, it := range items {
 		m.byID[it.ID] = it
 		for _, f := range it.Files {
 			m.files[f] = it
+		}
+		if it.IMDBID != "" && (it.Kind == "movie" || it.Kind == "show") {
+			m.imdb[it.IMDBID] = append(m.imdb[it.IMDBID], it)
+		}
+		if it.TVDBID > 0 && it.Kind == "show" {
+			m.showTVDB[it.TVDBID] = append(m.showTVDB[it.TVDBID], it)
 		}
 		switch it.Kind {
 		case "movie":
@@ -166,6 +177,13 @@ func (m *Matcher) Match(r *Record) *store.IndexItem {
 			return it
 		}
 	}
+	if r.IMDB != "" && (r.Kind == "movie" || r.Kind == "show") {
+		for _, it := range m.imdb[r.IMDB] {
+			if it.Kind == r.Kind {
+				return it
+			}
+		}
+	}
 	switch r.Kind {
 	case "movie":
 		if r.TMDB > 0 {
@@ -178,6 +196,11 @@ func (m *Matcher) Match(r *Record) *store.IndexItem {
 		}
 		return byYear(m.movieTitle[normTitle(stripParen(r.Title))], r.Year)
 	case "show":
+		if r.TVDB > 0 {
+			if c := m.showTVDB[r.TVDB]; len(c) > 0 {
+				return c[0]
+			}
+		}
 		return m.matchShow(r.TMDB, r.Title, r.Year)
 	case "episode":
 		show := m.matchShow(r.TMDB, r.ShowTitle, r.ShowYear)

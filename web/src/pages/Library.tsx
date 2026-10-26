@@ -3,8 +3,10 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { CollectionCard, PosterCard } from '../components/Cards'
+import { ChartRows } from '../components/ChartRows'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
+import { KometaImport } from '../components/KometaImport'
 import { RecommendationsEditor } from '../components/RecommendationsEditor'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
@@ -200,7 +202,7 @@ function LibraryView({ id }: { id: string }) {
         )}
       </header>
       {tab === 'recommended' && library && <RecommendedTab library={library} />}
-      {tab === 'collections' && <CollectionsTab libraryId={Number(id)} />}
+      {tab === 'collections' && <CollectionsTab libraryId={Number(id)} libraryKind={library?.kind ?? 'movies'} />}
       {tab === 'library' && (
         <>
           {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
@@ -232,16 +234,24 @@ function LibraryView({ id }: { id: string }) {
   )
 }
 
-function CollectionsTab({ libraryId }: { libraryId: number }) {
+function CollectionsTab({ libraryId, libraryKind }: { libraryId: number; libraryKind: string }) {
   const { user } = useAuth()
   const { data, reload } = useApi<Collection[]>(`/api/libraries/${libraryId}/collections`)
   const [creating, setCreating] = useState(false)
+  const [charts, setCharts] = useState(false)
+  const [kometa, setKometa] = useState(false)
   return (
     <>
       {user?.isAdmin && (
         <div className="actions" style={{ marginBottom: 20 }}>
           <button className="btn btn-glass btn-sm" onClick={() => setCreating(true)}>
             <Icon name="plus" size={16} /> New collection
+          </button>
+          <button className="btn btn-glass btn-sm" onClick={() => setCharts(true)}>
+            Add chart rows
+          </button>
+          <button className="btn btn-glass btn-sm" onClick={() => setKometa(true)}>
+            Import Kometa file
           </button>
           <span className="muted small">Add movies from their Edit dialog, or give a collection rules (genre, studio, years or a label) to fill it automatically.</span>
         </div>
@@ -252,9 +262,12 @@ function CollectionsTab({ libraryId }: { libraryId: number }) {
           <CollectionCard key={c.id} collection={c} onChanged={reload} />
         ))}
       </div>
+      {charts && <ChartRows libraryId={libraryId} libraryKind={libraryKind} onClose={() => setCharts(false)} onSaved={reload} />}
+      {kometa && <KometaImport libraryId={libraryId} onClose={() => setKometa(false)} onSaved={reload} />}
       {creating && (
         <CollectionEditor
           libraryId={libraryId}
+          libraryKind={libraryKind}
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false)
@@ -271,12 +284,16 @@ function RecommendedTab({ library }: { library: Library }) {
   const { user } = useAuth()
   const { data, loading, reload } = useApi<HubRow[]>(`/api/libraries/${library.id}/hubs`)
   const [managing, setManaging] = useState(false)
+  const [charts, setCharts] = useState(false)
   return (
     <>
       {user?.isAdmin && (
         <div className="actions" style={{ marginBottom: 20 }}>
           <button className="btn btn-glass btn-sm" onClick={() => setManaging(true)}>
             <Icon name="sliders" size={16} /> Manage recommendations
+          </button>
+          <button className="btn btn-glass btn-sm" onClick={() => setCharts(true)}>
+            Add chart rows
           </button>
           <span className="muted small">Pick which rows and collections show here, on Home and on Friends' Home.</span>
         </div>
@@ -297,6 +314,7 @@ function RecommendedTab({ library }: { library: Library }) {
         ))}
       </div>
       {managing && <RecommendationsEditor library={library} onClose={() => setManaging(false)} onSaved={reload} />}
+      {charts && <ChartRows libraryId={library.id} libraryKind={library.kind} onClose={() => setCharts(false)} onSaved={reload} />}
     </>
   )
 }

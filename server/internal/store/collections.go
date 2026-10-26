@@ -235,6 +235,10 @@ var CollectionSorts = map[string]string{
 	"title":        `i.sort_title COLLATE NOCASE, i.year, i.id`,
 	"added":        `i.added_at DESC, i.id DESC`,
 	"rating":       `i.rating DESC, i.sort_title COLLATE NOCASE, i.id`,
+	// list: the order of the list the collection follows (Kometa's
+	// collection_order: custom); titles not from the list come after.
+	"list": `COALESCE((SELECT x.from_list FROM collection_items x WHERE x.collection_id = c.id AND x.item_id = i.id AND x.from_list > 0), 1000000000),
+		i.release_date, i.sort_title COLLATE NOCASE, i.id`,
 }
 
 func (s *Store) collectionSort(id int64) string {
@@ -253,7 +257,7 @@ func (s *Store) SetCollectionSortTitle(id int64, sortTitle string) error {
 }
 
 // collectionOrder lists collections by sort title, falling back to the name.
-const collectionOrder = `COALESCE(NULLIF(c.sort_title, ''), c.name) COLLATE NOCASE, c.name COLLATE NOCASE`
+const collectionOrder = `COALESCE(NULLIF(c.sort_title, ''), c.name) COLLATE PLEXSORT, c.name COLLATE NOCASE`
 
 // SetCollectionSort changes how a collection's titles are ordered.
 func (s *Store) SetCollectionSort(id int64, sort string) error {
@@ -460,8 +464,9 @@ func (s *Store) ListCollections() ([]*Collection, error) {
 		c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, 0, '' FROM collections c WHERE c.list_url != '' ORDER BY c.id`)
 }
 
-// SyncCollectionList replaces the members a list added with itemIDs. Titles
-// added by hand stay. With failed set, members are kept and the error saved.
+// SyncCollectionList replaces the members a list added with itemIDs, in list
+// order: from_list keeps each one's place (1 = first). Titles added by hand
+// stay. With failed set, members are kept and the error saved.
 func (s *Store) SyncCollectionList(id int64, itemIDs []int64, failed string) error {
 	if failed != "" {
 		_, err := s.db.Exec(`UPDATE collections SET list_error = ? WHERE id = ?`, failed, id)
@@ -472,11 +477,11 @@ func (s *Store) SyncCollectionList(id int64, itemIDs []int64, failed string) err
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM collection_items WHERE collection_id = ? AND from_list = 1`, id); err != nil {
+	if _, err := tx.Exec(`DELETE FROM collection_items WHERE collection_id = ? AND from_list > 0`, id); err != nil {
 		return err
 	}
-	for _, it := range itemIDs {
-		if _, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id, from_list) VALUES (?, ?, 1)`, id, it); err != nil {
+	for i, it := range itemIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO collection_items (collection_id, item_id, from_list) VALUES (?, ?, ?)`, id, it, i+1); err != nil {
 			return err
 		}
 	}

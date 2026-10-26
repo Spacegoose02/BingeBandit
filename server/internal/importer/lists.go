@@ -17,18 +17,34 @@ import (
 )
 
 // Lists keeps collections in step with the lists they follow, the way
-// Kometa's mdblist_list and RSS builders do: an MDBList list
-// (https://mdblist.com/lists/<user>/<list>) or any RSS feed of movies or
-// shows, such as a Letterboxd list's.
+// Kometa's list builders do: an MDBList list
+// (https://mdblist.com/lists/<user>/<list>), a TMDB, Trakt or IMDb chart or
+// list, a Yamtrack list (see charts.go), or any RSS feed of movies or shows,
+// such as a Letterboxd list's. A collection can follow several, one link per
+// line; their titles are taken in turn, like Kometa's builders combined.
 type Lists struct {
 	st     *store.Store
 	client *http.Client
-	// mdblistBase is where MDBList's API lives; tests point it elsewhere.
-	mdblistBase, mdblistSite string
+	// Where each site's API lives; tests point them elsewhere.
+	mdblistBase, mdblistSite, tmdbBase, traktBase, imdbGraphQL, imdbSite string
 }
 
 func NewLists(st *store.Store) *Lists {
-	return &Lists{st: st, client: &http.Client{Timeout: 30 * time.Second}, mdblistBase: "https://api.mdblist.com", mdblistSite: "https://mdblist.com"}
+	return &Lists{st: st, client: &http.Client{Timeout: 30 * time.Second},
+		mdblistBase: "https://api.mdblist.com", mdblistSite: "https://mdblist.com",
+		tmdbBase: "https://api.themoviedb.org/3", traktBase: "https://api.trakt.tv",
+		imdbGraphQL: "https://api.graphql.imdb.com/", imdbSite: "https://www.imdb.com"}
+}
+
+// ListURLs splits a collection's list field into its links.
+func ListURLs(raw string) []string {
+	var out []string
+	for _, line := range strings.Split(raw, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 // SyncAll refreshes every collection that follows a list.
@@ -89,15 +105,71 @@ func (l *Lists) Sync(ctx context.Context, c *store.Collection) error {
 	return l.st.SyncCollectionList(c.ID, ids, "")
 }
 
-// Fetch reads a list's titles. libraryKind ("movies" or "shows") says what
-// an RSS item is when the feed doesn't.
+// Fetch reads the titles of a collection's lists (one link per line), in
+// order: the first title of each list, then the second of each, and so on.
+// libraryKind ("movies" or "shows") says what an RSS item is when the feed
+// doesn't.
 func (l *Lists) Fetch(ctx context.Context, raw, libraryKind string) ([]Record, error) {
+	links := ListURLs(raw)
+	if len(links) == 0 {
+		return nil, fmt.Errorf("no list to follow")
+	}
+	var lists [][]Record
+	for _, link := range links {
+		recs, err := l.fetchOne(ctx, link, libraryKind)
+		if err != nil {
+			if len(links) > 1 {
+				err = fmt.Errorf("%s: %w", link, err)
+			}
+			return nil, err
+		}
+		lists = append(lists, recs)
+	}
+	if len(lists) == 1 {
+		return lists[0], nil
+	}
+	var out []Record
+	seen := map[string]bool{}
+	for i := 0; ; i++ {
+		more := false
+		for _, recs := range lists {
+			if i >= len(recs) {
+				continue
+			}
+			more = true
+			r := recs[i]
+			key := r.Kind + "|" + r.IMDB + "|" + strconv.FormatInt(r.TMDB, 10) + "|" + strconv.FormatInt(r.TVDB, 10)
+			if r.IMDB == "" && r.TMDB == 0 && r.TVDB == 0 {
+				key += normTitle(r.Title) + strconv.Itoa(r.Year)
+			}
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, r)
+			}
+		}
+		if !more {
+			return out, nil
+		}
+	}
+}
+
+func (l *Lists) fetchOne(ctx context.Context, raw, libraryKind string) ([]Record, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return nil, fmt.Errorf("use a full https:// link to an MDBList list or an RSS feed")
+		return nil, fmt.Errorf("use a full https:// link to a list or an RSS feed")
 	}
-	if host := strings.TrimPrefix(u.Hostname(), "www."); host == "mdblist.com" {
+	switch strings.TrimPrefix(strings.TrimPrefix(u.Hostname(), "www."), "m.") {
+	case "mdblist.com":
 		return l.mdblist(ctx, u)
+	case "themoviedb.org":
+		return l.tmdb(ctx, u)
+	case "trakt.tv", "app.trakt.tv":
+		return l.trakt(ctx, u)
+	case "imdb.com":
+		return l.imdb(ctx, u, libraryKind)
+	}
+	if l.isYamtrack(u) {
+		return l.yamtrack(ctx, u)
 	}
 	return l.rss(ctx, u.String(), libraryKind)
 }
@@ -131,8 +203,11 @@ type mdbItem struct {
 	Title     string `json:"title"`
 	Year      int    `json:"release_year"`
 	Mediatype string `json:"mediatype"`
+	IMDB      string `json:"imdb_id"`
 	IDs       struct {
-		TMDB int64 `json:"tmdb"`
+		TMDB int64  `json:"tmdb"`
+		IMDB string `json:"imdb"`
+		TVDB int64  `json:"tvdb"`
 	} `json:"ids"`
 }
 
@@ -173,8 +248,12 @@ func (l *Lists) mdblist(ctx context.Context, u *url.URL) ([]Record, error) {
 		}
 		items = append(split.Movies, split.Shows...)
 	}
+	limit := listLimit(u)
 	out := make([]Record, 0, len(items))
 	for _, it := range items {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
 		kind := it.Mediatype
 		if kind != "movie" && kind != "show" {
 			continue
@@ -183,7 +262,11 @@ func (l *Lists) mdblist(ctx context.Context, u *url.URL) ([]Record, error) {
 		if tmdb == 0 {
 			tmdb = it.ID
 		}
-		out = append(out, Record{Kind: kind, Title: it.Title, Year: it.Year, TMDB: tmdb})
+		imdb := it.IDs.IMDB
+		if imdb == "" {
+			imdb = it.IMDB
+		}
+		out = append(out, Record{Kind: kind, Title: it.Title, Year: it.Year, TMDB: tmdb, IMDB: imdb, TVDB: it.IDs.TVDB})
 	}
 	return out, nil
 }
