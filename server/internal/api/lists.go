@@ -125,8 +125,119 @@ func (s *Server) createPlaylist(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, p)
 }
 
-func (s *Server) playlist(w http.ResponseWriter, r *http.Request) {
+// viewPlaylist loads {id} if the current user owns it or it was shared with them.
+func (s *Server) viewPlaylist(w http.ResponseWriter, r *http.Request) *store.Playlist {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return nil
+	}
+	p, err := s.Store.ViewPlaylist(currentUser(r).ID, id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return nil
+	}
+	return p
+}
+
+func (s *Server) sharedPlaylists(w http.ResponseWriter, r *http.Request) {
+	lists, err := s.Store.SharedPlaylists(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, lists)
+}
+
+// sharePeople is who a playlist can be shared with: the rest of the
+// household, and people who take recommendations from others (Account →
+// Sharing), so names are never shown to people who didn't opt in.
+func (s *Server) sharePeople(u *store.User) ([]store.Recipient, error) {
+	out := []store.Recipient{}
+	seen := map[int64]bool{u.ID: true}
+	members, err := s.Store.Household(u.HouseholdID())
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range members {
+		if !seen[m.ID] {
+			seen[m.ID] = true
+			out = append(out, store.Recipient{ID: m.ID, Name: memberName(m)})
+		}
+	}
+	others, err := s.Store.RecommendationRecipients(u.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range others {
+		if !seen[o.ID] {
+			seen[o.ID] = true
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+func (s *Server) playlistSharing(w http.ResponseWriter, r *http.Request) {
 	p := s.ownPlaylist(w, r)
+	if p == nil {
+		return
+	}
+	people, err := s.sharePeople(currentUser(r))
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	with, err := s.Store.PlaylistShares(p.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"people": people, "sharedWith": with})
+}
+
+// sharePlaylist sets who may see and play a playlist (not change it).
+func (s *Server) sharePlaylist(w http.ResponseWriter, r *http.Request) {
+	p := s.ownPlaylist(w, r)
+	if p == nil {
+		return
+	}
+	var req struct {
+		UserIDs []int64 `json:"userIds"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	people, err := s.sharePeople(currentUser(r))
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	allowed := map[int64]bool{}
+	for _, pe := range people {
+		allowed[pe.ID] = true
+	}
+	// Someone already shared with stays allowed after they stop taking recommendations.
+	current, _ := s.Store.PlaylistShares(p.ID)
+	for _, id := range current {
+		allowed[id] = true
+	}
+	for _, id := range req.UserIDs {
+		if !allowed[id] {
+			writeErr(w, http.StatusBadRequest, "you can share with your household and people who take recommendations")
+			return
+		}
+	}
+	if err := s.Store.SetPlaylistShares(p.ID, req.UserIDs); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) playlist(w http.ResponseWriter, r *http.Request) {
+	p := s.viewPlaylist(w, r)
 	if p == nil {
 		return
 	}
@@ -229,7 +340,7 @@ func (s *Server) reorderPlaylist(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) playlistNext(w http.ResponseWriter, r *http.Request) {
-	p := s.ownPlaylist(w, r)
+	p := s.viewPlaylist(w, r)
 	if p == nil {
 		return
 	}

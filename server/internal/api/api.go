@@ -225,6 +225,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 			r.Get("/playlists", s.playlists)
 			r.Post("/playlists", s.createPlaylist)
+			r.Get("/playlists/shared", s.sharedPlaylists)
 			r.Get("/playlists/{id}", s.playlist)
 			r.Put("/playlists/{id}", s.renamePlaylist)
 			r.Delete("/playlists/{id}", s.deletePlaylist)
@@ -232,6 +233,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Delete("/playlists/{id}/items/{item}", s.removeFromPlaylist)
 			r.Put("/playlists/{id}/order", s.reorderPlaylist)
 			r.Get("/playlists/{id}/next", s.playlistNext)
+			r.Get("/playlists/{id}/share", s.playlistSharing)
+			r.Put("/playlists/{id}/share", s.sharePlaylist)
 
 			r.Get("/home", s.home)
 			r.Get("/libraries", s.libraries)

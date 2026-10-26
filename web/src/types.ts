@@ -176,6 +176,10 @@ export interface Playlist {
   poster?: string
   createdAt: number
   updatedAt: number
+  /** Who made it, for a playlist shared with you; empty for your own. */
+  owner?: string
+  /** How many people you shared it with. */
+  shares?: number
 }
 
 export interface Play {
