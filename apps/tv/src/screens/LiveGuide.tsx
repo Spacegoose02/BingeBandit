@@ -229,7 +229,7 @@ export default function LiveGuide() {
     if (lastChannel.id !== synced.current) {
       synced.current = lastChannel.id
       const c = guide.channels.find((ch) => ch.id === lastChannel.id)
-      if (c && sel?.channel.id !== c.id) {
+      if (c && selRef.current?.channel.id !== c.id) {
         const t = Date.now() / 1000
         const segs = segments(c, guide.programs[c.epgId ?? ''], guide.from, guide.to)
         setTuned(c)
@@ -242,7 +242,7 @@ export default function LiveGuide() {
       restored.current = returns
       if (!isPhone) setFocusSel(returns)
     }
-  }, [active, guide, returns])
+  }, [active, guide, returns, clampStart, setFilter, shown])
   const preview = usePreview(active ? tuned?.id : undefined)
   // Built once per load so the memoized rows only redraw when something they show changes.
   // Bring the selected row into view so its block can take focus.
@@ -251,7 +251,7 @@ export default function LiveGuide() {
     if (!focusSel || !sel) return
     const i = shown.findIndex((c) => c.id === sel.channel.id)
     if (i >= 0) list.current?.scrollToIndex({ index: i, animated: false, viewPosition: 0.3 })
-  }, [focusSel])
+  }, [focusSel, sel, shown])
   const segsByChannel = useMemo(
     () => new Map((guide?.channels ?? []).map((c) => [c.id, segments(c, guide!.programs[c.epgId ?? ''], guide!.from, guide!.to)])),
     [guide],
