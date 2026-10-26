@@ -58,7 +58,9 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		} else if c, err := r.Cookie(cookieName); err == nil {
 			token, viaCookie = c.Value, true
 		} else if r.Method == http.MethodGet {
-			token = r.URL.Query().Get("token")
+			// Plex adds "?transcode=…" to tuner stream links even when they
+			// already have a query, which lands in the token.
+			token, _, _ = strings.Cut(r.URL.Query().Get("token"), "?")
 		}
 		u, err := s.Store.UserBySession(token)
 		session := token

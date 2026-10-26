@@ -360,7 +360,7 @@ func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
 // requestToken recovers the caller's token so generated playlist URLs work
 // in apps that can't send headers or cookies.
 func requestToken(r *http.Request) string {
-	if t := r.URL.Query().Get("token"); t != "" {
+	if t, _, _ := strings.Cut(r.URL.Query().Get("token"), "?"); t != "" {
 		return t
 	}
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
@@ -394,7 +394,7 @@ func (s *Server) livePlaylist(w http.ResponseWriter, r *http.Request) {
 	clean := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ")
 	for _, c := range chans {
 		logo := c.Logo
-		if strings.HasPrefix(logo, store.LibraryLogoPrefix) {
+		if logo != "" {
 			logo = base + logoURL(c.ID, logo) + "&token=" + token
 		}
 		fmt.Fprintf(&b, "#EXTINF:-1 tvg-id=\"%s\" tvg-chno=\"%s\" tvg-logo=\"%s\" group-title=\"%s\",%s\n%s/api/live/channels/%d/stream.ts?token=%s\n",
@@ -472,10 +472,10 @@ func (s *Server) liveEPG(w http.ResponseWriter, r *http.Request) {
 		// The number as a second name lets Plex match guide channels to the
 		// tuner lineup on its own.
 		xc := xmlChan{ID: xids[c.ID], Names: []xmlText{{c.Name}, {strconv.FormatFloat(c.Number, 'f', -1, 64)}}}
-		if logo := c.Logo; strings.HasPrefix(logo, store.LibraryLogoPrefix) {
-			xc.Icon = &xmlIcon{base + logoURL(c.ID, logo) + "&token=" + token}
-		} else if logo != "" {
-			xc.Icon = &xmlIcon{logo}
+		if c.Logo != "" {
+			// Through BingeBandit's logo cache rather than the provider's
+			// address, which Plex may not be able to fetch.
+			xc.Icon = &xmlIcon{base + logoURL(c.ID, c.Logo) + "&token=" + token}
 		}
 		doc.Channels = append(doc.Channels, xc)
 		for _, p := range fillGuide(byEPG[c.EPGID], c.Name, from, to) {

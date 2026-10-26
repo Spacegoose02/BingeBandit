@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/store"
 )
 
@@ -36,7 +37,7 @@ func TestTunerForPlex(t *testing.T) {
 	if err := st.CreateChannel(&store.Channel{Number: 9, Name: "News West", EPGID: "news.us", Enabled: true}, nil); err != nil {
 		t.Fatal(err)
 	}
-	s := &Server{Store: st}
+	s := &Server{Store: st, Live: livetv.NewManager(st, "ffmpeg", "ffprobe", t.TempDir())}
 	h := s.Router(context.Background())
 	get := func(path string) *httptest.ResponseRecorder {
 		t.Helper()
@@ -59,7 +60,7 @@ func TestTunerForPlex(t *testing.T) {
 	rec = get(base + "/lineup.json")
 	var lineup []struct{ GuideNumber, GuideName, URL string }
 	json.Unmarshal(rec.Body.Bytes(), &lineup)
-	if len(lineup) != 3 || lineup[0].GuideNumber != "7" || !strings.Contains(lineup[0].URL, "stream.ts?token="+key) {
+	if len(lineup) != 3 || lineup[0].GuideNumber != "7" || !strings.HasSuffix(lineup[0].URL, base+"/channels/1/stream.ts") {
 		t.Fatalf("lineup: %s", rec.Body)
 	}
 
@@ -72,6 +73,14 @@ func TestTunerForPlex(t *testing.T) {
 	for _, want := range []string{`<channel id="news.us">`, `<channel id="bb.2">`, `<channel id="bb.3">`, `channel="bb.2">`, `<title>Local Feed</title>`, `channel="bb.3">`, `<title>News West</title>`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("guide is missing %s", want)
+		}
+	}
+
+	// Plex appends "?transcode=heavy" to stream links whatever they hold.
+	// The channels have no streams, so getting past sign-in means a 503.
+	for _, u := range []string{base + "/channels/1/stream.ts?transcode=heavy", "/api/live/channels/1/stream.ts?token=" + key + "?transcode=heavy"} {
+		if c := get(u).Code; c != http.StatusServiceUnavailable {
+			t.Errorf("%s: %d", u, c)
 		}
 	}
 
