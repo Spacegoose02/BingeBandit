@@ -131,7 +131,8 @@ function GameLights({ teams, onClose }: { teams: SportsTeam[]; onClose: () => vo
   const load = useCallback(() => {
     api.get<LightsState>(`${base}/state`).then(
       (s) => {
-        setState(s)
+        // Older plugins leave out an empty delays or colours.
+        setState({ ...s, person: { ...s.person, delays: s.person.delays ?? {}, colours: s.person.colours ?? {} }, areas: s.areas ?? [], sources: s.sources ?? [] })
         if (s.error) setMsg(s.error)
         else if (!s.paired) setMsg('An admin still needs to pair the Hue bridge on the Game Lights setup page.')
       },

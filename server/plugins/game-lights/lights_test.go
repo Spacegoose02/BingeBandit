@@ -332,6 +332,27 @@ func TestStatusListsNotNull(t *testing.T) {
 	}
 }
 
+// A person who never saved anything still gets delays and colours as {}:
+// the TV app and the web page index into them, and crashed on a missing one.
+func TestMyStateMapsNotNull(t *testing.T) {
+	a := newApp(func() string { return t.TempDir() })
+	dir := t.TempDir()
+	a.conf.dir = func() string { return dir }
+	rec := httptest.NewRecorder()
+	a.myState(rec, httptest.NewRequest("GET", "/me/state", nil), "7")
+	var got struct {
+		Person map[string]json.RawMessage `json:"person"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"delays", "colours", "source"} {
+		if s := string(got.Person[k]); s == "" || s == "null" {
+			t.Errorf("person.%s = %q, want it set", k, s)
+		}
+	}
+}
+
 // Two people in one game, cheering for different teams in different rooms,
 // each with their own delay source and choices.
 func TestPeopleRoomsAndDelays(t *testing.T) {

@@ -62,7 +62,14 @@ func (a *app) myState(w http.ResponseWriter, r *http.Request, uid string) {
 			sources = append(sources, s)
 		}
 	}
-	resp := map[string]any{"paired": conf.Username != "", "person": p, "delay": p.delay(def), "defaultDelay": def,
+	// Person drops empty maps from the saved file (omitempty), but the web
+	// page and the TV app index into them, so they always go out as {}.
+	person := struct {
+		Person
+		Delays  map[string]int       `json:"delays"`
+		Colours map[string][2]string `json:"colours"`
+	}{p, p.Delays, p.Colours}
+	resp := map[string]any{"paired": conf.Username != "", "person": person, "delay": p.delay(def), "defaultDelay": def,
 		"sources": sources, "areas": []Area{}, "effects": Effects}
 	if conf.Username != "" {
 		if areas, err := a.runner.bridge(conf).Areas(r.Context()); err != nil {
