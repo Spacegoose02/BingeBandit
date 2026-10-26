@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // Prefs are a user's playback preferences, applied by every client.
@@ -32,7 +33,13 @@ type Prefs struct {
 	// before each starts (0 for none), and the final score when one ends.
 	GameAlertMinutes int  `json:"gameAlertMinutes"`
 	NotifyGameScores bool `json:"notifyGameScores"`
+	// HiddenTabs are the TV and phone app menu tabs this person turned off.
+	// Home, Search and Settings always show; libraries come and go by pinning.
+	HiddenTabs []string `json:"hiddenTabs"`
 }
+
+// HideableTabs are the app menu tabs that HiddenTabs may name.
+var HideableTabs = []string{"sports", "live", "more"}
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
@@ -61,6 +68,11 @@ func (p *Prefs) Validate() error {
 	}
 	if p.GameAlertMinutes < 0 || p.GameAlertMinutes > 180 {
 		return fmt.Errorf("game alerts must be from 0 to 180 minutes before")
+	}
+	for _, t := range p.HiddenTabs {
+		if !slices.Contains(HideableTabs, t) {
+			return fmt.Errorf("only the sports, live and more tabs can be hidden")
+		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {
 		return fmt.Errorf("language codes are at most 8 characters")

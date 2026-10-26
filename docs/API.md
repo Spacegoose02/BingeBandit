@@ -52,7 +52,7 @@ Rules:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/me` | The signed-in user. |
-| GET / PUT | `/me/prefs` | Playback preferences (audio/subtitle language, skip intro, …). |
+| GET / PUT | `/me/prefs` | Playback preferences (audio/subtitle language, skip intro, …), and `hiddenTabs`: the app menu tabs turned off (`sports`, `live`, `more`). |
 | PUT | `/me/password` | `{current, new}`. |
 | GET | `/me/history` | Your recent plays. |
 | GET / DELETE | `/me/sessions`, `/me/sessions/{id}` | Signed-in devices; sign one out. |
