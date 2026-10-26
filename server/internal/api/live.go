@@ -324,9 +324,17 @@ func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "ts")
 	if err != nil {
+		log.Printf("live tv: %s (%s, %s) couldn't open channel %v %q: %v", currentUser(r).Username, clientIP(r), r.UserAgent(), ch.Number, ch.Name, err)
 		writeErr(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
+	// External players (Plex's tuner, IPTV apps) leave no other trace, so
+	// say when one opens and closes a channel.
+	log.Printf("live tv: %s (%s, %s) opened channel %v %q", currentUser(r).Username, clientIP(r), r.UserAgent(), ch.Number, ch.Name)
+	began := time.Now()
+	defer func() {
+		log.Printf("live tv: %s (%s) closed channel %v %q after %s", currentUser(r).Username, clientIP(r), ch.Number, ch.Name, time.Since(began).Round(time.Second))
+	}()
 	defer s.Live.Leave(v.ID)
 	w.Header().Set("Content-Type", "video/mp2t")
 	w.Header().Set("Cache-Control", "no-cache")
