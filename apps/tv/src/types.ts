@@ -32,6 +32,7 @@ export interface Item {
   id: number
   kind: 'movie' | 'show' | 'season' | 'episode'
   title: string
+  sortTitle?: string
   year?: number
   overview?: string
   tagline?: string
@@ -110,6 +111,7 @@ export interface Library {
 export interface Collection {
   id: number
   name: string
+  sortTitle?: string
   overview?: string
   poster?: string
   backdrop?: string
