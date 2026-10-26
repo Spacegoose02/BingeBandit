@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { api, cached } from '../api'
 import { Icon } from '../icons'
@@ -98,6 +98,25 @@ function Recommended({ library }: { library: Library }) {
 
 type Tile = { item: Item; index: number } | { collection: Collection }
 
+/**
+ * Mixes collections into the titles by their sort title (or name), like Plex
+ * and the web app. A collection that sorts after every loaded title waits
+ * until the last page is in.
+ */
+function mix(items: Item[], collections: Collection[], complete: boolean): Tile[] {
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+  const key = (c: Collection) => c.sortTitle || c.name
+  const cols = [...collections].sort((a, b) => byName(key(a), key(b)))
+  const out: Tile[] = []
+  let c = 0
+  items.forEach((item, index) => {
+    while (c < cols.length && byName(key(cols[c]), item.sortTitle || item.title) <= 0) out.push({ collection: cols[c++] })
+    out.push({ item, index })
+  })
+  if (complete) while (c < cols.length) out.push({ collection: cols[c++] })
+  return out
+}
+
 /** How many tiles fit across, leaving room for the gutters (and the A–Z bar). */
 function useColumns(besideBar: boolean) {
   const { width } = useWindowDimensions()
@@ -177,7 +196,7 @@ function AllTitles({ library }: { library: Library }) {
             const have = new Set(cur.map((it) => it.id))
             return [...cur, ...p.items.filter((it) => !have.has(it.id))]
           })
-          // The server sends collections unless the library hides them; they go first.
+          // The server sends collections unless the library hides them; they mix in by sort title.
           if (offset === 0) {
             setCollections(p.collections ?? [])
             setLetters(p.letters ?? [])
@@ -232,18 +251,19 @@ function AllTitles({ library }: { library: Library }) {
   // Scroll once the rows holding the letter are in the list, then hand focus
   // to its first title. Rows have a fixed height, so the offset is exact
   // (scrollToIndex throws for rows the list hasn't caught up with yet).
+  const tiles = useMemo(() => mix(items, collections, items.length >= total), [items, collections, total])
   useEffect(() => {
     if (pending < 0 || pending >= items.length) return
-    list.current?.scrollToOffset({ offset: px(ROW_H) * Math.floor((collections.length + pending) / cols), animated: false })
+    const at = tiles.findIndex((t) => 'item' in t && t.index === pending)
+    list.current?.scrollToOffset({ offset: px(ROW_H) * Math.floor(at / cols), animated: false })
     setTarget(pending)
     setPending(-1)
-  }, [pending, items.length, collections.length, cols])
+  }, [pending, items.length, tiles, cols])
 
   if (error) return <Problem error={error} retry={() => { setError(''); more(items.length) }} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
   if (total === 0 && collections.length === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
   const current = letters.filter((l) => l.offset <= Math.max(focused, 0)).pop()?.letter
-  const tiles: Tile[] = [...collections.map((collection) => ({ collection })), ...items.map((item, index) => ({ item, index }))]
   return (
     <View style={st.titles}>
       <Grid
