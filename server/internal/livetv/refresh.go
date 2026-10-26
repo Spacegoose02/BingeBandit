@@ -70,6 +70,39 @@ func open(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
 	}{br, rc}, nil
 }
 
+// spool downloads a source to a temporary file before it's imported, so the
+// import's transaction (which holds the database's write lock) lasts as long
+// as the parsing, not as long as a slow provider takes to send a big
+// playlist. Saving watch progress and the like waits on that lock.
+func spool(ctx context.Context, url, userAgent string) (io.ReadCloser, error) {
+	rc, err := open(ctx, url, userAgent)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+	f, err := os.CreateTemp("", "bb-livetv-*")
+	if err != nil {
+		return nil, err
+	}
+	cleanup := func() { f.Close(); os.Remove(f.Name()) }
+	if _, err := io.Copy(f, rc); err != nil {
+		cleanup()
+		return nil, err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, err
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{bufio.NewReaderSize(f, 64*1024), closerFunc(cleanup)}, nil
+}
+
+type closerFunc func()
+
+func (c closerFunc) Close() error { c(); return nil }
+
 // Refresh downloads and imports one source.
 func Refresh(ctx context.Context, st *store.Store, src *store.LiveSource) error {
 	count, err := refresh(ctx, st, src)
@@ -85,7 +118,7 @@ func Refresh(ctx context.Context, st *store.Store, src *store.LiveSource) error 
 }
 
 func refresh(ctx context.Context, st *store.Store, src *store.LiveSource) (int, error) {
-	rc, err := open(ctx, src.URL, src.UserAgent)
+	rc, err := spool(ctx, src.URL, src.UserAgent)
 	if err != nil {
 		return 0, err
 	}
