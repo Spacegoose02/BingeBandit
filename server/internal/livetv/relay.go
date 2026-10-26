@@ -352,6 +352,7 @@ type Relay struct {
 	lastError string
 	head      bytes.Buffer // first bytes of the current upstream, for probing
 	gop       *gopCache    // the current upstream from its latest keyframe, for joining ts viewers
+	pend      bytes.Buffer // an HLS upstream's data waiting to go out evenly to ts viewers
 	headFrom  int64        // where head starts in the relay's byte stream
 	off       int64        // bytes relayed so far
 	hls       *hlsOutput
@@ -435,6 +436,7 @@ func (r *Relay) stop(reason string) {
 // and stalls, and skipping providers that are at their connection limit.
 func (r *Relay) run() {
 	defer r.stop("stream ended")
+	go r.smooth()
 	if r.channel.Custom {
 		for attempt := 0; attempt < maxPasses && r.ctx.Err() == nil; attempt++ {
 			err := r.pullCustom()
@@ -840,7 +842,49 @@ func (p *procReader) Close() error {
 func (r *Relay) resetHead() {
 	r.head.Reset()
 	r.headFrom = r.off
+	if r.pend.Len() > 0 {
+		r.toViewers(bytes.Clone(r.pend.Bytes())) // the last of the old upstream, before its keyframes are forgotten
+		r.pend.Reset()
+	}
 	r.gop.reset()
+}
+
+// smoothTick is how often an HLS upstream's data goes out to ts viewers.
+const smoothTick = 100 * time.Millisecond
+
+// smooth sends ts viewers (Plex's tuner, IPTV apps) an HLS upstream evenly
+// instead of a segment at a time. A burst of ten seconds of video, then ten
+// seconds of nothing, is what a playlist with 10 s segments delivers, and
+// Plex's player ran dry in every gap and gave up with a playback error. The
+// data goes out a segment's length behind, at the pace it comes in.
+func (r *Relay) smooth() {
+	t := time.NewTicker(smoothTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-t.C:
+		}
+		r.mu.Lock()
+		if n := smoothShare(r.pend.Len(), time.Duration(r.target.Load())); n > 0 {
+			r.toViewers(bytes.Clone(r.pend.Next(n)))
+		}
+		r.mu.Unlock()
+	}
+}
+
+// smoothShare is how much of queued bytes to send this tick: the share that
+// empties the queue over a segment's length, in whole packets.
+func smoothShare(queued int, target time.Duration) int {
+	if queued == 0 {
+		return 0
+	}
+	if target <= 0 {
+		return queued
+	}
+	n := int(float64(queued) * float64(smoothTick) / float64(target))
+	return min(queued, (n/tsPacket+1)*tsPacket)
 }
 
 func (r *Relay) broadcast(chunk []byte) {
@@ -855,6 +899,16 @@ func (r *Relay) broadcast(chunk []byte) {
 		r.hls.feed(tsChunk{off: r.off, b: chunk})
 	}
 	r.off += int64(len(chunk))
+	if r.target.Load() > 0 {
+		r.pend.Write(chunk)
+	} else {
+		r.toViewers(chunk)
+	}
+	r.mu.Unlock()
+}
+
+// toViewers sends relayed data to the ts viewers. Called with r.mu held.
+func (r *Relay) toViewers(chunk []byte) {
 	r.gop.feed(chunk)
 	for id, v := range r.viewers {
 		if v.ch == nil {
@@ -880,7 +934,6 @@ func (r *Relay) broadcast(chunk []byte) {
 			v.close()
 		}
 	}
-	r.mu.Unlock()
 }
 
 // Stats for the admin Live TV activity view.
