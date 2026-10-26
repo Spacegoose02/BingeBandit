@@ -115,7 +115,7 @@ func (a *app) status(w http.ResponseWriter, r *http.Request) {
 		Label string `json:"label"`
 		On    bool   `json:"on"`
 	}
-	var effects []effect
+	effects := []effect{}
 	for _, e := range Effects {
 		effects = append(effects, effect{e.Key, e.Label, !contains(conf.Off, e.Key)})
 	}
@@ -128,7 +128,8 @@ func (a *app) status(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(teams, func(i, j int) bool { return teams[i].Name < teams[j].Name })
 	resp["teams"] = teams
 	a.mu.Lock()
-	logs := slices.Clone(a.log)
+	// Cloned into a non-nil slice so an empty log goes out as [], not null.
+	logs := append([]logLine{}, a.log...)
 	a.mu.Unlock()
 	slices.Reverse(logs)
 	resp["log"] = logs
