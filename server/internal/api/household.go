@@ -32,7 +32,7 @@ type member struct {
 	Avatar  string  `json:"avatar,omitempty"`
 	Custom  bool    `json:"avatarCustom,omitempty"` // an uploaded picture, not a built-in one
 	Auto    bool    `json:"auto,omitempty"`         // the account opens as this member without asking
-	Kid     bool    `json:"kid,omitempty"` // only sees Live TV channels approved for kids
+	Kid     bool    `json:"kid,omitempty"`          // only sees Live TV channels approved for kids
 	AllLibs bool    `json:"allLibraries"`
 	LibIDs  []int64 `json:"libraryIds,omitempty"`
 }
