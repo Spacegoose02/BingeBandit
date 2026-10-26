@@ -5,7 +5,8 @@ import { Icon } from './Icon'
 /**
  * The signed-in user's M3U playlist and XMLTV guide URLs for IPTV apps, with
  * a button that makes an API key to put in them. The playlist lists only the
- * channels this user can watch.
+ * channels this user can watch. Plex gets an HDHomeRun-style tuner address
+ * (Plex only takes tuners, not M3U) and a guide URL with the key in the path.
  */
 export function IPTVLinks({ onCreated }: { onCreated?: () => void }) {
   const [key, setKey] = useState<string | null>(null)
@@ -18,9 +19,12 @@ export function IPTVLinks({ onCreated }: { onCreated?: () => void }) {
       alert((err as Error).message)
     }
   }
+  const tuner = `${origin}/api/live/tuner/${key ?? '…'}`
   const urls = [
     ['M3U playlist', `${origin}/api/live/playlist.m3u?token=${key ?? '…'}`],
     ['XMLTV guide', `${origin}/api/live/epg.xml?token=${key ?? '…'}`],
+    ['Plex tuner', tuner],
+    ['Plex guide', `${tuner}/epg.xml`],
   ]
   return (
     <div className="panel facts">
@@ -39,8 +43,8 @@ export function IPTVLinks({ onCreated }: { onCreated?: () => void }) {
       ))}
       <dd className="muted small" style={{ gridColumn: '1 / -1' }}>
         {key
-          ? "Copy these into TiviMate, VLC or another IPTV app now; the key won't be shown again. Delete it under API keys to cut the app off."
-          : 'Apps like TiviMate or VLC get the shared, fail-over streams. Create an API key for the app so it never needs your password.'}
+          ? "Copy these into TiviMate, VLC or another IPTV app now; the key won't be shown again. For Plex, go to Live TV & DVR, add the Plex tuner address as an HDHomeRun device, then give it the Plex guide URL as an XMLTV guide. Delete the key under API keys to cut the app off."
+          : 'Apps like TiviMate, VLC or Plex get the shared, fail-over streams. Create an API key for the app so it never needs your password.'}
       </dd>
       {!key && (
         <dd style={{ gridColumn: '1 / -1' }}>

@@ -114,6 +114,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Get("/auth/oidc/{id}/login", s.oidcLogin)
 		r.Route("/plugin/v1", s.pluginAPI)
 		r.Handle("/avatars/*", avatars.Handler())
+		r.Route("/live/tuner/{key}", s.tunerRoutes)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
