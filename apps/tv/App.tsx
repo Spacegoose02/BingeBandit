@@ -13,6 +13,7 @@ import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, isPhone } from './src/theme'
 import type { ServerInfo, User } from './src/types'
+import { Toasts } from './src/toasts'
 
 type Phase =
   | { name: 'loading' }
@@ -134,6 +135,7 @@ export default function App() {
       <NavContext.Provider value={nav}>
         <StatusBar hidden={fullScreen} translucent backgroundColor="transparent" barStyle="light-content" />
         <Insets enabled={!fullScreen}>{screen}</Insets>
+        {phase.name === 'app' && <Toasts />}
       </NavContext.Provider>
     </SafeAreaProvider>
   )

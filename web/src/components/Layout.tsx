@@ -55,6 +55,10 @@ export default function Layout() {
             <Icon name="compass" />
             <span>Discover</span>
           </NavLink>
+          <NavLink to="/sports" className="nav-item">
+            <Icon name="trophy" />
+            <span>Sports</span>
+          </NavLink>
           {user?.liveTV !== false && (
             <>
               <NavLink to="/live" className="nav-item">

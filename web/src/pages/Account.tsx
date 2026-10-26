@@ -793,6 +793,21 @@ function PlaybackPrefs() {
         <input type="checkbox" checked={p.notifyRecordings} onChange={(e) => set('notifyRecordings', e.target.checked)} />
         Tell me when my recordings finish or fail
       </label>
+      <label>
+        Before games of the <Link to="/sports">teams I follow</Link>
+        <select value={p.gameAlertMinutes} onChange={(e) => set('gameAlertMinutes', Number(e.target.value))}>
+          <option value={0}>Don't tell me</option>
+          {[5, 15, 30, 60, 120].map((m) => (
+            <option key={m} value={m}>
+              Tell me {m < 60 ? `${m} minutes` : m === 60 ? 'an hour' : '2 hours'} before
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.notifyGameScores} onChange={(e) => set('notifyGameScores', e.target.checked)} />
+        Tell me the final score when their games end
+      </label>
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
       <div className="actions">
         <button className="btn btn-primary">Save playback settings</button>

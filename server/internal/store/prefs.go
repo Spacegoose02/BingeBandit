@@ -28,12 +28,16 @@ type Prefs struct {
 	// Notifications in the app.
 	NotifyEpisodes   bool `json:"notifyEpisodes"`   // new episodes of shows you watch or have on your watchlist
 	NotifyRecordings bool `json:"notifyRecordings"` // your recordings finished or failed
+	// Games of the sports teams you follow: an alert this many minutes
+	// before each starts (0 for none), and the final score when one ends.
+	GameAlertMinutes int  `json:"gameAlertMinutes"`
+	NotifyGameScores bool `json:"notifyGameScores"`
 }
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
-	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true,
+	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true, GameAlertMinutes: 15,
 }
 
 func (p *Prefs) Validate() error {
@@ -54,6 +58,9 @@ func (p *Prefs) Validate() error {
 	}
 	if p.PreRollTrailers < 0 || p.PreRollTrailers > 5 {
 		return fmt.Errorf("trailers before a movie must be from 0 to 5")
+	}
+	if p.GameAlertMinutes < 0 || p.GameAlertMinutes > 180 {
+		return fmt.Errorf("game alerts must be from 0 to 180 minutes before")
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {
 		return fmt.Errorf("language codes are at most 8 characters")

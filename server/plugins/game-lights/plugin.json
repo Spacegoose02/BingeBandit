@@ -1,0 +1,6 @@
+{
+  "id": "game-lights",
+  "name": "Game Lights",
+  "description": "Philips Hue lights flash in your team's colours when it scores, from the teams people follow on the Sports page.",
+  "command": ["game-lights"]
+}

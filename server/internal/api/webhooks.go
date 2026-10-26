@@ -20,7 +20,8 @@ import (
 // player.progress (every ping) is left out: it's for plugins.
 var WebhookEvents = []string{"playback.start", "playback.stop", "playback.finished",
 	"player.play", "player.pause", "player.resume", "player.stop",
-	"recording.started", "recording.completed", "recording.failed"}
+	"recording.started", "recording.completed", "recording.failed",
+	"sports.game.start", "sports.score", "sports.game.end"}
 
 var webhookClient = &http.Client{Timeout: 10 * time.Second}
 

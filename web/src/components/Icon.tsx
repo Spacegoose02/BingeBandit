@@ -56,6 +56,7 @@ const paths: Record<string, string> = {
   arrowUp: 'M12 19V5M5 12l7-7 7 7',
   arrowDown: 'M12 5v14M19 12l-7 7-7-7',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 20.5a2 2 0 0 0 4 0',
+  trophy: 'M8 4h8v5a4 4 0 0 1-8 0zM8 6H4.5a3.5 3.5 0 0 0 3.8 4M16 6h3.5a3.5 3.5 0 0 1-3.8 4M12 13v4M8 20h8M9.5 17h5',
   terminal: 'M3 5h18v14H3zM7 9l3 3-3 3M12 15h5',
 }
 

@@ -737,4 +737,29 @@ CREATE TABLE poster_overlays (
 ALTER TABLE collections ADD COLUMN builtin TEXT NOT NULL DEFAULT '';
 CREATE INDEX collections_builtin ON collections(library_id, builtin) WHERE builtin != '';
 `,
+	// 39: the sports teams each person follows (copied from ESPN when
+	// picked, in their order), and the game alerts already sent so a
+	// restart doesn't send them again.
+	`
+CREATE TABLE sports_teams (
+	user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	league    TEXT NOT NULL,
+	team_id   TEXT NOT NULL,
+	name      TEXT NOT NULL,
+	short     TEXT NOT NULL DEFAULT '',
+	abbr      TEXT NOT NULL DEFAULT '',
+	logo      TEXT NOT NULL DEFAULT '',
+	color     TEXT NOT NULL DEFAULT '',
+	alt_color TEXT NOT NULL DEFAULT '',
+	position  INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (user_id, league, team_id)
+);
+CREATE TABLE sports_alerts (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	game_id    TEXT NOT NULL,
+	kind       TEXT NOT NULL,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, game_id, kind)
+);
+`,
 }

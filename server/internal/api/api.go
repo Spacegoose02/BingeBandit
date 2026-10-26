@@ -23,6 +23,7 @@ import (
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/plugins"
+	"bingebandit/internal/sports"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
@@ -70,6 +71,10 @@ type Server struct {
 	ratingFetches sync.Map
 	overlays      overlayState
 	ctx           context.Context // server lifetime, for work that outlives a request
+	// Sports reads ESPN for the Sports page and the game alerts.
+	Sports     *sports.Client
+	sportsOnce sync.Once
+	sportsWake chan struct{}
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -144,6 +149,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Delete("/together/{id}/invite", s.declineTogether)
 			r.Post("/items/{id}/recommend", s.recommend)
 			r.Delete("/recommendations/{id}", s.dismissRecommendation)
+			r.Get("/sports", s.sportsHome)
+			r.Put("/sports/teams", s.setSportsTeams)
+			r.Get("/sports/{league}/teams", s.sportsTeams)
+			r.Get("/sports/{league}/scores", s.sportsScores)
 			r.Get("/notifications", s.notifications)
 			r.Post("/notifications/read", s.readNotifications)
 			r.Delete("/notifications", s.clearNotifications)

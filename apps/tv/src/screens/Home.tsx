@@ -9,11 +9,12 @@ import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import Settings from './Settings'
+import Sports from './Sports'
 
 // Pinned libraries sit between Search and Live TV, as `lib:<id>`. The rest
 // are under More; one opened from there joins the menu while it's open.
-type Tab = 'home' | 'search' | 'live' | 'settings' | 'more' | `lib:${number}`
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', live: 'Live TV', settings: 'Settings', more: 'More' }
+type Tab = 'home' | 'search' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -82,6 +83,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     'search',
     ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
     ...(unpinned.length ? (['more'] as Tab[]) : []),
+    'sports',
     ...(liveTV ? (['live'] as Tab[]) : []),
     'settings',
   ]
@@ -128,6 +130,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {library && <LibraryTab key={library.id} library={library} />}
       {tab === 'search' && <Search />}
       {tab === 'more' && <MoreLibraries libraries={unpinned} onOpen={(l) => setTab(`lib:${l.id}`)} />}
+      {tab === 'sports' && <Sports />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings

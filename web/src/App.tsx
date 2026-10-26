@@ -9,6 +9,7 @@ import LibraryPage from './pages/Library'
 import ItemPage from './pages/Item'
 import CollectionPage from './pages/Collection'
 import { DiscoverPage } from './pages/Discover'
+import SportsPage from './pages/Sports'
 import { PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
 import ProfilePage from './pages/Profile'
 import AdminStatistics from './pages/admin/Statistics'
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />
           <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/sports" element={<SportsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/playlists" element={<PlaylistsPage />} />
           <Route path="/playlist/:id" element={<PlaylistPage />} />

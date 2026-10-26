@@ -156,6 +156,19 @@ An admin can turn Live TV off for a user (`PUT /api/admin/users/{id}/live-tv {on
 
 `state.position` is seconds at `state.at` (server ms); while playing, add the time since, using `now` to correct for clock differences.
 
+### Sports
+
+Scores and schedules come from ESPN's public (unofficial) site API, cached on the server.
+
+| | | |
+|---|---|---|
+| GET | `/sports` | `{leagues, teams, games, error?}`: the leagues, the teams you follow, and their games from two days ago to a week ahead (live first, then upcoming, then results). Each game has `mine` (your team ids in it) and, with Live TV, `channels` whose guide shows it. |
+| PUT | `/sports/teams` | `[{league, id}]` replaces your teams (at most 40); names, logos and colours come from ESPN. |
+| GET | `/sports/{league}/teams` | Every team in a league: `nfl`, `college-football`, `nba`, `mens-college-basketball`, `womens-college-basketball`, `mlb`, `nhl`, `mls`. |
+| GET | `/sports/{league}/scores?date=YYYYMMDD` | The league's games on an ESPN (US Eastern) day, today by default. |
+
+Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences.
+
 ### Passkeys
 
 | | | |
@@ -202,6 +215,7 @@ Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (
 | `playback.finished` | Something is marked watched by playing it. |
 | `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`, `lights` (false when Hue Sync is switched off on that device). |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
+| `sports.game.start` / `sports.score` / `sports.game.end` | A game of a team someone follows on the Sports page started, someone scored, or it ended. `data` has the `game` (from ESPN), its `sport`, the `scorer` team id, and the `fans` who follow each team. |
 | `test` | The *Send test* button. |
 
 Playback events also carry `userId`, `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.

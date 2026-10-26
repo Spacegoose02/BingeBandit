@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Lights setup</title>
+<style>
+  :root { --bg: #f6f7f9; --panel: #fff; --text: #16181d; --muted: #646a76; --line: #dde1e7; --accent: #0f9d8f; --danger: #c43d3d; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0d0f13; --panel: #171a21; --text: #e9ecf1; --muted: #9098a6; --line: #2a2f39; --accent: #2cc3b2; --danger: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 0 0 8px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-top: 20px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); min-width: 0; }
+  input { flex: 1; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .6; cursor: default; }
+  .light { display: flex; gap: 12px; align-items: center; border-top: 1px solid var(--line); padding: 10px 0; }
+  .light:first-of-type { border-top: 0; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); flex: none; }
+  .grow { flex: 1; min-width: 0; }
+  .error { color: var(--danger); }
+  .ok { color: var(--accent); }
+  .chip { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); vertical-align: middle; }
+  .effect { display: flex; gap: 10px; align-items: center; border-top: 1px solid var(--line); padding: 8px 0; }
+  .effect:first-of-type { border-top: 0; }
+  input[type=checkbox] { flex: none; width: 18px; height: 18px; }
+  input[type=color] { flex: none; width: 44px; height: 32px; padding: 2px; }
+  .log { font-size: 13px; max-height: 260px; overflow-y: auto; }
+  .log div { border-top: 1px solid var(--line); padding: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Game Lights</h1>
+  <p class="muted">Your Hue lights flash in your team's colours when it scores, green when it takes the ball away, and
+    red when it turns it over. It follows the teams people pick on the Sports page while their games are on. Who it
+    follows, the TV delay and brightness are under Admin → Plugins → Game Lights → Settings.</p>
+  <p id="games" class="small ok" style="white-space: pre-line"></p>
+
+  <section>
+    <h2>Bridge</h2>
+    <div id="paired" hidden>
+      <p>Paired with the bridge at <b id="addr"></b>. <span id="bridgeErr" class="error"></span></p>
+      <div class="row"><button id="unpair" type="button">Forget this bridge</button></div>
+    </div>
+    <div id="unpaired" hidden>
+      <p class="muted small">Find the bridge's address in the Hue app (Settings → My Hue system → the bridge → ⓘ), or try
+        Find. Then press the round link button on top of the bridge and click Pair within 30 seconds.</p>
+      <div class="row">
+        <input id="address" placeholder="192.168.1.50" aria-label="Bridge address">
+        <button id="find" type="button">Find</button>
+        <button id="pair" class="primary" type="button">Pair</button>
+      </div>
+    </div>
+    <p id="msg" class="small" role="status"></p>
+  </section>
+
+  <section id="lightsBox" hidden>
+    <h2>Lights</h2>
+    <p class="muted small">Tick the lights that flash. After each effect they go back to how they were.</p>
+    <div id="lights"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="saveLights" class="primary" type="button">Save lights</button>
+      <button id="sample" type="button">Try a sample game</button>
+      <button id="reset" type="button">Reset lights</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Effects</h2>
+    <p class="muted small">Untick an effect to skip it. Test plays it now on the chosen lights. Football follows each play;
+      hockey and soccer flash for goals, baseball for runs, and basketball only for a win.</p>
+    <div id="effects"></div>
+  </section>
+
+  <section id="teamsBox" hidden>
+    <h2>Team colours</h2>
+    <p class="muted small">Colours come from ESPN, with black and white swapped out because they make poor flashes. Pick
+      your own if a team's look wrong on your bulbs.</p>
+    <div id="teams"></div>
+  </section>
+
+  <section>
+    <h2>Activity</h2>
+    <div id="log" class="log muted"></div>
+  </section>
+</main>
+<script>
+  const base = location.pathname.replace(/\/?$/, '/')
+  const call = async (method, path, body) => {
+    const res = await fetch(base + path, {
+      method, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'BingeBandit', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    if (res.status === 204 || res.status === 202) return null
+    const data = await res.json().catch(() => null)
+    if (!res.ok) throw new Error((data && data.error) || res.statusText)
+    return data
+  }
+  const $ = (id) => document.getElementById(id)
+  // Attributes with a dash (aria-label) aren't properties, so they're set as attributes.
+  const el = (tag, props = {}, ...kids) => {
+    const n = document.createElement(tag)
+    for (const [k, v] of Object.entries(props)) k.includes('-') ? n.setAttribute(k, v) : (n[k] = v)
+    n.append(...kids.filter((k) => k != null)); return n
+  }
+  const say = (text, cls = '') => { $('msg').textContent = text; $('msg').className = 'small ' + cls }
+  const time = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+
+  let chosen = new Set()
+  function live(st) {
+    $('games').textContent = st.games.length ? st.games.map((g) => 'Following ' + g).join('\n') : ''
+    $('log').replaceChildren(...(st.log.length ? st.log.map((l) => el('div', { textContent: `${time(l.at)}  ${l.text}` })) : [el('div', { textContent: 'Nothing yet.' })]))
+  }
+  async function load() {
+    const st = await call('GET', 'status')
+    live(st)
+    $('paired').hidden = !st.paired
+    $('unpaired').hidden = st.paired
+    $('addr').textContent = st.bridge
+    $('bridgeErr').textContent = st.error || ''
+    $('lightsBox').hidden = !st.lights
+    if (st.lights) {
+      chosen = new Set(st.lights.filter((l) => l.chosen).map((l) => l.id))
+      $('lights').replaceChildren(...st.lights.map((l) => {
+        const box = el('input', { type: 'checkbox', checked: l.chosen, 'aria-label': l.name })
+        box.onchange = () => (box.checked ? chosen.add(l.id) : chosen.delete(l.id))
+        return el('label', { className: 'light' }, box,
+          el('div', { className: 'grow' }, el('div', { textContent: l.name }),
+            el('div', { className: 'small muted', textContent: [l.room, l.colour ? null : 'white only: flashes by brightness'].filter(Boolean).join(' · ') })))
+      }))
+    }
+    $('effects').replaceChildren(...st.effects.map((e) => {
+      const box = el('input', { type: 'checkbox', checked: e.on, 'aria-label': e.label })
+      box.onchange = () => call('PUT', 'effects', { [e.key]: box.checked }).catch((err) => say(err.message, 'error'))
+      const test = el('button', { type: 'button', textContent: 'Test' })
+      test.onclick = () => call('POST', 'test', { effect: e.key, team: st.teams[0] ? st.teams[0].key : '' }).then(() => say('Playing ' + e.key + '…', 'ok'), (err) => say(err.message, 'error'))
+      return el('div', { className: 'effect' }, box, el('div', { className: 'grow', textContent: e.label }), test)
+    }))
+    $('teamsBox').hidden = !st.teams.length
+    $('teams').replaceChildren(...st.teams.map((t) => {
+      const c1 = el('input', { type: 'color', value: t.colours[0], 'aria-label': t.name + ' first colour' })
+      const c2 = el('input', { type: 'color', value: t.colours[1], 'aria-label': t.name + ' second colour' })
+      const save = el('button', { type: 'button', textContent: 'Save' })
+      save.onclick = () => call('PUT', 'colours', { [t.key]: [c1.value, c2.value] }).then(() => { say('Saved.', 'ok'); load() }, (err) => say(err.message, 'error'))
+      const reset = el('button', { type: 'button', textContent: 'Use ESPN\'s', hidden: !t.custom })
+      reset.onclick = () => call('PUT', 'colours', { [t.key]: null }).then(load, (err) => say(err.message, 'error'))
+      const test = el('button', { type: 'button', textContent: 'Test' })
+      test.onclick = () => call('POST', 'test', { effect: 'touchdown', team: t.key }).then(() => say('Playing the ' + t.shortName + ' colours…', 'ok'), (err) => say(err.message, 'error'))
+      return el('div', { className: 'effect' }, el('div', { className: 'grow', textContent: t.name }), c1, c2, save, test, reset)
+    }))
+  }
+
+  $('find').onclick = async () => {
+    say('Looking…')
+    try {
+      const ips = await call('POST', 'discover')
+      if (ips.length) { $('address').value = ips[0]; say(ips.length > 1 ? `Found ${ips.length} bridges: ${ips.join(', ')}` : 'Found one.') }
+      else say('No bridge found. Type its address instead.', 'error')
+    } catch (e) { say(e.message, 'error') }
+  }
+  $('pair').onclick = async () => {
+    say('Pairing…')
+    try { await call('POST', 'pair', { address: $('address').value }); say('Paired.', 'ok'); await load() } catch (e) { say(e.message, 'error') }
+  }
+  $('unpair').onclick = async () => {
+    if (!confirm('Forget this bridge? You can pair it again any time.')) return
+    await call('POST', 'unpair'); say(''); await load()
+  }
+  $('saveLights').onclick = async () => {
+    try { await call('PUT', 'lights', [...chosen]); say('Saved.', 'ok') } catch (e) { say(e.message, 'error') }
+  }
+  $('sample').onclick = async () => {
+    try { await call('PUT', 'lights', [...chosen]); await call('POST', 'sample'); say('A sample game is playing: watch the lights and the activity below.', 'ok') } catch (e) { say(e.message, 'error') }
+  }
+  $('reset').onclick = async () => {
+    try { await call('POST', 'reset'); say('Putting the lights back.', 'ok') } catch (e) { say(e.message, 'error') }
+  }
+
+  load().catch((e) => say(e.message, 'error'))
+  setInterval(() => call('GET', 'status').then(live).catch(() => {}), 4000)
+</script>
+</body>
+</html>

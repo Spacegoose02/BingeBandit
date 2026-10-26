@@ -265,6 +265,61 @@ export interface Prefs {
   preRollIntro: boolean
   notifyEpisodes: boolean
   notifyRecordings: boolean
+  /** Minutes before a followed team's game to send an alert (0 = none). */
+  gameAlertMinutes: number
+  /** The final score when a followed team's game ends. */
+  notifyGameScores: boolean
+}
+
+export interface SportsLeague {
+  id: string
+  name: string
+  sport: 'football' | 'basketball' | 'baseball' | 'hockey' | 'soccer'
+}
+
+export interface SportsTeam {
+  league: string
+  id: string
+  name: string
+  shortName: string
+  abbr: string
+  logo?: string
+  color?: string
+  altColor?: string
+}
+
+export interface SportsSide extends SportsTeam {
+  home: boolean
+  score?: string
+  winner?: boolean
+  record?: string
+}
+
+export interface SportsGame {
+  id: string
+  league: string
+  name: string
+  shortName: string
+  start: string
+  state: 'pre' | 'in' | 'post'
+  detail: string
+  period?: number
+  clock?: string
+  home: SportsSide
+  away: SportsSide
+  broadcasts?: string[]
+  venue?: string
+  /** The person's teams playing in it. */
+  mine?: string[]
+  /** Live TV channels whose guide shows it. */
+  channels?: { id: number; number: number; name: string; title: string }[]
+}
+
+export interface SportsHome {
+  leagues: SportsLeague[]
+  teams: SportsTeam[]
+  games: SportsGame[]
+  error?: string
 }
 
 export interface PreRoll {

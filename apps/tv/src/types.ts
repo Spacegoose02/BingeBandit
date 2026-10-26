@@ -141,3 +141,47 @@ export interface ServerInfo {
   name: string
   version: string
 }
+
+export interface SportsLeague {
+  id: string
+  name: string
+  sport: string
+}
+
+export interface SportsTeam {
+  league: string
+  id: string
+  name: string
+  shortName: string
+  abbr: string
+  logo?: string
+  color?: string
+}
+
+export interface SportsSide extends SportsTeam {
+  home: boolean
+  score?: string
+  winner?: boolean
+  record?: string
+}
+
+export interface SportsGame {
+  id: string
+  league: string
+  start: string
+  state: 'pre' | 'in' | 'post'
+  detail: string
+  home: SportsSide
+  away: SportsSide
+  broadcasts?: string[]
+  mine?: string[]
+  /** Live TV channels whose guide shows it. */
+  channels?: { id: number; number: number; name: string }[]
+}
+
+export interface SportsHome {
+  leagues: SportsLeague[]
+  teams: SportsTeam[]
+  games: SportsGame[]
+  error?: string
+}

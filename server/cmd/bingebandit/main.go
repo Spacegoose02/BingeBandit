@@ -102,6 +102,7 @@ func main() {
 	srv.Plugins.ServerName = func() string { return st.Setting(store.SettingServerName) }
 	go srv.Plugins.Start(ctx)
 	go srv.RunNotifications(ctx)
+	go srv.RunSports(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
 
