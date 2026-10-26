@@ -34,6 +34,9 @@ export const backInterceptor: { current: (() => boolean) | null } = { current: n
  */
 export const homeBack: { current: (() => boolean) | null } = { current: null }
 
+/** Switches Home to its Live TV guide (set by Home, which sits under the live player). */
+export const showLiveGuide: { current: (() => void) | null } = { current: null }
+
 /**
  * Screens under the top one stay mounted (hidden), so Back returns to the
  * same scroll position. Each screen learns whether it is on top, and how many

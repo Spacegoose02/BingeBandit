@@ -67,6 +67,8 @@ type Viewer struct {
 
 	lastSeen atomic.Int64
 	ch       chan []byte // ts viewers only
+	ready    bool        // ts viewers: has been sent the stream from a keyframe (guarded by the relay's mu)
+	joinedAt int64       // the relay's byte offset when the viewer joined
 	closed   chan struct{}
 	once     sync.Once
 }
@@ -349,6 +351,7 @@ type Relay struct {
 	stream    store.ChannelStream
 	lastError string
 	head      bytes.Buffer // first bytes of the current upstream, for probing
+	gop       *gopCache    // the current upstream from its latest keyframe, for joining ts viewers
 	headFrom  int64        // where head starts in the relay's byte stream
 	off       int64        // bytes relayed so far
 	hls       *hlsOutput
@@ -373,7 +376,7 @@ type Relay struct {
 
 func (m *Manager) newRelay(ch *store.Channel) *Relay {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Relay{m: m, channel: ch, ctx: ctx, cancel: cancel, started: time.Now(), viewers: map[string]*Viewer{}, rateAt: time.Now()}
+	return &Relay{m: m, channel: ch, ctx: ctx, cancel: cancel, started: time.Now(), viewers: map[string]*Viewer{}, rateAt: time.Now(), gop: newGOPCache()}
 }
 
 // recording reports whether the DVR is one of the relay's viewers.
@@ -390,6 +393,7 @@ func (r *Relay) recording() bool {
 
 func (r *Relay) add(v *Viewer) {
 	r.mu.Lock()
+	v.joinedAt = r.off
 	r.viewers[v.ID] = v
 	r.mu.Unlock()
 }
@@ -836,6 +840,7 @@ func (p *procReader) Close() error {
 func (r *Relay) resetHead() {
 	r.head.Reset()
 	r.headFrom = r.off
+	r.gop.reset()
 }
 
 func (r *Relay) broadcast(chunk []byte) {
@@ -850,12 +855,25 @@ func (r *Relay) broadcast(chunk []byte) {
 		r.hls.feed(tsChunk{off: r.off, b: chunk})
 	}
 	r.off += int64(len(chunk))
+	r.gop.feed(chunk)
 	for id, v := range r.viewers {
 		if v.ch == nil {
 			continue
 		}
+		send := chunk
+		if !v.ready {
+			// Start a new viewer at the latest keyframe (which includes
+			// this chunk). A stream whose keyframes can't be found is
+			// sent as it comes after a short wait.
+			if start := r.gop.start(); start != nil {
+				send = start
+			} else if r.gop.worthWaiting(r.off-v.joinedAt, time.Since(time.Unix(v.Connected, 0))) {
+				continue
+			}
+			v.ready = true
+		}
 		select {
-		case v.ch <- chunk:
+		case v.ch <- send:
 		default:
 			// The viewer can't keep up; drop it rather than stall everyone.
 			delete(r.viewers, id)
