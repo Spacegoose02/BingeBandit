@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { api, cached } from '../api'
+import { Icon } from '../icons'
 import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, units } from '../theme'
@@ -48,8 +49,8 @@ export default function LibraryTab({ library, onTogglePin }: { library: Library;
           </Focusable>
         ))}
         {/* An unpinned library opened from More stays in the menu while it's open, so this can pin it back. */}
-        <Focusable onPress={onTogglePin} style={{ ...st.chip, ...st.chipEnd }}>
-          <Text style={st.chipText}>{library.pinned ? 'Unpin from menu' : 'Pin to menu'}</Text>
+        <Focusable onPress={onTogglePin} style={{ ...st.chip, ...st.chipEnd }} accessibilityLabel={library.pinned ? 'Unpin from menu' : 'Pin to menu'}>
+          <Icon name={library.pinned ? 'pinned' : 'pin'} size={px(36)} color={library.pinned ? colors.accent : colors.muted} />
         </Focusable>
       </View>
       {section === 'recommended' && <Recommended library={library} />}

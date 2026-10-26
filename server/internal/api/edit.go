@@ -710,3 +710,54 @@ func (s *Server) setUserLibraries(w http.ResponseWriter, r *http.Request) {
 	s.recheckTranscodes()
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// itemCollections is a movie's or show's own collections and the library's
+// others, for the TV app's options menu (Add to collection).
+func (s *Server) itemCollections(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	mine, err := s.Store.ItemCollectionNames(it.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	all, err := s.Store.LibraryCollections(it.LibraryID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	names := []string{}
+	for _, c := range all {
+		if !c.Smart() {
+			names = append(names, c.Name)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string][]string{"collections": mine, "library": names})
+}
+
+// setItemCollections replaces a movie's or show's collections by name,
+// making new ones as needed.
+func (s *Server) setItemCollections(w http.ResponseWriter, r *http.Request) {
+	it := s.adminItem(w, r)
+	if it == nil {
+		return
+	}
+	if it.Kind != "movie" && it.Kind != "show" {
+		writeErr(w, http.StatusBadRequest, "only movies and shows go in collections")
+		return
+	}
+	var req struct {
+		Collections []string `json:"collections"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.Store.SetItemCollections(it.ID, it.LibraryID, cleanList(req.Collections)); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

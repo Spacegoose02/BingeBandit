@@ -40,3 +40,29 @@ export function setHueArea(id: string) {
   area = id
   AsyncStorage.setItem(HUE_AREA_KEY, id).catch(() => undefined)
 }
+
+// Where the TV menu sits: down the left side, collapsed to icons until
+// focus moves into it (like Plex), or across the top.
+const MENU_KEY = 'bb.menuPosition'
+export type MenuPosition = 'side' | 'top'
+let menuPos: MenuPosition = 'side'
+const menuLoaded = AsyncStorage.getItem(MENU_KEY).then(
+  (v) => {
+    if (v === 'top' || v === 'side') menuPos = v
+  },
+  () => undefined,
+)
+
+export function menuPosition(): MenuPosition {
+  return menuPos
+}
+
+/** Resolves once the saved menu position is known. */
+export function menuPositionLoaded(): Promise<void> {
+  return menuLoaded
+}
+
+export function setMenuPosition(p: MenuPosition) {
+  menuPos = p
+  AsyncStorage.setItem(MENU_KEY, p).catch(() => undefined)
+}

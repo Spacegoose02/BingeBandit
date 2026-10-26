@@ -60,3 +60,9 @@ export interface FocusTarget {
  * never redraws every card.
  */
 export const FocusMemoryContext = createContext<(view: FocusTarget | null) => void>(() => {})
+
+/**
+ * Opens the options for a title (holding OK on a card, or a long tap):
+ * play, go to the show, mark watched, watchlist, playlists and more.
+ */
+export const ItemMenuContext = createContext<(item: import('./types').Item) => void>(() => {})

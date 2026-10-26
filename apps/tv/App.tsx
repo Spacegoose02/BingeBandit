@@ -14,6 +14,7 @@ import SignIn from './src/screens/SignIn'
 import { colors, font, isPhone, scaled } from './src/theme'
 import type { ServerInfo, User } from './src/types'
 import { Toasts } from './src/toasts'
+import { ItemMenuHost } from './src/itemMenu'
 
 type Phase =
   | { name: 'loading' }
@@ -151,7 +152,9 @@ export default function App() {
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
         <StatusBar hidden={fullScreen} translucent backgroundColor="transparent" barStyle="light-content" />
-        <Insets enabled={!fullScreen}>{screen}</Insets>
+        <ItemMenuHost>
+          <Insets enabled={!fullScreen}>{screen}</Insets>
+        </ItemMenuHost>
         {phase.name === 'app' && <Toasts />}
         {exitHint && (
           <View style={styles.exitHint} pointerEvents="none">
