@@ -308,3 +308,22 @@ func TestFootballPlays(t *testing.T) {
 		t.Errorf("%d effects for one touchdown", lights)
 	}
 }
+
+// A fresh, unpaired plugin has no activity yet; the page reads every list's
+// length, so none of them may go out as null.
+func TestStatusListsNotNull(t *testing.T) {
+	a := newApp(func() string { return t.TempDir() })
+	dir := t.TempDir()
+	a.conf.dir = func() string { return dir }
+	rec := httptest.NewRecorder()
+	a.status(rec, httptest.NewRequest("GET", "/status", nil))
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"games", "log", "effects", "teams"} {
+		if s := string(got[k]); s == "" || s == "null" {
+			t.Errorf("%s = %q, want a list", k, s)
+		}
+	}
+}

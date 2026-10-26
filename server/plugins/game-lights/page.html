@@ -120,11 +120,13 @@
 
   let chosen = new Set()
   function live(st) {
+    st.games = st.games || []; st.log = st.log || []
     $('games').textContent = st.games.length ? st.games.map((g) => 'Following ' + g).join('\n') : ''
     $('log').replaceChildren(...(st.log.length ? st.log.map((l) => el('div', { textContent: `${time(l.at)}  ${l.text}` })) : [el('div', { textContent: 'Nothing yet.' })]))
   }
   async function load() {
     const st = await call('GET', 'status')
+    st.effects = st.effects || []; st.teams = st.teams || []
     live(st)
     $('paired').hidden = !st.paired
     $('unpaired').hidden = st.paired
