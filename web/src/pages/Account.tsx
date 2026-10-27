@@ -177,8 +177,8 @@ function Sharing() {
 }
 
 function RecommendOptIn() {
-  const { data, reload } = useApi<{ accept: boolean }>('/api/me/recommendations')
-  if (!data) return null
+  const { data, reload } = useApi<{ accept: boolean; enabled?: boolean }>('/api/me/recommendations')
+  if (!data || data.enabled === false) return null
   const toggle = async (accept: boolean) => {
     await api.put('/api/me/recommendations', { accept }).catch((e) => alert(e.message))
     reload()
@@ -868,6 +868,35 @@ function PlaybackPrefs() {
       <label className="check">
         <input type="checkbox" checked={p.notifyGameScores} onChange={(e) => set('notifyGameScores', e.target.checked)} />
         Tell me the final score when their games end
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.scoreBug} onChange={(e) => set('scoreBug', e.target.checked)} />
+        Show their live score in a corner while I watch something else
+      </label>
+      <label>
+        Before Live TV shows I follow
+        <select value={p.liveAlertMinutes} onChange={(e) => set('liveAlertMinutes', Number(e.target.value))}>
+          <option value={0}>Don't tell me</option>
+          {[5, 10, 15, 30, 60].map((m) => (
+            <option key={m} value={m}>
+              Tell me {m < 60 ? `${m} minutes` : 'an hour'} before
+            </option>
+          ))}
+        </select>
+        <span className="muted small">
+          {p.liveFollows?.length
+            ? `Following ${p.liveFollows.join(', ')}. Follow or stop following a show from the `
+            : 'Follow a show with the bell on it in the '}
+          <Link to="/live">Live TV guide</Link> or by holding OK on it in the TV app's guide.
+        </span>
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.notifyTogether} onChange={(e) => set('notifyTogether', e.target.checked)} />
+        Let people invite me to watch together
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={p.quietWhilePlaying} onChange={(e) => set('quietWhilePlaying', e.target.checked)} />
+        Don't pop up alerts or invitations while I'm watching something (they wait under the bell)
       </label>
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
       <div className="actions">

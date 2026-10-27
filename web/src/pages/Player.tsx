@@ -6,9 +6,11 @@ import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
+import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
 import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
+import { ScoreBug } from '../components/ScoreBug'
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
 const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub'])
@@ -278,7 +280,13 @@ function PlayerView({
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
-  const [menu, setMenu] = useState<null | 'settings' | 'together'>(null)
+  const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary'>(null)
+  // Hue Sync's quick switch, once this profile turned it on (Account).
+  const hue = useHueMode()
+  const [hueSeen, setHueSeen] = useState(false)
+  useEffect(() => {
+    if (hue.mode && hue.mode !== 'off') setHueSeen(true)
+  }, [hue.mode])
   const [error, setError] = useState('')
   const [toast, setToast] = useState(together.error ? `Couldn't join the watch party: ${together.error}` : '')
   const [upNext, setUpNext] = useState<Item | null>(null)
@@ -756,6 +764,7 @@ function PlayerView({
       onMouseMove={poke}
       onTouchStart={poke}
     >
+      <ScoreBug />
       <video
         ref={videoRef}
         className="player-video"
@@ -892,6 +901,19 @@ function PlayerView({
           <span className={`mode-pill ${mode}`}>
             {modeLabel}
           </span>
+          {!!item.overview && (
+            <div className="menu-anchor">
+              <button className={`icon-btn ${menu === 'summary' ? 'active' : ''}`} onClick={() => setMenu(menu === 'summary' ? null : 'summary')} aria-label="Summary" title="Summary">
+                <Icon name="info" size={22} />
+              </button>
+              {menu === 'summary' && (
+                <div className="menu player-menu player-summary">
+                  <div className="menu-section">Summary</div>
+                  <p>{item.overview}</p>
+                </div>
+              )}
+            </div>
+          )}
           <div className="menu-anchor">
             <button
               className={`icon-btn ${roomId ? 'active' : ''}`}
@@ -907,11 +929,24 @@ function PlayerView({
             )}
           </div>
           <div className="menu-anchor">
-            <button className="icon-btn" onClick={() => setMenu(menu === 'settings' ? null : 'settings')} aria-label="Playback settings">
+            <button className="icon-btn" onClick={() => setMenu(menu === 'settings' ? null : 'settings')} aria-label="Options" title="Options">
               <Icon name="sliders" size={22} />
             </button>
             {menu === 'settings' && (
               <div className="menu player-menu">
+                <button onClick={() => setMenu('together')}>
+                  {roomId ? `Watching together${tg.room ? ` (${tg.room.members.length})` : ''}…` : 'Watch together…'}
+                </button>
+                {hue.mode && hueSeen && (
+                  <>
+                    <div className="menu-section">Hue Sync</div>
+                    {(['sync', 'theater', 'off'] as HueMode[]).map((m) => (
+                      <button key={m} className={hue.mode === m ? 'active' : ''} onClick={() => hue.setMode(m).catch((e) => setToast(e.message))}>
+                        {hueModeNames[m]}
+                      </button>
+                    ))}
+                  </>
+                )}
                 <div className="menu-section">Quality</div>
                 {/* Original as is, original converted by the server (smoother on
                     a device that can't keep up with the file), or smaller. */}

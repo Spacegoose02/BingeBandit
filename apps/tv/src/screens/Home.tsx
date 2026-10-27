@@ -12,14 +12,20 @@ import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import { fetchHousehold } from './Profiles'
 import Settings, { type HideableTab } from './Settings'
+import Discover from './Discover'
 import Sports from './Sports'
 
 // Pinned libraries sit between Search and Live TV, as `lib:<id>`. More lists
 // every library to open or pin; an unpinned one opened from there joins the
 // menu while it's open.
-type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
-type MenuPrefs = { hiddenTabs?: HideableTab[] | null }
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
+type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'discover' | 'settings' | 'more' | `lib:${number}`
+// Discover stays under More until pinned (pinnedTabs), so it never lands in a saved menu by surprise.
+type MenuPrefs = { hiddenTabs?: HideableTab[] | null; pinnedTabs?: string[] | null }
+const hiddenFrom = (p?: MenuPrefs | null): HideableTab[] => [
+  ...(p?.hiddenTabs ?? ['sports']).filter((t) => t !== 'discover'),
+  ...(p?.pinnedTabs?.includes('discover') ? [] : (['discover'] as HideableTab[])),
+]
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', discover: 'Discover', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -27,7 +33,7 @@ let lastTab: Tab = 'home'
 let updateCheck: Promise<AppRelease | null> | null = null
 
 
-const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', settings: 'settings', more: 'more' }
+const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', discover: 'discover', settings: 'settings', more: 'more' }
 
 /** What holding OK on a menu entry pins or unpins: a library, or the Sports or Live TV tab. */
 interface Pinnable {
@@ -158,10 +164,10 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   }
   // Tabs this person turned off, kept with their other preferences so they
   // follow the profile to every TV and phone.
-  const [hidden, setHidden] = useState<HideableTab[]>(() => cached<MenuPrefs>('/api/me/prefs')?.hiddenTabs ?? ['sports'])
+  const [hidden, setHidden] = useState<HideableTab[]>(() => hiddenFrom(cached<MenuPrefs>('/api/me/prefs')))
   useEffect(() => {
     api.get<MenuPrefs>('/api/me/prefs').then((p) => {
-      const h = p.hiddenTabs ?? ['sports'] // Sports starts under More
+      const h = hiddenFrom(p) // Sports and Discover start under More
       setHidden(h)
       if ((h as Tab[]).includes(lastTab)) setTab('home')
     }, () => undefined)
@@ -173,7 +179,13 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     // The rest of the preferences go back as they are.
     api
       .get<MenuPrefs>('/api/me/prefs')
-      .then((p) => api.put('/api/me/prefs', { ...p, hiddenTabs: next }))
+      .then((p) =>
+        api.put('/api/me/prefs', {
+          ...p,
+          hiddenTabs: next.filter((x) => x !== 'discover'),
+          pinnedTabs: next.includes('discover') ? [] : ['discover'],
+        }),
+      )
       .then(() => api.get('/api/me/prefs'))
       .catch(() => setHidden(before))
   }
@@ -211,6 +223,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
     ...(shows('sports') ? (['sports'] as Tab[]) : []),
     ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
+    ...(shows('discover') ? (['discover'] as Tab[]) : []),
     ...(libraries.length && shows('more') ? (['more'] as Tab[]) : []),
     'settings',
   ]
@@ -232,7 +245,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     )
     // Phones: a bottom tab bar you tap. TVs: a side or top menu that switches as focus moves along it.
     const lib = libraries.find((l) => `lib:${l.id}` === t)
-    const hold = lib ? () => setPinMenu(pinLibrary(lib)) : t === 'sports' || t === 'live' ? () => setPinMenu(pinTab(t)) : undefined
+    const hold = lib ? () => setPinMenu(pinLibrary(lib)) : t === 'sports' || t === 'live' || t === 'discover' ? () => setPinMenu(pinTab(t)) : undefined
     if (side)
       return (
         <Focusable
@@ -313,13 +326,14 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'more' && (
         <More
           libraries={libraries}
-          tabs={(liveTV ? (['sports', 'live'] as HideableTab[]) : (['sports'] as HideableTab[])).map((t) => ({ tab: t, ...pinTab(t) }))}
+          tabs={(liveTV ? (['sports', 'live', 'discover'] as HideableTab[]) : (['sports', 'discover'] as HideableTab[])).map((t) => ({ tab: t, ...pinTab(t) }))}
           onOpen={(t) => setTab(t)}
           onHold={setPinMenu}
           pinLibrary={pinLibrary}
         />
       )}
       {tab === 'sports' && <Sports />}
+      {tab === 'discover' && <Discover />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
@@ -327,7 +341,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           menu={{
             libraries,
             hidden,
-            tabs: liveTV ? ['sports', 'live', 'more'] : ['sports', 'more'],
+            tabs: liveTV ? ['sports', 'live', 'discover', 'more'] : ['sports', 'discover', 'more'],
             togglePin,
             toggleTab,
             position,

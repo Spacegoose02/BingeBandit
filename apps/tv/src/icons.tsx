@@ -1,7 +1,7 @@
 import React from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
 
-export type IconName = 'home' | 'search' | 'movies' | 'shows' | 'more' | 'sports' | 'live' | 'settings' | 'pin' | 'pinned'
+export type IconName = 'home' | 'search' | 'movies' | 'shows' | 'more' | 'sports' | 'live' | 'settings' | 'pin' | 'pinned' | 'discover'
 
 /** Line icons for the side menu, drawn on a 24-unit grid. */
 export function Icon({ name, size, color }: { name: IconName; size: number; color: string }) {
@@ -10,6 +10,14 @@ export function Icon({ name, size, color }: { name: IconName; size: number; colo
   switch (name) {
     case 'home':
       body = <Path d="M3 11 12 3l9 8M5 9.5V21h5v-6h4v6h5V9.5" {...line} />
+      break
+    case 'discover':
+      body = (
+        <>
+          <Circle cx={12} cy={12} r={9} {...line} />
+          <Path d="m15.5 8.5-2 5-5 2 2-5z" {...line} />
+        </>
+      )
       break
     case 'search':
       body = (

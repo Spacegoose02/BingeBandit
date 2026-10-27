@@ -22,8 +22,9 @@ const (
 	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
-	SettingWatchedPercent    = "watched_percent"        // how far into a movie or episode it counts as watched
-	SettingContinueDays      = "continue_watching_days" // titles not played for this long leave Continue Watching; 0 = never
+	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
+	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
+	SettingContinueDays      = "continue_watching_days"  // titles not played for this long leave Continue Watching; 0 = never
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
@@ -93,6 +94,7 @@ var SettingDefaults = map[string]string{
 	SettingTranscodeThrottle: "true",
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
+	SettingRecommendations:   "true",
 	SettingWatchedPercent:    "90",
 	SettingContinueDays:      "0",
 	SettingWatchFolders:      "true",

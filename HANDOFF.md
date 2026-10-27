@@ -2,7 +2,19 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-27, the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+_Last updated: 2026-10-27, the third feature board (player options, alerts, Cinemask collections, score bug), the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+
+## Third feature board (2026-10-27, no migrations)
+
+- **PR #100 (merged):** score pills shrink to fit (`overlay/draw.go` `drawRatings`, cache key v3); custom channel editor Previous/Next, X to cancel a scheduled item (`store.CancelPlayout`), Restart channel (`livetv.RestartPlayout`); Hue Sync per profile (Off default / Sync / Theater, plugin `GET/PUT /me`, `People` in its config) and Game Lights opt-in per profile (`Person.Enabled`, `Off` = stopped, `Skip` teams, config version 2).
+- **Player:** Summary button and an Options menu (Watch together, Hue Sync mode, Quality, Audio & Subtitles) on web and TV; the TV seek bar is focusable and scrubs with left/right (10/30/60 s steps, commits after 900 ms or OK).
+- **Recommendations:** admin setting `recommendations_enabled` (default on); `GET /api/me/recommendations` says `enabled`. TV app has a Discover tab (YouTube rows) that is opt-in through `prefs.pinnedTabs` (`OptInTabs`), and a "Recommendations to me" toggle.
+- **Live TV on TV:** CH+/CH− step channels; holding OK on a guide cell opens Watch / favourite / Record or Ask to record / Follow show (the logo column isn't focusable, so favouriting is from the programme cell).
+- **Alerts:** prefs `notifyTogether`, `liveFollows` + `liveAlertMinutes` (kind `live`, `notifyLiveShows`, alert ids `live:epg:start` in `sports_alerts`), `quietWhilePlaying`, `scoreBug`. Notifications tick every minute now. Watch together invitees: everyone who can see the title and allows invites; kids only see kids.
+- **Cinemask collections:** Cinemask Upgrades 1.1.0 setting "Let collections add their missing titles" (off). Then the collection editor shows Monitor/Search switches (stored in the plugin's `collections.json`, with `added` so a title is handed over once). Plugin API `GET /collections/{id}/missing` (`importer.Lists.Missing`: TMDB collection parts for movie libraries plus followed lists, minus anything in any library).
+- **Score bug:** `GET /api/sports/live` (today's and yesterday's scoreboards only); web `components/ScoreBug.tsx`, TV `src/scorebug.tsx` over any player, hidden on the game's own channel.
+- Already existed, so nothing built: trailers / custom intro before movies (prefs `preRollTrailers`, `preRollIntro`), TV passcode settings (Settings → Profiles & PINs). Local guides by zip: dropped by Michael.
+- Nothing here was tried on a device, a real Hue bridge, or a real Cinemask.
 
 ## Roku channel (2026-10-27)
 

@@ -52,7 +52,7 @@ Rules:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/me` | The signed-in user. |
-| GET / PUT | `/me/prefs` | Playback preferences (audio/subtitle language, skip intro, …), and `hiddenTabs`: the app menu tabs turned off (`sports`, `live`, `more`). |
+| GET / PUT | `/me/prefs` | Playback preferences (audio/subtitle language, skip intro, …), `hiddenTabs`: the app menu tabs turned off (`sports`, `live`, `more`), `pinnedTabs`: tabs that stay under More until pinned (`discover`), `notifyTogether` (others may invite you to watch together), `liveFollows` (Live TV show titles to be alerted about `liveAlertMinutes` before they air; 0 turns the alerts off) and `quietWhilePlaying` (no pop-ups over a movie or show). |
 | PUT | `/me/password` | `{current, new}`. |
 | GET | `/me/history` | Your recent plays. |
 | GET / DELETE | `/me/sessions`, `/me/sessions/{id}` | Signed-in devices; sign one out. |
@@ -99,7 +99,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/items/{id}/recommend` | People this movie or show can be recommended to (opted in, and able to see it): `[{id, name}]`. |
 | POST | `/items/{id}/recommend` | `{userIds, note}` → `{sent}`. Recommending again renews it. |
 | DELETE | `/recommendations/{itemId}` | Hide a title from your "Recommended for You" row. |
-| GET/PUT | `/me/recommendations` | `{accept}`: whether others may recommend titles to you (off by default). `/home` includes the row (`id: "recommended"`) and `recommendedBy` (item id → `{from, notes}`). |
+| GET/PUT | `/me/recommendations` | `{accept}`: whether others may recommend titles to you (off by default). GET also has `enabled`, false when an admin turned recommendations off (setting `recommendations_enabled`); then recommending answers 403 and the row is left out. `/home` includes the row (`id: "recommended"`) and `recommendedBy` (item id → `{from, notes}`). |
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
@@ -152,7 +152,7 @@ An admin can turn Live TV off for a user (`PUT /api/admin/users/{id}/live-tv {on
 | GET | `/together/{id}` | The room (404 once it has ended, or when you can't see what it plays). `?watching=1` joins it by polling (the TV app): you count as a member while you look at least every 10 s. |
 | GET | `/together/{id}/events` | Server-sent events: the room as above after every change and join or leave. |
 | POST | `/together/{id}/state` | `{paused, position, itemId?}` play, pause, seek or move everyone to another movie or episode. |
-| GET / POST | `/together/{id}/people`, `/together/{id}/invite` | Who can be invited (people who accept recommendations and can see it); `{userIds}` invites them. |
+| GET / POST | `/together/{id}/people`, `/together/{id}/invite` | Who can be invited (people who can see it and left `prefs.notifyTogether` on; a kid only sees other kids); `{userIds}` invites them. |
 | GET | `/together/invites` | Your open invitations. `DELETE /together/{id}/invite` declines one. |
 
 `state.position` is seconds at `state.at` (server ms); while playing, add the time since, using `now` to correct for clock differences.
@@ -164,11 +164,12 @@ Scores and schedules come from ESPN's public (unofficial) site API, cached on th
 | | | |
 |---|---|---|
 | GET | `/sports` | `{leagues, teams, games, error?}`: the leagues, the teams you follow, and their games from two days ago to a week ahead (live first, then upcoming, then results). Each game has `mine` (your team ids in it) and, with Live TV, `channels` whose guide shows it. |
+| GET | `/sports/live` | `{games}`: just your teams' games on now (today's and yesterday's scoreboards), with `channels`, for the player's score bug. |
 | PUT | `/sports/teams` | `[{league, id}]` replaces your teams (at most 40); names, logos and colours come from ESPN. |
 | GET | `/sports/{league}/teams` | Every team in a league: `nfl`, `college-football`, `nba`, `mens-college-basketball`, `womens-college-basketball`, `mlb`, `nhl`, `mls`. |
 | GET | `/sports/{league}/scores?date=YYYYMMDD` | The league's games on an ESPN (US Eastern) day, today by default. |
 
-Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences.
+Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences. `scoreBug` (default on) shows live scores in a corner of the players.
 
 ### Passkeys
 

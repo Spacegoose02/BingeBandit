@@ -1,9 +1,9 @@
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, Image, PanResponder, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, FlatList, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
 import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
-import { Center } from '../components'
+import { Button, Center } from '../components'
 import { clock, episodeLabel, joinChannel, leaveChannel } from '../live'
 import { FocusMemoryContext, useNav, useScreen, type FocusTarget } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
@@ -30,7 +30,12 @@ interface Guide {
   channels: LiveChannel[]
   programs: Record<string, GuideProgram[]>
   categories?: ChannelCategory[] // the viewer's own; older servers send none
+  recordings?: Record<string, string> // "epgId:start" → status
+  canRecord?: boolean
+  recordNeedsApproval?: boolean
 }
+
+const recNames: Record<string, string> = { pending: 'Waiting for approval', scheduled: 'Set to record', recording: 'Recording now', completed: 'Recorded', failed: 'Recording failed' }
 
 /** The guide's channel filter: all, favourites, one of your categories ("my:<id>") or a provider category. Kept while the app runs. */
 let lastFilter = 'all'
@@ -171,6 +176,9 @@ export default function LiveGuide() {
     [gridFrom, gridTo, geo.span, clampStart],
   )
   const watch = useCallback((c: LiveChannel) => nav.push({ name: 'live', channelId: c.id }), [nav])
+  // Holding OK on a block: favourite its channel, record it (or ask to).
+  const [held, setHeld] = useState<{ channel: LiveChannel; seg: Seg } | null>(null)
+  const onHoldSeg = useCallback((channel: LiveChannel, seg: Seg) => setHeld({ channel, seg }), [])
   // Phone: the first tap on a block shows it up top; tapping it again tunes in.
   const selRef = useRef(sel)
   selRef.current = sel
@@ -349,13 +357,119 @@ export default function LiveGuide() {
                 focusSel={sel?.channel.id === item.id ? focusSel : 0}
                 onFocusSeg={onFocusSeg}
                 onTapSeg={onTapSeg}
+                onHoldSeg={onHoldSeg}
                 onWatch={watch}
+                recordings={guide.recordings}
               />
             )}
           />
         </TVFocusGuideView>
       </View>
+      {held && (
+        <GuideMenu
+          channel={held.channel}
+          seg={held.seg}
+          guide={guide}
+          now={now}
+          onWatch={() => {
+            setHeld(null)
+            watch(held.channel)
+          }}
+          onChanged={load}
+          onClose={() => setHeld(null)}
+        />
+      )}
     </View>
+  )
+}
+
+/** What holding OK on a guide block offers: watch, favourite the channel, record or ask to. */
+function GuideMenu({
+  channel,
+  seg,
+  guide,
+  now,
+  onWatch,
+  onChanged,
+  onClose,
+}: {
+  channel: LiveChannel
+  seg: Seg
+  guide: Guide
+  now: number
+  onWatch: () => void
+  onChanged: () => void
+  onClose: () => void
+}) {
+  const [msg, setMsg] = useState('')
+  const [fav, setFav] = useState(channel.favorite)
+  const p = seg.program
+  const status = p ? guide.recordings?.[`${channel.epgId}:${p.start}`] : undefined
+  const canRecord = !!guide.canRecord && !!p && p.id !== undefined && p.id > 0 && p.stop > now && !status
+  const ask = !!guide.recordNeedsApproval
+  // Following the show: a pop-up before it airs, on any channel.
+  const [follows, setFollows] = useState<string[] | null>(null)
+  useEffect(() => {
+    api.get<{ liveFollows?: string[] | null }>('/api/me/prefs').then((pr) => setFollows(pr.liveFollows ?? []), () => undefined)
+  }, [])
+  const following = !!p && !!follows?.some((t) => t.toLowerCase() === p.title.toLowerCase())
+  const toggleFollow = () => {
+    if (!p || !follows) return
+    const next = following ? follows.filter((t) => t.toLowerCase() !== p.title.toLowerCase()) : [...follows, p.title]
+    api
+      .get<Record<string, unknown>>('/api/me/prefs')
+      .then((cur) => api.put('/api/me/prefs', { ...cur, liveFollows: next }))
+      .then(
+        () => {
+          setFollows(next)
+          setMsg(following ? `You'll no longer hear about “${p.title}”.` : `You'll get a pop-up before “${p.title}” comes on.`)
+          api.get('/api/me/prefs').catch(() => undefined)
+        },
+        (e) => setMsg(e.message),
+      )
+  }
+  const toggleFav = () =>
+    api[fav ? 'del' : 'post'](`/api/live/channels/${channel.id}/favorite`).then(
+      () => {
+        setMsg(fav ? `${channel.name} is no longer a favourite.` : `${channel.name} is in ★ Favourites now.`)
+        setFav(!fav)
+        onChanged()
+      },
+      (e) => setMsg(e.message),
+    )
+  const record = (series: boolean) =>
+    api.post<{ status: string; conflict?: string }>('/api/dvr/recordings', { channelId: channel.id, programId: p!.id, series }).then(
+      (r) => {
+        setMsg(
+          (r.status === 'pending' ? 'Sent to an admin to approve.' : series ? `Recording every “${p!.title}”.` : `“${p!.title}” will be recorded.`) +
+            (r.conflict ? ` It may not record: ${r.conflict}.` : ''),
+        )
+        onChanged()
+      },
+      (e) => setMsg(e.message),
+    )
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={st.scrim} onPress={onClose}>
+        <View style={st.holdMenu}>
+          <Text style={st.holdTitle} numberOfLines={1}>{p?.title ?? channel.name}</Text>
+          <Text style={st.meta} numberOfLines={1}>
+            {channel.number}  {channel.name}
+            {p ? `  ·  ${day(p.start)} ${clock(p.start)} – ${clock(p.stop)}` : ''}
+            {status ? `  ·  ${recNames[status] ?? status}` : ''}
+          </Text>
+          {!!msg && <Text style={st.holdMsg}>{msg}</Text>}
+          <View style={st.holdButtons}>
+            <Button small preferFocus label={`Watch ${channel.name}`} onPress={onWatch} />
+            <Button small label={fav ? '★ Remove from favourites' : '☆ Add to favourites'} onPress={toggleFav} />
+            {p && follows && <Button small label={following ? 'Following: stop alerts' : 'Follow show'} onPress={toggleFollow} />}
+            {canRecord && <Button small label={ask ? 'Ask to record' : '● Record'} onPress={() => record(false)} />}
+            {canRecord && <Button small label={ask ? 'Ask to record the series' : '● Record series'} onPress={() => record(true)} />}
+            <Button small label="Close" onPress={onClose} />
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
   )
 }
 
@@ -371,7 +485,9 @@ const ChannelRow = memo(function Row({
   focusSel,
   onFocusSeg,
   onTapSeg,
+  onHoldSeg,
   onWatch,
+  recordings,
 }: {
   channel: LiveChannel
   segs: Seg[]
@@ -384,7 +500,9 @@ const ChannelRow = memo(function Row({
   focusSel: number
   onFocusSeg: (c: LiveChannel, s: Seg) => void
   onTapSeg: (c: LiveChannel, s: Seg) => void
+  onHoldSeg: (c: LiveChannel, s: Seg) => void
   onWatch: (c: LiveChannel) => void
+  recordings?: Record<string, string>
 }) {
   return (
     <View style={st.row}>
@@ -406,6 +524,8 @@ const ChannelRow = memo(function Row({
               focusNow={selKey === seg.key ? focusSel : 0}
               onFocus={() => onFocusSeg(channel, seg)}
               onPress={() => (isPhone ? onTapSeg(channel, seg) : onWatch(channel))}
+              onLongPress={() => onHoldSeg(channel, seg)}
+              recording={!!seg.program && !!recordings?.[`${channel.epgId}:${seg.program.start}`]}
             />
           ))}
         </View>
@@ -460,6 +580,8 @@ function Cell({
   focusNow,
   onFocus,
   onPress,
+  onLongPress,
+  recording,
 }: {
   seg: Seg
   from: number
@@ -470,6 +592,8 @@ function Cell({
   focusNow: number // when it changes, take focus
   onFocus: () => void
   onPress: () => void
+  onLongPress: () => void
+  recording: boolean
 }) {
   const [focused, setFocused] = useState(false)
   const ref = useRef<View>(null)
@@ -497,10 +621,12 @@ function Cell({
       }}
       onBlur={() => setFocused(false)}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[st.cell, airing && st.cellAiring, lit && st.cellFocused, { left: px(left), width: px(width) - px(ROW_GAP), paddingLeft: px(18 + inset) }]}
     >
       <Text style={[st.cellText, !seg.program && st.cellEmpty, lit && st.cellTextFocused]} numberOfLines={1}>
         {startedEarlier || inset > 0 ? '‹ ' : ''}
+        {recording && <Text style={st.recDot}>● </Text>}
         {seg.program?.title ?? 'No guide information'}
       </Text>
     </Pressable>
@@ -557,4 +683,10 @@ const st = StyleSheet.create(scaled({
   cellText: { color: colors.text, fontSize: font.body, fontWeight: '600' },
   cellEmpty: { color: colors.muted, fontWeight: '400' },
   cellTextFocused: { color: colors.accentText },
+  recDot: { color: colors.danger },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  holdMenu: { width: isPhone ? '90%' : 1100, backgroundColor: colors.surface, borderRadius: 22, padding: 36, borderWidth: 1, borderColor: colors.border },
+  holdTitle: { color: colors.text, fontSize: font.heading, fontWeight: '800' },
+  holdMsg: { color: colors.accent, fontSize: font.small, marginTop: 12 },
+  holdButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 24 },
 }))

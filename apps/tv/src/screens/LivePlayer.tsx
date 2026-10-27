@@ -227,6 +227,12 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         case 'down':
           step(1)
           break
+        case 'channelUp':
+          step(1)
+          break
+        case 'channelDown':
+          step(-1)
+          break
         case 'playPause':
           togglePause()
           break
@@ -241,6 +247,13 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         break
       case 'down':
         step(1)
+        break
+      // The remote's CH+ / CH− (or P+ / P−) buttons, where it has them: up the numbers and down.
+      case 'channelUp':
+        step(1)
+        break
+      case 'channelDown':
+        step(-1)
         break
       case 'select':
         showInfo(paused, true)

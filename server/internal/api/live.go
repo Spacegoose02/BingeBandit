@@ -158,7 +158,7 @@ func (s *Server) liveGuide(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"from": from, "to": to, "channels": s.withNowNext(chans), "programs": byID,
-		"recordings": recs, "canRecord": s.canRecord(currentUser(r)), "categories": cats,
+		"recordings": recs, "canRecord": s.canRecord(currentUser(r)), "recordNeedsApproval": s.needsApproval(currentUser(r)), "categories": cats,
 	})
 }
 

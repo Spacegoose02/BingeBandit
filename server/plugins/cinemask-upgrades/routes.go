@@ -40,6 +40,8 @@ func (a *app) routes() http.Handler {
 	mux.HandleFunc("POST /releases", admin(a.releases))
 	mux.HandleFunc("POST /grab", admin(a.grab))
 	mux.HandleFunc("POST /search-all", admin(a.searchAll))
+	mux.HandleFunc("GET /collections/{id}", admin(a.collection))
+	mux.HandleFunc("PUT /collections/{id}", admin(a.setCollection))
 	mux.HandleFunc("POST /search-all/stop", admin(func(w http.ResponseWriter, r *http.Request) {
 		a.stopBulk()
 		w.WriteHeader(http.StatusNoContent)
@@ -182,7 +184,7 @@ func (a *app) monitor(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	m, err := c.Monitor(r.Context(), t.Kind, t.TMDBID, t.ProfileID)
+	m, err := c.Monitor(r.Context(), t.Kind, t.TMDBID, t.ProfileID, false)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

@@ -274,6 +274,12 @@ export interface Prefs {
   gameAlertMinutes: number
   /** The final score when a followed team's game ends. */
   notifyGameScores: boolean
+  notifyTogether: boolean
+  /** Your teams' live scores in a corner of the player. */
+  scoreBug: boolean
+  liveFollows: string[] | null
+  liveAlertMinutes: number
+  quietWhilePlaying: boolean
 }
 
 export interface SportsLeague {

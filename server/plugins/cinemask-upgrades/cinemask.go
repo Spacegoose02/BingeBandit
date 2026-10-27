@@ -268,8 +268,8 @@ func (c *Cinemask) SetProfile(ctx context.Context, id, profileID int64) error {
 }
 
 // Monitor starts following a title, without searching yet.
-func (c *Cinemask) Monitor(ctx context.Context, kind string, tmdbID, profileID int64) (*Monitored, error) {
-	body := map[string]any{"kind": kind, "tmdbId": tmdbID, "search": false}
+func (c *Cinemask) Monitor(ctx context.Context, kind string, tmdbID, profileID int64, search bool) (*Monitored, error) {
+	body := map[string]any{"kind": kind, "tmdbId": tmdbID, "search": search}
 	if profileID > 0 {
 		body["profileId"] = profileID
 	}

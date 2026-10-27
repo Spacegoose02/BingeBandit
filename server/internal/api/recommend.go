@@ -8,8 +8,15 @@ import (
 	"bingebandit/internal/store"
 )
 
+// recommendationsOn is the admin's switch for recommending titles to people.
+func (s *Server) recommendationsOn() bool {
+	return s.Store.Setting(store.SettingRecommendations) != "false"
+}
+
+// getRecommendOptIn says whether the viewer takes recommendations, and
+// (enabled) whether an admin left the feature on, so apps can hide it.
 func (s *Server) getRecommendOptIn(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"accept": s.Store.AcceptsRecommendations(currentUser(r).ID)})
+	writeJSON(w, http.StatusOK, map[string]bool{"accept": s.Store.AcceptsRecommendations(currentUser(r).ID), "enabled": s.recommendationsOn()})
 }
 
 func (s *Server) setRecommendOptIn(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +36,10 @@ func (s *Server) setRecommendOptIn(w http.ResponseWriter, r *http.Request) {
 
 // recommendable returns the movie or show the viewer may recommend.
 func (s *Server) recommendable(w http.ResponseWriter, r *http.Request) *store.Item {
+	if !s.recommendationsOn() {
+		writeErr(w, http.StatusForbidden, "an admin turned recommendations off")
+		return nil
+	}
 	id, ok := idParam(r, "id")
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "bad id")
@@ -133,6 +144,9 @@ func (s *Server) dismissRecommendation(w http.ResponseWriter, r *http.Request) {
 // recommendedRow is the Home row of titles recommended to the viewer that
 // they can still see and haven't finished, with who recommended each.
 func (s *Server) recommendedRow(uid int64) ([]*store.Item, map[int64]store.Recommendation) {
+	if !s.recommendationsOn() {
+		return nil, nil
+	}
 	recs, err := s.Store.RecommendationsFor(uid, 40)
 	if err != nil {
 		return nil, nil

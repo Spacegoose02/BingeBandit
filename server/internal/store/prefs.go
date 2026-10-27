@@ -33,11 +33,29 @@ type Prefs struct {
 	// before each starts (0 for none), and the final score when one ends.
 	GameAlertMinutes int  `json:"gameAlertMinutes"`
 	NotifyGameScores bool `json:"notifyGameScores"`
+	// ScoreBug shows the score of your teams' games in a corner of the player
+	// while they're on (not on the channel showing the game).
+	ScoreBug bool `json:"scoreBug"`
+	// NotifyTogether: people may invite you to watch together.
+	NotifyTogether bool `json:"notifyTogether"`
+	// LiveFollows are Live TV show titles to be told about LiveAlertMinutes
+	// before they air (0 for no alerts), on any channel you can watch.
+	LiveFollows      []string `json:"liveFollows"`
+	LiveAlertMinutes int      `json:"liveAlertMinutes"`
+	// QuietWhilePlaying keeps alerts from popping up over a movie or show
+	// (they still wait under the bell).
+	QuietWhilePlaying bool `json:"quietWhilePlaying"`
 	// HiddenTabs are the TV and phone app menu tabs this person turned off.
 	// Home, Search and Settings always show; libraries come and go by pinning.
 	// Never set (null) means DefaultHiddenTabs; an empty list shows them all.
 	HiddenTabs []string `json:"hiddenTabs"`
+	// PinnedTabs are app menu tabs that stay under More until pinned
+	// (OptInTabs), so turning one on never surprises anyone's saved menu.
+	PinnedTabs []string `json:"pinnedTabs"`
 }
+
+// OptInTabs are the app menu tabs PinnedTabs may name.
+var OptInTabs = []string{"discover"}
 
 // DefaultHiddenTabs start out under More instead of in the menu, until the
 // person pins them. Kept out of DefaultPrefs: decoding into a shared slice
@@ -51,6 +69,7 @@ var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
 	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true, GameAlertMinutes: 15,
+	NotifyTogether: true, LiveAlertMinutes: 10, ScoreBug: true,
 }
 
 func (p *Prefs) Validate() error {
@@ -78,6 +97,22 @@ func (p *Prefs) Validate() error {
 	for _, t := range p.HiddenTabs {
 		if !slices.Contains(HideableTabs, t) {
 			return fmt.Errorf("only the sports, live and more tabs can be hidden")
+		}
+	}
+	for _, t := range p.PinnedTabs {
+		if !slices.Contains(OptInTabs, t) {
+			return fmt.Errorf("only the discover tab can be pinned this way")
+		}
+	}
+	if p.LiveAlertMinutes < 0 || p.LiveAlertMinutes > 180 {
+		return fmt.Errorf("show alerts must be from 0 to 180 minutes before")
+	}
+	if len(p.LiveFollows) > 200 {
+		return fmt.Errorf("follow at most 200 shows")
+	}
+	for _, t := range p.LiveFollows {
+		if len(t) == 0 || len(t) > 200 {
+			return fmt.Errorf("followed show titles are 1 to 200 characters")
 		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {

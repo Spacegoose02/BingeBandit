@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -359,17 +360,39 @@ func (s *Server) inviteTogether(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// togetherInvitees are the people who accept recommendations from others
-// (the same opt-in) and can see what is playing.
+// togetherInvitees are the people who can be asked to join: anyone who can
+// play what's on and hasn't turned watch together invitations off. A kid
+// can only ask other kids.
 func (s *Server) togetherInvitees(me int64, rm *togetherRoom) ([]store.Recipient, error) {
 	rm.mu.Lock()
 	item := rm.state.ItemID
 	rm.mu.Unlock()
-	it, err := s.Store.Item(me, item)
+	if _, err := s.Store.Item(me, item); err != nil {
+		return nil, err
+	}
+	self, err := s.Store.UserByID(me)
 	if err != nil {
 		return nil, err
 	}
-	return s.recipients(me, it)
+	users, err := s.Store.ListUsers()
+	if err != nil {
+		return nil, err
+	}
+	out := []store.Recipient{}
+	for _, u := range users {
+		if u.ID == me || (self.Kid && !u.Kid) {
+			continue
+		}
+		if p, err := s.Store.UserPrefs(u.ID); err != nil || !p.NotifyTogether {
+			continue
+		}
+		if _, err := s.Store.Item(u.ID, item); err != nil {
+			continue // can't see that library
+		}
+		out = append(out, store.Recipient{ID: u.ID, Name: displayName(u)})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, nil
 }
 
 func (s *Server) togetherPeople(w http.ResponseWriter, r *http.Request) {

@@ -12,8 +12,8 @@ import { fetchHousehold, PinPad } from './Profiles'
 
 // The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
 // always show, so there's always a way back to turn them on.
-export type HideableTab = 'sports' | 'live' | 'more'
-export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', more: 'More' }
+export type HideableTab = 'sports' | 'live' | 'discover' | 'more'
+export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', discover: 'Discover', more: 'More' }
 
 /** What the menu shows, and how to change it; Home owns both. */
 export interface MenuChoices {
@@ -26,7 +26,7 @@ export interface MenuChoices {
   setPosition: (p: MenuPosition) => void
 }
 
-type Section = 'device' | 'menu' | 'profiles' | 'admin'
+type Section = 'device' | 'menu' | 'alerts' | 'profiles' | 'admin'
 
 /**
  * Runs a settings change, asking for the settings passcode first when the
@@ -75,6 +75,7 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
   const names: [Section, string][] = [
     ['device', isPhone ? 'This phone' : 'This TV'],
     ['menu', 'Menu'],
+    ['alerts', 'Alerts'],
     ['profiles', 'Profiles & PINs'],
     ...(admin ? ([['admin', 'Server']] as [Section, string][]) : []),
   ]
@@ -91,6 +92,7 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
       </View>
       {section === 'device' && <Device update={update} menu={menu} onSignOut={onSignOut} onSwitchProfile={onSwitchProfile} />}
       {section === 'menu' && <MenuSection menu={menu} />}
+      {section === 'alerts' && <AlertsSection />}
       {section === 'profiles' && <ProfilesSection guard={guard} />}
       {section === 'admin' && admin && <AdminSection guard={guard} />}
       {prompt}
@@ -144,6 +146,17 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
     const id = options[(i + 1) % options.length].id
     setHueArea(id)
     setAreaState(id)
+  }
+  // Recommendations from other people, unless an admin turned them off.
+  const [recs, setRecs] = useState<{ accept: boolean; enabled?: boolean } | null>(null)
+  useEffect(() => {
+    api.get<{ accept: boolean; enabled?: boolean }>('/api/me/recommendations').then(setRecs, () => undefined)
+  }, [])
+  const toggleRecs = () => {
+    if (!recs) return
+    const accept = !recs.accept
+    setRecs({ ...recs, accept })
+    api.put('/api/me/recommendations', { accept }).catch(() => setRecs(recs))
   }
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
@@ -240,6 +253,17 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           </Text>
         </Focusable>
       )}
+      {recs && recs.enabled !== false && (
+        <Focusable onPress={toggleRecs} style={st.option}>
+          <Text style={st.value}>Recommendations to me: {recs.accept ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {recs.accept
+              ? 'Other people here can recommend movies and shows to you; they show up in a row on Home.'
+              : 'Nobody can recommend titles to you.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to turn it {recs.accept ? 'off' : 'on'}.
+          </Text>
+        </Focusable>
+      )}
       <View style={st.signOut}>
         {hasProfiles && <Button label="Switch profile" onPress={onSwitchProfile} style={st.gap} />}
         <Button label="Sign out" onPress={onSignOut} />
@@ -271,6 +295,74 @@ function MenuSection({ menu }: { menu: MenuChoices }) {
           </View>
         </Focusable>
       ))}
+    </>
+  )
+}
+
+interface AlertPrefs {
+  gameAlertMinutes: number
+  notifyGameScores: boolean
+  scoreBug: boolean
+  liveAlertMinutes: number
+  liveFollows?: string[] | null
+  notifyTogether: boolean
+  quietWhilePlaying: boolean
+}
+
+const minutesLabel = (m: number) => (m === 0 ? 'Off' : m < 60 ? `${m} minutes before` : m === 60 ? 'An hour before' : '2 hours before')
+
+/** This profile's pop-ups and alerts, saved with its other preferences. */
+function AlertsSection() {
+  const [p, setP] = useState<AlertPrefs | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    api.get<AlertPrefs>('/api/me/prefs').then(setP, (e) => setMsg(e.message))
+  }, [])
+  if (!p) return <Text style={st.hint}>{msg || 'Loading…'}</Text>
+  const save = (patch: Partial<AlertPrefs>) => {
+    const before = p
+    setP({ ...p, ...patch })
+    // The rest of the preferences go back as they are.
+    api
+      .get<AlertPrefs>('/api/me/prefs')
+      .then((cur) => api.put<AlertPrefs>('/api/me/prefs', { ...cur, ...patch }))
+      .then(() => api.get('/api/me/prefs'))
+      .catch((e) => {
+        setP(before)
+        setMsg(e.message)
+      })
+  }
+  const cycle = (list: number[], now: number) => list[(list.indexOf(now) + 1) % list.length]
+  const press = isPhone ? 'Tap' : 'Press OK'
+  return (
+    <>
+      {!!msg && <Text style={st.msg}>{msg}</Text>}
+      <Focusable onPress={() => save({ gameAlertMinutes: cycle([0, 5, 15, 30, 60, 120], p.gameAlertMinutes) })} style={st.option}>
+        <Text style={st.value}>Before my teams' games: {minutesLabel(p.gameAlertMinutes)}</Text>
+        <Text style={st.hint}>A pop-up before games of the teams you follow in Sports. {press} for the next choice.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ notifyGameScores: !p.notifyGameScores })} style={st.option}>
+        <Text style={st.value}>Final scores: {p.notifyGameScores ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>The score when your teams' games end. {press} to turn it {p.notifyGameScores ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ scoreBug: !p.scoreBug })} style={st.option}>
+        <Text style={st.value}>Score bug: {p.scoreBug ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>Your teams' live score in a corner of the player while you watch something else. {press} to turn it {p.scoreBug ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ liveAlertMinutes: cycle([0, 5, 10, 15, 30, 60], p.liveAlertMinutes) })} style={st.option}>
+        <Text style={st.value}>Before Live TV shows I follow: {minutesLabel(p.liveAlertMinutes)}</Text>
+        <Text style={st.hint}>
+          {p.liveFollows?.length ? `Following ${p.liveFollows.join(', ')}.` : 'Not following any shows yet.'} Hold OK on a show in the guide to follow it. {press} for the next choice.
+        </Text>
+      </Focusable>
+      <Focusable onPress={() => save({ notifyTogether: !p.notifyTogether })} style={st.option}>
+        <Text style={st.value}>Watch together invitations: {p.notifyTogether ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>{p.notifyTogether ? 'People can invite you to watch with them.' : "Nobody can invite you, and you aren't listed when they try."} {press} to turn it {p.notifyTogether ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ quietWhilePlaying: !p.quietWhilePlaying })} style={st.option}>
+        <Text style={st.value}>Pop-ups while watching: {p.quietWhilePlaying ? 'Wait until I stop' : 'Show them'}</Text>
+        <Text style={st.hint}>Alerts and invitations over a movie, show or channel. {press} to switch.</Text>
+      </Focusable>
     </>
   )
 }

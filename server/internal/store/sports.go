@@ -1,6 +1,8 @@
 package store
 
 import (
+	"fmt"
+
 	"bingebandit/internal/sports"
 )
 
@@ -83,6 +85,12 @@ func (s *Store) MarkSportsAlert(userID int64, gameID, kind string) (bool, error)
 	}
 	n, _ := res.RowsAffected()
 	return n > 0, nil
+}
+
+// MarkLiveAlert is MarkSportsAlert for a followed Live TV show's airing,
+// kept in the same table (and pruned with it).
+func (s *Store) MarkLiveAlert(userID int64, epgID string, start int64) (bool, error) {
+	return s.MarkSportsAlert(userID, fmt.Sprintf("live:%s:%d", epgID, start), "live")
 }
 
 // PruneSportsAlerts forgets alerts older than two weeks.

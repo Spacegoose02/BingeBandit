@@ -47,10 +47,51 @@ type sportChannel struct {
 // recent results).
 func (s *Server) sportsHome(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	teams, err := s.Store.SportsTeams(u.ID)
+	teams, games, problems, err := s.myGames(r, 2, 7)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	sortGames(games, time.Now())
+	if u.LiveTV {
+		s.findChannels(u.ID, games)
+	}
+	resp := map[string]any{"leagues": sports.Leagues, "teams": teams, "games": orEmpty(games)}
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		resp["error"] = "Couldn't reach ESPN for " + strings.Join(problems, "; ")
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// sportsLive is the games of your teams that are on now, for the player's
+// score bug: just today's and yesterday's scoreboards, so it's cheap to poll.
+func (s *Server) sportsLive(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	_, games, _, err := s.myGames(r, 1, 0)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	live := games[:0]
+	for _, g := range games {
+		if g.State == "in" {
+			live = append(live, g)
+		}
+	}
+	sortGames(live, time.Now())
+	if u.LiveTV {
+		s.findChannels(u.ID, live)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"games": orEmpty(live)})
+}
+
+// myGames lists the games of the person's teams from before days ago to
+// after days ahead, with the leagues ESPN didn't answer for.
+func (s *Server) myGames(r *http.Request, before, after int) ([]sports.Team, []sportsGame, []string, error) {
+	teams, err := s.Store.SportsTeams(currentUser(r).ID)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 	mine := map[string]map[string]bool{}
 	for _, t := range teams {
@@ -62,7 +103,7 @@ func (s *Server) sportsHome(w http.ResponseWriter, r *http.Request) {
 	var games []sportsGame
 	var problems []string
 	for league, ids := range mine {
-		all, err := s.sportsClient().Games(r.Context(), league, 2, 7)
+		all, err := s.sportsClient().Games(r.Context(), league, before, after)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", sports.LeagueByID(league).Name, err))
 			continue
@@ -79,16 +120,7 @@ func (s *Server) sportsHome(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	sortGames(games, time.Now())
-	if u.LiveTV {
-		s.findChannels(u.ID, games)
-	}
-	resp := map[string]any{"leagues": sports.Leagues, "teams": teams, "games": orEmpty(games)}
-	if len(problems) > 0 {
-		sort.Strings(problems)
-		resp["error"] = "Couldn't reach ESPN for " + strings.Join(problems, "; ")
-	}
-	writeJSON(w, http.StatusOK, resp)
+	return teams, games, problems, nil
 }
 
 func orEmpty[T any](v []T) []T {

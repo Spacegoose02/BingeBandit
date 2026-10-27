@@ -4,7 +4,7 @@ import { api } from '../api'
 import { CategoryMenu, ManageCategories } from '../components/ChannelCategories'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
-import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
+import type { ChannelCategory, GuideProgram, LiveChannel, Prefs } from '../types'
 
 const HOURS = 4 // guide window width
 const SLOT = 30 * 60 // ruler step, seconds
@@ -19,6 +19,7 @@ interface Guide {
   programs: Record<string, GuideProgram[]>
   recordings: Record<string, string> // "epgId:start" → status
   canRecord: boolean
+  recordNeedsApproval?: boolean // recordings go to an admin first
   categories: ChannelCategory[] // the viewer's own
 }
 
@@ -69,6 +70,21 @@ export default function LiveGuide() {
   const pxPerSec = (width - labelW) / (to - from)
   const x = (t: number) => (Math.max(Math.min(t, to), from) - from) * pxPerSec
   const hero = selected ?? (channels[0] ? { channel: channels[0], program: channels[0].now } : null)
+
+  // Shows you follow: an alert before each airing (Account sets how long before).
+  const { data: prefs, setData: setPrefs } = useApi<Prefs>('/api/me/prefs')
+  const following = (title: string) => !!prefs?.liveFollows?.some((t) => t.toLowerCase() === title.toLowerCase())
+  const toggleFollow = async (title: string) => {
+    if (!prefs) return
+    const list = prefs.liveFollows ?? []
+    const next = following(title) ? list.filter((t) => t.toLowerCase() !== title.toLowerCase()) : [...list, title]
+    try {
+      setPrefs(await api.put<Prefs>('/api/me/prefs', { ...prefs, liveFollows: next }))
+      setNote(following(title) ? `You'll no longer hear about “${title}”.` : `You'll get an alert before “${title}” comes on${prefs.liveAlertMinutes ? '' : ' (turn the alerts on in Account)'}.`)
+    } catch (e) {
+      setNote((e as Error).message)
+    }
+  }
 
   const toggleFav = async (c: LiveChannel) => {
     await api[c.favorite ? 'del' : 'post'](`/api/live/channels/${c.id}/favorite`)
@@ -123,10 +139,10 @@ export default function LiveGuide() {
               {data?.canRecord && hero.program && hero.program.stop > now && !recStatus(hero.program) && (
                 <>
                   <button className="btn btn-glass" onClick={() => record(hero.channel, hero.program!, false)}>
-                    <span className="rec-dot" /> Record
+                    <span className="rec-dot" /> {data.recordNeedsApproval ? 'Ask to record' : 'Record'}
                   </button>
                   <button className="btn btn-glass" onClick={() => record(hero.channel, hero.program!, true)}>
-                    <span className="rec-dot" /> Record series
+                    <span className="rec-dot" /> {data.recordNeedsApproval ? 'Ask to record the series' : 'Record series'}
                   </button>
                 </>
               )}
@@ -136,6 +152,11 @@ export default function LiveGuide() {
                   {({ pending: 'Waiting for approval', recording: 'Recording now', completed: 'Recorded' } as Record<string, string>)[recStatus(hero.program)!] ??
                     'Set to record'}
                 </Link>
+              )}
+              {hero.program && prefs && (
+                <button className={`btn btn-glass ${following(hero.program.title) ? 'active' : ''}`} onClick={() => toggleFollow(hero.program!.title)} title="An alert before it comes on, on any channel">
+                  <Icon name="bell" size={16} /> {following(hero.program.title) ? 'Following' : 'Follow show'}
+                </button>
               )}
               <CategoryMenu channel={hero.channel} categories={categories} onChanged={reload} />
               {note && <span className="muted small">{note}</span>}

@@ -13,6 +13,7 @@ import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, font, isPhone, scaled } from './src/theme'
 import type { ServerInfo, User } from './src/types'
+import { ScoreBug } from './src/scorebug'
 import { Toasts } from './src/toasts'
 import { ItemMenuHost } from './src/itemMenu'
 import { TogetherInvites } from './src/together'
@@ -150,6 +151,7 @@ export default function App() {
       ))
   }
 
+  const playing = top.name === 'player' || top.name === 'live' || top.name === 'trailer'
   const fullScreen = !isPhone || top.name === 'player' || top.name === 'live' || top.name === 'trailer'
   return (
     <SafeAreaProvider>
@@ -158,8 +160,9 @@ export default function App() {
         <ItemMenuHost>
           <Insets enabled={!fullScreen}>{screen}</Insets>
         </ItemMenuHost>
-        {phase.name === 'app' && <Toasts />}
-        {phase.name === 'app' && <TogetherInvites />}
+        {phase.name === 'app' && <Toasts playing={playing} />}
+        {phase.name === 'app' && <TogetherInvites playing={playing} />}
+        {phase.name === 'app' && <ScoreBug playing={playing && top.name !== 'trailer'} channelId={top.name === 'live' ? top.channelId : undefined} />}
         {exitHint && (
           <View style={styles.exitHint} pointerEvents="none">
             <Text style={styles.exitHintText}>Press Back again to exit</Text>
