@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"bingebandit/internal/importer"
 	"bingebandit/internal/plugins"
 	"bingebandit/internal/store"
 )
@@ -191,6 +192,7 @@ func (s *Server) pluginAPI(r chi.Router) {
 	r.Get("/search", s.search)
 	r.Get("/files", s.pluginFiles)
 	r.Get("/files/{id}/direct", s.directPlay)
+	r.Get("/collections/{id}/missing", s.pluginCollectionMissing)
 	r.Get("/images/tmdb/{file}", s.tmdbImage)
 	r.Get("/images/local/{file}", s.localImage)
 	r.Route("/users/{uid}", func(r chi.Router) {
@@ -210,6 +212,26 @@ func (s *Server) pluginInfo(w http.ResponseWriter, r *http.Request) {
 		"id": p.ID, "server": s.Store.Setting(store.SettingServerName), "version": s.Version,
 		"settings": s.Plugins.Settings(p),
 	})
+}
+
+// pluginCollectionMissing lists the titles a collection's TMDB collection or
+// lists have that no library does, for plugins that go and get them.
+func (s *Server) pluginCollectionMissing(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	c, err := s.Store.Collection(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	missing, unknown, err := importer.NewLists(s.Store).Missing(r.Context(), c)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if missing == nil {
+		missing = []importer.Wanted{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"missing": missing, "unknown": unknown})
 }
 
 func (s *Server) pluginUsers(w http.ResponseWriter, r *http.Request) {

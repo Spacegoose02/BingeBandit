@@ -17,7 +17,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "cinemask-upgrades",
 	Name:        "Cinemask Upgrades",
-	Version:     "1.0.0",
+	Version:     "1.1.0",
 	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies.",
 	Author:      "BingeBandit",
 	Homepage:    "https://github.com/Spacegoose02/cinemask",
@@ -29,6 +29,8 @@ var manifest = bbplugin.Manifest{
 		{Key: "old_codecs", Label: "Also list old codecs (MPEG-2, DivX/Xvid, VC-1, WMV)", Type: "bool", Default: "true"},
 		{Key: "min_bitrate", Label: "Also list files below this bitrate (Mbps; 0 is off)", Type: "number", Default: "0"},
 		{Key: "want_hdr", Label: "Also list 4K files without HDR", Type: "bool", Default: "false"},
+		{Key: "collections", Label: "Let collections add their missing titles to Cinemask", Type: "bool", Default: "false",
+			Help: "Each collection then gets Monitor and Search switches in its editor, both off until you turn them on."},
 	},
 	Pages: []bbplugin.Page{{Title: "Upgrades", Path: "/", Admin: true}},
 }
@@ -37,6 +39,11 @@ type app struct {
 	p *bbplugin.Plugin
 	// files lists the library's files (tests replace it).
 	files func(ctx context.Context) ([]file, error)
+	// missing lists a collection's titles no library has (tests replace it).
+	missing func(ctx context.Context, id int64) ([]wanted, error)
+	cols    *colStore
+	// kick runs a collection at once after its switches change.
+	kick func(id int64)
 
 	mu       sync.Mutex
 	settings map[string]string
@@ -50,6 +57,10 @@ func main() {
 	a.p = &bbplugin.Plugin{Manifest: manifest, OnEvent: a.onEvent}
 	a.p.Handler = a.routes()
 	a.files = a.libraryFiles
+	a.missing = a.collectionMissing
+	a.cols = &colStore{dir: func() string { return a.p.DataDir }}
+	a.p.Start = a.watchCollections
+	a.kick = func(id int64) { go a.runCollection(context.Background(), id) }
 	log.SetFlags(0)
 	if err := a.p.Run(); err != nil {
 		log.Fatal(err)

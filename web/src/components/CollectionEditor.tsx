@@ -220,6 +220,7 @@ export function CollectionEditor({
             </span>
           )}
         </label>
+        {collection && (collection.tmdbId || collection.listUrl) ? <CinemaskSwitches collectionId={collection.id} /> : null}
         <div className="label">Smart rules: include everything that matches all of these</div>
         <div className="field-grid">
           <label>
@@ -257,5 +258,58 @@ export function CollectionEditor({
         </div>
       </form>
     </Modal>
+  )
+}
+
+interface CinemaskState {
+  enabled: boolean
+  monitor: boolean
+  search: boolean
+  lastRun?: number
+  error?: string
+  missing?: number
+  added?: number
+}
+
+/** The Cinemask Upgrades plugin's switches for a collection's missing
+ * titles. Hidden unless the plugin runs with collections turned on in its
+ * settings; each switch saves at once. */
+function CinemaskSwitches({ collectionId }: { collectionId: number }) {
+  const path = `/api/plugins/cinemask-upgrades/collections/${collectionId}`
+  const { data, reload } = useApi<CinemaskState>(path)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  if (!data?.enabled) return null
+  const set = async (monitor: boolean, search: boolean) => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.put(path, { monitor, search })
+      reload()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="check-list">
+      <div className="label">Cinemask</div>
+      <label className="check">
+        <input type="checkbox" checked={data.monitor} disabled={busy} onChange={(e) => set(e.target.checked, e.target.checked && data.search)} />
+        Monitor missing titles in Cinemask
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={data.search} disabled={busy} onChange={(e) => set(data.monitor || e.target.checked, e.target.checked)} />
+        Search for them too
+      </label>
+      <span className="muted small">
+        Titles from this collection's TMDB collection or lists that no library has yet are added to Cinemask, now and every six hours.
+        {data.lastRun
+          ? ` Last checked ${new Date(data.lastRun * 1000).toLocaleString()}: ${data.missing ?? 0} missing, ${data.added ?? 0} handed to Cinemask.`
+          : ''}
+      </span>
+      {(error || data.error) && <span className="form-error">{error || data.error}</span>}
+    </div>
   )
 }
