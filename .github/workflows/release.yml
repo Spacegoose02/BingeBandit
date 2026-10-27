@@ -100,14 +100,28 @@ jobs:
           BB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           BB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           BB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease -PbbVersion=${GITHUB_REF_NAME} -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
-      - name: Name the APK
+        run: ./gradlew assembleSideloadRelease -PbbVersion=${GITHUB_REF_NAME} -PreactNativeArchitectures=armeabi-v7a,arm64-v8a
+      # The Google Play bundle (upload it in Play Console). Play rejects bundles
+      # signed with the debug key, so it's only built with the release key.
+      - name: Build Play bundle
+        if: env.BB_KEYSTORE != ''
+        working-directory: apps/tv/android
+        env:
+          BB_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          BB_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          BB_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundlePlayRelease -PbbVersion=${GITHUB_REF_NAME} -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86_64
+      - name: Name the files
         run: |
           mkdir -p release
-          cp apps/tv/android/app/build/outputs/apk/release/app-release.apk "release/BingeBandit-TV-${GITHUB_REF_NAME}.apk"
+          cp apps/tv/android/app/build/outputs/apk/sideload/release/app-sideload-release.apk "release/BingeBandit-TV-${GITHUB_REF_NAME}.apk"
+          aab=apps/tv/android/app/build/outputs/bundle/playRelease/app-play-release.aab
+          if [ -f "$aab" ]; then cp "$aab" "release/BingeBandit-TV-GooglePlay-${GITHUB_REF_NAME}.aab"; fi
       - uses: softprops/action-gh-release@v2
         with:
-          files: release/*.apk
+          files: |
+            release/*.apk
+            release/*.aab
 
   docker:
     runs-on: ubuntu-latest

@@ -22,6 +22,7 @@ react {
     //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
     // debuggableVariants = ["liteDebug", "prodDebug"]
+    debuggableVariants = ["sideloadDebug", "playDebug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -99,6 +100,23 @@ android {
         // allows cleartext outright (React Native's plugin would turn the
         // usesCleartextTraffic placeholder off for release builds).
     }
+    // "sideload" is the APK on GitHub Releases, which updates itself.
+    // "play" is the bundle for Google Play: Play handles updates, so it drops
+    // the in-app updater and its install-packages permission.
+    flavorDimensions "store"
+    productFlavors {
+        sideload {
+            dimension "store"
+            buildConfigField "boolean", "SELF_UPDATE", "true"
+        }
+        play {
+            dimension "store"
+            buildConfigField "boolean", "SELF_UPDATE", "false"
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -108,6 +126,7 @@ android {
         }
         // Release builds are signed with the key in BB_KEYSTORE (CI secrets);
         // without it they fall back to the debug key, fine for local testing.
+        // For Google Play this is the upload key: Play re-signs with its own.
         release {
             if (System.getenv("BB_KEYSTORE")) {
                 storeFile file(System.getenv("BB_KEYSTORE"))

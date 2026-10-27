@@ -4,6 +4,7 @@ import { api } from './api'
 interface Updater {
   versionName: string
   versionCode: number
+  selfUpdate?: boolean
   canInstall(): Promise<boolean>
   openInstallSettings(): Promise<boolean>
   downloadAndInstall(url: string): Promise<boolean>
@@ -17,6 +18,9 @@ export const installed = {
   code: AppUpdater?.versionCode ?? 0,
 }
 
+/** False in the Google Play build: Play updates it, so there's no in-app updater. */
+export const selfUpdates = AppUpdater?.selfUpdate !== false
+
 export interface AppRelease {
   version: string
   versionCode: number
@@ -28,6 +32,7 @@ export interface AppRelease {
 
 /** Asks the server for the newest app release; null when this one is current. */
 export async function checkForUpdate(): Promise<AppRelease | null> {
+  if (!selfUpdates) return null
   const rel = await api.get<AppRelease | undefined>('/api/apps/android')
   if (!rel || !installed.code || rel.versionCode <= installed.code) return null
   return rel
