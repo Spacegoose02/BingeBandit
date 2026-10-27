@@ -1,7 +1,11 @@
 package metadata
 
 import (
+	"context"
+	"encoding/json"
 	"image"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -75,5 +79,21 @@ func TestShrink(t *testing.T) {
 	}
 	if b := shrink(src, 2000).Bounds(); b.Dx() != 1000 {
 		t.Fatalf("small image was scaled: %v", b)
+	}
+}
+
+// An empty search must encode as [] rather than null: the web picker counts it.
+func TestTPDbSearchEmptyIsList(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("<html><body>No results</body></html>"))
+	}))
+	defer srv.Close()
+	got, err := NewTPDb(srv.URL, t.TempDir()).Search(context.Background(), "movie", "Nothing Here", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(got)
+	if string(b) != "[]" {
+		t.Fatalf("got %s, want []", b)
 	}
 }

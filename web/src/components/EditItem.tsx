@@ -420,7 +420,9 @@ function TPDbSearch({ item, busy, onPick }: { item: Item; busy: boolean; onPick:
     setLoading(true)
     setError('')
     try {
-      setRes(await api.get(`/api/admin/items/${item.id}/tpdb${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`))
+      const r = await api.get<{ query: string; titles: TPDbTitle[] | null }>(`/api/admin/items/${item.id}/tpdb${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`)
+      // Older servers send null for an empty list; keep a bad response from blanking the page.
+      setRes({ query: r.query, titles: (r.titles ?? []).map((t) => ({ ...t, posters: t.posters ?? [] })) })
     } catch (err) {
       setError((err as Error).message)
     } finally {

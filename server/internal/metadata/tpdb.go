@@ -214,6 +214,9 @@ func (t *TPDb) search(ctx context.Context, kind, query string, year int) ([]TPDb
 			return nil, err
 		}
 		title := TPDbTitle{ID: id, Title: pageTitle(page), URL: query, Posters: t.parsePosters(page)}
+		if title.Posters == nil {
+			title.Posters = []TPDbPoster{}
+		}
 		return []TPDbTitle{title}, nil
 	}
 
@@ -252,6 +255,15 @@ func (t *TPDb) search(ctx context.Context, kind, query string, year int) ([]TPDb
 		titles[i].Posters = t.parsePosters(page)
 		if titles[i].Title == "" {
 			titles[i].Title = pageTitle(page)
+		}
+	}
+	// Empty lists, not null, so the web picker can count them.
+	if titles == nil {
+		titles = []TPDbTitle{}
+	}
+	for i := range titles {
+		if titles[i].Posters == nil {
+			titles[i].Posters = []TPDbPoster{}
 		}
 	}
 	return titles, nil

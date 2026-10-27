@@ -609,11 +609,11 @@ textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3
 .artwork-current { display: flex; gap: 18px; align-items: flex-start; }
 .artwork-sources { flex: 1; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; min-width: 0; }
 .url-row { display: flex; gap: 8px; width: 100%; }
-.art-grid { display: grid; gap: 12px; max-height: 46vh; overflow-y: auto; padding: 2px; }
+.art-grid { display: grid; gap: 12px; max-height: 46vh; overflow-y: auto; padding: 2px; grid-auto-rows: max-content; align-content: start; }
 .art-grid.poster { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 .art-grid.wide { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .art-grid.logo { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-.art-thumb { position: relative; border: 0; padding: 0; border-radius: 8px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; }
+.art-thumb { position: relative; border: 0; padding: 0; border-radius: 8px; overflow: hidden; overflow: clip; background: var(--surface-2); display: grid; place-items: center; }
 .art-thumb.poster { aspect-ratio: 2 / 3; }
 .art-thumb.wide { aspect-ratio: 16 / 9; }
 .art-thumb.logo { aspect-ratio: 16 / 7; background: repeating-conic-gradient(#20252d 0 25%, #191d23 0 50%) 0 0 / 16px 16px; }
