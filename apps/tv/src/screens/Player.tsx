@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn } from '../devicePrefs'
-import { Button } from '../components'
+import { Button, Focusable } from '../components'
+import { fetchHueMode, hueModeNames, saveHueMode, type HueMode } from '../lights'
 import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
@@ -439,6 +440,54 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   // arrive here; this viewer's own go out through userPause and userSeek.
   const [roomId, setRoomId] = useState<string | null>(together ?? null)
   const [togetherOpen, setTogetherOpen] = useState(false)
+  const [summary, setSummary] = useState(false)
+  // Hue Sync's quick switch in Options: only once this profile turned it on.
+  const [hueMode, setHueMode] = useState<HueMode | null>(null)
+  const [hueSeen, setHueSeen] = useState(false)
+  useEffect(() => {
+    fetchHueMode().then((m) => {
+      setHueMode(m)
+      setHueSeen(m !== null && m !== 'off')
+    })
+  }, [])
+  const pickHue = (m: HueMode) => {
+    const was = hueMode
+    setHueMode(m)
+    saveHueMode(m).then(
+      () => say(m === 'off' ? 'Hue Sync off' : `Hue Sync: ${hueModeNames[m]}`),
+      (e) => {
+        setHueMode(was)
+        say(e.message)
+      },
+    )
+  }
+  // Scrubbing on the focused progress bar (TV): ◀ / ▶ move a marker, faster
+  // the more they're pressed in a row; it seeks once they stop, or on OK.
+  const [seekFocused, setSeekFocused] = useState(false)
+  const [scrub, setScrub] = useState<number | null>(null)
+  const scrubRef = useRef<number | null>(null)
+  const scrubPresses = useRef({ n: 0, at: 0 })
+  const scrubTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const commitScrub = () => {
+    if (scrubTimer.current) clearTimeout(scrubTimer.current)
+    const t = scrubRef.current
+    scrubRef.current = null
+    setScrub(null)
+    if (t !== null) userSeek(t)
+  }
+  const nudgeScrub = (dir: 1 | -1) => {
+    const now = Date.now()
+    const p = scrubPresses.current
+    p.n = now - p.at < 700 ? p.n + 1 : 0
+    p.at = now
+    const step = p.n < 3 ? 10 : p.n < 8 ? 30 : 60
+    const from = scrubRef.current ?? posRef.current
+    const t = Math.max(0, Math.min(duration || from + step, from + dir * step))
+    scrubRef.current = t
+    setScrub(t)
+    if (scrubTimer.current) clearTimeout(scrubTimer.current)
+    scrubTimer.current = setTimeout(commitScrub, 900)
+  }
   const pausedRef = useRef(paused)
   pausedRef.current = paused
   const me = current()?.user.id
@@ -504,6 +553,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
         setTogetherOpen(false)
         return true
       }
+      if (summary) {
+        setSummary(false)
+        return true
+      }
       if (menu) {
         setMenu(false)
         return true
@@ -523,10 +576,14 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0) return
-    if (menu || togetherOpen) return // the menu's buttons handle the keys
+    if (menu || togetherOpen || summary) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
       if (!paused) showControls('full')
+      if (seekFocused && (evt.eventType === 'left' || evt.eventType === 'right')) {
+        nudgeScrub(evt.eventType === 'left' ? -1 : 1)
+        return
+      }
       if (evt.eventType === 'playPause') userPause(!pausedRef.current)
       return
     }
@@ -614,8 +671,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           Phone: tapping the picture shows or hides the controls. */}
       <Pressable
         style={StyleSheet.absoluteFill}
-        hasTVPreferredFocus={!menu && !togetherOpen && controls !== 'full'}
-        focusable={!menu && !togetherOpen && controls !== 'full'}
+        hasTVPreferredFocus={!menu && !togetherOpen && !summary && controls !== 'full'}
+        focusable={!menu && !togetherOpen && !summary && controls !== 'full'}
         onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
       />
       {!!cue && (
@@ -630,7 +687,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !lock.locked && (
+      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !lock.locked && (
         <Pressable style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
@@ -650,14 +707,38 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                 showControls('full')
               }} />
             ) : (
-              <View style={st.track}>
-                <View style={[st.fill, { width: `${pct}%` }]} />
-              </View>
+              <TVFocusGuideView trapFocusLeft trapFocusRight>
+                <Focusable
+                  focusable={controls === 'full'}
+                  onFocus={() => setSeekFocused(true)}
+                  onBlur={() => {
+                    setSeekFocused(false)
+                    if (scrubRef.current !== null) commitScrub()
+                  }}
+                  onPress={commitScrub}
+                  style={st.seekFocus}
+                >
+                  <View style={st.track}>
+                    <View style={[st.fill, { width: `${pct}%` }]} />
+                    {scrub !== null && duration > 0 && <View style={[st.scrubMark, { left: `${Math.min(100, (scrub / duration) * 100)}%` }]} />}
+                  </View>
+                </Focusable>
+              </TVFocusGuideView>
             )}
             <View style={st.times}>
-              <Text style={st.time}>{clock(pos)}</Text>
+              <Text style={st.time}>{clock(scrub ?? pos)}</Text>
               <Text style={st.mode}>
-                {paused ? 'Paused' : mode === 'direct' ? 'Direct play' : quality > 0 ? `Converting · ${resolutionLabel(quality)}` : 'Converting'}
+                {scrub !== null
+                  ? `Jump to ${clock(scrub)}: OK or wait`
+                  : seekFocused
+                    ? '◀ ▶ to move through the video'
+                    : paused
+                      ? 'Paused'
+                      : mode === 'direct'
+                        ? 'Direct play'
+                        : quality > 0
+                          ? `Converting · ${resolutionLabel(quality)}`
+                          : 'Converting'}
               </Text>
               <Text style={[st.time, st.timeEnd]}>-{clock(duration - pos)}</Text>
             </View>
@@ -667,15 +748,17 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                 <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => userPause(!pausedRef.current)} />
                 <Button small label="30s ⟳" onPress={() => userSeek(posRef.current + 30)} />
                 {next && <Button small label="Next episode  ▶▶" onPress={() => playNext(next.id)} />}
-                <Button small label="Quality, audio & subtitles" onPress={() => setMenu(true)} />
-                <Button
-                  small
-                  label={roomId ? `Together (${tg.room?.members.length ?? 1})` : 'Watch together'}
-                  onPress={() => {
-                    setControls('hidden')
-                    setTogetherOpen(true)
-                  }}
-                />
+                {!!item?.overview && (
+                  <Button
+                    small
+                    label="Summary"
+                    onPress={() => {
+                      setControls('hidden')
+                      setSummary(true)
+                    }}
+                  />
+                )}
+                <Button small label={roomId ? `Options · Together (${tg.room?.members.length ?? 1})` : 'Options'} onPress={() => setMenu(true)} />
                 {isPhone && (
                   <Button
                     small
@@ -698,8 +781,46 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           <Text style={st.noticeText}>{notice}</Text>
         </View>
       )}
+      {summary && item && (
+        <View style={[st.menu, barsPad]}>
+          <Text style={st.summaryTitle}>{title}</Text>
+          {!!subtitleLine && <Text style={st.sub}>{subtitleLine}</Text>}
+          <Text style={st.summaryMeta}>
+            {[item.year, item.runtime ? `${item.runtime} min` : '', item.rating ? `★ ${item.rating.toFixed(1)}` : ''].filter(Boolean).join('  ·  ')}
+          </Text>
+          <ScrollView style={st.summaryScroll}>
+            <Text style={st.summaryText}>{item.overview}</Text>
+          </ScrollView>
+          <View style={st.controlRow}>
+            <Button small preferFocus label="Close" onPress={() => setSummary(false)} />
+          </View>
+        </View>
+      )}
       {menu && (
         <View style={[st.menu, barsPad]}>
+          <Text style={st.menuTitle}>Watch together</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button
+              small
+              primary={!!roomId}
+              label={roomId ? `Together (${tg.room?.members.length ?? 1}): invite or leave` : 'Watch together'}
+              onPress={() => {
+                setMenu(false)
+                setControls('hidden')
+                setTogetherOpen(true)
+              }}
+            />
+          </ScrollView>
+          {hueMode !== null && hueSeen && (
+            <>
+              <Text style={st.menuTitle}>Hue Sync</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {(['sync', 'theater', 'off'] as HueMode[]).map((m) => (
+                  <Button key={m} small primary={hueMode === m} label={hueModeNames[m]} onPress={() => pickHue(m)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
           {file && (
             <>
               <Text style={st.menuTitle}>Quality</Text>
@@ -831,4 +952,10 @@ const st = StyleSheet.create(scaled({
   menuTitle: { color: colors.muted, fontSize: font.small, fontWeight: '700', marginTop: 10, marginBottom: 6 },
   menuRow: { paddingVertical: 10 },
   controlRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  seekFocus: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 6 },
+  scrubMark: { position: 'absolute', top: -8, width: 6, height: 26, marginLeft: -3, borderRadius: 3, backgroundColor: '#fff' },
+  summaryTitle: { color: colors.text, fontSize: font.title, fontWeight: '700' },
+  summaryMeta: { color: colors.muted, fontSize: font.small, marginTop: 8 },
+  summaryScroll: { maxHeight: 260, marginTop: 14 },
+  summaryText: { color: colors.text, fontSize: font.body, lineHeight: 34 },
 }))

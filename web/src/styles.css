@@ -912,6 +912,8 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .volume { display: flex; align-items: center; }
 .menu-anchor { position: relative; }
 .player-menu { position: absolute; right: 0; bottom: 48px; max-height: 60vh; overflow-y: auto; min-width: 260px; }
+.player-summary { width: min(420px, 80vw); }
+.player-summary p { margin: 0; padding: 4px 12px 10px; font-size: 14px; line-height: 1.5; color: var(--text); }
 .spinner {
   position: absolute;
   top: 50%;
