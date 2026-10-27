@@ -497,4 +497,3 @@ func (s *Store) SameNamedCollections(id int64) ([]*Collection, error) {
 		JOIN libraries l ON l.id = c.library_id
 		ORDER BY l.name COLLATE NOCASE`, id)
 }
-
