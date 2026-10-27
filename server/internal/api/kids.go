@@ -200,3 +200,79 @@ func (s *Server) setItemKids(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// approvableCollection loads collection {id} if the signed-in user can see
+// its library.
+func (s *Server) approvableCollection(w http.ResponseWriter, r *http.Request) *store.Collection {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return nil
+	}
+	c, err := s.Store.Collection(id)
+	if err == nil && !s.Store.CanSeeLibrary(currentUser(r), c.LibraryID) {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		writeStoreErr(w, err)
+		return nil
+	}
+	return c
+}
+
+// collectionKids lists the kids the signed-in parent or admin can approve
+// this whole collection for, and which already have it.
+func (s *Server) collectionKids(w http.ResponseWriter, r *http.Request) {
+	c := s.approvableCollection(w, r)
+	if c == nil {
+		return
+	}
+	kids, err := s.kidCandidates(currentUser(r))
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	have, err := s.Store.KidCollectionUsers(c.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	out := []kidTitleState{}
+	for _, k := range kids {
+		out = append(out, kidTitleState{ID: k.ID, Name: memberName(k), Approved: have[k.ID], Avatar: k.Avatar})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// setCollectionKids sets which of the caller's kids this collection is
+// approved for; kids the caller doesn't manage are left alone.
+func (s *Server) setCollectionKids(w http.ResponseWriter, r *http.Request) {
+	c := s.approvableCollection(w, r)
+	if c == nil {
+		return
+	}
+	var req struct {
+		UserIDs []int64 `json:"userIds"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u := currentUser(r)
+	kids, err := s.kidCandidates(u)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	want := map[int64]bool{}
+	for _, id := range req.UserIDs {
+		want[id] = true
+	}
+	for _, k := range kids {
+		if err := s.Store.SetKidCollection(k.ID, c.ID, u.ID, want[k.ID]); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
