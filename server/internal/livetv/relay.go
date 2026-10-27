@@ -712,12 +712,20 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return nil, fmt.Errorf("only http(s) streams are supported")
 	}
+	// Which of the HLS streams to pass on: all pictures and sounds, or one
+	// variant of a master playlist with its sound (YouTube keeps the sound
+	// in a separate rendition that the variant only points to).
+	maps := []string{"-map", "0:v?", "-map", "0:a?"}
 	if isYouTube(url) {
-		hls, err := resolveYouTube(ctx, url)
+		yt, err := resolveYouTube(ctx, url)
 		if err != nil {
 			return nil, err
 		}
-		url = hls
+		url = yt.URL
+		if yt.Program >= 0 {
+			p := strconv.Itoa(yt.Program)
+			maps = []string{"-map", "0:p:" + p + ":v?", "-map", "0:p:" + p + ":a?"}
+		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -740,7 +748,7 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 	if strings.Contains(ct, "mpegurl") || strings.HasSuffix(strings.ToLower(final.Path), ".m3u8") {
 		target := hlsTargetDuration(ctx, resp, userAgent)
 		resp.Body.Close()
-		rc, err := m.remuxHLS(ctx, final.String(), userAgent)
+		rc, err := m.remuxHLS(ctx, final.String(), userAgent, maps)
 		if err != nil {
 			return nil, err
 		}
@@ -751,10 +759,12 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 }
 
 // remuxHLS runs ffmpeg to follow a live HLS playlist and emit MPEG-TS.
-func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string) (*procReader, error) {
+func (m *Manager) remuxHLS(ctx context.Context, url, userAgent string, maps []string) (*procReader, error) {
 	args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, ffmpegProxyArgs()...)
 	args = append(args, "-user_agent", userAgent, "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
-		"-i", url, "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-f", "mpegts", "pipe:1")
+		"-i", url)
+	args = append(args, maps...)
+	args = append(args, "-c", "copy", "-f", "mpegts", "pipe:1")
 	cmd := exec.CommandContext(ctx, m.ffmpeg, args...)
 	media.HideWindow(cmd)
 	var stderr bytes.Buffer
