@@ -40,8 +40,9 @@ jobs:
           grep -E "uses-permission|uses-feature|leanback" sideload.txt play.txt
           grep -q "REQUEST_INSTALL_PACKAGES" sideload.txt
           ! grep -q "REQUEST_INSTALL_PACKAGES" play.txt
-          # Phones and TVs: neither leanback nor a touchscreen may be required.
+          # Phones and TVs: neither leanback, a touchscreen nor wifi may be required.
           for f in sideload.txt play.txt; do
             ! grep -q "uses-feature: name='android.software.leanback'" $f
             ! grep -q "uses-feature: name='android.hardware.touchscreen'" $f
+            ! grep -q "uses-feature: name='android.hardware.wifi'" $f
           done
