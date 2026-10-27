@@ -7,6 +7,7 @@ import type { Library, Member } from '../types'
 import { Avatar, AvatarPicker } from './Avatar'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
+import { setStayingAs, stayingAs } from '../profilePick'
 
 /** Account section: the profiles under this account. */
 export function Profiles() {
@@ -29,6 +30,7 @@ export function Profiles() {
           This is a profile of another account. <Link to="/who">Switch profile</Link> to manage profiles from the account.
         </p>
         <AvatarPicker memberId={user.id} name={user.profileName ?? user.username} src={user.avatar} onChange={changed} />
+        <StayHere members={members} />
       </div>
     )
   }
@@ -105,9 +107,33 @@ export function Profiles() {
           <span className="muted small">On every device signed in to this account. Switch profile from your name in the menu.</span>
         </label>
       )}
+      <StayHere members={members} />
       {error && <div className="form-error">{error}</div>}
       {editing && <EditProfile profile={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} onPicture={reload} />}
     </div>
+  )
+}
+
+/** Lets whoever is signed in have this browser skip "Who's watching?" and open as them. */
+function StayHere({ members }: { members?: Member[] | null }) {
+  const me = members?.find((m) => m.current)
+  const [, redraw] = useState(0)
+  if (!me || !members || members.length < 2) return null
+  const on = stayingAs() === me.id
+  const toggle = (next: boolean) => {
+    setStayingAs(next ? me.id : 0)
+    redraw((n) => n + 1)
+  }
+  return (
+    <label className="check">
+      <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
+      <span>
+        Sign in as {me.name} in this browser
+        <span className="muted small" style={{ display: 'block' }}>
+          Opens straight as {me.name}, without "Who's watching?"{me.hasPin ? ' or your PIN' : ''}. Switching profile asks again.
+        </span>
+      </span>
+    </label>
   )
 }
 

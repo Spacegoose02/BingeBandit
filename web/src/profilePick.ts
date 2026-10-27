@@ -28,3 +28,26 @@ export function donePicking() {
     // ignore
   }
 }
+
+// A member can have this browser open straight as them, skipping the picker.
+// Kept per browser (localStorage) and only honoured while still signed in as
+// that member, so after switching to someone else the picker (and its PIN)
+// comes back.
+const STAY_KEY = 'bb:stayAs'
+
+export function stayingAs(): number {
+  try {
+    return Number(localStorage.getItem(STAY_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
+export function setStayingAs(memberId: number) {
+  try {
+    if (memberId) localStorage.setItem(STAY_KEY, String(memberId))
+    else localStorage.removeItem(STAY_KEY)
+  } catch {
+    // Private windows can refuse storage.
+  }
+}
