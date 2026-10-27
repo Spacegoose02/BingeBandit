@@ -1,7 +1,11 @@
 package livetv
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,5 +71,39 @@ func TestIsYouTube(t *testing.T) {
 		if isYouTube(u) != want {
 			t.Errorf("%s: %v", u, !want)
 		}
+	}
+}
+
+func TestResolveYouTubeFromPage(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/channel/UCa/live":
+			if c, _ := r.Cookie("SOCS"); c == nil {
+				t.Error("no consent cookie")
+			}
+			fmt.Fprintf(w, `<script>var ytInitialPlayerResponse = {"streamingData":{"hlsManifestUrl":"%s/api/manifest/hls_variant/id/1?a=1&b=2"}}</script>`, srv.URL)
+		case "/api/manifest/hls_variant/id/1":
+			if r.URL.RawQuery != "a=1&b=2" {
+				t.Errorf("query %q", r.URL.RawQuery)
+			}
+			w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=854x480\n/v/480.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=4500000,RESOLUTION=1920x1080\n/v/1080.m3u8\n" +
+				"#EXT-X-STREAM-INF:BANDWIDTH=20000000,RESOLUTION=3840x2160\n/v/2160.m3u8\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	oldBin, oldClient := YTDLP, youtubeClient
+	YTDLP, youtubeClient = "no-such-yt-dlp", srv.Client()
+	defer func() { YTDLP, youtubeClient = oldBin, oldClient }()
+
+	got, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCa/live")
+	if err != nil || got != srv.URL+"/v/1080.m3u8" {
+		t.Fatalf("resolved %q %v", got, err)
+	}
+	if _, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCb/live"); err == nil || !strings.Contains(err.Error(), "yt-dlp isn't installed") {
+		t.Fatalf("both failing: %v", err)
 	}
 }
