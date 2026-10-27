@@ -353,6 +353,7 @@ func (s *Server) friendsActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	type friend struct {
 		Username string  `json:"username"`
+		Name     string  `json:"name"`
 		ItemID   int64   `json:"itemId"`
 		Title    string  `json:"title"`
 		Subtitle string  `json:"subtitle,omitempty"`
@@ -371,7 +372,7 @@ func (s *Server) friendsActivity(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[np.UserID] = true
-		out = append(out, friend{np.Username, np.ItemID, np.Title, np.Subtitle, np.Poster, np.Position, np.Duration, np.Paused})
+		out = append(out, friend{np.Username, np.Name, np.ItemID, np.Title, np.Subtitle, np.Poster, np.Position, np.Duration, np.Paused})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

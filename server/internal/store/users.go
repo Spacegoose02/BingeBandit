@@ -119,6 +119,20 @@ func (s *Store) RenameProfile(id int64, name, owner string) error {
 	return err
 }
 
+// SetDisplayName sets the name others see for an account; "" goes back to
+// its username. Sign-in keeps using the username. A profile's name is
+// changed with RenameProfile instead.
+func (s *Store) SetDisplayName(id int64, name string) error {
+	res, err := s.db.Exec(`UPDATE users SET profile_name = ? WHERE id = ? AND owner_id IS NULL`, name, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Household lists an account and its profiles, the account first.
 func (s *Store) Household(ownerID int64) ([]*User, error) {
 	rows, err := s.db.Query(`SELECT `+userCols+` FROM users WHERE id = ? OR owner_id = ? ORDER BY owner_id IS NOT NULL, created_at, id`, ownerID, ownerID)

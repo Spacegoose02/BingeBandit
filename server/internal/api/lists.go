@@ -417,7 +417,7 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 		recent[i].IP = "" // never show IPs on profiles
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"user":   map[string]any{"username": u.Username, "createdAt": u.CreatedAt, "profilePublic": u.ProfilePublic, "isMe": u.ID == me.ID},
+		"user":   map[string]any{"username": u.Username, "name": memberName(u), "createdAt": u.CreatedAt, "profilePublic": u.ProfilePublic, "isMe": u.ID == me.ID},
 		"stats":  stats,
 		"recent": recent,
 	})
@@ -433,7 +433,7 @@ func (s *Server) publicProfiles(w http.ResponseWriter, r *http.Request) {
 	out := []map[string]any{}
 	for _, u := range users {
 		if u.ProfilePublic || u.ID == currentUser(r).ID {
-			out = append(out, map[string]any{"username": u.Username, "isMe": u.ID == currentUser(r).ID})
+			out = append(out, map[string]any{"username": u.Username, "name": memberName(u), "isMe": u.ID == currentUser(r).ID})
 		}
 	}
 	writeJSON(w, http.StatusOK, out)

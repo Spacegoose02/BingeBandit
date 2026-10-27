@@ -98,6 +98,7 @@ export interface Webhook {
 
 export interface FriendActivity {
   username: string
+  name?: string // the display name others see
   itemId: number
   title: string
   subtitle?: string
@@ -658,6 +659,7 @@ export interface NowPlaying {
   id: string
   userId: number
   username: string
+  name?: string // the display name others see
   itemId: number
   title: string
   subtitle?: string

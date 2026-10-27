@@ -145,12 +145,7 @@ func (t *togetherRooms) sweep() {
 	}
 }
 
-func displayName(u *store.User) string {
-	if u.ProfileName != "" {
-		return u.ProfileName
-	}
-	return u.Username
-}
+func displayName(u *store.User) string { return memberName(u) }
 
 // startTogether opens a room for an item the host can see.
 func (s *Server) startTogether(w http.ResponseWriter, r *http.Request) {

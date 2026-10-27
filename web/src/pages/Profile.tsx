@@ -8,7 +8,7 @@ import { timeAgo } from '../format'
 import type { Play, UserStats } from '../types'
 
 interface ProfileData {
-  user: { username: string; createdAt: number; profilePublic: boolean; isMe: boolean }
+  user: { username: string; name?: string; createdAt: number; profilePublic: boolean; isMe: boolean }
   stats: UserStats
   recent: Play[]
 }
@@ -49,7 +49,7 @@ export default function ProfilePage() {
   const { user: me } = useAuth()
   const username = param ?? me?.username ?? ''
   const { data, error, reload } = useApi<ProfileData>(`/api/profiles/${encodeURIComponent(username)}`)
-  useDocumentTitle(data ? `${data.user.username}'s profile` : 'Profile')
+  useDocumentTitle(data ? `${data.user.name || data.user.username}'s profile` : 'Profile')
   if (error) return <div className="page"><div className="empty">This profile is private or doesn't exist.</div></div>
   if (!data) return <div className="page-loading" />
   const { user, stats, recent } = data
@@ -63,9 +63,9 @@ export default function ProfilePage() {
     <div className="page">
       <header className="page-head">
         <div className="profile-head">
-          <span className="avatar big">{user.username.slice(0, 1).toUpperCase()}</span>
+          <span className="avatar big">{(user.name || user.username).slice(0, 1).toUpperCase()}</span>
           <div>
-            <h1>{user.username}</h1>
+            <h1>{user.name || user.username}</h1>
             <div className="muted">Watching since {new Date(user.createdAt * 1000).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</div>
           </div>
         </div>

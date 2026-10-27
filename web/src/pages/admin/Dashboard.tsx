@@ -73,7 +73,9 @@ export default function AdminDashboard() {
             </div>
             <dl className="np-facts">
               <dt>User</dt>
-              <dd>{np.username}</dd>
+              <dd>
+                {np.name && np.name !== np.username ? <>{np.name} <span className="muted small">({np.username})</span></> : np.username}
+              </dd>
               <dt>Client</dt>
               <dd>{np.client}</dd>
               <dt>Location</dt>
