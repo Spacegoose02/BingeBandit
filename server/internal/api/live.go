@@ -819,7 +819,50 @@ func (s *Server) epgChannels(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	// What's on now helps tell look-alike guide channels apart.
+	type withNow struct {
+		store.EPGChannel
+		Now string `json:"now,omitempty"`
+	}
+	ids := make([]string, len(list))
+	for i, c := range list {
+		ids[i] = c.ID
+	}
+	now := time.Now().Unix()
+	progs, err := s.Store.Programs(ids, now, now+1)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	titles := map[string]string{}
+	for _, p := range progs {
+		titles[p.EPGID] = p.Title
+	}
+	out := make([]withNow, len(list))
+	for i, c := range list {
+		out[i] = withNow{c, titles[c.ID]}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// epgPreview lists a guide channel's programmes from now through the next few
+// hours, so an admin can check a match before saving it.
+func (s *Server) epgPreview(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.URL.Query().Get("id"))
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, "missing id")
+		return
+	}
+	now := time.Now().Unix()
+	progs, err := s.Store.Programs([]string{id}, now, now+6*3600)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if len(progs) > 12 {
+		progs = progs[:12]
+	}
+	writeJSON(w, http.StatusOK, progs)
 }
 
 // liveActivity reports every running relay with its viewers and what's airing.

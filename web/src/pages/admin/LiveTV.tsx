@@ -6,8 +6,8 @@ import { IPTVLinks } from '../../components/IPTVLinks'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
-import type { AdminChannel, LiveSource, LiveStream, RelayStat } from '../../types'
-import { ChannelLogo, channelNo } from '../LiveGuide'
+import type { AdminChannel, GuideProgram, LiveSource, LiveStream, RelayStat } from '../../types'
+import { ChannelLogo, channelNo, clock } from '../LiveGuide'
 import { CustomChannelEditor } from './CustomChannel'
 import { DispatcharrImport } from './DispatcharrImport'
 import { KidChannels } from './KidChannels'
@@ -453,7 +453,7 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
   const [streams, setStreams] = useState(channel.streams ?? [])
   const [epgQ, setEpgQ] = useState('')
   const [streamQ, setStreamQ] = useState('')
-  const { data: epg } = useApi<{ id: string; displayName: string }[]>(epgQ ? `/api/admin/live/epg-channels?q=${encodeURIComponent(epgQ)}` : null)
+  const { data: epg } = useApi<{ id: string; displayName: string; now?: string }[]>(epgQ ? `/api/admin/live/epg-channels?q=${encodeURIComponent(epgQ)}` : null)
   const { data: found } = useApi<{ streams: LiveStream[] }>(streamQ ? `/api/admin/live/streams?limit=20&q=${encodeURIComponent(streamQ)}` : null)
   const [error, setError] = useState('')
 
@@ -505,11 +505,13 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
             {epg?.map((g) => (
               <button type="button" key={g.id} onClick={() => { setC({ ...c, epgId: g.id }); setEpgQ('') }}>
                 {g.displayName} <span className="muted small mono">{g.id}</span>
+                {g.now && <span className="muted small"> · now: {g.now}</span>}
               </button>
             ))}
             {epg?.length === 0 && <div className="muted small menu-pad">No matches</div>}
           </div>
         )}
+        {c.epgId && !epgQ && <GuidePreview epgId={c.epgId} />}
 
         <div className="label">Streams, in fallback order</div>
         {!!channel.lost?.length && (
@@ -553,6 +555,31 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
         </div>
       </form>
     </Modal>
+  )
+}
+
+// GuidePreview shows what a guide channel airs over the next few hours, so a
+// match can be checked against the stream before saving.
+function GuidePreview({ epgId }: { epgId: string }) {
+  const { data, loading } = useApi<GuideProgram[]>(`/api/admin/live/epg-preview?id=${encodeURIComponent(epgId)}`)
+  const now = Date.now() / 1000
+  return (
+    <div className="panel list compact">
+      {data?.map((p) => (
+        <div key={`${p.start}-${p.title}`} className="list-row">
+          <span className="muted small mono" style={{ minWidth: 120 }}>{clock(p.start)}–{clock(p.stop)}</span>
+          <div className="grow">
+            <div>
+              {p.start <= now && <span className="chip strong" style={{ marginRight: 6 }}>Now</span>}
+              {p.title}
+              {p.subtitle && <span className="muted"> · {p.subtitle}</span>}
+            </div>
+            {p.description && <div className="muted small clamp-2">{p.description}</div>}
+          </div>
+        </div>
+      ))}
+      {!loading && data?.length === 0 && <div className="list-row muted small">No programmes in the next 6 hours for this guide channel.</div>}
+    </div>
   )
 }
 
