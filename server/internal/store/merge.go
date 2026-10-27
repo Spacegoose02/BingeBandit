@@ -203,6 +203,9 @@ func mergeMovie(tx *sql.Tx, libraryID, keepID, dupID int64, dupKey string) error
 	if _, err := tx.Exec(`UPDATE media_files SET item_id = ? WHERE item_id = ?`, keepID, dupID); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`UPDATE OR IGNORE media_file_episodes SET item_id = ? WHERE item_id = ?`, keepID, dupID); err != nil {
+		return err
+	}
 	if err := moveRows(tx, dupID, keepID); err != nil {
 		return err
 	}
@@ -260,6 +263,9 @@ func mergeShow(tx *sql.Tx, libraryID, keepID int64, keepKey string, dupID int64,
 			return err
 		}
 		if _, err := tx.Exec(`UPDATE media_files SET item_id = ? WHERE item_id = ?`, epID, e.id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE OR IGNORE media_file_episodes SET item_id = ? WHERE item_id = ?`, epID, e.id); err != nil {
 			return err
 		}
 		if err := moveRows(tx, e.id, epID); err != nil {

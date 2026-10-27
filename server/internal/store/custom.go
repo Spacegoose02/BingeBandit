@@ -118,7 +118,8 @@ const playableSelect = `SELECT i.id, f.id, f.duration,
 	CASE WHEN i.kind = 'episode' THEN 'S' || i.season_number || ' · E' || i.episode_number || ' ' || i.title ELSE '' END,
 	i.overview, COALESCE(json_extract(COALESCE(sh.genres, i.genres), '$[0]'), ''), COALESCE(NULLIF(sh.poster, ''), i.poster)
 FROM items i
-JOIN media_files f ON f.id = (SELECT f2.id FROM media_files f2 WHERE f2.item_id = i.id AND f2.duration > 0 ORDER BY f2.height DESC LIMIT 1)
+JOIN media_files f ON f.id = (SELECT f2.id FROM media_files f2 WHERE (f2.item_id = i.id OR f2.id IN (SELECT l.file_id FROM media_file_episodes l WHERE l.item_id = i.id))
+	AND f2.duration > 0 ORDER BY f2.height DESC LIMIT 1)
 LEFT JOIN items sh ON sh.id = i.show_id
 WHERE i.kind IN ('movie','episode') AND `
 

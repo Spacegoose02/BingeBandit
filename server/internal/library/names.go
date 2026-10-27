@@ -168,9 +168,46 @@ func normKey(s string) string {
 	return b.String()
 }
 
-var reExtraEpisode = regexp.MustCompile(`(?i)^[\s._\-]*e\d{1,4}`)
+// reMoreEpisodes matches one more episode right after the S01E01 marker of a
+// multi-episode file, in the ways Sonarr and scene releases write it:
+// S01E01E02, S01E01-E02, S01E01-02 and S01E01.S01E02.
+var reMoreEpisodes = regexp.MustCompile(`(?i)^(?:[\s._-]?e(\d{1,4})|-(\d{1,4})|[._-]?s(\d{1,3})e(\d{1,4}))`)
+
+// maxEpisodesPerFile keeps a stray number (S01E01-1080p is caught by the
+// separator check, S01E01-500 is not) from making hundreds of episodes.
+const maxEpisodesPerFile = 30
+
+// lastEpisode reads the extra episodes that follow a file's first one and
+// returns the last episode number in the file (first when there are none)
+// and the rest of the name after them. Gaps are filled, so S01E01-03 is
+// episodes 1, 2 and 3.
+func lastEpisode(season, first int, rest string) (int, string) {
+	last := first
+	for {
+		m := reMoreEpisodes.FindStringSubmatch(rest)
+		if m == nil {
+			return last, rest
+		}
+		// The number must end there: "S01E01-1080p" is a resolution.
+		if len(rest) > len(m[0]) {
+			if c := rune(rest[len(m[0])]); !isSep(c) && c != 'e' && c != 'E' && c != 's' && c != 'S' {
+				return last, rest
+			}
+		}
+		num := m[1] + m[2] + m[4]
+		if m[3] != "" {
+			if sn, _ := strconv.Atoi(m[3]); sn != season {
+				return last, rest
+			}
+		}
+		n, _ := strconv.Atoi(num)
+		if n <= last || n-first >= maxEpisodesPerFile {
+			return last, rest
+		}
+		last, rest = n, rest[len(m[0]):]
+	}
+}
 
 func episodeTitle(rest string) string {
-	rest = reExtraEpisode.ReplaceAllString(rest, "") // multi-episode files: S01E01E02
 	return cleanTitle(rest)
 }
