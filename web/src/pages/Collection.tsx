@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
+import { KidsApproveCollectionButton } from '../components/KidsApprove'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { smartRuleText } from '../format'
@@ -84,16 +85,19 @@ export default function CollectionPage() {
               <div className="muted">{total} {total === 1 ? 'item' : 'items'}</div>
               {collection.overview && <p className="overview">{collection.overview}</p>}
             </div>
-            {user?.isAdmin && (
-              <div className="actions">
-                <button className="btn btn-glass btn-sm" onClick={() => setEditing(true)}>
-                  <Icon name="edit" size={16} /> Edit
-                </button>
-                <button className="btn btn-glass btn-sm danger" onClick={remove} aria-label="Delete collection">
-                  <Icon name="trash" size={16} />
-                </button>
-              </div>
-            )}
+            <div className="actions">
+              <KidsApproveCollectionButton collection={collection} shows={items[0]?.kind === 'show'} />
+              {user?.isAdmin && (
+                <>
+                  <button className="btn btn-glass btn-sm" onClick={() => setEditing(true)}>
+                    <Icon name="edit" size={16} /> Edit
+                  </button>
+                  <button className="btn btn-glass btn-sm danger" onClick={remove} aria-label="Delete collection">
+                    <Icon name="trash" size={16} />
+                  </button>
+                </>
+              )}
+            </div>
           </header>
           {items.length === 0 && <div className="empty">Nothing in this collection yet.</div>}
           <div className="poster-grid">

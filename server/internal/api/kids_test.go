@@ -203,3 +203,127 @@ func TestKidTitles(t *testing.T) {
 		t.Fatalf("approval not removed: %d", c)
 	}
 }
+
+func TestKidCollections(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	parent, _ := st.CreateUser("dana", "", false)
+	movies := &store.Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	tv := &store.Library{Name: "TV", Kind: "shows", Paths: []string{}}
+	st.CreateLibrary(movies)
+	st.CreateLibrary(tv)
+	kid, _ := st.CreateProfile(parent, "Kids")
+	st.SetKid(kid.ID, true)
+	st.SetUserLibraries(kid.ID, false, nil)
+	st.CreateSession("dana", parent.ID, "Web", "")
+	st.CreateSession("kid", kid.ID, "Web", "")
+	add := func(it *store.Item) int64 {
+		t.Helper()
+		id, err := st.UpsertItem(it)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	toyStory := add(&store.Item{LibraryID: movies.ID, Kind: "movie", Title: "Toy Story", SortTitle: "Toy Story", MatchKey: "m1"})
+	cars := add(&store.Item{LibraryID: movies.ID, Kind: "movie", Title: "Cars", SortTitle: "Cars", MatchKey: "m2"})
+	alien := add(&store.Item{LibraryID: movies.ID, Kind: "movie", Title: "Alien", SortTitle: "Alien", MatchKey: "m3"})
+	bluey := add(&store.Item{LibraryID: tv.ID, Kind: "show", Title: "Bluey", SortTitle: "Bluey", MatchKey: "s1"})
+	st.UpdateMetadata(bluey, &store.Item{Title: "Bluey", Genres: []string{"Kids"}})
+	season := add(&store.Item{LibraryID: tv.ID, Kind: "season", ParentID: bluey, ShowID: bluey, Title: "Season 1", MatchKey: "s1/1"})
+	ep := add(&store.Item{LibraryID: tv.ID, Kind: "episode", ParentID: season, ShowID: bluey, Title: "Magic Xylophone", MatchKey: "s1/1/1"})
+	wire := add(&store.Item{LibraryID: tv.ID, Kind: "show", Title: "The Wire", SortTitle: "Wire", MatchKey: "s2"})
+	st.UpdateMetadata(wire, &store.Item{Title: "The Wire", Genres: []string{"Crime"}})
+	if err := st.SetItemCollections(toyStory, movies.ID, []string{"Pixar"}); err != nil {
+		t.Fatal(err)
+	}
+	cols, _ := st.LibraryCollections(movies.ID)
+	if len(cols) != 1 {
+		t.Fatalf("collections: %+v", cols)
+	}
+	pixar := cols[0].ID
+	kidsTV, err := st.CreateCollection(tv.ID, "Kids TV", store.SmartRules{GenreRule: "Kids"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h := (&Server{Store: st}).Router(context.Background())
+	call := func(token, method, path, body string, out any) int {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if out != nil {
+			json.Unmarshal(rec.Body.Bytes(), out)
+		}
+		return rec.Code
+	}
+	id := func(n int64) string { return strconv.FormatInt(n, 10) }
+
+	if c := call("kid", "GET", "/api/collections/"+id(pixar), "", nil); c != http.StatusNotFound {
+		t.Fatalf("kid opens an unapproved collection: %d", c)
+	}
+	var kids []kidTitleState
+	if c := call("dana", "GET", "/api/collections/"+id(pixar)+"/kids", "", &kids); c != http.StatusOK || len(kids) != 1 || kids[0].Approved {
+		t.Fatalf("kids for parent: %d %+v", c, kids)
+	}
+	for _, c := range []int64{pixar, kidsTV.ID} {
+		if code := call("dana", "PUT", "/api/collections/"+id(c)+"/kids", `{"userIds":[`+id(kid.ID)+`]}`, nil); code != http.StatusNoContent {
+			t.Fatalf("approve collection: %d", code)
+		}
+	}
+	if c := call("kid", "PUT", "/api/collections/"+id(pixar)+"/kids", `{"userIds":[]}`, nil); c != http.StatusNotFound {
+		t.Fatalf("kid changed its own approval: %d", c)
+	}
+	call("dana", "GET", "/api/collections/"+id(pixar)+"/kids", "", &kids)
+	if len(kids) != 1 || !kids[0].Approved {
+		t.Fatalf("not approved: %+v", kids)
+	}
+
+	// The collection's titles open up, and so do ones added to it later.
+	if c := call("kid", "GET", "/api/items/"+id(toyStory), "", nil); c != http.StatusOK {
+		t.Fatalf("kid can't open Toy Story: %d", c)
+	}
+	if c := call("kid", "GET", "/api/items/"+id(cars), "", nil); c != http.StatusNotFound {
+		t.Fatalf("kid sees Cars before it joins: %d", c)
+	}
+	st.SetItemCollections(cars, movies.ID, []string{"Pixar"})
+	if c := call("kid", "GET", "/api/items/"+id(cars), "", nil); c != http.StatusOK {
+		t.Fatalf("kid can't open Cars after it joined: %d", c)
+	}
+	if c := call("kid", "GET", "/api/items/"+id(alien), "", nil); c != http.StatusNotFound {
+		t.Fatalf("kid sees Alien: %d", c)
+	}
+	// A smart collection of shows brings their seasons and episodes.
+	for _, it := range []int64{bluey, season, ep} {
+		if c := call("kid", "GET", "/api/items/"+id(it), "", nil); c != http.StatusOK {
+			t.Errorf("kid can't open %d from Kids TV: %d", it, c)
+		}
+	}
+	var page struct {
+		Items []store.Item `json:"items"`
+	}
+	if c := call("kid", "GET", "/api/collections/"+id(kidsTV.ID), "", &page); c != http.StatusOK || len(page.Items) != 1 || page.Items[0].Title != "Bluey" {
+		t.Fatalf("kid's Kids TV: %d %+v", c, page.Items)
+	}
+
+	var approved []store.Collection
+	call("kid", "GET", "/api/kids/collections?kind=movie", "", &approved)
+	if len(approved) != 1 || approved[0].Name != "Pixar" || approved[0].ItemCount != 2 {
+		t.Fatalf("approved movie collections: %+v", approved)
+	}
+	call("kid", "GET", "/api/kids/collections?kind=show", "", &approved)
+	if len(approved) != 1 || approved[0].Name != "Kids TV" {
+		t.Fatalf("approved show collections: %+v", approved)
+	}
+
+	// Taking it away.
+	call("dana", "PUT", "/api/collections/"+id(pixar)+"/kids", `{"userIds":[]}`, nil)
+	if c := call("kid", "GET", "/api/items/"+id(toyStory), "", nil); c != http.StatusNotFound {
+		t.Fatalf("approval not removed: %d", c)
+	}
+}

@@ -5,7 +5,8 @@ import "database/sql"
 // Kid mode: a user marked as a kid only sees the Live TV channels an admin
 // approved for kids, either one at a time or by the channel's group. Parents
 // can also approve single movies and shows for a kid from libraries the kid
-// can't browse (kid_titles, honoured by visible in items.go).
+// can't browse, one at a time (kid_titles) or a whole collection at once
+// (kid_collections); visible in items.go honours both.
 
 // kidChannels is a condition on channels c for the user bound to its one
 // parameter: anyone who isn't a kid gets every channel (so does uid 0, used
@@ -115,5 +116,50 @@ func (s *Store) SetKidTitle(userID, itemID, by int64, on bool) error {
 		return err
 	}
 	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_titles (user_id, item_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, itemID, by, now())
+	return err
+}
+
+// KidCollections lists the collections approved for a kid from libraries of
+// movies (kind "movie") or shows (kind "show").
+func (s *Store) KidCollections(uid int64, kind string) ([]*Collection, error) {
+	return s.queryCollections(collectionSelect+` JOIN kid_collections kc ON kc.collection_id = c.id AND kc.user_id = ?
+		JOIN libraries l ON l.id = c.library_id AND l.kind = ?
+		ORDER BY `+collectionOrder, uid, kind+"s")
+}
+
+// KidCollectionApproved reports whether collection id is approved for uid.
+func (s *Store) KidCollectionApproved(uid, id int64) bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM kid_collections WHERE user_id = ? AND collection_id = ?`, uid, id).Scan(&n)
+	return n > 0
+}
+
+// KidCollectionUsers lists the users a collection is approved for.
+func (s *Store) KidCollectionUsers(id int64) (map[int64]bool, error) {
+	rows, err := s.db.Query(`SELECT user_id FROM kid_collections WHERE collection_id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, err
+		}
+		out[uid] = true
+	}
+	return out, rows.Err()
+}
+
+// SetKidCollection approves a whole collection for a kid (by is who
+// approved it), or takes the approval away. Titles approved one by one keep
+// their own approval either way.
+func (s *Store) SetKidCollection(userID, id, by int64, on bool) error {
+	if !on {
+		_, err := s.db.Exec(`DELETE FROM kid_collections WHERE user_id = ? AND collection_id = ?`, userID, id)
+		return err
+	}
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_collections (user_id, collection_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, id, by, now())
 	return err
 }

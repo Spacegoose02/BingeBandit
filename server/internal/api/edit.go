@@ -508,7 +508,9 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	if !s.Store.CanSeeLibrary(currentUser(r), c.LibraryID) {
+	// A kid opens a collection a parent approved for them from a library
+	// they can't otherwise browse.
+	if !s.Store.CanSeeLibrary(currentUser(r), c.LibraryID) && !s.Store.KidCollectionApproved(currentUser(r).ID, id) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}

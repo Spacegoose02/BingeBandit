@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
-import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
+import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { Icon, type IconName } from '../icons'
 import { homeBack, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
-import type { HomeData, Item, Library, User } from '../types'
+import type { Collection, HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
@@ -545,15 +545,35 @@ function Search() {
   )
 }
 
-/** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */
+type KidTile = { item: Item } | { collection: Collection }
+
+/** Approved titles and whole collections, mixed by sort title like a library. */
+function kidTiles(items: Item[], collections: Collection[]): KidTile[] {
+  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
+  const keyed: (KidTile & { key: string })[] = [
+    ...collections.map((collection) => ({ collection, key: collection.sortTitle || collection.name })),
+    ...items.map((item) => ({ item, key: item.sortTitle || item.title })),
+  ]
+  return keyed.sort((a, b) => byName(a.key, b.key))
+}
+
+/**
+ * A kid's Approved Movies or Approved Shows: the titles and whole collections
+ * a parent approved for them.
+ */
 function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
   const nav = useNav()
   const path = `/api/kids/titles?kind=${kind}`
+  const colPath = `/api/kids/collections?kind=${kind}`
   const [items, setItems] = useState<Item[] | null>(() => cached<Item[]>(path) ?? null)
+  // An older server has no approved collections: treat that as none.
+  const [collections, setCollections] = useState<Collection[] | null>(() => cached<Collection[]>(colPath) ?? null)
   const [error, setError] = useState('')
   useEffect(() => {
     api.get<Item[]>(path).then(setItems, (e) => setError(e.message))
-  }, [path])
+    api.get<Collection[]>(colPath).then(setCollections, () => setCollections([]))
+  }, [path, colPath])
+  const tiles = items && collections ? kidTiles(items, collections) : null
   // The guide spans the whole screen, so Right from the side menu always
   // finds it and lands on the first poster. Without it, a short list whose
   // posters sit under the open menu had nothing to the right to move to.
@@ -561,17 +581,23 @@ function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
     <TVFocusGuideView style={st.flex} autoFocus>
       <ScrollView contentContainerStyle={st.search}>
         {!!error && <Text style={st.error}>{error}</Text>}
-        {items && items.length === 0 && (
+        {tiles && tiles.length === 0 && (
           <Text style={st.mutedLeft}>Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</Text>
         )}
-        {items && items.length > 0 && (
+        {tiles && tiles.length > 0 && (
           <View style={st.grid}>
-            {items.map((it) => (
-              <View key={it.id} style={st.gridCell}>
-                <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
-                <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
-              </View>
-            ))}
+            {tiles.map((t) =>
+              'collection' in t ? (
+                <View key={`c${t.collection.id}`} style={st.gridCell}>
+                  <CollectionCard collection={t.collection} onPress={() => nav.push({ name: 'collection', id: t.collection.id })} />
+                </View>
+              ) : (
+                <View key={t.item.id} style={st.gridCell}>
+                  <PosterCard item={t.item} onPress={() => nav.push({ name: 'details', id: t.item.id })} />
+                  <Text style={st.gridTitle} numberOfLines={1}>{t.item.title}</Text>
+                </View>
+              ),
+            )}
           </View>
         )}
       </ScrollView>

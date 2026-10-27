@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 )
 
@@ -60,6 +61,13 @@ const memberOf = `(i.library_id = c.library_id AND i.kind IN ('movie','show') AN
 		AND (c.studio_rule = '' OR i.studio = c.studio_rule COLLATE NOCASE)
 		AND (c.year_from = 0 OR i.year >= c.year_from)
 		AND (c.year_to = 0 OR (i.year > 0 AND i.year <= c.year_to)))))`
+
+// memberOfAs is memberOf for item alias item and collection alias coll, for
+// queries that already use i and c for something else.
+func memberOfAs(item, coll string) string {
+	q := regexp.MustCompile(`\bi\.`).ReplaceAllString(memberOf, item+".")
+	return regexp.MustCompile(`\bc\.`).ReplaceAllString(q, coll+".")
+}
 
 const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title,
 	(SELECT COUNT(*) FROM items i WHERE ` + memberOf + `),

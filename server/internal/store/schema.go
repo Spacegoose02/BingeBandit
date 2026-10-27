@@ -809,4 +809,17 @@ ALTER TABLE epg_programs ADD COLUMN rating TEXT NOT NULL DEFAULT '';
 ALTER TABLE epg_programs ADD COLUMN stars TEXT NOT NULL DEFAULT '';
 ALTER TABLE epg_programs ADD COLUMN genres TEXT NOT NULL DEFAULT '';
 `,
+	// 45: whole collections a parent (or an admin) approved for a kid. The
+	// kid gets every title in the collection, including ones added to it
+	// later, and the collection itself under Approved Movies or Shows.
+	`
+CREATE TABLE kid_collections (
+	user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	collection_id INTEGER NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+	added_by      INTEGER NOT NULL DEFAULT 0,
+	created_at    INTEGER NOT NULL,
+	PRIMARY KEY (user_id, collection_id)
+);
+CREATE INDEX kid_collections_collection ON kid_collections(collection_id);
+`,
 }
