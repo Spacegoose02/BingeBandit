@@ -4,24 +4,53 @@
 
 **BingeBandit** is a self-hosted media server that aims to replace Plex, Jellyfin, Dispatcharr and ErsatzTV with one app: your movies and shows, live TV with a real guide and DVR, and custom TV channels built from your own library.
 
-> Status: **Milestone 1 (core media server)** is working. See [docs/ROADMAP.md](docs/ROADMAP.md) for everything that's planned.
+![BingeBandit Home](docs/screenshots/home.webp)
 
-## What works today
+**New here? Read the [user guide](docs/GUIDE.md).** It walks through installing, adding your media, Live TV, profiles, kid mode and the TV apps, with screenshots.
 
-- Movie and TV libraries from any folders, with automatic scanning (and periodic rescans)
-- Filename parsing for `Movie (Year)`, scene-style names, `S01E02`, `1x02`, `Season 01/` folders and `{tmdb-12345}` hints
-- TMDB metadata: posters, backdrops, logos, ratings, genres, cast & crew, trailers, collections, content ratings
-- A Plex-style home: hero spotlight, Continue Watching (with next-episode "On Deck"), Recently Added and Recently Released
-- Movie, show, season and episode pages; mark watched and unwatched; trailer playback
-- A web player that plays directly when the browser can, otherwise transcodes to HLS with FFmpeg
-  - quality switching, audio-track switching and text subtitles
-  - resume, auto-play of the next episode, keyboard shortcuts
-  - hardware encoding (NVENC, Quick Sync, VAAPI, AMF, VideoToolbox) and HDR→SDR tone mapping
-- Users with admin and regular roles, an admin dashboard with Now Playing (local/remote, IP, direct vs transcode, source → target) and library stats
-- **Live TV**: M3U and XMLTV sources, channels with automatic fallback streams, one shared provider connection per channel, a TV guide, a live player with a mini guide, Dispatcharr-style stats, a one-click import of an existing Dispatcharr setup, and M3U/XMLTV output for other apps
-- Watchlist, playlists, watch history, profiles, server statistics, and intro/credits detection with Skip buttons
-- **Plugins** that run as their own processes or containers and use a plugin API ([docs/PLUGINS.md](docs/PLUGINS.md)); Watchlist RSS, Hue Sync (lights follow the screen) and Cinemask Upgrades (find low-quality files and have Cinemask search for better ones) are bundled
-- A single binary with the web UI embedded, for Windows, Linux, macOS and Docker/Unraid
+> BingeBandit is under active development and pre-1.0. See [docs/ROADMAP.md](docs/ROADMAP.md) for what's done and what's planned.
+
+## Features
+
+**Your library**
+- Movie and TV libraries from any folders, picked up automatically as files change
+- Posters, backdrops, ratings, cast, trailers and collections from TMDB, with optional TheTVDB, MDBList, IMDb and Rotten Tomatoes scores
+- A Plex-style Home with Continue Watching, pinned libraries and recommendation rows you choose
+- Collections that follow smart rules or TMDB, Trakt, IMDb and MDBList lists, plus Kometa-style poster overlays
+- Watchlist, shared playlists, watch history, Discover and Sports pages
+
+**Watching**
+- Plays directly when the device can, otherwise transcodes with FFmpeg, including hardware encoding (NVENC, Quick Sync, VAAPI, AMF, VideoToolbox) and HDR to SDR tone mapping
+- Audio and subtitle choice, resume across devices, skip intro and credits, auto-play next episode, Watch Together
+- Apps for Android TV, Google TV, Fire TV and Android phones, an early Roku channel, and a web app that works on phones
+
+**Live TV**
+- M3U and XMLTV sources, channels with automatic backup streams, a cable-box style guide and a DVR
+- Custom 24/7 channels from your own library, one-click import from Dispatcharr, and M3U, XMLTV and Plex tuner output for other apps
+
+**Your household**
+- Users and profiles with "Who's watching?", PINs, passkeys, two-step sign-in and single sign-on
+- Kid mode: kids see only the titles, collections and channels you approve
+- TVs sign in with a code from your phone, so nobody types a password on a remote
+
+**Running it**
+- A single binary with the web app built in, for Windows, Linux, macOS and Docker/Unraid
+- Admin dashboard with Now Playing, statistics, scheduled tasks, backups (optionally to S3), logs and Plex/Tautulli/Trakt import
+- [Plugins](docs/PLUGINS.md) that run as their own processes: Watchlist RSS, Hue Sync, Game Lights and Cinemask Upgrades are bundled
+- An [HTTP API](docs/API.md) for scripts and your own apps
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Movie page](docs/screenshots/movie.webp) | ![Live TV guide](docs/screenshots/live-guide.webp) |
+| **Movie page** | **Live TV guide** |
+| ![Library](docs/screenshots/library.webp) | ![Season page](docs/screenshots/season.webp) |
+| **Library** | **Season page** |
+| ![Kid profile](docs/screenshots/kids-home.webp) | ![Dashboard](docs/screenshots/admin-dashboard.webp) |
+| **Kid profile** | **Admin dashboard** |
+
+The screenshots use made-up titles with generated artwork. More are in the [user guide](docs/GUIDE.md).
 
 ## Run it
 
