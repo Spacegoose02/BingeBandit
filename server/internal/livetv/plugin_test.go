@@ -1,10 +1,13 @@
 package livetv
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -105,5 +108,109 @@ func TestResolveYouTubeFromPage(t *testing.T) {
 	}
 	if _, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCb/live"); err == nil || !strings.Contains(err.Error(), "yt-dlp isn't installed") {
 		t.Fatalf("both failing: %v", err)
+	}
+}
+
+// YouTube's web page often has no hlsManifestUrl now; the player API, asked
+// as one of its apps, still gives one (here the second app asked, after a
+// TV playlist with a JavaScript challenge would be no use).
+func TestResolveYouTubeFromPlayerAPI(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/channel/UCa/live":
+			w.Write([]byte(`<link rel="canonical" href="https://www.youtube.com/watch?v=OQpgz8u7YCA"><script>{"isLiveNow":true}</script>`))
+		case "/youtubei/v1/player":
+			var body struct {
+				VideoID string `json:"videoId"`
+				Context struct {
+					Client struct {
+						ClientName string `json:"clientName"`
+					} `json:"client"`
+				} `json:"context"`
+			}
+			json.NewDecoder(r.Body).Decode(&body)
+			if body.VideoID != "OQpgz8u7YCA" {
+				t.Errorf("video %q", body.VideoID)
+			}
+			switch body.Context.Client.ClientName {
+			case "VISIONOS":
+				w.Write([]byte(`{"playabilityStatus":{"status":"OK"},"streamingData":{}}`))
+				return
+			case "TVHTML5":
+				t.Error("asked the TV app after iOS answered")
+			}
+			fmt.Fprintf(w, `{"playabilityStatus":{"status":"OK"},"streamingData":{"hlsManifestUrl":"%s/api/manifest/hls_variant/id/1"}}`, srv.URL)
+		case "/api/manifest/hls_variant/id/1":
+			w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=4500000,RESOLUTION=1280x720\n/v/720.m3u8\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	oldBin, oldClient := YTDLP, youtubeClient
+	YTDLP, youtubeClient = "no-such-yt-dlp", srv.Client()
+	defer func() { YTDLP, youtubeClient = oldBin, oldClient }()
+
+	got, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCa/live")
+	if err != nil || got != srv.URL+"/v/720.m3u8" {
+		t.Fatalf("resolved %q %v", got, err)
+	}
+}
+
+func TestPickYouTubeHLS(t *testing.T) {
+	formats := []ytdlpFormat{
+		{URL: "dash-video", Protocol: "http_dash_segments", VCodec: "avc1", ACodec: "none", Height: 1080},
+		{URL: "480", Protocol: "m3u8_native", VCodec: "avc1", ACodec: "mp4a", Height: 480},
+		{URL: "1080", Protocol: "m3u8_native", VCodec: "avc1", ACodec: "mp4a", Height: 1080},
+		{URL: "2160", Protocol: "m3u8_native", VCodec: "vp9", ACodec: "mp4a", Height: 2160},
+	}
+	if got := pickHLS(formats); got != "1080" {
+		t.Fatalf("picked %q", got)
+	}
+	if got := pickHLS(formats[:1]); got != "" {
+		t.Fatalf("picked %q from DASH only", got)
+	}
+}
+
+func TestYouTubeVideoID(t *testing.T) {
+	for link, want := range map[string]string{
+		"https://www.youtube.com/watch?v=OQpgz8u7YCA": "OQpgz8u7YCA",
+		"https://youtu.be/OQpgz8u7YCA":                "OQpgz8u7YCA",
+		"https://www.youtube.com/live/OQpgz8u7YCA":    "OQpgz8u7YCA",
+		"https://www.youtube.com/channel/UCa/live":    "",
+	} {
+		if got := videoID(link); got != want {
+			t.Errorf("%s: %q", link, got)
+		}
+	}
+}
+
+func TestYTDLPMessage(t *testing.T) {
+	stderr := "WARNING: [youtube] No supported JavaScript runtime could be found\nERROR: [youtube] x: Requested format is not available\n"
+	if got := ytdlpMessage(stderr, nil); got != "[youtube] x: Requested format is not available ([youtube] No supported JavaScript runtime could be found)" {
+		t.Fatalf("%q", got)
+	}
+}
+
+// yt-dlp's JSON is read instead of failing on a format request: here
+// there's DASH it can't use and an HLS stream with sound and picture.
+func TestYTDLPHLSFromJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as yt-dlp")
+	}
+	bin := filepath.Join(t.TempDir(), "yt-dlp")
+	script := `#!/bin/sh
+echo 'WARNING: [youtube] something is missing' >&2
+echo '{"id":"OQpgz8u7YCA","formats":[{"url":"dash","protocol":"http_dash_segments","vcodec":"avc1","acodec":"none","height":1080},{"url":"hls720","protocol":"m3u8_native","vcodec":"avc1","acodec":"mp4a","height":720}]}'
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := YTDLP
+	YTDLP = bin
+	defer func() { YTDLP = old }()
+	if got, err := ytdlpHLS(t.Context(), "https://www.youtube.com/channel/UCa/live"); err != nil || got != "hls720" {
+		t.Fatalf("got %q %v", got, err)
 	}
 }
