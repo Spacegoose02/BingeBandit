@@ -16,7 +16,7 @@ interface KidState {
 
 /**
  * Button and dialog for a parent (or an admin) to approve a movie or show for
- * kid profiles, who then find it under Kids Movies or Kids Shows even
+ * kid profiles, who then find it under Approved Movies or Approved Shows even
  * without access to its library.
  */
 export function KidsApproveButton({ item }: { item: Item }) {
@@ -53,7 +53,7 @@ function KidsDialog({ item, kids, onClose }: { item: Item; kids: KidState[]; onC
   const [picked, setPicked] = useState(new Set(kids.filter((k) => k.approved).map((k) => k.id)))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const where = item.kind === 'show' ? 'Kids Shows' : 'Kids Movies'
+  const where = item.kind === 'show' ? 'Approved Shows' : 'Approved Movies'
 
   const toggle = (id: number) => {
     const next = new Set(picked)

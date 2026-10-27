@@ -20,7 +20,7 @@ export interface User {
   totpEnabled: boolean
   shareActivity: boolean
   liveTV: boolean // may watch Live TV and use the DVR
-  kid: boolean // only sees Live TV channels approved for kids, and gets Kids Movies and Kids Shows
+  kid: boolean // only sees Live TV channels approved for kids, and gets Approved Movies and Approved Shows
   hasPassword: boolean
   hasPasscode: boolean
   ownerId?: number // set for a profile: the account it belongs to
@@ -40,7 +40,7 @@ export interface Member {
   avatar?: string
   /** The account opens as this member without asking who's watching. */
   auto?: boolean
-  /** Only sees Live TV channels approved for kids, and gets Kids Movies and Kids Shows. */
+  /** Only sees Live TV channels approved for kids, and gets Approved Movies and Approved Shows. */
   kid?: boolean
   allLibraries: boolean
   libraryIds?: number[]

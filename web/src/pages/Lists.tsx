@@ -33,9 +33,9 @@ export function WatchlistPage() {
   )
 }
 
-/** A kid's Kids Movies or Kids Shows: the titles a parent approved for them. */
+/** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */
 export function KidsTitlesPage({ kind }: { kind: 'movie' | 'show' }) {
-  const title = kind === 'movie' ? 'Kids Movies' : 'Kids Shows'
+  const title = kind === 'movie' ? 'Approved Movies' : 'Approved Shows'
   useDocumentTitle(title)
   const { data } = useApi<Item[]>(`/api/kids/titles?kind=${kind}`)
   return (

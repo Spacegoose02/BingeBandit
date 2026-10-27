@@ -75,11 +75,11 @@ export default function Layout() {
             <>
               <NavLink to="/kids/movies" className="nav-item">
                 <Icon name="film" />
-                <span>Kids Movies</span>
+                <span>Approved Movies</span>
               </NavLink>
               <NavLink to="/kids/shows" className="nav-item">
                 <Icon name="tv" />
-                <span>Kids Shows</span>
+                <span>Approved Shows</span>
               </NavLink>
             </>
           )}

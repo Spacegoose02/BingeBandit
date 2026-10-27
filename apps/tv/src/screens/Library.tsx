@@ -403,11 +403,11 @@ export function CollectionScreen({ id }: { id: number }) {
         busy={busy}
         onEnd={next}
         // The same-named collections in other libraries, once every title
-        // here has loaded: "Marvel Universe in Kids Movies".
+        // here has loaded: "Marvel Universe in Kids Movies". Just its titles,
+        // not a card for that collection: you're already in this one.
         footer={items.length >= total || ended.current ? <>{data.others?.map((o) => (
           <Row key={o.collection.id} title={`${o.collection.name} in ${o.library}`}>
             {o.items.map((it) => <PosterCard key={it.id} item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />)}
-            <CollectionCard collection={o.collection} onPress={() => nav.push({ name: 'collection', id: o.collection.id })} />
           </Row>
         ))}</> : null}
         header={

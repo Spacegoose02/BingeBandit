@@ -19,7 +19,7 @@ import Sports from './Sports'
 // menu while it's open.
 type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'settings' | 'more' | `lib:${number}`
 type MenuPrefs = { hiddenTabs?: HideableTab[] | null }
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Kids Movies', kidsShows: 'Kids Shows', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -158,10 +158,10 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   }
   // Tabs this person turned off, kept with their other preferences so they
   // follow the profile to every TV and phone.
-  const [hidden, setHidden] = useState<HideableTab[]>(() => cached<MenuPrefs>('/api/me/prefs')?.hiddenTabs ?? [])
+  const [hidden, setHidden] = useState<HideableTab[]>(() => cached<MenuPrefs>('/api/me/prefs')?.hiddenTabs ?? ['sports'])
   useEffect(() => {
     api.get<MenuPrefs>('/api/me/prefs').then((p) => {
-      const h = p.hiddenTabs ?? []
+      const h = p.hiddenTabs ?? ['sports'] // Sports starts under More
       setHidden(h)
       if ((h as Tab[]).includes(lastTab)) setTab('home')
     }, () => undefined)
@@ -545,7 +545,7 @@ function Search() {
   )
 }
 
-/** A kid's Kids Movies or Kids Shows: the titles a parent approved for them. */
+/** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */
 function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
   const nav = useNav()
   const path = `/api/kids/titles?kind=${kind}`
@@ -554,23 +554,28 @@ function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
   useEffect(() => {
     api.get<Item[]>(path).then(setItems, (e) => setError(e.message))
   }, [path])
+  // The guide spans the whole screen, so Right from the side menu always
+  // finds it and lands on the first poster. Without it, a short list whose
+  // posters sit under the open menu had nothing to the right to move to.
   return (
-    <ScrollView contentContainerStyle={st.search}>
-      {!!error && <Text style={st.error}>{error}</Text>}
-      {items && items.length === 0 && (
-        <Text style={st.mutedLeft}>Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</Text>
-      )}
-      {items && items.length > 0 && (
-        <View style={st.grid}>
-          {items.map((it) => (
-            <View key={it.id} style={st.gridCell}>
-              <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
-              <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+    <TVFocusGuideView style={st.flex} autoFocus>
+      <ScrollView contentContainerStyle={st.search}>
+        {!!error && <Text style={st.error}>{error}</Text>}
+        {items && items.length === 0 && (
+          <Text style={st.mutedLeft}>Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</Text>
+        )}
+        {items && items.length > 0 && (
+          <View style={st.grid}>
+            {items.map((it) => (
+              <View key={it.id} style={st.gridCell}>
+                <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
+                <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </TVFocusGuideView>
   )
 }
 

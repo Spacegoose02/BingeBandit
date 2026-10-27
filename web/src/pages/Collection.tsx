@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { PosterCard } from '../components/Cards'
@@ -102,12 +102,9 @@ export default function CollectionPage() {
             ))}
           </div>
           <div ref={sentinel} style={{ height: 1 }} />
+          {/* Just the titles: this is already the collection, so no link to its namesake. */}
           {data.others?.map((o) => (
-            <Row
-              key={o.collection.id}
-              title={`${o.collection.name} in ${o.library}`}
-              action={<Link to={`/collection/${o.collection.id}`} className="muted small">See all</Link>}
-            >
+            <Row key={o.collection.id} title={`${o.collection.name} in ${o.library}`}>
               {o.items.map((it) => (
                 <PosterCard key={it.id} item={it} />
               ))}

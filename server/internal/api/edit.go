@@ -541,8 +541,13 @@ type otherCollection struct {
 	Items      []*store.Item     `json:"items"`
 }
 
+// sameNamedTitles caps a same-named collection's row. The row lists the
+// titles themselves, with no link to the other collection, so it holds all
+// of them for any real collection.
+const sameNamedTitles = 500
+
 // sameNamedRows are the same-named collections in the libraries u may see,
-// each with its first titles; ones with nothing u may see are left out, so a
+// each with its titles; ones with nothing u may see are left out, so a
 // kid with only Kids Movies never sees a "Marvel Universe in Movies" row.
 func (s *Server) sameNamedRows(u *store.User, id int64) []otherCollection {
 	out := []otherCollection{}
@@ -558,7 +563,7 @@ func (s *Server) sameNamedRows(u *store.User, id int64) []otherCollection {
 		if err != nil {
 			continue
 		}
-		items, err := s.Store.CollectionPage(u.ID, c.ID, 0, rowSize)
+		items, err := s.Store.CollectionPage(u.ID, c.ID, 0, sameNamedTitles)
 		if err != nil || len(items) == 0 {
 			continue
 		}
