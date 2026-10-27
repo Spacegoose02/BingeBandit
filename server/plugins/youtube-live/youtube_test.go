@@ -38,6 +38,13 @@ func TestLook(t *testing.T) {
 			} else {
 				w.Write([]byte(`<link rel="canonical" href="https://www.youtube.com/channel/` + alice + `">`))
 			}
+		case "/channel/" + alice + "/streams":
+			// Alice streams twice at once: the one /live shows, and another.
+			if aliceLive {
+				w.Write([]byte(`{"videoRenderer":{"videoId":"abcdefghijk","title":{"runs":[{"text":"Speedrun night"}]},"style":"LIVE"},
+					{"videoRenderer":{"videoId":"second00001","title":{"runs":[{"text":"Cam 2 \u0026 chat"}]},"badges":[{"style":"BADGE_STYLE_TYPE_LIVE_NOW"}]},
+					{"videoRenderer":{"videoId":"oldvideo001","title":{"runs":[{"text":"Last week"}]},"style":"DEFAULT"}`))
+			}
 		case "/channel/" + bob + "/live":
 			// An upcoming stream sits on /live too, but isn't on yet.
 			w.Write([]byte(`<link rel="canonical" href="https://www.youtube.com/watch?v=zzzzzzzzzzz">"liveBroadcastDetails":{"isLiveNow":false}`))
@@ -50,7 +57,9 @@ func TestLook(t *testing.T) {
 	// Without yt-dlp the /live page is read.
 	old := ytdlpLive
 	ytdlpLive = func(context.Context, string) (liveState, bool) { return liveState{}, false }
-	defer func() { ytdlpLive = old }()
+	oldStreams := ytdlpStreams
+	ytdlpStreams = func(context.Context, string) ([]liveState, bool) { return nil, false }
+	defer func() { ytdlpLive, ytdlpStreams = old, oldStreams }()
 
 	a := newApp()
 	a.p = &bbplugin.Plugin{Manifest: manifest}
@@ -59,14 +68,18 @@ func TestLook(t *testing.T) {
 	var group string
 	a.send = func(_ context.Context, g string, c []channel) error { group, sent = g, c; return nil }
 	a.look(context.Background())
-	if group != "YouTube Live" || len(sent) != 2 {
+	if group != "YouTube Live" || len(sent) != 3 {
 		t.Fatalf("sent %q %+v", group, sent)
 	}
 	if s := sent[0]; s.Key != alice || s.Name != "Alice & Co" || !s.Live || s.Title != "Speedrun night" || s.StartedAt != 1793124000 ||
 		s.URL != "https://www.youtube.com/channel/"+alice+"/live" || s.Logo != "https://yt3.example/a.jpg" {
 		t.Errorf("alice: %+v", s)
 	}
-	if s := sent[1]; s.Key != bob || s.Live {
+	if s := sent[1]; s.Key != alice+".second00001" || s.Name != "Alice & Co (2)" || !s.Live || s.Title != "Cam 2 & chat" ||
+		s.URL != "https://www.youtube.com/watch?v=second00001" {
+		t.Errorf("alice's second stream: %+v", s)
+	}
+	if s := sent[2]; s.Key != bob || s.Live {
 		t.Errorf("bob (upcoming only): %+v", s)
 	}
 	if y := a.people["https://example.com/nope"]; y == nil || y.Error == "" {
@@ -77,8 +90,8 @@ func TestLook(t *testing.T) {
 	aliceLive = false
 	mu.Unlock()
 	a.look(context.Background())
-	if sent[0].Live {
-		t.Errorf("alice stopped: %+v", sent[0])
+	if sent[0].Live || len(sent) != 2 {
+		t.Errorf("alice stopped, and her second channel should go: %+v", sent)
 	}
 
 	// The status page lists them.
@@ -106,5 +119,12 @@ func TestParseYTDLP(t *testing.T) {
 	}
 	if _, ok := parseYTDLP("", "ERROR: Unable to download API page\n", errors.New("exit 1")); ok {
 		t.Error("a network error should fall back to reading the page")
+	}
+}
+
+func TestParseStreams(t *testing.T) {
+	got := parseStreams("is_live\tabcdefghijk\tMain cam\nwas_live\tolder000001\tYesterday\nis_live\tsecond00001\tCam 2\tchat\n")
+	if len(got) != 2 || got[0].VideoID != "abcdefghijk" || got[1].Title != "Cam 2\tchat" {
+		t.Errorf("%+v", got)
 	}
 }

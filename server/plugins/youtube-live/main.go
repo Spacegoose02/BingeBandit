@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os/exec"
 	"strconv"
@@ -20,7 +21,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "youtube-live",
 	Name:        "YouTube Live",
-	Version:     "1.0.1",
+	Version:     "1.1.0",
 	Description: "Live TV channels for the YouTubers you pick, shown in the guide while they're live.",
 	Author:      "BingeBandit",
 	Settings: []bbplugin.Setting{
@@ -36,14 +37,15 @@ var manifest = bbplugin.Manifest{
 
 // youtuber is one listed channel and what the last look found.
 type youtuber struct {
-	Input     string    `json:"input"`
-	ID        string    `json:"id,omitempty"`
-	Name      string    `json:"name,omitempty"`
-	Avatar    string    `json:"avatar,omitempty"`
-	profileAt time.Time // when Name and Avatar were read
-	Live      liveState `json:"live"`
-	Error     string    `json:"error,omitempty"`
-	Checked   time.Time `json:"checked"`
+	Input     string      `json:"input"`
+	ID        string      `json:"id,omitempty"`
+	Name      string      `json:"name,omitempty"`
+	Avatar    string      `json:"avatar,omitempty"`
+	profileAt time.Time   // when Name and Avatar were read
+	Live      liveState   `json:"live"`
+	More      []liveState `json:"more,omitempty"` // other streams on at the same time
+	Error     string      `json:"error,omitempty"`
+	Checked   time.Time   `json:"checked"`
 }
 
 // channel is what the plugin API's PUT /live/channels takes for each.
@@ -208,6 +210,13 @@ func (a *app) look(ctx context.Context) {
 				y.Live = st
 			}
 		}
+		if !y.Live.Live {
+			y.More = nil
+		} else if y.Error == "" {
+			if more, err := moreLive(ctx, y.ID, y.Live.VideoID); err == nil {
+				y.More = more
+			} // else keep the last list for one bad look
+		}
 		y.Checked = time.Now()
 		a.mu.Lock()
 		if cur := a.people[in]; cur != nil {
@@ -220,6 +229,11 @@ func (a *app) look(ctx context.Context) {
 		seen[y.ID] = true
 		chans = append(chans, channel{Key: y.ID, Name: y.Name, Logo: y.Avatar, URL: "https://www.youtube.com/channel/" + y.ID + "/live",
 			Live: y.Live.Live, Title: y.Live.Title, Description: y.Live.Description, StartedAt: y.Live.StartedAt})
+		// Each other stream on at once gets a channel of its own while it lasts.
+		for i, m := range y.More {
+			chans = append(chans, channel{Key: y.ID + "." + m.VideoID, Name: fmt.Sprintf("%s (%d)", y.Name, i+2), Logo: y.Avatar,
+				URL: "https://www.youtube.com/watch?v=" + m.VideoID, Live: true, Title: m.Title})
+		}
 	}
 	if chans == nil {
 		chans = []channel{}
