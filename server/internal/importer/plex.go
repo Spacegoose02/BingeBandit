@@ -48,31 +48,35 @@ type plexMedia struct {
 }
 
 type plexMeta struct {
-	RatingKey            string      `json:"ratingKey"`
-	Key                  string      `json:"key"`
-	Type                 string      `json:"type"`
-	Title                string      `json:"title"`
-	Summary              string      `json:"summary"`
-	Year                 int         `json:"year"`
-	GrandparentTitle     string      `json:"grandparentTitle"`
-	GrandparentRatingKey string      `json:"grandparentRatingKey"`
-	GrandparentKey       string      `json:"grandparentKey"`
-	ParentRatingKey      string      `json:"parentRatingKey"`
-	ParentTitle          string      `json:"parentTitle"`
-	ParentYear           int         `json:"parentYear"`
-	Thumb                string      `json:"thumb"` // poster, a path on the server
-	Art                  string      `json:"art"`   // background
-	ParentIndex          int         `json:"parentIndex"`
-	Index                int         `json:"index"`
-	Duration             int64       `json:"duration"` // ms
-	ViewCount            int         `json:"viewCount"`
-	ViewOffset           int64       `json:"viewOffset"` // ms
-	LastViewedAt         int64       `json:"lastViewedAt"`
-	ViewedAt             int64       `json:"viewedAt"`
-	AccountID            int         `json:"accountID"`
-	HistoryKey           string      `json:"historyKey"`
-	Guid                 []plexGuid  `json:"Guid"`
-	Media                []plexMedia `json:"Media"`
+	RatingKey            string     `json:"ratingKey"`
+	Key                  string     `json:"key"`
+	Type                 string     `json:"type"`
+	Title                string     `json:"title"`
+	Summary              string     `json:"summary"`
+	Year                 int        `json:"year"`
+	GrandparentTitle     string     `json:"grandparentTitle"`
+	GrandparentRatingKey string     `json:"grandparentRatingKey"`
+	GrandparentKey       string     `json:"grandparentKey"`
+	ParentRatingKey      string     `json:"parentRatingKey"`
+	ParentTitle          string     `json:"parentTitle"`
+	ParentYear           int        `json:"parentYear"`
+	Thumb                string     `json:"thumb"` // poster, a path on the server
+	Art                  string     `json:"art"`   // background
+	ParentIndex          int        `json:"parentIndex"`
+	Index                int        `json:"index"`
+	Duration             int64      `json:"duration"` // ms
+	ViewCount            int        `json:"viewCount"`
+	ViewOffset           int64      `json:"viewOffset"` // ms
+	LastViewedAt         int64      `json:"lastViewedAt"`
+	ViewedAt             int64      `json:"viewedAt"`
+	AccountID            int        `json:"accountID"`
+	HistoryKey           string     `json:"historyKey"`
+	Guid                 []plexGuid `json:"Guid"`
+	// LegacyGuid is the item's own guid string. Items matched by Plex's old
+	// agents carry their ids only here (com.plexapp.agents.imdb://tt…). It
+	// also keeps "guid" from being folded onto Guid, which can't hold a string.
+	LegacyGuid string      `json:"guid"`
+	Media      []plexMedia `json:"Media"`
 }
 
 type plexContainer struct {
@@ -228,14 +232,53 @@ func (p *Plex) details(ctx context.Context, ratingKey string) *plexMeta {
 	return m
 }
 
-func guidTMDB(gs []plexGuid) int64 {
-	for _, g := range gs {
-		if v, ok := strings.CutPrefix(g.ID, "tmdb://"); ok {
-			n, _ := strconv.ParseInt(v, 10, 64)
-			return n
+// plexIDs are an item's ids on TMDB, IMDb and TheTVDB, as far as Plex knows them.
+type plexIDs struct {
+	TMDB int64
+	IMDB string
+	TVDB int64
+}
+
+func (m *plexMeta) ids() plexIDs {
+	var ids plexIDs
+	for _, g := range m.Guid {
+		ids.add(g.ID)
+	}
+	if m.LegacyGuid != "" {
+		ids.add(m.LegacyGuid)
+	}
+	return ids
+}
+
+// add reads one guid: the new agents' "tmdb://123", "imdb://tt…" and
+// "tvdb://123", or an old agent's "com.plexapp.agents.themoviedb://123?lang=en".
+// The first id of each kind wins.
+func (ids *plexIDs) add(guid string) {
+	scheme, v, ok := strings.Cut(guid, "://")
+	if !ok {
+		return
+	}
+	v, _, _ = strings.Cut(v, "?")
+	v, _, _ = strings.Cut(v, "/") // an episode's old guid goes on to /season/episode
+	switch strings.TrimPrefix(scheme, "com.plexapp.agents.") {
+	case "tmdb", "themoviedb":
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && ids.TMDB == 0 {
+			ids.TMDB = n
+		}
+	case "imdb":
+		if strings.HasPrefix(v, "tt") && ids.IMDB == "" {
+			ids.IMDB = v
+		}
+	case "tvdb", "thetvdb":
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && ids.TVDB == 0 {
+			ids.TVDB = n
 		}
 	}
-	return 0
+}
+
+// set puts the ids on a movie or show record.
+func (ids plexIDs) set(r *Record) {
+	r.TMDB, r.IMDB, r.TVDB = ids.TMDB, ids.IMDB, ids.TVDB
 }
 
 func firstFile(ms []plexMedia) string {
@@ -267,7 +310,7 @@ func (p *Plex) record(ctx context.Context, m *plexMeta) Record {
 			r.Duration = float64(d.Duration) / 1000
 		}
 		if m.Type == "movie" || m.Type == "show" {
-			r.TMDB = guidTMDB(d.Guid)
+			d.ids().set(&r)
 		}
 		if m.GrandparentRatingKey == "" {
 			m.GrandparentRatingKey = d.GrandparentRatingKey
@@ -282,7 +325,7 @@ func (p *Plex) record(ctx context.Context, m *plexMeta) Record {
 			gk = ratingKeyFromKey(m.GrandparentKey)
 		}
 		if show := p.details(ctx, gk); show != nil {
-			r.TMDB = guidTMDB(show.Guid)
+			r.TMDB = show.ids().TMDB
 			r.ShowYear = show.Year
 			if r.ShowTitle == "" {
 				r.ShowTitle = show.Title
@@ -452,14 +495,16 @@ func (p *Plex) Artwork(ctx context.Context, emit func(Art) error, progress func(
 				a := Art{Poster: m.Thumb, Backdrop: m.Art}
 				switch m.Type {
 				case "movie":
-					a.Record = Record{Kind: "movie", Title: m.Title, Year: m.Year, TMDB: guidTMDB(m.Guid), File: firstFile(m.Media)}
+					a.Record = Record{Kind: "movie", Title: m.Title, Year: m.Year, File: firstFile(m.Media)}
+					m.ids().set(&a.Record)
 				case "show":
 					shows[m.RatingKey] = m
-					a.Record = Record{Kind: "show", Title: m.Title, Year: m.Year, TMDB: guidTMDB(m.Guid)}
+					a.Record = Record{Kind: "show", Title: m.Title, Year: m.Year}
+					m.ids().set(&a.Record)
 				case "season":
 					a.Record = Record{Kind: "season", ShowTitle: m.ParentTitle, ShowYear: m.ParentYear, Season: m.Index}
 					if show := shows[m.ParentRatingKey]; show != nil {
-						a.ShowTitle, a.ShowYear, a.TMDB = show.Title, show.Year, guidTMDB(show.Guid)
+						a.ShowTitle, a.ShowYear, a.TMDB = show.Title, show.Year, show.ids().TMDB
 						if a.Backdrop == show.Art {
 							a.Backdrop = "" // Plex hands seasons their show's background
 						}
