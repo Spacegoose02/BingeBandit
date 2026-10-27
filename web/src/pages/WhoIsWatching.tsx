@@ -6,7 +6,7 @@ import { Avatar } from '../components/Avatar'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
 import type { Member, User } from '../types'
-import { donePicking } from '../profilePick'
+import { donePicking, stayingAs } from '../profilePick'
 
 export default function WhoIsWatching() {
   useDocumentTitle("Who's watching?")
@@ -37,6 +37,8 @@ export default function WhoIsWatching() {
     }
     // One person in the household: nothing to pick.
     if (members.length < 2) return leave()
+    // This browser opens as whoever chose to stay signed in here.
+    if (state?.opening && members.some((m) => m.current && m.id === stayingAs())) return leave()
     const auto = state?.opening ? members.find((m) => m.auto) : undefined
     if (auto?.current) return leave()
     if (auto && !auto.hasPin) {

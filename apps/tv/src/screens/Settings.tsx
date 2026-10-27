@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { ApiError, api, current } from '../api'
+import { ApiError, api, current, saveSession } from '../api'
 import { Button, Focusable } from '../components'
 import { hueArea, hueSyncOn, setHueArea, setHueSync, type MenuPosition } from '../devicePrefs'
 import { Icon } from '../icons'
@@ -251,7 +251,7 @@ type Guard = (change: () => Promise<unknown>) => Promise<boolean>
 /**
  * Who's watching, PINs and the settings passcode. The account manages its
  * profiles' PINs and which member the app opens as; a profile sees only its
- * own passcode.
+ * own PIN. Anyone can have this device open straight as them.
  */
 function ProfilesSection({ guard }: { guard: Guard }) {
   const [members, setMembers] = useState<Member[] | null>(null)
@@ -273,6 +273,18 @@ function ProfilesSection({ guard }: { guard: Guard }) {
     )
   const me = members?.find((m) => m.current)
   const owner = !!me?.isOwner
+  const household = !!members && members.length > 1
+  // This device opens as whoever is signed in, skipping "Who's watching?".
+  // Switching profile here starts a new session without it, so the next
+  // person to open the app is asked (and for the PIN) again.
+  const [stay, setStay] = useState(() => !!current()?.profileChosen)
+  const toggleStay = async () => {
+    const s = current()
+    if (!s) return
+    await saveSession({ ...s, profileChosen: !stay })
+    setStay(!stay)
+    setMsg(!stay ? `${isPhone ? 'This phone' : 'This TV'} opens as ${me?.name ?? 'you'} now.` : "Asks who's watching when the app opens.")
+  }
   const auto = members?.find((m) => m.auto)
   // OK steps through "Ask who's watching" and each member.
   const nextAuto = () => {
@@ -298,7 +310,20 @@ function ProfilesSection({ guard }: { guard: Guard }) {
   return (
     <>
       {!!msg && <Text style={st.msg}>{msg}</Text>}
-      {owner && members && members.length > 1 && (
+      {household && me && (
+        <Focusable onPress={toggleStay} style={st.option}>
+          <Text style={st.value}>
+            Sign in as {me.name} on {isPhone ? 'this phone' : 'this TV'}: {stay ? 'On' : 'Off'}
+          </Text>
+          <Text style={st.hint}>
+            {stay
+              ? `Opens straight as ${me.name}, without "Who's watching?" or a PIN. Switching profile turns it off.`
+              : `Skip "Who's watching?" here and open as ${me.name} every time.`}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to turn it {stay ? 'off' : 'on'}.
+          </Text>
+        </Focusable>
+      )}
+      {owner && household && (
         <Focusable onPress={nextAuto} style={st.option}>
           <Text style={st.value}>When the app opens: {auto ? `sign in as ${auto.name}` : "ask who's watching"}</Text>
           <Text style={st.hint}>
@@ -319,11 +344,25 @@ function ProfilesSection({ guard }: { guard: Guard }) {
               </View>
             </View>
           ))}
-      {passcode && (
+      {passcode && household && me && (
+        <View style={st.option}>
+          <Text style={st.value}>Your PIN ({me.name}): {passcode.set ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {passcode.set
+              ? `Switching to ${me.name} asks for it, and so does changing ${owner ? 'settings, profiles and the server' : 'your settings'}.`
+              : `Anyone can switch to ${me.name} now. Add a PIN so only you can.`}
+          </Text>
+          <View style={st.buttons}>
+            <Button small label={passcode.set ? 'Change PIN' : 'Add a PIN'} onPress={() => setEntering({ title: 'Choose a 4 to 8 digit PIN', save: (code) => api.put('/api/me/passcode', { passcode: code }) })} />
+            {passcode.set && <Button small label="Remove PIN" onPress={() => run(() => api.del('/api/me/passcode'), `${me.name} has no PIN now.`)} />}
+            {passcode.set && passcode.unlocked && <Button small label="Lock now" onPress={() => run(() => api.post('/api/me/passcode/lock'), 'Locked.')} />}
+          </View>
+        </View>
+      )}
+      {passcode && !household && (
         <View style={st.option}>
           <Text style={st.value}>Settings passcode: {passcode.set ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
-            {owner ? 'Also the PIN for switching to you. ' : ''}
             {passcode.set
               ? 'Changing settings, profiles and the server asks for it first.'
               : 'Ask for a code before anyone changes settings on this account, so kids can\'t.'}
@@ -335,7 +374,7 @@ function ProfilesSection({ guard }: { guard: Guard }) {
           </View>
         </View>
       )}
-      {!owner && members && members.length > 1 && <Text style={st.hint}>The account that owns this profile manages the profiles' PINs.</Text>}
+      {!owner && household && <Text style={st.hint}>The account that owns this profile can also change or remove your PIN.</Text>}
     </>
   )
 }

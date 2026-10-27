@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { Outlet } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
+import { useApi } from '../hooks'
+import type { Member } from '../types'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
 
@@ -137,13 +139,26 @@ export function PasscodeSettings() {
   const [value, setValue] = useState('')
   const [editing, setEditing] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  // With profiles, the passcode is also the PIN for switching to this member.
+  const { data: members } = useApi<Member[]>('/api/household')
   if (!user) return null
+  const pin = !!members && members.length > 1
+  const name = user.profileName ?? user.username
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
     try {
       await api.put('/api/me/passcode', { passcode: value })
-      setMsg({ ok: true, text: user.hasPasscode ? 'Passcode changed.' : 'Passcode set. Other browsers and devices now need it to change settings.' })
+      setMsg({
+        ok: true,
+        text: pin
+          ? user.hasPasscode
+            ? 'PIN changed.'
+            : `PIN set. Switching to ${name} now asks for it.`
+          : user.hasPasscode
+            ? 'Passcode changed.'
+            : 'Passcode set. Other browsers and devices now need it to change settings.',
+      })
       setValue('')
       setEditing(false)
       refresh()
@@ -152,9 +167,9 @@ export function PasscodeSettings() {
     }
   }
   const remove = async () => {
-    if (!confirm('Remove the settings passcode? Anyone signed in as you can then change settings.')) return
+    if (!confirm(pin ? `Remove your PIN? Anyone can then switch to ${name} and change its settings.` : 'Remove the settings passcode? Anyone signed in as you can then change settings.')) return
     await api.del('/api/me/passcode').catch((e) => alert(e.message))
-    setMsg({ ok: true, text: 'Passcode removed.' })
+    setMsg({ ok: true, text: pin ? 'PIN removed.' : 'Passcode removed.' })
     refresh()
   }
   const lockNow = async () => {
@@ -164,7 +179,13 @@ export function PasscodeSettings() {
 
   return (
     <div className="panel form" style={{ marginBottom: 20 }}>
-      <h3>Settings passcode</h3>
+      <h3>{pin ? 'Your PIN' : 'Settings passcode'}</h3>
+      {pin && (
+        <p className="muted small">
+          Switching to {name} from "Who's watching?" asks for this 4 to 8 digit PIN, on the web and on TVs. It's also your settings
+          passcode.
+        </p>
+      )}
       <p className="muted small">
         Lock your account settings{user.isAdmin && ' and the server admin pages'} behind a 4 to 8 digit passcode, so whoever uses this
         account can watch but not change anything. Once entered, settings stay unlocked for 15 minutes of use. Apps and API keys
@@ -179,13 +200,13 @@ export function PasscodeSettings() {
             pattern="[0-9]{4,8}"
             minLength={4}
             maxLength={8}
-            placeholder={user.hasPasscode ? 'New passcode' : 'Choose a passcode'}
+            placeholder={pin ? (user.hasPasscode ? 'New PIN' : 'Choose a PIN') : user.hasPasscode ? 'New passcode' : 'Choose a passcode'}
             value={value}
             onChange={(e) => setValue(e.target.value.replace(/\D/g, ''))}
             autoComplete="off"
             required
           />
-          <button className="btn btn-primary">{user.hasPasscode ? 'Change' : 'Set passcode'}</button>
+          <button className="btn btn-primary">{user.hasPasscode ? 'Change' : pin ? 'Set PIN' : 'Set passcode'}</button>
           {editing && (
             <button type="button" className="btn btn-glass" onClick={() => setEditing(false)}>
               Cancel
@@ -198,7 +219,7 @@ export function PasscodeSettings() {
             <Icon name="lock" size={16} /> Lock now
           </button>
           <button className="btn btn-glass" onClick={() => setEditing(true)}>
-            Change passcode
+            {pin ? 'Change PIN' : 'Change passcode'}
           </button>
           <button className="btn btn-glass danger" onClick={remove}>
             Remove
