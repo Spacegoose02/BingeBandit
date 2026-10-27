@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { CollectionCard, PosterCard } from '../components/Cards'
@@ -307,7 +307,7 @@ function RecommendedTab({ library }: { library: Library }) {
           <Row
             key={row.id}
             title={row.title}
-            action={row.collectionId ? <Link to={`/collection/${row.collectionId}`} className="muted small">See all</Link> : undefined}
+            to={row.collectionId ? `/collection/${row.collectionId}` : undefined}
           >
             {row.items.map((it) => (
               <PosterCard key={it.id} item={it} />
