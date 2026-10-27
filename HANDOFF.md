@@ -15,6 +15,7 @@ _Last updated: 2026-10-27, the third feature board (player options, alerts, Cine
 - **Score bug:** `GET /api/sports/live` (today's and yesterday's scoreboards only); web `components/ScoreBug.tsx`, TV `src/scorebug.tsx` over any player, hidden on the game's own channel.
 - Already existed, so nothing built: trailers / custom intro before movies (prefs `preRollTrailers`, `preRollIntro`), TV passcode settings (Settings → Profiles & PINs). Local guides by zip: dropped by Michael.
 - Nothing here was tried on a device, a real Hue bridge, or a real Cinemask.
+- **YouTube Live** (Michael chose real channels via yt-dlp): plugin `server/plugins/youtube-live` (bundled, off by default) lists YouTubers (setting `youtubers`), checks `/channel/<UC>/live` every 3 min (`isLiveNow` + canonical /watch link; upcoming streams don't count) and sends the whole list to the new plugin API `PUT /live/channels`. `livetv.SyncPluginChannels` keeps them in an m3u source at `plugin:<id>` (no migration: the sources table only allows m3u/epg, so `IsPluginSource` checks the URL and refresh skips it), creates one channel per stream (kept, just disabled while not live, so numbers and favourites stay) and writes a guide entry per live stream (start → now+2 h, pushed on each report). The relay resolves youtube.com links with `yt-dlp -g` each time it opens them (`livetv/youtube.go`). Dockerfile adds the standalone yt-dlp; the plugin runs `yt-dlp -U` daily. Never tried against real YouTube (the dev proxy blocks it).
 
 ## Roku channel (2026-10-27)
 

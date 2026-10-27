@@ -1,0 +1,6 @@
+{
+  "id": "youtube-live",
+  "name": "YouTube Live",
+  "description": "Live TV channels for the YouTubers you pick, shown in the guide while they're live.",
+  "command": ["youtube-live"]
+}
