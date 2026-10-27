@@ -31,7 +31,7 @@ form { margin-top: 16px; } button { font: inherit; padding: 6px 14px; border-rad
 <p>Each YouTuber gets a channel in the {{.Group}} group of Live TV, shown while they stream. Add or remove YouTubers in this plugin's settings. Last sent to Live TV {{ago .Sent}}{{if .SendErr}} <span class="err">({{.SendErr}})</span>{{end}}.</p>
 {{if .People}}<table><tr><th>YouTuber</th><th>Now</th><th>Checked</th></tr>
 {{range .People}}<tr><td>{{if .Avatar}}<img src="{{.Avatar}}" alt="">{{end}}{{if .Name}}{{.Name}}{{else}}{{.Input}}{{end}}</td>
-<td>{{if .Error}}<span class="err">{{.Error}}</span>{{else if .Live.Live}}<span class="live">● Live</span> {{.Live.Title}}{{else}}<span class="muted">Not live</span>{{end}}</td>
+<td>{{if .Error}}<span class="err">{{.Error}}</span>{{else if .Live.Live}}<span class="live">● Live</span> {{.Live.Title}}{{range .More}}<br><span class="live">● Live</span> {{.Title}}{{end}}{{else}}<span class="muted">Not live</span>{{end}}</td>
 <td class="muted">{{ago .Checked}}</td></tr>{{end}}</table>
 {{else}}<p>No YouTubers yet: list them in the plugin's settings.</p>{{end}}
 <form id="check"><button>Check now</button></form>

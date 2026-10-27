@@ -169,6 +169,97 @@ func scrapeLive(ctx context.Context, id string) (liveState, error) {
 	return s, nil
 }
 
+// moreLive finds a channel's other live streams: a YouTuber can stream
+// several at once, but /live shows only one. Their Streams tab marks each
+// one that's on. yt-dlp is asked first, then the tab is read.
+func moreLive(ctx context.Context, id, shown string) ([]liveState, error) {
+	all, ok := ytdlpStreams(ctx, baseURL+"/channel/"+id+"/streams")
+	if !ok {
+		var err error
+		if all, err = scrapeStreams(ctx, id); err != nil {
+			return nil, err
+		}
+	}
+	var out []liveState
+	seen := map[string]bool{shown: true}
+	for _, s := range all {
+		if s.Live && s.VideoID != "" && !seen[s.VideoID] && len(out) < maxMore {
+			seen[s.VideoID] = true
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// maxMore caps the extra channels one YouTuber gets.
+const maxMore = 5
+
+// ytdlpStreams lists the newest entries of a Streams tab with yt-dlp
+// (tests replace it). ok is false when yt-dlp can't say.
+var ytdlpStreams = func(ctx context.Context, link string) ([]liveState, bool) {
+	path, err := exec.LookPath("yt-dlp")
+	if err != nil {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "--no-warnings", "--flat-playlist", "-I", "1:15",
+		"-O", "%(live_status)s\t%(id)s\t%(title)s", link).Output()
+	if err != nil {
+		return nil, false
+	}
+	return parseStreams(string(out)), true
+}
+
+// parseStreams reads yt-dlp's lines of live status, video id and title.
+func parseStreams(out string) []liveState {
+	var list []liveState
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.SplitN(strings.TrimSpace(line), "\t", 3)
+		if len(f) == 3 && f[0] == "is_live" {
+			list = append(list, liveState{Live: true, VideoID: f[1], Title: f[2]})
+		}
+	}
+	return list
+}
+
+var (
+	reTabVideo = regexp.MustCompile(`"videoRenderer"\s*:\s*\{\s*"videoId"\s*:\s*"([A-Za-z0-9_-]{11})"`)
+	reTabTitle = regexp.MustCompile(`"title"\s*:\s*\{\s*"runs"\s*:\s*\[\s*\{\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"`)
+	reTabLive  = regexp.MustCompile(`"style"\s*:\s*"LIVE"|BADGE_STYLE_TYPE_LIVE_NOW`)
+)
+
+// scrapeStreams reads a channel's Streams tab: each video there is a
+// videoRenderer, and one that's on now carries a LIVE overlay or badge.
+func scrapeStreams(ctx context.Context, id string) ([]liveState, error) {
+	page, err := get(ctx, "/channel/"+id+"/streams")
+	if err != nil {
+		return nil, err
+	}
+	var list []liveState
+	at := reTabVideo.FindAllStringSubmatchIndex(page, 30)
+	for i, m := range at {
+		end := len(page)
+		if i+1 < len(at) {
+			end = at[i+1][0]
+		}
+		chunk := page[m[0]:end]
+		if !reTabLive.MatchString(chunk) {
+			continue
+		}
+		s := liveState{Live: true, VideoID: page[m[2]:m[3]]}
+		if t := reTabTitle.FindStringSubmatch(chunk); t != nil {
+			if u, err := strconv.Unquote(`"` + t[1] + `"`); err == nil {
+				s.Title = u
+			} else {
+				s.Title = t[1]
+			}
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}
+
 // splitList reads the YouTubers setting: one per line or comma.
 func splitList(raw string) []string {
 	var out []string
