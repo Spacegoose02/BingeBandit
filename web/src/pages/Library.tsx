@@ -213,7 +213,17 @@ function LibraryView({ id }: { id: string }) {
               'item' in t ? (
                 <PosterCard key={t.item.id} item={t.item} domId={showAZ ? `lib-item-${t.item.id}` : undefined} />
               ) : (
-                <CollectionCard key={`c${t.collection.id}`} collection={t.collection} />
+                <CollectionCard
+                  key={`c${t.collection.id}`}
+                  collection={t.collection}
+                  libraryKind={library?.kind}
+                  onChanged={() =>
+                    // Picks up an edit or a delete without reloading the grid.
+                    api
+                      .get<Collection[]>(`/api/libraries/${id}/collections`)
+                      .then((fresh) => setCollections((cs) => fresh.filter((c) => cs.some((x) => x.id === c.id))), () => undefined)
+                  }
+                />
               ),
             )}
           </div>
@@ -261,7 +271,7 @@ function CollectionsTab({ libraryId, libraryKind }: { libraryId: number; library
       {data?.length === 0 && <div className="empty">No collections yet. TMDB collections appear here once metadata is fetched.</div>}
       <div className="poster-grid">
         {data?.map((c) => (
-          <CollectionCard key={c.id} collection={c} onChanged={reload} />
+          <CollectionCard key={c.id} collection={c} libraryKind={libraryKind} onChanged={reload} />
         ))}
       </div>
       {charts && <ChartRows libraryId={libraryId} libraryKind={libraryKind} onClose={() => setCharts(false)} onSaved={reload} />}

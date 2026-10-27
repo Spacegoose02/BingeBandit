@@ -45,6 +45,7 @@ const paths: Record<string, string> = {
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
   stack: 'M12 3 3 8l9 5 9-5zM3 13l9 5 9-5',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  dots: 'M12 5h.01M12 12h.01M12 19h.01',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
   bookmark: 'M6 3h12v18l-6-4.5L6 21z',
   pin: 'M9 3h6l-1 6 4 4H6l4-4zM12 13v8',

@@ -37,7 +37,7 @@ export function RecommendButton({ item }: { item: Item }) {
   )
 }
 
-function RecommendDialog({ item, onClose }: { item: Item; onClose: (msg?: string) => void }) {
+export function RecommendDialog({ item, onClose }: { item: Item; onClose: (msg?: string) => void }) {
   const { data: people } = useApi<Recipient[]>(`/api/items/${item.id}/recommend`)
   const [picked, setPicked] = useState<number[]>([])
   const [note, setNote] = useState('')
