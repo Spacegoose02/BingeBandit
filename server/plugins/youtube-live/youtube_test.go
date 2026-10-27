@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -46,6 +47,10 @@ func TestLook(t *testing.T) {
 	}))
 	defer yt.Close()
 	baseURL, discover.BaseURL = yt.URL, yt.URL
+	// Without yt-dlp the /live page is read.
+	old := ytdlpLive
+	ytdlpLive = func(context.Context, string) (liveState, bool) { return liveState{}, false }
+	defer func() { ytdlpLive = old }()
 
 	a := newApp()
 	a.p = &bbplugin.Plugin{Manifest: manifest}
@@ -85,5 +90,21 @@ func TestLook(t *testing.T) {
 	h.ServeHTTP(w, req)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "Alice &amp; Co") || !strings.Contains(w.Body.String(), "Not live") {
 		t.Errorf("page: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestParseYTDLP(t *testing.T) {
+	s, ok := parseYTDLP("is_live\tabcdefghijk\t1793124000\tNews tonight: live\n", "", nil)
+	if !ok || !s.Live || s.VideoID != "abcdefghijk" || s.StartedAt != 1793124000 || s.Title != "News tonight: live" {
+		t.Errorf("live: %+v %v", s, ok)
+	}
+	if s, ok := parseYTDLP("is_upcoming\tabcdefghijk\tNA\tSoon\n", "", nil); !ok || s.Live {
+		t.Errorf("upcoming: %+v %v", s, ok)
+	}
+	if s, ok := parseYTDLP("", "ERROR: [youtube:tab] UCx: The channel is not currently live\n", errors.New("exit 1")); !ok || s.Live {
+		t.Errorf("not live: %+v %v", s, ok)
+	}
+	if _, ok := parseYTDLP("", "ERROR: Unable to download API page\n", errors.New("exit 1")); ok {
+		t.Error("a network error should fall back to reading the page")
 	}
 }

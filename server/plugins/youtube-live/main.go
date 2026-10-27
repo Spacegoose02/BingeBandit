@@ -20,7 +20,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "youtube-live",
 	Name:        "YouTube Live",
-	Version:     "1.0.0",
+	Version:     "1.0.1",
 	Description: "Live TV channels for the YouTubers you pick, shown in the guide while they're live.",
 	Author:      "BingeBandit",
 	Settings: []bbplugin.Setting{

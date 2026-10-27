@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"html"
 	"io"
 	"net/http"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +23,7 @@ var client = &http.Client{Timeout: 20 * time.Second}
 var (
 	reLiveNow   = regexp.MustCompile(`"isLiveNow"\s*:\s*true`)
 	reStarted   = regexp.MustCompile(`"liveBroadcastDetails"\s*:\s*\{[^}]*"startTimestamp"\s*:\s*"([^"]+)"`)
-	reWatch     = regexp.MustCompile(`<link rel="canonical" href="https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})"`)
+	reWatch     = regexp.MustCompile(`(?:<link rel="canonical" href="https://www\.youtube\.com/watch\?v=|"videoDetails"\s*:\s*\{\s*"videoId"\s*:\s*")([A-Za-z0-9_-]{11})`)
 	reMetaTitle = regexp.MustCompile(`<meta name="title" content="([^"]*)"`)
 	reOGTitle   = regexp.MustCompile(`<meta property="og:title" content="([^"]*)"`)
 	reOGImage   = regexp.MustCompile(`<meta property="og:image" content="([^"]*)"`)
@@ -86,10 +88,62 @@ type liveState struct {
 	StartedAt   int64
 }
 
-// checkLive reads a channel's /live page: while it streams, YouTube shows
+// checkLive asks yt-dlp whether a channel is streaming, since it keeps up
+// with YouTube's pages; without yt-dlp, or when it fails for some other
+// reason than "not live", the /live page is read instead.
+func checkLive(ctx context.Context, id string) (liveState, error) {
+	if s, ok := ytdlpLive(ctx, baseURL+"/channel/"+id+"/live"); ok {
+		return s, nil
+	}
+	return scrapeLive(ctx, id)
+}
+
+// ytdlpLive runs yt-dlp on a /live link (tests replace it). ok is false
+// when yt-dlp can't say.
+var ytdlpLive = func(ctx context.Context, link string) (liveState, bool) {
+	path, err := exec.LookPath("yt-dlp")
+	if err != nil {
+		return liveState{}, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, path, "--no-warnings", "--skip-download", "--no-playlist", "--ignore-no-formats-error",
+		"-O", "%(live_status)s\t%(id)s\t%(release_timestamp)s\t%(title)s", link)
+	var out, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &stderr
+	err = cmd.Run()
+	return parseYTDLP(out.String(), stderr.String(), err)
+}
+
+// parseYTDLP reads yt-dlp's answer: a line of live status, video id,
+// start time and title, or an error saying the channel isn't live.
+func parseYTDLP(stdout, stderr string, runErr error) (liveState, bool) {
+	if runErr != nil {
+		msg := strings.ToLower(stderr)
+		if strings.Contains(msg, "not currently live") || strings.Contains(msg, "will begin") || strings.Contains(msg, "premieres in") {
+			return liveState{}, true
+		}
+		return liveState{}, false
+	}
+	line := strings.TrimSpace(strings.SplitN(strings.TrimSpace(stdout), "\n", 2)[0])
+	f := strings.SplitN(line, "\t", 4)
+	if len(f) < 4 {
+		return liveState{}, false
+	}
+	if f[0] != "is_live" {
+		return liveState{}, true // upcoming, finished or a plain video
+	}
+	s := liveState{Live: true, VideoID: f[1], Title: f[3]}
+	if n, err := strconv.ParseInt(f[2], 10, 64); err == nil {
+		s.StartedAt = n
+	}
+	return s, true
+}
+
+// scrapeLive reads a channel's /live page: while it streams, YouTube shows
 // the stream there (canonical /watch link, isLiveNow true); otherwise the
 // channel page or an upcoming stream, which doesn't count.
-func checkLive(ctx context.Context, id string) (liveState, error) {
+func scrapeLive(ctx context.Context, id string) (liveState, error) {
 	page, err := get(ctx, "/channel/"+id+"/live")
 	if err != nil {
 		return liveState{}, err
