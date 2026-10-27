@@ -33,6 +33,9 @@ type Prefs struct {
 	// before each starts (0 for none), and the final score when one ends.
 	GameAlertMinutes int  `json:"gameAlertMinutes"`
 	NotifyGameScores bool `json:"notifyGameScores"`
+	// ScoreBug shows the score of your teams' games in a corner of the player
+	// while they're on (not on the channel showing the game).
+	ScoreBug bool `json:"scoreBug"`
 	// NotifyTogether: people may invite you to watch together.
 	NotifyTogether bool `json:"notifyTogether"`
 	// LiveFollows are Live TV show titles to be told about LiveAlertMinutes
@@ -66,7 +69,7 @@ var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
 	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true, GameAlertMinutes: 15,
-	NotifyTogether: true, LiveAlertMinutes: 10,
+	NotifyTogether: true, LiveAlertMinutes: 10, ScoreBug: true,
 }
 
 func (p *Prefs) Validate() error {

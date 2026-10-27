@@ -869,6 +869,10 @@ function PlaybackPrefs() {
         <input type="checkbox" checked={p.notifyGameScores} onChange={(e) => set('notifyGameScores', e.target.checked)} />
         Tell me the final score when their games end
       </label>
+      <label className="check">
+        <input type="checkbox" checked={p.scoreBug} onChange={(e) => set('scoreBug', e.target.checked)} />
+        Show their live score in a corner while I watch something else
+      </label>
       <label>
         Before Live TV shows I follow
         <select value={p.liveAlertMinutes} onChange={(e) => set('liveAlertMinutes', Number(e.target.value))}>

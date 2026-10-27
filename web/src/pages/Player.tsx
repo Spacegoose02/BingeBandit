@@ -10,6 +10,7 @@ import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
 import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
+import { ScoreBug } from '../components/ScoreBug'
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
 const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub'])
@@ -763,6 +764,7 @@ function PlayerView({
       onMouseMove={poke}
       onTouchStart={poke}
     >
+      <ScoreBug />
       <video
         ref={videoRef}
         className="player-video"

@@ -302,6 +302,7 @@ function MenuSection({ menu }: { menu: MenuChoices }) {
 interface AlertPrefs {
   gameAlertMinutes: number
   notifyGameScores: boolean
+  scoreBug: boolean
   liveAlertMinutes: number
   liveFollows?: string[] | null
   notifyTogether: boolean
@@ -343,6 +344,10 @@ function AlertsSection() {
       <Focusable onPress={() => save({ notifyGameScores: !p.notifyGameScores })} style={st.option}>
         <Text style={st.value}>Final scores: {p.notifyGameScores ? 'On' : 'Off'}</Text>
         <Text style={st.hint}>The score when your teams' games end. {press} to turn it {p.notifyGameScores ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ scoreBug: !p.scoreBug })} style={st.option}>
+        <Text style={st.value}>Score bug: {p.scoreBug ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>Your teams' live score in a corner of the player while you watch something else. {press} to turn it {p.scoreBug ? 'off' : 'on'}.</Text>
       </Focusable>
       <Focusable onPress={() => save({ liveAlertMinutes: cycle([0, 5, 10, 15, 30, 60], p.liveAlertMinutes) })} style={st.option}>
         <Text style={st.value}>Before Live TV shows I follow: {minutesLabel(p.liveAlertMinutes)}</Text>

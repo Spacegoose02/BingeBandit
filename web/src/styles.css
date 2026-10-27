@@ -1212,3 +1212,13 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .notify-item img.notify-img-sports { height: 40px; object-fit: contain; background: none; }
 .row-title-link { color: inherit; text-decoration: none; }
 .row-title-link:hover { text-decoration: underline; }
+
+/* Score bug: your teams' live scores over the player. */
+.score-bug { position: absolute; top: 16px; left: 16px; z-index: 5; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.score-bug-game { display: flex; align-items: center; border-radius: 9px; overflow: hidden; background: rgba(12, 14, 18, 0.86); color: #fff; font-size: 13px; }
+.score-bug-side { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-left: 4px solid #888; }
+.score-bug-side img { width: 20px; height: 20px; object-fit: contain; }
+.score-bug-side strong { min-width: 18px; text-align: right; font-size: 15px; }
+.score-bug-detail { padding: 0 10px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; }
+@media (max-width: 600px) { .score-bug-detail { display: none; } }
+.player .score-bug { top: 76px; }

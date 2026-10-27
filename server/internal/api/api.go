@@ -152,6 +152,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/items/{id}/recommend", s.recommend)
 			r.Delete("/recommendations/{id}", s.dismissRecommendation)
 			r.Get("/sports", s.sportsHome)
+			r.Get("/sports/live", s.sportsLive)
 			r.Put("/sports/teams", s.setSportsTeams)
 			r.Get("/sports/{league}/teams", s.sportsTeams)
 			r.Get("/sports/{league}/scores", s.sportsScores)

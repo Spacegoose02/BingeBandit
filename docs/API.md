@@ -164,11 +164,12 @@ Scores and schedules come from ESPN's public (unofficial) site API, cached on th
 | | | |
 |---|---|---|
 | GET | `/sports` | `{leagues, teams, games, error?}`: the leagues, the teams you follow, and their games from two days ago to a week ahead (live first, then upcoming, then results). Each game has `mine` (your team ids in it) and, with Live TV, `channels` whose guide shows it. |
+| GET | `/sports/live` | `{games}`: just your teams' games on now (today's and yesterday's scoreboards), with `channels`, for the player's score bug. |
 | PUT | `/sports/teams` | `[{league, id}]` replaces your teams (at most 40); names, logos and colours come from ESPN. |
 | GET | `/sports/{league}/teams` | Every team in a league: `nfl`, `college-football`, `nba`, `mens-college-basketball`, `womens-college-basketball`, `mlb`, `nhl`, `mls`. |
 | GET | `/sports/{league}/scores?date=YYYYMMDD` | The league's games on an ESPN (US Eastern) day, today by default. |
 
-Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences.
+Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences. `scoreBug` (default on) shows live scores in a corner of the players.
 
 ### Passkeys
 

@@ -106,6 +106,26 @@ func TestSports(t *testing.T) {
 		t.Fatalf("scores: %d %+v", code, day)
 	}
 
+	// The score bug's list: only games that are on.
+	var live struct {
+		Games []sportsGame `json:"games"`
+	}
+	if code := call("dana", "GET", "/api/sports/live", "", &live); code != 200 || len(live.Games) != 0 {
+		t.Fatalf("live before kick-off: %d %+v", code, live)
+	}
+	if sports.Day(start) == sports.Day(time.Now()) { // not just before midnight
+		mu.Lock()
+		state, home = "in", "7"
+		mu.Unlock()
+		srv.Sports = sports.NewClient()
+		if code := call("dana", "GET", "/api/sports/live", "", &live); code != 200 || len(live.Games) != 1 || live.Games[0].Home.Score != "7" {
+			t.Fatalf("live: %d %+v", code, live)
+		}
+		mu.Lock()
+		state, home = "pre", "0"
+		mu.Unlock()
+	}
+
 	// The tracker: Dana gets the "starting soon" alert (15 minutes is the
 	// default), Sam turned it off but wants final scores.
 	srv.Sports.Now = time.Now

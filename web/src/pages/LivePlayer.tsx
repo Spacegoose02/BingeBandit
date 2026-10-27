@@ -7,6 +7,7 @@ import { useApi, useDocumentTitle } from '../hooks'
 import { guideEpisode } from '../format'
 import type { LiveChannel } from '../types'
 import { ChannelLogo, channelNo, clock } from './LiveGuide'
+import { ScoreBug } from '../components/ScoreBug'
 
 /** Full-screen live channel player with channel up/down and a mini guide. */
 export default function LivePlayer() {
@@ -266,7 +267,8 @@ export default function LivePlayer() {
   return (
     <div ref={containerRef} className={`live-player ${guide ? 'with-guide' : ''} ${controls ? 'show-controls' : ''}`} onMouseMove={poke}>
       <div className="live-stage">
-        <video
+        <ScoreBug channelId={Number(id)} />
+      <video
           ref={videoRef}
           className="player-video"
           playsInline
