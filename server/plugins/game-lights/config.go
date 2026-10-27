@@ -33,19 +33,32 @@ type Config struct {
 	Colours  map[string][2]string `json:"colours,omitempty"` // team key → two hex colours
 	Teams    map[string]Team      `json:"teams,omitempty"`   // teams followed so far, for the setup page
 	People   map[string]Person    `json:"people,omitempty"`  // each person's own choices, by user id
+	// Version 2: Game Lights is opt-in per person (Person.Enabled).
+	Version int `json:"version,omitempty"`
 }
 
 // Person is what each person sets for themselves on My Game Lights (web) or
 // in the TV app's Sports tab.
 type Person struct {
-	Off    bool   `json:"off,omitempty"`    // no lights for this person's teams
-	Area   string `json:"area,omitempty"`   // Hue room or zone (group id); "" = the lights the admin ticked
-	Source string `json:"source,omitempty"` // how they're watching, which picks the delay
+	// Enabled is the person's own switch for Game Lights (Account on the
+	// web); nobody's lights flash until they turn it on.
+	Enabled bool `json:"enabled,omitempty"`
+	// Off is the TV app's Start / Stop: Game Lights stays on for the person,
+	// but nothing flashes until they start it again.
+	Off    bool     `json:"off,omitempty"`
+	Skip   []string `json:"skip,omitempty"`   // team keys (league/id) the lights leave out
+	Area   string   `json:"area,omitempty"`   // Hue room or zone (group id); "" = the lights the admin ticked
+	Source string   `json:"source,omitempty"` // how they're watching, which picks the delay
 	// Delays are seconds behind ESPN per source ("Cable", "YouTube TV"…), so
 	// switching providers is one choice; missing = the admin's delay.
 	Delays   map[string]int       `json:"delays,omitempty"`
 	Opponent string               `json:"opponent,omitempty"` // other team scores: "red" (default), "colour" (dim, in their colours) or "off"
 	Colours  map[string][2]string `json:"colours,omitempty"`  // team key → two hex colours, over the admin's
+}
+
+// lightsFor reports whether this person's lights flash for a team.
+func (p Person) lightsFor(team string) bool {
+	return p.Enabled && !p.Off && !slices.Contains(p.Skip, team)
 }
 
 // Sources are offered for the delay; people can name their own too.
@@ -79,6 +92,14 @@ func (s *configStore) load() Config {
 		s.c = &Config{}
 		if b, err := os.ReadFile(s.file()); err == nil {
 			json.Unmarshal(b, s.c)
+		}
+		if s.c.Version < 2 {
+			// Before it was opt-in, everyone who'd set their own choices used it.
+			for id, p := range s.c.People {
+				p.Enabled = true
+				s.c.People[id] = p
+			}
+			s.c.Version = 2
 		}
 	}
 	c := *s.c

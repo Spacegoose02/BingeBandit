@@ -20,3 +20,9 @@ server/internal/web/dist/*
 Thumbs.db
 # tsc output next to the sources shadows the .tsx files in Vite builds
 web/src/**/*.js
+
+# Plugin binaries built in place (go build in a plugin folder)
+server/plugins/*/cinemask-upgrades
+server/plugins/*/game-lights
+server/plugins/*/hue-sync
+server/plugins/*/watchlist-rss

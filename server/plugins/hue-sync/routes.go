@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,13 +44,16 @@ func (a *app) routes() http.Handler {
 	}))
 	mux.HandleFunc("POST /pair", admin(a.pair))
 	mux.HandleFunc("POST /unpair", admin(func(w http.ResponseWriter, r *http.Request) {
-		a.conf.set(Config{})
+		a.conf.update(func(c *Config) { *c = Config{People: c.People} })
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	mux.HandleFunc("PUT /lights", admin(a.assign))
 	// Anyone signed in: the rooms and zones a device can pick for its lights.
 	mux.HandleFunc("GET /areas", a.areas)
 	mux.HandleFunc("POST /test", admin(a.test))
+	// Anyone signed in: their own mode (off, sync or theater).
+	mux.HandleFunc("GET /me", a.myMode)
+	mux.HandleFunc("PUT /me", a.setMyMode)
 	return mux
 }
 
@@ -106,6 +110,51 @@ func (a *app) areas(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func (a *app) myMode(w http.ResponseWriter, r *http.Request) {
+	u, ok := bbplugin.UserOf(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+		return
+	}
+	conf := a.conf.get()
+	writeJSON(w, http.StatusOK, map[string]any{"mode": conf.mode(u.ID), "paired": conf.Username != "", "modes": []string{ModeOff, ModeSync, ModeTheater}})
+}
+
+// setMyMode saves the person's mode and applies it at once to whatever
+// they're playing, so the player's quick switch doesn't wait for a ping.
+func (a *app) setMyMode(w http.ResponseWriter, r *http.Request) {
+	u, ok := bbplugin.UserOf(r)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in first"})
+		return
+	}
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&req)
+	if req.Mode != ModeOff && req.Mode != ModeSync && req.Mode != ModeTheater {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mode is off, sync or theater"})
+		return
+	}
+	err := a.conf.update(func(c *Config) {
+		if c.People == nil {
+			c.People = map[string]string{}
+		}
+		key := strconv.FormatInt(u.ID, 10)
+		if req.Mode == ModeOff {
+			delete(c.People, key)
+		} else {
+			c.People[key] = req.Mode
+		}
+	})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	a.engine.setMode(context.WithoutCancel(r.Context()), u.ID, req.Mode)
+	writeJSON(w, http.StatusOK, map[string]string{"mode": req.Mode})
 }
 
 func (a *app) pair(w http.ResponseWriter, r *http.Request) {

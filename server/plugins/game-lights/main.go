@@ -20,7 +20,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "game-lights",
 	Name:        "Game Lights",
-	Version:     "1.1.1",
+	Version:     "1.2.0",
 	Description: "Philips Hue lights flash in your team's colours when it scores, from the teams people follow on the Sports page.",
 	Author:      "BingeBandit",
 	Events:      []string{"sports.game.start", "sports.game.live", "sports.score", "sports.game.end"},

@@ -18,7 +18,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "hue-sync",
 	Name:        "Hue Sync",
-	Version:     "1.2.0",
+	Version:     "1.3.0",
 	Description: "Philips Hue lights follow the colours on screen while movies and shows play.",
 	Author:      "BingeBandit",
 	Events:      []string{"player.play", "player.pause", "player.resume", "player.progress", "player.stop"},
@@ -28,12 +28,16 @@ var manifest = bbplugin.Manifest{
 		{Key: "brightness", Label: "Maximum brightness (%)", Type: "number", Default: "80"},
 		{Key: "updates_per_second", Label: "Updates per second (the bridge takes about 10 light changes a second in total)", Type: "number", Default: "4"},
 		{Key: "delay_ms", Label: "Delay (ms): raise it if the lights change before the picture", Type: "number", Default: "0"},
+		{Key: "theater_brightness", Label: "Theater mode brightness (%)", Type: "number", Default: "8",
+			Help: "How far the lights dim for people who pick Theater; 0 turns them off"},
 		{Key: "on_pause", Label: "When paused", Type: "select", Options: []string{"keep", "bright"}, Default: "bright",
 			Help: "keep: hold the colours; bright: warm white so you can see the room"},
 		{Key: "on_stop", Label: "When playback stops", Type: "select", Options: []string{"restore", "off", "leave"}, Default: "restore",
 			Help: "restore: put the lights back as they were"},
 	},
 	Pages: []bbplugin.Page{{Title: "Hue Sync setup", Path: "/", Admin: true}},
+	// Nobody's lights move until they pick Sync or Theater for themselves
+	// (Account on the web, Settings in the TV app, or the player's options).
 }
 
 type app struct {

@@ -176,11 +176,28 @@ func TestEngineFollowsPlayer(t *testing.T) {
 
 	ctx := context.Background()
 	off := false
+	uid := int64(5)
 	var lights *bool // nil: a server that predates the app switch
 	send := func(event string, pos float64, client string) {
-		d, _ := json.Marshal(playerEvent{SessionID: "s1", User: "ann", Client: client, ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Lights: lights})
+		d, _ := json.Marshal(playerEvent{SessionID: "s1", UserID: uid, User: "ann", Client: client, ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Lights: lights})
 		a.engine.onEvent(ctx, bbplugin.Event{Event: event, Data: d})
 	}
+
+	// Nobody has picked a mode yet: Hue Sync is opt-in.
+	send("player.play", 0.2, "Web")
+	if _, active := a.engine.Status(); active {
+		t.Fatal("should not follow someone who hasn't turned Hue Sync on")
+	}
+	setMode := func(mode string) {
+		req := httptest.NewRequest("PUT", "/me", strings.NewReader(`{"mode":"`+mode+`"}`))
+		req.Header.Set("X-BingeBandit-User-Id", "5")
+		rec := httptest.NewRecorder()
+		a.routes().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("set mode %s: %d %s", mode, rec.Code, rec.Body)
+		}
+	}
+	setMode(ModeSync)
 
 	// A device the filter leaves out is ignored.
 	send("player.play", 0.2, "Android TV")
@@ -227,6 +244,29 @@ func TestEngineFollowsPlayer(t *testing.T) {
 		t.Error("should let go once Hue Sync is switched off")
 	}
 	waitFor(t, "restore again", func() bool { c, ok := bridge.xy("1"); return ok && math.Abs(c.X-0.45) < 0.001 })
+
+	// Theater mode, picked mid-play from the player: the lights dim to a warm glow.
+	lights = &on
+	send("player.play", 0.2, "Web")
+	waitFor(t, "red once more", func() bool { c, ok := bridge.xy("1"); return ok && near(c, redXY[0], redXY[1]) })
+	setMode(ModeTheater)
+	dimmed := func() bool {
+		bridge.mu.Lock()
+		defer bridge.mu.Unlock()
+		st := bridge.states["1"]
+		return st["ct"] == float64(447) && st["xy"] == nil
+	}
+	waitFor(t, "dim", dimmed)
+	time.Sleep(400 * time.Millisecond) // no colours follow the picture now
+	if !dimmed() {
+		t.Error("theater mode should hold the lights dim")
+	}
+	// Off from Account: the lights go back at once.
+	setMode(ModeOff)
+	if _, active := a.engine.Status(); active {
+		t.Error("should let go once the person turns Hue Sync off")
+	}
+	waitFor(t, "restore after theater", func() bool { c, ok := bridge.xy("1"); return ok && math.Abs(c.X-0.45) < 0.001 })
 }
 
 func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
@@ -245,7 +285,7 @@ func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
 	a.fileURL = func(int64) (string, string) { return video, "" }
 	a.engine = &Engine{a: a}
 	// The bed lamp isn't chosen on the setup page: picking its room is enough.
-	a.conf.set(Config{Bridge: hb.URL, Username: "u1", Lights: map[string]string{"1": "all"}})
+	a.conf.set(Config{Bridge: hb.URL, Username: "u1", Lights: map[string]string{"1": "all"}, People: map[string]string{"5": ModeSync}})
 
 	// Devices see every room, then every zone.
 	req := httptest.NewRequest("GET", "/areas", nil)
@@ -260,7 +300,7 @@ func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
 
 	ctx := context.Background()
 	send := func(event, session, area string, pos float64) {
-		d, _ := json.Marshal(playerEvent{SessionID: session, User: "ann", Client: "Android TV", ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Area: area})
+		d, _ := json.Marshal(playerEvent{SessionID: session, UserID: 5, User: "ann", Client: "Android TV", ItemID: 7, FileID: 3, Title: "RGB", Position: pos, Area: area})
 		a.engine.onEvent(ctx, bbplugin.Event{Event: event, Data: d})
 	}
 	// The living room TV drives only the sofa lamp.
