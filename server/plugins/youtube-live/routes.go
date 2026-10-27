@@ -34,7 +34,18 @@ form { margin-top: 16px; } button { font: inherit; padding: 6px 14px; border-rad
 <td>{{if .Error}}<span class="err">{{.Error}}</span>{{else if .Live.Live}}<span class="live">● Live</span> {{.Live.Title}}{{else}}<span class="muted">Not live</span>{{end}}</td>
 <td class="muted">{{ago .Checked}}</td></tr>{{end}}</table>
 {{else}}<p>No YouTubers yet: list them in the plugin's settings.</p>{{end}}
-<form method="post" action="check"><button>Check now</button></form>
+<form id="check"><button>Check now</button></form>
+<script>
+// BingeBandit only lets a page post with this header (a plain form can't send it).
+document.getElementById('check').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const b = e.target.querySelector('button')
+  b.disabled = true
+  b.textContent = 'Checking…'
+  await fetch('check', { method: 'POST', headers: { 'X-Requested-With': 'BingeBandit' } }).catch(() => {})
+  location.reload()
+})
+</script>
 </body></html>`))
 
 func (a *app) routes() http.Handler {
@@ -66,9 +77,20 @@ func (a *app) routes() http.Handler {
 		page.Execute(w, data)
 	}))
 	mux.HandleFunc("POST /check", admin(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		a.kick()
-		time.Sleep(2 * time.Second) // usually enough for a short list
-		http.Redirect(w, r, "./", http.StatusSeeOther)
+		// Give a short list time to be checked before the page reloads.
+		deadline := time.Now().Add(20 * time.Second)
+		for time.Now().Before(deadline) && r.Context().Err() == nil {
+			a.mu.Lock()
+			done := !a.lastSent.IsZero() && time.Since(a.lastSent) < time.Since(start)
+			a.mu.Unlock()
+			if done {
+				break
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}))
 	return mux
 }
