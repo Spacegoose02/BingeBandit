@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type ApiError } from '../api'
 import { Icon } from '../components/Icon'
 import { useApi, useDocumentTitle } from '../hooks'
+import { guideEpisode } from '../format'
 import type { LiveChannel } from '../types'
 import { ChannelLogo, channelNo, clock } from './LiveGuide'
 
@@ -298,9 +299,11 @@ export default function LivePlayer() {
                   <span className="ch-num">{channelNo(channel.number)}</span> {channel.name}
                 </div>
                 <div className="player-sub">
-                  {prog ? `${prog.title}${prog.subtitle ? ` — ${prog.subtitle}` : ''} · ${clock(prog.start)}–${clock(prog.stop)}` : 'Live'}
+                  {prog ? `${prog.title}${prog.year ? ` (${prog.year})` : ''}${prog.subtitle ? ` — ${prog.subtitle}` : ''} · ${clock(prog.start)}–${clock(prog.stop)}` : 'Live'}
+                  {prog && [prog.rating, prog.genres || prog.category, prog.episode && guideEpisode(prog.episode), prog.stars && `★ ${prog.stars}`].filter(Boolean).map((f) => ` · ${f}`).join('')}
                   {channel.next && ` · Next: ${channel.next.title} at ${clock(channel.next.start)}`}
                 </div>
+                {prog?.description && <div className="live-desc" title={prog.description}>{prog.description}</div>}
                 {prog && (
                   <div className="progress inline live-progress">
                     <div style={{ width: `${pct}%` }} />

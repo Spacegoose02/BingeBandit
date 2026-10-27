@@ -1,5 +1,6 @@
 import type { BufferConfig } from 'react-native-video'
 import { absolute, api, request } from './api'
+import type { GuideProgram } from './types'
 
 /**
  * Joins a channel's shared stream. The server answers once the first
@@ -56,4 +57,36 @@ export function fmtBehind(secs: number): string {
   const m = Math.floor(secs / 60)
   const s = Math.floor(secs % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+export function clock(t: number): string {
+  const d = new Date(t * 1000)
+  const h = d.getHours()
+  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+/**
+ * A guide episode number as people read it. Guides give either an onscreen
+ * label ("S1E2", shown as is) or xmltv_ns ("0.1.0/1": zero-based season,
+ * episode and part), shown as "S1 E2".
+ */
+export function episodeLabel(ep: string): string {
+  const m = /^\s*(\d*)(?:\/\d+)?\s*\.\s*(\d*)(?:\/\d+)?\s*\.[^.]*$/.exec(ep)
+  if (!m) return ep.trim()
+  const season = m[1] ? `S${Number(m[1]) + 1}` : ''
+  const episode = m[2] ? `E${Number(m[2]) + 1}` : ''
+  return [season, episode].filter(Boolean).join(' ')
+}
+
+/** A programme's facts in one line: time, age rating, genres, episode and stars. */
+export function programFacts(p: GuideProgram): string {
+  const parts = [`${clock(p.start)} – ${clock(p.stop)}`]
+  if (p.rating) parts.push(p.rating)
+  if (p.genres || p.category) parts.push(p.genres || p.category!)
+  if (p.episode) {
+    const ep = episodeLabel(p.episode)
+    if (ep) parts.push(ep)
+  }
+  if (p.stars) parts.push(`★ ${p.stars}`)
+  return parts.join('   ·   ')
 }

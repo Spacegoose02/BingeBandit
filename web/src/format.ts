@@ -111,3 +111,14 @@ export function smartRuleText(c: { labelRule?: string; genreRule?: string; studi
   if (c.labelRule) parts.push(`labelled “${c.labelRule}”`)
   return parts.join(' · ')
 }
+
+/**
+ * A guide episode number as people read it. Guides give either an onscreen
+ * label ("S1E2", shown as is) or xmltv_ns ("0.1.0/1": zero-based season,
+ * episode and part), shown as "S1 E2".
+ */
+export function guideEpisode(ep: string): string {
+  const m = /^\s*(\d*)(?:\/\d+)?\s*\.\s*(\d*)(?:\/\d+)?\s*\.[^.]*$/.exec(ep)
+  if (!m) return ep.trim()
+  return [m[1] ? `S${Number(m[1]) + 1}` : '', m[2] ? `E${Number(m[2]) + 1}` : ''].filter(Boolean).join(' ')
+}

@@ -3,6 +3,8 @@ package livetv
 import (
 	"encoding/xml"
 	"io"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,6 +24,10 @@ type Program struct {
 	Category    string
 	Icon        string
 	Episode     string
+	Year        int
+	Rating      string
+	Stars       string
+	Genres      string
 }
 
 type xmlChannel struct {
@@ -47,6 +53,14 @@ type xmlProgramme struct {
 		System string `xml:"system,attr"`
 		Value  string `xml:",chardata"`
 	} `xml:"episode-num"`
+	Date    string `xml:"date"`
+	Ratings []struct {
+		System string `xml:"system,attr"`
+		Value  string `xml:"value"`
+	} `xml:"rating"`
+	Stars []struct {
+		Value string `xml:"value"`
+	} `xml:"star-rating"`
 }
 
 // ParseXMLTV streams an XMLTV guide, calling onChannel and onProgram for
@@ -97,11 +111,44 @@ func ParseXMLTV(r io.Reader, from, to time.Time, onChannel func(GuideChannel) er
 					prog.Episode = strings.TrimSpace(e.Value)
 				}
 			}
+			prog.Year = guideYear(p.Date)
+			for _, r := range p.Ratings {
+				// Prefer the familiar US systems when a guide lists several.
+				if v := strings.TrimSpace(r.Value); v != "" && (prog.Rating == "" || r.System == "MPAA" || r.System == "VCHIP") {
+					prog.Rating = v
+				}
+			}
+			for _, s := range p.Stars {
+				if v := strings.TrimSpace(s.Value); v != "" && prog.Stars == "" {
+					prog.Stars = v
+				}
+			}
+			var genres []string
+			for _, c := range p.Categories {
+				if c = strings.TrimSpace(c); c != "" && !slices.Contains(genres, c) {
+					genres = append(genres, c)
+				}
+			}
+			prog.Genres = strings.Join(genres, ", ")
 			if err := onProgram(prog); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+// guideYear reads the year from a programme's <date> ("1980", "19800509"),
+// or 0 when there's none.
+func guideYear(d string) int {
+	d = strings.TrimSpace(d)
+	if len(d) < 4 {
+		return 0
+	}
+	y, err := strconv.Atoi(d[:4])
+	if err != nil || y < 1880 || y > 2200 {
+		return 0
+	}
+	return y
 }
 
 func first(s []string) string {
