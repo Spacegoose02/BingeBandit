@@ -83,8 +83,12 @@ func (s *Store) FileByPath(path string) (*MediaFile, error) {
 	return scanFile(s.db.QueryRow(`SELECT `+fileCols+` FROM media_files WHERE path = ?`, path))
 }
 
+// itemFiles matches the files of item ?1: its own, and a multi-episode file
+// it shares with an earlier episode.
+const itemFiles = `(item_id = ?1 OR id IN (SELECT file_id FROM media_file_episodes WHERE item_id = ?1))`
+
 func (s *Store) FilesForItem(itemID int64) ([]*MediaFile, error) {
-	rows, err := s.db.Query(`SELECT `+fileCols+` FROM media_files WHERE item_id = ? ORDER BY height DESC, size DESC`, itemID)
+	rows, err := s.db.Query(`SELECT `+fileCols+` FROM media_files WHERE `+itemFiles+` ORDER BY height DESC, size DESC`, itemID)
 	if err != nil {
 		return nil, err
 	}
@@ -117,6 +121,56 @@ func (s *Store) UpsertFile(f *MediaFile, gen int64) error {
 		f.ItemID, f.Path, f.Size, f.MTime, f.Container, f.Duration, f.Bitrate, f.VideoCodec, f.Width, f.Height,
 		f.BitDepth, boolInt(f.HDR), f.AudioCodec, f.AudioChannels, string(streams), f.ProbedAt, gen)
 	return err
+}
+
+// SetFileEpisodes links a multi-episode file (by id, or by path when id is
+// 0) to its later episodes, replacing the links it had.
+func (s *Store) SetFileEpisodes(fileID int64, path string, itemIDs []int64) error {
+	if fileID == 0 {
+		if err := s.db.QueryRow(`SELECT id FROM media_files WHERE path = ?`, path).Scan(&fileID); err != nil {
+			return err
+		}
+	}
+	if len(itemIDs) == 0 {
+		// The common case: nothing to link, and usually nothing to unlink.
+		_, err := s.db.Exec(`DELETE FROM media_file_episodes WHERE file_id = ?`, fileID)
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM media_file_episodes WHERE file_id = ?`, fileID); err != nil {
+		return err
+	}
+	for _, id := range itemIDs {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO media_file_episodes (file_id, item_id) VALUES (?, ?)`, fileID, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// SharedFileEpisodes lists the other episodes that play the same
+// multi-episode file as itemID (none for an ordinary file).
+func (s *Store) SharedFileEpisodes(itemID int64) ([]int64, error) {
+	rows, err := s.db.Query(`WITH f AS (SELECT id FROM media_files WHERE `+itemFiles+`)
+		SELECT item_id FROM media_files WHERE id IN f AND item_id != ?1
+		UNION SELECT item_id FROM media_file_episodes WHERE file_id IN f AND item_id != ?1`, itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // TouchFile marks an unchanged file as seen in this scan.
@@ -171,7 +225,8 @@ func (s *Store) PruneUnder(libraryID, gen int64, prefixes []string) (int64, erro
 // deleteOrphans removes movies/episodes without files, then empty seasons and shows.
 func deleteOrphans(tx *sql.Tx, libraryID int64) error {
 	for _, q := range []string{
-		`DELETE FROM items WHERE library_id = ? AND kind IN ('movie','episode') AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f.item_id = items.id)`,
+		`DELETE FROM items WHERE library_id = ? AND kind IN ('movie','episode') AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f.item_id = items.id)
+			AND NOT EXISTS (SELECT 1 FROM media_file_episodes l WHERE l.item_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'season' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'show' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 	} {

@@ -24,7 +24,15 @@ func (s *Store) SaveProgress(uid, itemID int64, position, duration float64) (boo
 		ON CONFLICT (user_id, item_id) DO UPDATE SET position = excluded.position, duration = excluded.duration,
 			watched = MAX(watch_state.watched, excluded.watched), updated_at = excluded.updated_at`,
 		uid, itemID, position, duration, boolInt(completed), now())
-	return completed, err
+	if err != nil || !completed {
+		return completed, err
+	}
+	// Finishing a multi-episode file finishes every episode in it.
+	shared, err := s.SharedFileEpisodes(itemID)
+	if err != nil || len(shared) == 0 {
+		return completed, err
+	}
+	return completed, s.SetWatched(uid, shared, true)
 }
 
 func (s *Store) SetWatched(uid int64, itemIDs []int64, watched bool) error {

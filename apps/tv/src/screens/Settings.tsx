@@ -135,7 +135,13 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   useEffect(() => {
     if (hue)
       api.get<{ id: string; name: string; type: string }[]>('/api/plugins/hue-sync/areas').then(
-        (list) => setAreas(list.map((a) => ({ ...a, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))),
+        (list) =>
+          setAreas(
+            list.map((a) => ({
+              ...a,
+              name: `${a.name} (${a.type === 'Zone' ? 'zone' : a.type === 'Entertainment' ? 'entertainment area' : 'room'})`,
+            })),
+          ),
         () => undefined,
       )
   }, [hue])

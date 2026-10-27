@@ -289,11 +289,12 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 		return err
 	}
 	var itemID int64
+	var more []int64 // the other episodes of a multi-episode file
 	switch lib.Kind {
 	case "movies":
 		itemID, err = s.movieItem(lib, f)
 	case "shows":
-		itemID, err = s.episodeItem(lib, f)
+		itemID, more, err = s.episodeItems(lib, f)
 	default:
 		err = fmt.Errorf("unknown library kind %q", lib.Kind)
 	}
@@ -310,7 +311,10 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 				return err
 			}
 		}
-		return s.st.TouchFile(existing.ID, itemID, gen)
+		if err := s.st.TouchFile(existing.ID, itemID, gen); err != nil {
+			return err
+		}
+		return s.linkEpisodes(lib, existing.ID, existing.Path, more)
 	}
 	mf := &store.MediaFile{ItemID: itemID, Path: f.path, Size: info.Size(), MTime: info.ModTime().Unix()}
 	if err := media.Probe(ctx, s.ffprobe, mf); err != nil {
@@ -318,7 +322,19 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 		mf.Container = strings.TrimPrefix(strings.ToLower(filepath.Ext(f.path)), ".")
 	}
 	mf.Streams = withSidecars(mf.Streams, side)
-	return s.st.UpsertFile(mf, gen)
+	if err := s.st.UpsertFile(mf, gen); err != nil {
+		return err
+	}
+	return s.linkEpisodes(lib, 0, f.path, more)
+}
+
+// linkEpisodes attaches a multi-episode file to its later episodes, and
+// drops links a renamed file no longer has.
+func (s *Scanner) linkEpisodes(lib *store.Library, fileID int64, path string, more []int64) error {
+	if lib.Kind != "shows" {
+		return nil
+	}
+	return s.st.SetFileEpisodes(fileID, path, more)
 }
 
 // movieItem prefers a "Title (Year)" folder over the filename, since folders
@@ -353,12 +369,15 @@ func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 	})
 }
 
-// episodeItem maps Show/Season N/Show - S01E02 - Title.mkv (and looser
-// layouts) onto show, season and episode rows, creating them as needed.
-func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
+// episodeItems maps Show/Season N/Show - S01E02 - Title.mkv (and looser
+// layouts) onto show, season and episode rows, creating them as needed. The
+// file belongs to the first episode; a multi-episode file (S01E01E02) also
+// gets a row for each later episode, returned in more, which plays the same
+// file.
+func (s *Scanner) episodeItems(lib *store.Library, f found) (id int64, more []int64, err error) {
 	rel, err := filepath.Rel(f.root, f.path)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	name := strings.TrimSuffix(parts[len(parts)-1], filepath.Ext(f.path))
@@ -373,7 +392,11 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 		}
 	}
 	if !ok {
-		return 0, fmt.Errorf("cannot find season/episode in %s", f.path)
+		return 0, nil, fmt.Errorf("cannot find season/episode in %s", f.path)
+	}
+	last := episode
+	if season < 1900 { // not date-named
+		last, rest = lastEpisode(season, episode, rest)
 	}
 
 	showName := parts[0]
@@ -383,7 +406,7 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 	showTitle, showYear, tmdb := parseTitleYear(showName)
 	tvdb, imdb := idHints(showName)
 	if showTitle == "" {
-		return 0, fmt.Errorf("cannot find show name for %s", f.path)
+		return 0, nil, fmt.Errorf("cannot find show name for %s", f.path)
 	}
 	showKey := fmt.Sprintf("show:%s:%d", normKey(showTitle), showYear)
 
@@ -397,7 +420,7 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 			LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, TVDBID: tvdb, IMDbID: imdb, MatchKey: showKey,
 		})
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 	}
 	seasonTitle := fmt.Sprintf("Season %d", season)
@@ -409,7 +432,7 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 		SeasonNumber: &season, MatchKey: fmt.Sprintf("%s:s%d", showKey, season),
 	})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	epTitle := episodeTitle(rest)
 	if epTitle == "" {
@@ -422,10 +445,25 @@ func (s *Scanner) episodeItem(lib *store.Library, f found) (int64, error) {
 			}
 		}
 	}
-	return s.st.UpsertItem(&store.Item{
-		LibraryID: lib.ID, Kind: "episode", ParentID: seasonID, ShowID: showID, Title: epTitle,
-		SeasonNumber: &season, EpisodeNumber: &episode, MatchKey: fmt.Sprintf("%s:s%d:e%d", showKey, season, episode),
-	})
+	upsert := func(n int, title string) (int64, error) {
+		return s.st.UpsertItem(&store.Item{
+			LibraryID: lib.ID, Kind: "episode", ParentID: seasonID, ShowID: showID, Title: title,
+			SeasonNumber: &season, EpisodeNumber: &n, MatchKey: fmt.Sprintf("%s:s%d:e%d", showKey, season, n),
+		})
+	}
+	if id, err = upsert(episode, epTitle); err != nil {
+		return 0, nil, err
+	}
+	// The file's title is usually the first episode's (or both, joined);
+	// the later ones get theirs from the metadata provider.
+	for n := episode + 1; n <= last; n++ {
+		mid, err := upsert(n, fmt.Sprintf("Episode %d", n))
+		if err != nil {
+			return 0, nil, err
+		}
+		more = append(more, mid)
+	}
+	return id, more, nil
 }
 
 func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Status, force bool) error {

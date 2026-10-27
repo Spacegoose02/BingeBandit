@@ -168,7 +168,7 @@ func TestEngineFollowsPlayer(t *testing.T) {
 	a.conf = &configStore{dir: t.TempDir}
 	a.fileURL = func(int64) (string, string) { return video, "" }
 	a.engine = &Engine{a: a}
-	user, err := newBridge(hb.URL, "").Pair(context.Background())
+	user, _, err := newBridge(hb.URL, "").Pair(context.Background())
 	if err != nil || user != "u1" {
 		t.Fatalf("pair: %q %v", user, err)
 	}

@@ -58,6 +58,7 @@ func TestParseEpisode(t *testing.T) {
 		{"show.name.s02e10.720p.hdtv", 2, 10, true, ""},
 		{"Show 3x07 Title Here", 3, 7, true, "Title Here"},
 		{"S01E01E02 Pilot", 1, 1, true, "Pilot"},
+		{"Show - S02E05-E06 - Finale", 2, 5, true, "Finale"},
 		{"The Daily Show - 2026-10-23", 2026, 10230000, true, ""},
 		{"Bandit News - 2026-10-23 19.30", 2026, 10231930, true, ""},
 		{"Random file", 0, 0, false, ""},
@@ -66,6 +67,9 @@ func TestParseEpisode(t *testing.T) {
 		s, e, _, rest, ok := parseEpisode(c.in)
 		if s != c.s || e != c.e || ok != c.ok {
 			t.Errorf("parseEpisode(%q) = %d, %d, %v; want %d, %d, %v", c.in, s, e, ok, c.s, c.e, c.ok)
+		}
+		if ok {
+			_, rest = lastEpisode(s, e, rest)
 		}
 		if ok && episodeTitle(rest) != c.epTitle {
 			t.Errorf("episodeTitle(%q) = %q; want %q", rest, episodeTitle(rest), c.epTitle)
@@ -81,5 +85,35 @@ func TestParseSeasonDir(t *testing.T) {
 	}
 	if _, ok := parseSeasonDir("Extras"); ok {
 		t.Error("parseSeasonDir(Extras) should fail")
+	}
+}
+
+func TestLastEpisode(t *testing.T) {
+	cases := []struct {
+		in   string
+		last int
+		rest string
+	}{
+		{"Show - S01E01E02 - Pilot", 2, " - Pilot"},
+		{"Show S01E01E02E03", 3, ""},
+		{"Show.S01E01-E02.720p", 2, ".720p"},
+		{"Show.S01E01-03.HDTV", 3, ".HDTV"},
+		{"Show.S01E01.S01E02.HDTV", 2, ".HDTV"},
+		{"Show.S01E01.S02E02", 1, ".S02E02"}, // another season: not this file's
+		{"Show.S01E01-1080p", 1, "-1080p"},   // a resolution, not an episode
+		{"Show - S01E01 - Episode 2", 1, " - Episode 2"},
+		{"Show - S01E01 - 24 Hours", 1, " - 24 Hours"},
+		{"Show.S01E05E04", 5, "E04"},     // backwards: ignored
+		{"Show.S01E01-E500", 1, "-E500"}, // too many
+	}
+	for _, c := range cases {
+		s, e, _, rest, ok := parseEpisode(c.in)
+		if !ok {
+			t.Fatalf("parseEpisode(%q) failed", c.in)
+		}
+		last, r := lastEpisode(s, e, rest)
+		if last != c.last || r != c.rest {
+			t.Errorf("lastEpisode(%q) = %d, %q; want %d, %q", c.in, last, r, c.last, c.rest)
+		}
 	}
 }

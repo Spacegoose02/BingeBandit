@@ -358,10 +358,17 @@ func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, err
 	return out, rows.Err()
 }
 
+// laterEpisode matches episodes of @show after season @s episode @e, skipping
+// the rest of a multi-episode file that episode is in (it was just played).
+const laterEpisode = `i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0
+	AND (i.season_number > @s OR (i.season_number = @s AND i.episode_number > @e))
+	AND NOT EXISTS (SELECT 1 FROM media_file_episodes l JOIN media_files f ON f.id = l.file_id
+		JOIN items cur ON cur.id = f.item_id
+		WHERE l.item_id = i.id AND cur.show_id = @show AND cur.season_number = @s AND cur.episode_number <= @e)`
+
 // NextEpisode is the first regular-season episode after the given one.
 func (s *Store) NextEpisode(uid, showID int64, season, episode int) (*Item, error) {
-	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0 AND `+visible+`
-		AND (i.season_number > @s OR (i.season_number = @s AND i.episode_number > @e))
+	return scanItem(s.db.QueryRow(itemSelect+` WHERE `+laterEpisode+` AND `+visible+`
 		ORDER BY i.season_number, i.episode_number LIMIT 1`,
 		uidArg(uid), sql.Named("show", showID), sql.Named("s", season), sql.Named("e", episode)))
 }
@@ -374,8 +381,7 @@ func (s *Store) UpNext(uid, showID int64, season, episode int) (*Item, error) {
 	if err != nil || !next.Watch.Watched {
 		return next, err
 	}
-	unwatched, err := scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0 AND `+visible+`
-		AND (i.season_number > @s OR (i.season_number = @s AND i.episode_number > @e)) AND COALESCE(w.watched, 0) = 0
+	unwatched, err := scanItem(s.db.QueryRow(itemSelect+` WHERE `+laterEpisode+` AND `+visible+` AND COALESCE(w.watched, 0) = 0
 		ORDER BY i.season_number, i.episode_number LIMIT 1`,
 		uidArg(uid), sql.Named("show", showID), sql.Named("s", season), sql.Named("e", episode)))
 	if errors.Is(err, ErrNotFound) {

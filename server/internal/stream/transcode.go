@@ -48,6 +48,11 @@ type Options struct {
 	// Older clients send neither and get AAC stereo.
 	AudioCodecs      []string `json:"audioCodecs"`
 	MaxAudioChannels int      `json:"maxAudioChannels"`
+	// SurroundCodec is what a surround track the client can't take as it
+	// is (DTS, TrueHD) becomes: "ac3" or "eac3" for a device that passes
+	// Dolby through to a receiver or soundbar (which often can't take
+	// multichannel PCM over HDMI ARC). Empty: AAC 5.1.
+	SurroundCodec string `json:"surroundCodec"`
 	// EncodeVideo converts H.264 that would otherwise be copied: the viewer
 	// picked "Convert", or direct play stuttered (a high bitrate, level or
 	// profile the device can't keep up with).
@@ -423,7 +428,8 @@ func pickAudio(streams []store.Stream, index int) *store.Stream {
 var copyableAudio = map[string]bool{"aac": true, "ac3": true, "eac3": true, "mp3": true}
 
 // audioArgs picks how to send the audio track: copy it when the client can
-// play it as is, convert to AAC 5.1 for surround clients, else AAC stereo.
+// play it as is, convert to 5.1 (Dolby Digital (Plus) when the client asked
+// for it, else AAC) for surround clients, else AAC stereo.
 // It records the choice on s.
 func audioArgs(s *Session, a *store.Stream, o Options) []string {
 	maxCh := o.MaxAudioChannels
@@ -439,6 +445,14 @@ func audioArgs(s *Session, a *store.Stream, o Options) []string {
 		}
 	}
 	if a != nil && a.Channels >= 6 && maxCh >= 6 {
+		switch o.SurroundCodec {
+		case "ac3":
+			s.AudioCodec, s.AudioChannels = "ac3", 6
+			return []string{"-c:a", "ac3", "-ac", "6", "-b:a", "640k"}
+		case "eac3":
+			s.AudioCodec, s.AudioChannels = "eac3", 6
+			return []string{"-c:a", "eac3", "-ac", "6", "-b:a", "768k"}
+		}
 		s.AudioCodec, s.AudioChannels = "aac", 6
 		return []string{"-c:a", "aac", "-ac", "6", "-b:a", "384k"}
 	}

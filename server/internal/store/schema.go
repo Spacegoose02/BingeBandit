@@ -822,4 +822,15 @@ CREATE TABLE kid_collections (
 );
 CREATE INDEX kid_collections_collection ON kid_collections(collection_id);
 `,
+	// 46: the later episodes of a multi-episode file (S01E01E02). The file
+	// belongs to the first episode (media_files.item_id); each later one is
+	// linked here and plays the same file.
+	`
+CREATE TABLE media_file_episodes (
+	file_id INTEGER NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+	item_id INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	PRIMARY KEY (file_id, item_id)
+);
+CREATE INDEX media_file_episodes_item ON media_file_episodes(item_id);
+`,
 }

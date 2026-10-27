@@ -45,6 +45,10 @@
     <h2>Bridge</h2>
     <div id="paired" hidden>
       <p>Paired with the bridge at <b id="addr"></b>. <span id="bridgeErr" class="error"></span></p>
+      <p class="muted small">For the smoothest sync, make an entertainment area in the Hue app (Settings → Entertainment
+        areas) and pick it as a screen's lights in Account (or the TV app's Settings). Its lights get 25 updates a second,
+        each following the part of the picture on its side of the TV.
+        <span id="restream" hidden>This bridge was paired before streaming: forget it and pair again to use entertainment areas.</span></p>
       <div class="row"><button id="unpair" type="button">Forget this bridge</button></div>
     </div>
     <div id="unpaired" hidden>
@@ -122,6 +126,7 @@
     $('paired').hidden = !st.paired
     $('unpaired').hidden = st.paired
     $('addr').textContent = st.bridge
+    $('restream').hidden = !st.paired || st.streaming
     $('bridgeErr').textContent = st.error || ''
     $('lightsBox').hidden = !st.lights
     if (!st.lights) return

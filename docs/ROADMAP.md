@@ -11,6 +11,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | TMDB metadata: posters, backdrops, logos, ratings, genres, studio/network, content rating |
 | ✅ | Cast & crew, trailers, "Other movies in this collection" |
 | ✅ | Shows → seasons (with season covers) → episodes |
+| ✅ | Multi-episode files (`S01E01E02`, `S01E01-E02`, `S01E01-03`, `S01E01.S01E02`): one episode per number, all playing the same file; finishing it finishes them all |
 | ✅ | Home like Plex: hero, Continue Watching (+ next episode), Recently Added (merged per media type), Recently Released |
 | ✅ | Mark as watched / unwatched (movie, episode, season, whole show) |
 | ✅ | Continue watching with progress per user |
@@ -147,6 +148,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | **Android TV / Fire TV APK** (`apps/tv`, react-native-tvos): home rows, details, seasons/episodes, player with resume/next episode/progress, Live TV with channel up/down |
 | ✅ | Easy setup: finds the server on the home network, signs in with a code or QR code (or password + 2FA), big remote-friendly screens |
 | ✅ | APK built and attached to GitHub releases (signed when the key secrets are set) |
+| ✅ | TV app surround: AC-3/E-AC-3 the box can decode or pass through is played (and kept when converting); DTS/TrueHD become Dolby Digital for a receiver or soundbar |
 | ✅ | TV player control bar (⟲ 10 s / play-pause / 30 s ⟳ / next episode / audio & subtitles); audio and subtitle choice from the viewer's preferences, text subtitles drawn by the app, image subtitles burned in |
 | ✅ | Cable-box style guide grid: timeline, programs sized by length, details and a live preview of the focused channel |
 | ✅ | Search; watchlist add/remove on details |
@@ -169,7 +171,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | | Yamtrack plugin (Yamtrack already works today through a Plex-style webhook or Trakt; a plugin could add history import and per-user setup) |
 | ✅ | **Cinemask Upgrades** (bundled): lists movies and episodes below the quality you want (resolution, old codecs, low bitrate, 4K without HDR, judged from the files) and has [Cinemask](https://github.com/Spacegoose02/cinemask) search for better copies: search and grab, pick a release, move the title to a higher profile, add it to Cinemask, or search all |
 | ✅ | **Hue Sync** (bundled): Hue lights follow the colours on screen, per zone (left, right, centre…), in step with the player; pause and stop behaviour, filters for people and devices |
-| | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box) |
+| ✅ | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box): pick an entertainment area made in the Hue app as a screen's lights |
 | ✅ | Plugin catalogue: install, update and uninstall plugins from a list (BingeBandit's own, published with each release, plus catalogues the admin adds) instead of copying folders |
 
 ## Docs
