@@ -7,7 +7,7 @@ import type { Collection, Item } from '../types'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
 
-interface KidState {
+export interface KidState {
   id: number
   name: string
   approved: boolean
@@ -80,7 +80,7 @@ function ApproveButton({ path, name, what, collection }: { path: string; name: s
   )
 }
 
-function KidsDialog({ path, name, what, kids, onClose }: { path: string; name: string; what: string; kids: KidState[]; onClose: (saved?: boolean) => void }) {
+export function KidsDialog({ path, name, what, kids, onClose }: { path: string; name: string; what: string; kids: KidState[]; onClose: (saved?: boolean) => void }) {
   const [picked, setPicked] = useState(new Set(kids.filter((k) => k.approved).map((k) => k.id)))
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
