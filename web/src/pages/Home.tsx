@@ -123,7 +123,7 @@ export default function Home() {
             <Row
               key={row.id}
               title={row.title}
-              action={row.collectionId ? <Link to={`/collection/${row.collectionId}`} className="muted small">See all</Link> : undefined}
+              to={row.collectionId ? `/collection/${row.collectionId}` : undefined}
             >
               {row.items.map((it) => (
                 <PosterCard key={it.id} item={it} />

@@ -230,7 +230,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
           <Row
             key={collection.id}
             title={collection.name}
-            action={<Link to={`/collection/${collection.id}`} className="muted small">View collection</Link>}
+            to={`/collection/${collection.id}`}
           >
             {items.map((m) => (
               <PosterCard key={m.id} item={m} />
