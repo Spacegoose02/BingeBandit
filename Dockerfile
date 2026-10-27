@@ -25,12 +25,16 @@ RUN for p in watchlist-rss hue-sync cinemask-upgrades game-lights youtube-live; 
 
 # yt-dlp finds the HLS address of YouTube live streams (the YouTube Live
 # plugin's channels). The standalone build needs no Python; the plugin runs
-# "yt-dlp -U" daily, since YouTube changes often.
+# "yt-dlp -U" daily, since YouTube changes often. YouTube only hands out
+# stream addresses after a JavaScript challenge, which yt-dlp solves with
+# Deno (its default runtime).
 FROM alpine:3.20 AS ytdlp
 ARG TARGETARCH
-RUN case "$TARGETARCH" in arm64) f=yt-dlp_linux_aarch64 ;; *) f=yt-dlp_linux ;; esac \
+RUN case "$TARGETARCH" in arm64) f=yt-dlp_linux_aarch64; d=aarch64 ;; *) f=yt-dlp_linux; d=x86_64 ;; esac \
  && wget -qO /yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/latest/download/$f" \
- && chmod +x /yt-dlp
+ && chmod +x /yt-dlp \
+ && wget -qO /deno.zip "https://github.com/denoland/deno/releases/latest/download/deno-$d-unknown-linux-gnu.zip" \
+ && unzip -q /deno.zip -d / && chmod +x /deno && rm /deno.zip
 
 FROM debian:bookworm-slim
 ARG TARGETARCH
@@ -42,7 +46,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /bingebandit /usr/local/bin/bingebandit
 COPY --from=server /plugins /usr/local/lib/bingebandit/plugins
-COPY --from=ytdlp /yt-dlp /usr/local/bin/yt-dlp
+COPY --from=ytdlp /yt-dlp /deno /usr/local/bin/
 ENV BB_DATA_DIR=/config BB_ADDR=:8484 BB_PLUGINS_DIR=/usr/local/lib/bingebandit/plugins
 VOLUME ["/config"]
 EXPOSE 8484
