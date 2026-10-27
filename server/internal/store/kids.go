@@ -84,9 +84,12 @@ func (s *Store) SetKidGroup(name string, on bool) error {
 	return err
 }
 
-// KidTitles lists the movies or shows (kind) approved for a kid, by title.
+// KidTitles lists the movies or shows (kind) approved for a kid, by title:
+// the ones approved one by one and everything in the collections approved
+// for them.
 func (s *Store) KidTitles(uid int64, kind string) ([]*Item, error) {
-	return s.queryItems(listSelect+` WHERE i.kind = @kind AND i.id IN (SELECT item_id FROM kid_titles WHERE user_id = @uid)
+	return s.queryItems(listSelect+` WHERE i.kind = @kind AND (i.id IN (SELECT item_id FROM kid_titles WHERE user_id = @uid)
+			OR EXISTS (SELECT 1 FROM kid_collections kc JOIN collections c ON c.id = kc.collection_id WHERE kc.user_id = @uid AND `+memberOf+`))
 		ORDER BY i.sort_title COLLATE NOCASE, i.id`, uidArg(uid), sql.Named("kind", kind))
 }
 
@@ -117,14 +120,6 @@ func (s *Store) SetKidTitle(userID, itemID, by int64, on bool) error {
 	}
 	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_titles (user_id, item_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, itemID, by, now())
 	return err
-}
-
-// KidCollections lists the collections approved for a kid from libraries of
-// movies (kind "movie") or shows (kind "show").
-func (s *Store) KidCollections(uid int64, kind string) ([]*Collection, error) {
-	return s.queryCollections(collectionSelect+` JOIN kid_collections kc ON kc.collection_id = c.id AND kc.user_id = ?
-		JOIN libraries l ON l.id = c.library_id AND l.kind = ?
-		ORDER BY `+collectionOrder, uid, kind+"s")
 }
 
 // KidCollectionApproved reports whether collection id is approved for uid.

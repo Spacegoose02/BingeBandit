@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
-import { CollectionCard, PosterCard } from '../components/Cards'
+import { PosterCard } from '../components/Cards'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { useApi, useDocumentTitle } from '../hooks'
 import { episodeLabel, formatRuntime } from '../format'
-import type { Collection, Item, Playlist } from '../types'
+import type { Item, Playlist } from '../types'
 
 export function WatchlistPage() {
   useDocumentTitle('Watchlist')
@@ -33,16 +33,11 @@ export function WatchlistPage() {
   )
 }
 
-/**
- * A kid's Approved Movies or Approved Shows: the titles and whole collections
- * a parent approved for them, mixed by sort title like a library.
- */
+/** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */
 export function KidsTitlesPage({ kind }: { kind: 'movie' | 'show' }) {
   const title = kind === 'movie' ? 'Approved Movies' : 'Approved Shows'
   useDocumentTitle(title)
   const { data } = useApi<Item[]>(`/api/kids/titles?kind=${kind}`)
-  const { data: collections } = useApi<Collection[]>(`/api/kids/collections?kind=${kind}`)
-  const tiles = data && collections ? kidTiles(data, collections) : null
   return (
     <div className="page">
       <header className="page-head">
@@ -51,24 +46,14 @@ export function KidsTitlesPage({ kind }: { kind: 'movie' | 'show' }) {
           <div className="muted">{kind === 'movie' ? 'Movies' : 'Shows'} a grown-up picked for you.</div>
         </div>
       </header>
-      {tiles?.length === 0 && <div className="empty">Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</div>}
+      {data?.length === 0 && <div className="empty">Nothing here yet. Ask a grown-up to pick some {kind === 'movie' ? 'movies' : 'shows'} for you.</div>}
       <div className="poster-grid">
-        {tiles?.map((t) =>
-          'collection' in t ? <CollectionCard key={`c${t.collection.id}`} collection={t.collection} /> : <PosterCard key={t.item.id} item={t.item} />,
-        )}
+        {data?.map((it) => (
+          <PosterCard key={it.id} item={it} />
+        ))}
       </div>
     </div>
   )
-}
-
-function kidTiles(items: Item[], collections: Collection[]): ({ item: Item } | { collection: Collection })[] {
-  const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'base' })
-  return [
-    ...collections.map((collection) => ({ collection, key: collection.sortTitle || collection.name })),
-    ...items.map((item) => ({ item, key: item.sortTitle || item.title })),
-  ]
-    .sort((a, b) => byName(a.key, b.key))
-    .map(({ key: _, ...t }) => t)
 }
 
 export function PlaylistsPage() {

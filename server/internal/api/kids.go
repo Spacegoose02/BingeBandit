@@ -201,23 +201,6 @@ func (s *Server) setItemKids(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// kidCollections lists the collections approved for the signed-in kid from
-// movie libraries (?kind=movie) or show libraries (?kind=show), shown with
-// their Approved Movies and Approved Shows.
-func (s *Server) kidCollections(w http.ResponseWriter, r *http.Request) {
-	kind := r.URL.Query().Get("kind")
-	if kind != "movie" && kind != "show" {
-		writeErr(w, http.StatusBadRequest, "kind must be movie or show")
-		return
-	}
-	cols, err := s.Store.KidCollections(currentUser(r).ID, kind)
-	if err != nil {
-		writeStoreErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, cols)
-}
-
 // approvableCollection loads collection {id} if the signed-in user can see
 // its library.
 func (s *Server) approvableCollection(w http.ResponseWriter, r *http.Request) *store.Collection {

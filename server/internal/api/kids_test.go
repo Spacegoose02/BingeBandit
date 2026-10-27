@@ -311,14 +311,15 @@ func TestKidCollections(t *testing.T) {
 		t.Fatalf("kid's Kids TV: %d %+v", c, page.Items)
 	}
 
-	var approved []store.Collection
-	call("kid", "GET", "/api/kids/collections?kind=movie", "", &approved)
-	if len(approved) != 1 || approved[0].Name != "Pixar" || approved[0].ItemCount != 2 {
-		t.Fatalf("approved movie collections: %+v", approved)
+	// The titles land in Approved Movies and Approved Shows.
+	var list []store.Item
+	call("kid", "GET", "/api/kids/titles?kind=movie", "", &list)
+	if len(list) != 2 || list[0].Title != "Cars" || list[1].Title != "Toy Story" {
+		t.Fatalf("approved movies: %+v", list)
 	}
-	call("kid", "GET", "/api/kids/collections?kind=show", "", &approved)
-	if len(approved) != 1 || approved[0].Name != "Kids TV" {
-		t.Fatalf("approved show collections: %+v", approved)
+	call("kid", "GET", "/api/kids/titles?kind=show", "", &list)
+	if len(list) != 1 || list[0].Title != "Bluey" {
+		t.Fatalf("approved shows: %+v", list)
 	}
 
 	// Taking it away.
