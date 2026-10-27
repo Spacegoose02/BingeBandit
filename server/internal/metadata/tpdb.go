@@ -53,6 +53,7 @@ type TPDb struct {
 	thumbDir string
 	mu       sync.Mutex
 	cache    map[string]tpdbCached
+	previews map[int64]string // poster id → the small image its title page shows
 }
 
 type tpdbCached struct {
@@ -64,7 +65,7 @@ func NewTPDb(base, thumbDir string) *TPDb {
 	if base == "" {
 		base = tpdbBase
 	}
-	return &TPDb{base: strings.TrimSuffix(base, "/"), hc: &http.Client{Timeout: 20 * time.Second}, thumbDir: thumbDir, cache: map[string]tpdbCached{}}
+	return &TPDb{base: strings.TrimSuffix(base, "/"), hc: &http.Client{Timeout: 20 * time.Second}, thumbDir: thumbDir, cache: map[string]tpdbCached{}, previews: map[int64]string{}}
 }
 
 // AssetURL is where a poster's full image is downloaded from.
@@ -72,7 +73,8 @@ func (t *TPDb) AssetURL(id int64) string { return fmt.Sprintf("%s/api/assets/%d"
 
 var (
 	reTPDbTitleLink  = regexp.MustCompile(`(?is)<a\b[^>]*href="(?:https?://theposterdb\.com)?/posters/(\d+)"[^>]*>(.*?)</a>`)
-	reTPDbPosterID   = regexp.MustCompile(`(?i)data-poster-id="(\d+)"|/api/assets/(\d+)|theposterdb\.com/poster/(\d+)\b|href="/poster/(\d+)"`)
+	reTPDbPosterID   = regexp.MustCompile(`(?i)data-poster-id=["'](\d+)["']|/api/assets/(\d+)|theposterdb\.com/poster/(\d+)\b|href="/poster/(\d+)"`)
+	reTPDbPreview    = regexp.MustCompile(`(?i)type="image/jpeg"\s+srcset="(https://images\.theposterdb\.com/[^"\s]+)"`)
 	reTPDbUser       = regexp.MustCompile(`(?i)/user/([A-Za-z0-9_.-]+)`)
 	reTPDbPosterText = regexp.MustCompile(`(?is)class="[^"]*text-break[^"]*"[^>]*>(.*?)</`)
 	reTags           = regexp.MustCompile(`(?s)<[^>]*>`)
@@ -120,12 +122,23 @@ func (t *TPDb) parsePosters(page string) []TPDbPoster {
 	}
 	var out []TPDbPoster
 	seen := map[int64]bool{}
+	prev := 0
 	for i, loc := range locs {
 		id := ids[i]
 		if id == 0 || seen[id] {
 			continue
 		}
 		seen[id] = true
+		// The preview image sits just before the poster's overlay.
+		if m := reTPDbPreview.FindAllStringSubmatch(page[prev:loc[0]], -1); m != nil {
+			t.mu.Lock()
+			if len(t.previews) > 5000 {
+				t.previews = map[int64]string{}
+			}
+			t.previews[id] = m[len(m)-1][1]
+			t.mu.Unlock()
+		}
+		prev = loc[1]
 		end := len(page)
 		for j := i + 1; j < len(locs); j++ {
 			if ids[j] != id {
@@ -214,6 +227,9 @@ func (t *TPDb) search(ctx context.Context, kind, query string, year int) ([]TPDb
 			return nil, err
 		}
 		title := TPDbTitle{ID: id, Title: pageTitle(page), URL: query, Posters: t.parsePosters(page)}
+		if title.Posters == nil {
+			title.Posters = []TPDbPoster{}
+		}
 		return []TPDbTitle{title}, nil
 	}
 
@@ -254,6 +270,15 @@ func (t *TPDb) search(ctx context.Context, kind, query string, year int) ([]TPDb
 			titles[i].Title = pageTitle(page)
 		}
 	}
+	// Empty lists, not null, so the web picker can count them.
+	if titles == nil {
+		titles = []TPDbTitle{}
+	}
+	for i := range titles {
+		if titles[i].Posters == nil {
+			titles[i].Posters = []TPDbPoster{}
+		}
+	}
 	return titles, nil
 }
 
@@ -286,7 +311,13 @@ func (t *TPDb) Thumb(ctx context.Context, id int64) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return path, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, t.AssetURL(id), nil)
+	from := t.AssetURL(id)
+	t.mu.Lock()
+	if u, ok := t.previews[id]; ok {
+		from = u // already small, and served without a sign-in
+	}
+	t.mu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, from, nil)
 	if err != nil {
 		return "", err
 	}
