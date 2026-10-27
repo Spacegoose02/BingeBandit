@@ -118,6 +118,10 @@ func Refresh(ctx context.Context, st *store.Store, src *store.LiveSource) error 
 }
 
 func refresh(ctx context.Context, st *store.Store, src *store.LiveSource) (int, error) {
+	if IsPluginSource(src) {
+		// A plugin sends its channels itself (SyncPluginChannels).
+		return src.EntryCount, nil
+	}
 	rc, err := spool(ctx, src.URL, src.UserAgent)
 	if err != nil {
 		return 0, err
@@ -173,7 +177,7 @@ func RefreshDue(ctx context.Context, st *store.Store) (string, error) {
 	done, failed := 0, 0
 	for _, src := range sources {
 		hours := max(src.RefreshHours, 1)
-		if !src.Enabled || time.Since(time.Unix(src.LastRefresh, 0)) < time.Duration(hours)*time.Hour {
+		if !src.Enabled || IsPluginSource(src) || time.Since(time.Unix(src.LastRefresh, 0)) < time.Duration(hours)*time.Hour {
 			continue
 		}
 		if Refresh(ctx, st, src) != nil {

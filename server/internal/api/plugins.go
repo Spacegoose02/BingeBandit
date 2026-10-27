@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"bingebandit/internal/importer"
+	"bingebandit/internal/livetv"
 	"bingebandit/internal/plugins"
 	"bingebandit/internal/store"
 )
@@ -193,6 +194,7 @@ func (s *Server) pluginAPI(r chi.Router) {
 	r.Get("/files", s.pluginFiles)
 	r.Get("/files/{id}/direct", s.directPlay)
 	r.Get("/collections/{id}/missing", s.pluginCollectionMissing)
+	r.Put("/live/channels", s.pluginLiveChannels)
 	r.Get("/images/tmdb/{file}", s.tmdbImage)
 	r.Get("/images/local/{file}", s.localImage)
 	r.Route("/users/{uid}", func(r chi.Router) {
@@ -279,6 +281,33 @@ func (s *Server) pluginFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"files": files, "total": total})
+}
+
+// pluginLiveChannels replaces the Live TV channels a plugin offers (such as
+// YouTubers' live streams), each shown while it's live.
+func (s *Server) pluginLiveChannels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Group    string                 `json:"group"`
+		Channels []livetv.PluginChannel `json:"channels"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	req.Group = strings.TrimSpace(req.Group)
+	if req.Group == "" || len(req.Group) > 60 {
+		writeErr(w, http.StatusBadRequest, "group must be 1 to 60 characters")
+		return
+	}
+	if err := livetv.ValidPluginChannels(req.Channels); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := livetv.SyncPluginChannels(s.Store, currentPlugin(r).ID, req.Group, req.Channels); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // pluginLog writes a line to the server log, for plugins that run elsewhere.

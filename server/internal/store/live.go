@@ -742,3 +742,51 @@ func (s *Store) CreateChannel(c *Channel, streamIDs []int64) error {
 	}
 	return tx.Commit()
 }
+
+// SourceChannel is a channel playing one of a source's streams.
+type SourceChannel struct {
+	ChannelID int64
+	StreamID  int64
+	URL       string
+	Enabled   bool
+}
+
+// SourceChannels lists the channels that play a source's streams.
+func (s *Store) SourceChannels(sourceID int64) ([]SourceChannel, error) {
+	rows, err := s.db.Query(`SELECT c.id, ls.id, ls.url, c.enabled FROM channels c
+		JOIN channel_streams cs ON cs.channel_id = c.id JOIN live_streams ls ON ls.id = cs.stream_id
+		WHERE ls.source_id = ? ORDER BY c.id`, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SourceChannel
+	for rows.Next() {
+		var c SourceChannel
+		if err := rows.Scan(&c.ChannelID, &c.StreamID, &c.URL, &c.Enabled); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// ChannelStreamCount is how many streams a channel has left.
+func (s *Store) ChannelStreamCount(id int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM channel_streams WHERE channel_id = ?`, id).Scan(&n)
+	return n, err
+}
+
+// SetChannelEnabled shows or hides a channel without touching the rest.
+func (s *Store) SetChannelEnabled(id int64, on bool) error {
+	_, err := s.db.Exec(`UPDATE channels SET enabled = ? WHERE id = ?`, boolInt(on), id)
+	return err
+}
+
+// NextChannelNumber is one past the highest channel number.
+func (s *Store) NextChannelNumber() (float64, error) {
+	var n float64
+	err := s.db.QueryRow(`SELECT COALESCE(MAX(number), 0) FROM channels`).Scan(&n)
+	return float64(int(n)) + 1, err
+}

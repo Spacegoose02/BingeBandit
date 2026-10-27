@@ -17,11 +17,20 @@ COPY server/ ./
 COPY --from=web /src/server/internal/web/dist ./internal/web/dist
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /bingebandit ./cmd/bingebandit
 # Bundled plugins: each gets its own folder with its plugin.json. They're off until an admin turns them on.
-RUN for p in watchlist-rss hue-sync cinemask-upgrades game-lights; do \
+RUN for p in watchlist-rss hue-sync cinemask-upgrades game-lights youtube-live; do \
       mkdir -p /plugins/$p \
       && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /plugins/$p/$p ./plugins/$p \
       && { echo '{'; echo "  \"version\": \"${VERSION#v}\","; tail -n +2 plugins/$p/plugin.json; } > /plugins/$p/plugin.json || exit 1; \
     done
+
+# yt-dlp finds the HLS address of YouTube live streams (the YouTube Live
+# plugin's channels). The standalone build needs no Python; the plugin runs
+# "yt-dlp -U" daily, since YouTube changes often.
+FROM alpine:3.20 AS ytdlp
+ARG TARGETARCH
+RUN case "$TARGETARCH" in arm64) f=yt-dlp_linux_aarch64 ;; *) f=yt-dlp_linux ;; esac \
+ && wget -qO /yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/latest/download/$f" \
+ && chmod +x /yt-dlp
 
 FROM debian:bookworm-slim
 ARG TARGETARCH
@@ -33,6 +42,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /bingebandit /usr/local/bin/bingebandit
 COPY --from=server /plugins /usr/local/lib/bingebandit/plugins
+COPY --from=ytdlp /yt-dlp /usr/local/bin/yt-dlp
 ENV BB_DATA_DIR=/config BB_ADDR=:8484 BB_PLUGINS_DIR=/usr/local/lib/bingebandit/plugins
 VOLUME ["/config"]
 EXPOSE 8484
