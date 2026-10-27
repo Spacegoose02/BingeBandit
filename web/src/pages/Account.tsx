@@ -9,6 +9,7 @@ import { Profiles } from '../components/Profiles'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
 import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
+import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { createPasskey, passkeyErrorMessage, passkeysSupported } from '../passkeys'
 import type { APIKey, DeviceSession, Identity, Passkey, PluginLinks, Prefs } from '../types'
 
@@ -30,6 +31,7 @@ function PluginPages() {
   const { data } = useApi<PluginLinks[]>('/api/plugins')
   if (!data) return null
   const hue = data.some((p) => p.id === 'hue-sync')
+  const gameLights = data.some((p) => p.id === 'game-lights')
   return (
     <>
       {data.some((p) => p.pages.length > 0) && (
@@ -51,12 +53,18 @@ function PluginPages() {
         </div>
       )}
       {hue && <HueSync />}
+      {gameLights && <GameLightsSwitch />}
     </>
   )
 }
 
-/** Hue Sync's switch for this browser; the TV app has its own in Settings. */
+/**
+ * Hue Sync for this profile (off until picked, saved by the plugin), then
+ * this browser's own switch and room. The TV app shows Hue Sync only once a
+ * mode is picked here.
+ */
 function HueSync() {
+  const { mode, setMode } = useHueMode()
   const [on, setOn] = useState(hueSyncOn)
   const [area, setArea] = useState(hueArea)
   // Rooms and zones from the Hue app; missing when the plugin isn't running.
@@ -72,11 +80,27 @@ function HueSync() {
   return (
     <div className="panel form" style={{ marginBottom: 20 }}>
       <h3>Hue Sync</h3>
-      <label className="check">
-        <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
-        Let the Hue lights follow what plays in this browser
+      <label>
+        For this profile
+        <select value={mode ?? 'off'} disabled={!mode} onChange={(e) => setMode(e.target.value as HueMode).catch((err) => alert(err.message))}>
+          {(Object.keys(hueModeNames) as HueMode[]).map((m) => (
+            <option key={m} value={m}>
+              {hueModeNames[m]}
+            </option>
+          ))}
+        </select>
+        <span className="muted small">
+          Sync: the lights follow the colours on screen. Theater: they dim while something plays and come back up when you pause or stop. You can switch from the
+          player's options too.
+        </span>
       </label>
-      {on && !!areas?.length && (
+      {mode && mode !== 'off' && (
+        <label className="check">
+          <input type="checkbox" checked={on} onChange={(e) => toggle(e.target.checked)} />
+          Use it in this browser
+        </label>
+      )}
+      {mode && mode !== 'off' && on && !!areas?.length && (
         <label>
           Lights in
           <select value={area} onChange={(e) => pickArea(e.target.value)}>
@@ -101,7 +125,33 @@ function HueSync() {
           </span>
         </label>
       )}
-      <p className="muted small">This only changes this browser. Your other devices each have their own switch.</p>
+      {mode && mode !== 'off' && <p className="muted small">The browser switch and room only change this browser. Your other devices each have their own.</p>}
+    </div>
+  )
+}
+
+/** This profile's Game Lights switch (off until turned on); the rest is on My Game Lights. */
+function GameLightsSwitch() {
+  const base = '/api/plugins/game-lights/me'
+  const { data, reload } = useApi<{ person: Record<string, unknown> & { enabled?: boolean; off?: boolean } }>(`${base}/state`)
+  if (!data) return null
+  const p = data.person
+  const set = async (enabled: boolean) => {
+    await api.put(`${base}/settings`, { ...p, enabled, off: false }).catch((e) => alert(e.message))
+    reload()
+  }
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>Game Lights</h3>
+      <label className="check">
+        <input type="checkbox" checked={!!p.enabled} onChange={(e) => set(e.target.checked)} />
+        Flash the Hue lights when my teams score
+      </label>
+      {p.enabled && p.off && <p className="muted small">Stopped from the TV app for now. Start it again there, or turn it off and on here.</p>}
+      <p className="muted small">
+        Off until you turn it on, for each profile. Your teams come from <Link to="/sports">Sports</Link>; the room, delay and colours are on{' '}
+        <a href={`${base}`} target="_blank" rel="noreferrer">My Game Lights</a>. The TV app shows Game Lights once it's on here.
+      </p>
     </div>
   )
 }

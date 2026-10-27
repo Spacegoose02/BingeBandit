@@ -94,30 +94,54 @@ func Draw(base image.Image, w int, p Plan, imgs Images) *image.RGBA {
 		badge(dst, fc, w-margin-tw, margin, bh, p.Audio, badgeBG, white)
 	}
 	if len(p.Ratings) > 0 {
-		total := 0
-		widths := make([][2]int, len(p.Ratings))
-		for i, r := range p.Ratings {
-			s := sources[r.Source]
-			widths[i] = [2]int{badgeWidth(fc, bh, s.label), badgeWidth(fc, bh, r.Text)}
-			total += widths[i][0] + widths[i][1]
-		}
-		total += gap * (len(p.Ratings) - 1)
-		x := (w - total) / 2
-		if x < margin {
-			x = margin
-		}
-		y := h - margin - bh
-		for i, r := range p.Ratings {
-			s := sources[r.Source]
-			// One pill: the source's colour with its name, then the score.
-			roundRect(dst, image.Rect(x, y, x+widths[i][0]+widths[i][1], y+bh), bh/4, badgeBG)
-			roundRect(dst, image.Rect(x, y, x+widths[i][0], y+bh), bh/4, s.bg)
-			text(dst, fc, x, y, widths[i][0], bh, s.label, s.fg)
-			text(dst, fc, x+widths[i][0], y, widths[i][1], bh, r.Text, white)
-			x += widths[i][0] + widths[i][1] + gap
-		}
+		drawRatings(dst, fc, w, h, bh, margin, gap, p.Ratings)
 	}
 	return dst
+}
+
+// drawRatings centres the score pills along the bottom, shrinking them until
+// they fit between the margins: three scores used to run off a narrow poster.
+func drawRatings(dst *image.RGBA, fc font.Face, w, h, bh, margin, gap int, ratings []Rating) {
+	measure := func(fc font.Face, bh, gap int) ([][2]int, int) {
+		total := gap * (len(ratings) - 1)
+		widths := make([][2]int, len(ratings))
+		for i, r := range ratings {
+			widths[i] = [2]int{badgeWidth(fc, bh, sources[r.Source].label), badgeWidth(fc, bh, r.Text)}
+			total += widths[i][0] + widths[i][1]
+		}
+		return widths, total
+	}
+	avail := w - 2*margin
+	widths, total := measure(fc, bh, gap)
+	for i := 0; i < 4 && total > avail && bh > 8; i++ {
+		scale := float64(avail) / float64(total)
+		nbh := int(math.Floor(float64(bh) * scale))
+		if nbh >= bh {
+			nbh = bh - 1
+		}
+		small := face(float64(nbh) * 0.58)
+		if small == nil {
+			break
+		}
+		defer small.Close()
+		fc, bh = small, nbh
+		gap = int(math.Max(1, math.Floor(float64(gap)*scale)))
+		widths, total = measure(fc, bh, gap)
+	}
+	x := (w - total) / 2
+	if x < margin {
+		x = margin
+	}
+	y := h - margin - bh
+	for i, r := range ratings {
+		s := sources[r.Source]
+		// One pill: the source's colour with its name, then the score.
+		roundRect(dst, image.Rect(x, y, x+widths[i][0]+widths[i][1], y+bh), bh/4, badgeBG)
+		roundRect(dst, image.Rect(x, y, x+widths[i][0], y+bh), bh/4, s.bg)
+		text(dst, fc, x, y, widths[i][0], bh, s.label, s.fg)
+		text(dst, fc, x+widths[i][0], y, widths[i][1], bh, r.Text, white)
+		x += widths[i][0] + widths[i][1] + gap
+	}
 }
 
 func badgeWidth(fc font.Face, bh int, s string) int {

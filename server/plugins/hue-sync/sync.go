@@ -42,7 +42,8 @@ type session struct {
 	pos     float64   // file position at `at`
 	at      time.Time // when pos was reported
 	paused  bool
-	sampler *Sampler
+	mode    string   // ModeSync or ModeTheater; guarded by Engine.mu
+	sampler *Sampler // nil in theater mode, which needs no picture
 	ctx     context.Context
 	cancel  context.CancelFunc
 	lights  [][2]string           // light id and the part of the picture it follows
@@ -109,6 +110,14 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 		}
 		return
 	}
+	mode := e.a.conf.get().mode(p.UserID)
+	if mode == ModeOff {
+		// The person hasn't turned Hue Sync on for themselves (or just turned it off).
+		if cur != nil {
+			e.endLocked(ctx, cur, "turned off by "+p.User)
+		}
+		return
+	}
 	if !mine {
 		// A new player, one we joined late, or the device moved to other lights.
 		// Only take over when it matches the filters.
@@ -135,20 +144,79 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 		if cur != nil {
 			e.endLocked(ctx, cur, "moved on")
 		}
-		e.startLocked(ctx, p, lights)
+		e.startLocked(ctx, p, lights, mode)
 		return
 	}
 	now := time.Now()
 	drift := math.Abs(cur.position(now) - p.Position)
 	wasPaused := cur.paused
 	cur.ev, cur.pos, cur.at, cur.paused = p, p.Position, now, p.Paused
-	if drift > 2.5 && !cur.sampler.Covers(p.Position) {
+	if cur.mode != mode {
+		e.switchLocked(ctx, cur, mode)
+	}
+	if cur.sampler != nil && drift > 2.5 && !cur.sampler.Covers(p.Position) {
 		// A seek outside what's been read: read again from there.
 		cur.sampler.Stop()
 		cur.sampler = e.newSampler(cur.ctx, p.FileID, p.Position)
 	}
 	if p.Paused && !wasPaused {
 		e.pauseLocked(ctx, cur)
+	} else if !p.Paused && wasPaused && cur.mode == ModeTheater {
+		e.dimLocked(ctx, cur)
+	}
+}
+
+// setMode applies a person's new mode to whatever they're playing now.
+func (e *Engine) setMode(ctx context.Context, userID int64, mode string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, s := range e.sessions {
+		if s.ev.UserID != userID {
+			continue
+		}
+		if mode == ModeOff {
+			e.endLocked(ctx, s, "turned off by "+s.ev.User)
+		} else if s.mode != mode {
+			e.switchLocked(ctx, s, mode)
+		}
+	}
+}
+
+// switchLocked moves a playing session between following the picture and
+// theater mode.
+func (e *Engine) switchLocked(ctx context.Context, s *session, mode string) {
+	s.mode = mode
+	clear(s.sent)
+	if mode == ModeTheater {
+		if s.sampler != nil {
+			s.sampler.Stop()
+			s.sampler = nil
+		}
+		if !s.paused {
+			e.dimLocked(ctx, s)
+		}
+		return
+	}
+	if s.sampler == nil {
+		s.sampler = e.newSampler(s.ctx, s.ev.FileID, s.position(time.Now()))
+	}
+}
+
+// dimLocked brings a theater-mode session's lights down to a warm glow (or
+// off), as the admin set.
+func (e *Engine) dimLocked(ctx context.Context, s *session) {
+	conf := e.a.conf.get()
+	b := newBridge(conf.Bridge, conf.Username)
+	pct, err := strconv.ParseFloat(e.a.setting(ctx, "theater_brightness"), 64)
+	if err != nil || pct < 0 || pct > 100 {
+		pct = 8
+	}
+	state := map[string]any{"on": false, "transitiontime": 20}
+	if pct > 0 {
+		state = map[string]any{"on": true, "ct": 447, "bri": max(1, int(math.Round(pct/100*254))), "transitiontime": 20}
+	}
+	for _, l := range s.lights {
+		go b.SetState(ctx, l[0], state)
 	}
 }
 
@@ -198,7 +266,7 @@ func (e *Engine) newSampler(ctx context.Context, fileID int64, from float64) *Sa
 	return startSampler(ctx, e.a.ffmpeg, url, key, math.Max(0, from-1), sampleFPS, 45)
 }
 
-func (e *Engine) startLocked(ctx context.Context, p playerEvent, lights [][2]string) {
+func (e *Engine) startLocked(ctx context.Context, p playerEvent, lights [][2]string, mode string) {
 	conf := e.a.conf.get()
 	b := newBridge(conf.Bridge, conf.Username)
 	saved := map[string]LightState{}
@@ -212,11 +280,17 @@ func (e *Engine) startLocked(ctx context.Context, p playerEvent, lights [][2]str
 		}
 	}
 	sctx, cancel := context.WithCancel(ctx)
-	s := &session{ev: p, pos: p.Position, at: time.Now(), paused: p.Paused, ctx: sctx, cancel: cancel,
+	s := &session{ev: p, pos: p.Position, at: time.Now(), paused: p.Paused, mode: mode, ctx: sctx, cancel: cancel,
 		lights: lights, saved: saved, sent: map[string]Colour{}}
-	s.sampler = e.newSampler(sctx, p.FileID, p.Position)
+	if mode == ModeTheater {
+		if !p.Paused {
+			e.dimLocked(ctx, s)
+		}
+	} else {
+		s.sampler = e.newSampler(sctx, p.FileID, p.Position)
+	}
 	e.sessions[p.SessionID] = s
-	log.Printf("following %s on %s: %s (%d lights)", p.User, p.Client, p.Title, len(lights))
+	log.Printf("following %s on %s (%s): %s (%d lights)", p.User, p.Client, mode, p.Title, len(lights))
 	go e.run(sctx, s, b)
 }
 
@@ -254,7 +328,7 @@ func (e *Engine) run(ctx context.Context, s *session, b *Bridge) {
 		}
 		delay, _ := strconv.ParseFloat(e.a.setting(ctx, "delay_ms"), 64)
 		e.mu.Lock()
-		if e.sessions[s.ev.SessionID] != s || s.paused {
+		if e.sessions[s.ev.SessionID] != s || s.paused || s.sampler == nil {
 			e.mu.Unlock()
 			continue
 		}
@@ -330,7 +404,9 @@ func (e *Engine) pauseLocked(ctx context.Context, s *session) {
 // them off, or leaves them, as the admin chose.
 func (e *Engine) endLocked(ctx context.Context, s *session, why string) {
 	s.cancel()
-	s.sampler.Stop()
+	if s.sampler != nil {
+		s.sampler.Stop()
+	}
 	delete(e.sessions, s.ev.SessionID)
 	e.status = "Idle (last: " + s.ev.Title + ", " + why + ")"
 	conf := e.a.conf.get()
@@ -364,6 +440,9 @@ func (e *Engine) Status() (string, bool) {
 	var lines []string
 	for _, s := range e.sessions {
 		line := fmt.Sprintf("Following %s (%s): %s, %d lights", s.ev.User, s.ev.Client, s.ev.Title, len(s.lights))
+		if s.mode == ModeTheater {
+			line = fmt.Sprintf("Theater mode for %s (%s): %s, %d lights dimmed", s.ev.User, s.ev.Client, s.ev.Title, len(s.lights))
+		}
 		if s.problem != "" {
 			line += " (" + s.problem + ")"
 		}

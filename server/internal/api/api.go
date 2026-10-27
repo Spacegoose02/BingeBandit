@@ -369,6 +369,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/live/custom/{id}", s.customChannel)
 				r.Put("/live/custom/{id}", s.saveCustomChannel)
 				r.Get("/live/custom/{id}/schedule", s.customSchedule)
+				r.Delete("/live/custom/{id}/schedule/{entry}", s.cancelScheduled)
+				r.Post("/live/custom/{id}/restart", s.restartCustomChannel)
 				r.Get("/live/activity", s.liveActivity)
 				r.Post("/live/test-encoder", s.testEncoder)
 				r.Delete("/live/activity/{id}", s.stopRelay)

@@ -23,7 +23,7 @@ const fromTime = (s: string) => {
 const sourceKey = (s: ContentSource) => `${s.type}:${s.id ?? s.label}`
 
 /** Create or edit a custom (library-built) channel and its time blocks. */
-export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: { channel?: AdminChannel; nextNumber: number; onClose: () => void; onSaved: () => void }) {
+export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved, step }: { channel?: AdminChannel; nextNumber: number; onClose: () => void; onSaved: () => void; step?: StepProps }) {
   const [form, setForm] = useState({ number: channel?.number ?? nextNumber, name: channel?.name ?? '', logo: channel?.logo ?? '', group: channel?.group ?? 'Custom', enabled: channel?.enabled ?? true })
   const [blocks, setBlocks] = useState<Block[]>([{ startMinute: -1, endMinute: -1, mode: 'shuffle', sources: [] }])
   const [error, setError] = useState('')
@@ -33,9 +33,37 @@ export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: {
   const { data: schedule, reload: reloadSchedule } = useApi<GuideProgram[]>(savedId ? `/api/admin/live/custom/${savedId}/schedule` : null)
   const { data: options } = useApi<SourceOption[]>('/api/admin/live/content-sources')
 
+  const [baseline, setBaseline] = useState('')
   useEffect(() => {
     if (existing?.blocks.length) setBlocks(existing.blocks)
   }, [existing])
+  const snapshot = JSON.stringify({ form, blocks })
+  // What was last loaded or saved, so Previous / Next can warn about edits.
+  useEffect(() => {
+    if (!channel || existing) setBaseline(JSON.stringify({ form, blocks: existing?.blocks.length ? existing.blocks : blocks }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing])
+  const dirty = baseline !== '' && snapshot !== baseline
+
+  const cancelEntry = async (p: GuideProgram) => {
+    setError('')
+    try {
+      await api.del(`/api/admin/live/custom/${savedId}/schedule/${-p.id}`)
+      reloadSchedule()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  const restart = async () => {
+    if (!confirm(`Start ${form.name || 'this channel'} over from now? The schedule is built again, in-order content goes back to the start, and anyone watching reconnects.`)) return
+    setError('')
+    try {
+      await api.post(`/api/admin/live/custom/${savedId}/restart`, {})
+      reloadSchedule()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
 
   // Sources are stored without names; look them up for display.
   const nameOf = (s: ContentSource) => s.name ?? options?.find((o) => sourceKey(o) === sourceKey(s))?.name ?? s.label ?? `${s.type} ${s.id}`
@@ -52,6 +80,7 @@ export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: {
         ? await api.put<{ channel: AdminChannel }>(`/api/admin/live/custom/${savedId}`, body)
         : await api.post<{ channel: AdminChannel }>('/api/admin/live/custom', body)
       setSavedId(res.channel.id)
+      setBaseline(snapshot)
       reloadSchedule()
       onSaved()
     } catch (err) {
@@ -141,13 +170,27 @@ export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: {
 
         {schedule && schedule.length > 0 && (
           <>
-            <div className="label">Coming up</div>
+            <div className="schedule-head">
+              <div className="label">Coming up</div>
+              <button type="button" className="btn btn-glass btn-sm" onClick={restart} title="Build the schedule again from now and restart the stream">
+                <Icon name="refresh" size={14} /> Restart channel
+              </button>
+            </div>
             <div className="schedule-preview">
               {schedule.slice(0, 12).map((p) => (
                 <div key={p.id} className="schedule-row">
                   <span className="muted mono">{clock(p.start)}</span>
                   <span>{p.title}</span>
                   {p.subtitle && <span className="muted small">{p.subtitle}</span>}
+                  <button
+                    type="button"
+                    className="icon-btn schedule-cancel"
+                    onClick={() => cancelEntry(p)}
+                    title={p.start * 1000 <= Date.now() ? 'Skip this one now; the next starts right away' : 'Take this off the schedule; the rest moves up'}
+                    aria-label={`Cancel ${p.title}`}
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
                 </div>
               ))}
             </div>
@@ -159,11 +202,34 @@ export function CustomChannelEditor({ channel, nextNumber, onClose, onSaved }: {
           <label className="check grow">
             <input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Visible to viewers
           </label>
+          {step && <StepButtons step={step} dirty={dirty} />}
           <button type="button" className="btn btn-glass" onClick={onClose}>Close</button>
           <button className="btn btn-primary" disabled={saving}>{saving ? 'Building schedule…' : savedId ? 'Save' : 'Create channel'}</button>
         </div>
       </form>
     </Modal>
+  )
+}
+
+/** Moves the open channel editor to the previous or next channel in the list. */
+export interface StepProps {
+  prev?: () => void
+  next?: () => void
+}
+
+export function StepButtons({ step, dirty }: { step: StepProps; dirty: boolean }) {
+  const go = (f?: () => void) => () => {
+    if (f && (!dirty || confirm('Leave this channel without saving your changes?'))) f()
+  }
+  return (
+    <div className="step-buttons">
+      <button type="button" className="btn btn-glass" onClick={go(step.prev)} disabled={!step.prev} title="Previous channel" aria-label="Previous channel">
+        <Icon name="back" size={16} /> Previous
+      </button>
+      <button type="button" className="btn btn-glass" onClick={go(step.next)} disabled={!step.next} title="Next channel" aria-label="Next channel">
+        Next <Icon name="next" size={16} />
+      </button>
+    </div>
   )
 }
 

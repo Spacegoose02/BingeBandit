@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Image, Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api } from '../api'
+import { fetchGameLightsOn } from '../lights'
 import { Button, Center, Focusable } from '../components'
 import { useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
@@ -20,11 +21,12 @@ export default function Sports() {
   const [data, setData] = useState<SportsHome | null>(null)
   const [error, setError] = useState('')
   const [picking, setPicking] = useState(false)
-  // The Game Lights button only shows when the server runs the plugin.
+  // The Game Lights button only shows once this profile turned Game Lights
+  // on (Account on the web), with the plugin running.
   const [lightsPlugin, setLightsPlugin] = useState(false)
   const [lights, setLights] = useState(false)
   useEffect(() => {
-    api.get<{ id: string }[]>('/api/plugins').then((ps) => setLightsPlugin(ps.some((p) => p.id === 'game-lights')), () => undefined)
+    fetchGameLightsOn().then(setLightsPlugin)
   }, [])
   const load = useCallback(() => {
     api.get<SportsHome>('/api/sports').then(
@@ -98,7 +100,9 @@ export default function Sports() {
 }
 
 interface LightsPerson {
+  enabled?: boolean
   off?: boolean
+  skip?: string[]
   area?: string
   source: string
   delays: Record<string, number>
@@ -120,7 +124,7 @@ interface LightsState {
 const opponentNames: Record<string, string> = { red: 'a dim red pulse', colour: 'a dim pulse in their colours', off: 'nothing' }
 
 /**
- * This person's Game Lights: on or off, the room, how they're watching and
+ * This person's Game Lights: start / stop, which teams, the room, how they're watching and
  * its delay (measured by pressing OK as a play shows on the TV), and what
  * the other team's scores do. Team colours are on My Game Lights on the web.
  */
@@ -162,7 +166,6 @@ function GameLights({ teams, onClose }: { teams: SportsTeam[]; onClose: () => vo
   const areas = [{ id: '', name: "The house's game lights" }, ...state.areas.map((a) => ({ id: a.id, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))]
   const areaName = areas.find((a) => a.id === (p.area ?? ''))?.name ?? areas[0].name
   const setDelay = (d: number) => save({ ...p, delays: { ...p.delays, [p.source]: Math.max(0, Math.min(300, d)) } })
-  const team = teams[0]
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
       <View style={st.scrim}>
@@ -170,8 +173,30 @@ function GameLights({ teams, onClose }: { teams: SportsTeam[]; onClose: () => vo
           <Text style={st.sectionTitle}>Game Lights</Text>
           {!!msg && <Text style={st.small}>{msg}</Text>}
           <Focusable hasTVPreferredFocus onPress={() => save({ ...p, off: !p.off })} style={st.lightsOption}>
-            <Text style={st.name}>Lights for my teams: {p.off ? 'Off' : 'On'}</Text>
+            <Text style={st.name}>{p.off ? 'Stopped: OK to start' : 'Running: OK to stop'}</Text>
+            <Text style={st.small}>Stop the lights for a while without turning Game Lights off.</Text>
           </Focusable>
+          {teams.map((t) => {
+            const key = `${t.league}/${t.id}`
+            const on = !(p.skip ?? []).includes(key)
+            return (
+              <View key={key} style={st.lightsOption}>
+                <Text style={st.name}>{t.name}</Text>
+                <View style={st.lightsButtons}>
+                  <Button
+                    small
+                    label={on ? 'Lights on: OK to leave out' : 'Left out: OK to add'}
+                    onPress={() => save({ ...p, skip: on ? [...(p.skip ?? []), key] : (p.skip ?? []).filter((k) => k !== key) })}
+                  />
+                  <Button
+                    small
+                    label="Test a touchdown"
+                    onPress={() => api.post(`${base}/test`, { effect: 'touchdown', team: t }).then(() => setMsg('Watch the lights…'), (e) => setMsg(e.message))}
+                  />
+                </View>
+              </View>
+            )
+          })}
           <Focusable onPress={() => save({ ...p, area: cycle(areas.map((a) => a.id), p.area ?? '') })} style={st.lightsOption}>
             <Text style={st.name}>Room: {areaName}</Text>
             <Text style={st.small}>The room you watch in. OK for the next one.</Text>
@@ -210,13 +235,6 @@ function GameLights({ teams, onClose }: { teams: SportsTeam[]; onClose: () => vo
             <Text style={st.name}>When the other team scores: {opponentNames[p.opponent || 'red']}</Text>
           </Focusable>
           <View style={st.lightsButtons}>
-            {team && (
-              <Button
-                small
-                label={`Test a ${team.shortName || team.name} touchdown`}
-                onPress={() => api.post(`${base}/test`, { effect: 'touchdown', team }).then(() => setMsg('Watch the lights…'), (e) => setMsg(e.message))}
-              />
-            )}
             <Button small label="Close" onPress={onClose} />
           </View>
           <Text style={st.small}>Your own team colours are on My Game Lights, under Account on the web.</Text>

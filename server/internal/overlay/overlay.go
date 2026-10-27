@@ -277,7 +277,7 @@ func (p Plan) Empty() bool {
 // render cache. Bump the version when drawing changes.
 func (p Plan) Key(ref string, w int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "v2|%s|%d|%s|%s|%s|", ref, w, p.Resolution, p.Range, p.Audio)
+	fmt.Fprintf(&b, "v3|%s|%d|%s|%s|%s|", ref, w, p.Resolution, p.Range, p.Audio)
 	for _, r := range p.Ratings {
 		fmt.Fprintf(&b, "%s=%s,", r.Source, r.Text)
 	}

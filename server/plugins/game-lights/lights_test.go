@@ -7,6 +7,8 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -163,7 +165,8 @@ func testApp(t *testing.T) (*app, *fakeBridge) {
 	a.runner.bridge = func(Config) bridgeAPI { return fb }
 	a.runner.gap = time.Millisecond
 	a.settings = map[string]string{"delay_seconds": "0", "brightness": "100", "reduced_flashing": "on"}
-	a.conf.set(Config{Bridge: "bridge", Username: "user", Lights: []string{"1", "2"}})
+	// The sports events in these tests come from user 0, who turned Game Lights on.
+	a.conf.set(Config{Bridge: "bridge", Username: "user", Lights: []string{"1", "2"}, Version: 2, People: map[string]Person{"0": {Enabled: true}}})
 	return a, fb
 }
 
@@ -359,8 +362,8 @@ func TestPeopleRoomsAndDelays(t *testing.T) {
 	a, fb := testApp(t)
 	a.conf.update(func(c *Config) {
 		c.People = map[string]Person{
-			"1": {Area: "10", Source: "YouTube TV", Delays: map[string]int{"YouTube TV": 0, "Cable or antenna": 60}, Opponent: "colour"},
-			"2": {Area: "11", Opponent: "off"},
+			"1": {Enabled: true, Area: "10", Source: "YouTube TV", Delays: map[string]int{"YouTube TV": 0, "Cable or antenna": 60}, Opponent: "colour"},
+			"2": {Enabled: true, Area: "11", Opponent: "off"},
 		}
 	})
 	a.settings["delay_seconds"] = "0"
@@ -417,4 +420,44 @@ func TestPeopleRoomsAndDelays(t *testing.T) {
 		}
 	}
 	a.resetAll()
+}
+
+// Game Lights is opt-in per person, and each team can be left out.
+func TestOptInAndSkippedTeams(t *testing.T) {
+	a, fb := testApp(t)
+	sets := func() int {
+		fb.mu.Lock()
+		defer fb.mu.Unlock()
+		return len(fb.sets)
+	}
+	score := func(n string) {
+		a.follower.onEvent(context.Background(), "sports.score", sportsData("in", "259", n, "0", false, "hockey", "nhl"))
+		time.Sleep(150 * time.Millisecond)
+		wait(t, func() bool { return a.runner.Idle() })
+	}
+	for _, p := range []Person{{}, {Enabled: true, Off: true}, {Enabled: true, Skip: []string{"nhl/259"}}} {
+		a.conf.update(func(c *Config) { c.People = map[string]Person{"0": p} })
+		before := sets()
+		score("1")
+		if sets() != before {
+			t.Errorf("%+v: the lights flashed", p)
+		}
+	}
+	a.conf.update(func(c *Config) { c.People = map[string]Person{"0": {Enabled: true, Skip: []string{"nhl/2390"}}} })
+	score("2")
+	if sets() == 0 {
+		t.Error("an enabled person's team didn't flash")
+	}
+	a.resetAll()
+}
+
+// People who had set their own choices before it was opt-in keep it on.
+func TestConfigVersion2(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"people":{"1":{"area":"10"},"2":{"off":true}}}`), 0o600)
+	s := &configStore{dir: func() string { return dir }}
+	c := s.get()
+	if !c.People["1"].Enabled || !c.People["2"].Enabled || !c.People["2"].Off || c.Version != 2 {
+		t.Errorf("after upgrade: %+v", c)
+	}
 }

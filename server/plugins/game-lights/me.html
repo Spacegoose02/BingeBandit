@@ -43,12 +43,14 @@
 <main>
   <h1>My Game Lights</h1>
   <p class="muted">When your teams from the Sports page play, the Hue lights flash in their colours as they score.
-    These choices are yours alone; the TV app's Sports tab has them too.</p>
+    Game Lights is off until you turn it on here. These choices are yours alone; the TV app's Sports tab has them too.</p>
   <p id="msg" class="small"></p>
 
   <section>
     <h2>Lights</h2>
-    <label class="effect"><input id="on" type="checkbox"><div class="grow">Light up for my teams</div></label>
+    <label class="effect"><input id="on" type="checkbox"><div class="grow">Use Game Lights on this profile</div></label>
+    <p id="stopped" class="small muted" hidden style="margin-top:8px">Stopped from the TV app, so nothing flashes for now.
+      <button type="button" id="start">Start again</button></p>
     <div class="row" style="margin-top:8px">
       <span class="grow">Room or zone</span>
       <select id="area" aria-label="Room or zone"></select>
@@ -85,8 +87,8 @@
   </section>
 
   <section>
-    <h2>My team colours</h2>
-    <p class="small muted">If two of your teams look alike, or a colour reads badly on your bulbs, pick your own.</p>
+    <h2>My teams</h2>
+    <p class="small muted">Untick a team to leave it out. If two of your teams look alike, or a colour reads badly on your bulbs, pick your own.</p>
     <div id="teams"></div>
   </section>
 </main>
@@ -115,7 +117,8 @@
   let st, me
   const save = () => call('PUT', 'settings', me).then(() => say('Saved.', 'ok'), fail)
   function draw() {
-    $('on').checked = !me.off
+    $('on').checked = !!me.enabled
+    $('stopped').hidden = !me.enabled || !me.off
     $('area').replaceChildren(el('option', { value: '', textContent: "The house's game lights" }),
       ...st.areas.map((a) => el('option', { value: a.id, textContent: `${a.name} (${a.type.toLowerCase()})` })))
     $('area').value = me.area || ''
@@ -145,11 +148,15 @@
       reset.onclick = () => { const c = { ...me.colours }; delete c[key]; me.colours = c; save().then(load) }
       const test = el('button', { type: 'button', textContent: 'Test' })
       test.onclick = () => call('POST', 'test', { effect: 'touchdown', team: t }).then(() => say('Playing a touchdown in the ' + t.shortName + ' colours…', 'ok'), fail)
-      return el('div', { className: 'effect' }, el('div', { className: 'grow', textContent: t.name }), c1, c2, keep, test, reset)
+      const skip = me.skip || []
+      const on = el('input', { type: 'checkbox', checked: !skip.includes(key), 'aria-label': 'Lights for ' + t.name, title: 'Lights for this team' })
+      on.onchange = () => { const s = (me.skip || []).filter((k) => k !== key); me.skip = on.checked ? s : [...s, key]; save() }
+      return el('div', { className: 'effect' }, on, el('div', { className: 'grow', textContent: t.name }), c1, c2, keep, test, reset)
     }) : [el('p', { className: 'muted small', textContent: 'Pick teams on the Sports page first.' })]))
   }
 
-  $('on').onchange = () => { me.off = !$('on').checked; save() }
+  $('on').onchange = () => { me.enabled = $('on').checked; me.off = false; draw(); save() }
+  $('start').onclick = () => { me.off = false; draw(); save() }
   $('area').onchange = () => { me.area = $('area').value; save() }
   $('source').onchange = () => { me.source = $('source').value; draw(); save() }
   $('addSource').onclick = () => {

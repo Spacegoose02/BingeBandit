@@ -94,10 +94,14 @@ func (f *Follower) fansFor(ctx context.Context, ev sportsEvent) []fan {
 			names = append(names, n)
 		}
 	}
+	people := f.a.conf.get().People
 	var out []fan
 	for _, fn := range ev.Fans {
 		if len(names) > 0 && !contains(names, strings.ToLower(fn.User)) {
 			continue
+		}
+		if !people[strconv.FormatInt(fn.UserID, 10)].Enabled {
+			continue // they haven't turned Game Lights on
 		}
 		if fn.TeamID == ev.Game.Home.ID || fn.TeamID == ev.Game.Away.ID {
 			out = append(out, fan{strconv.FormatInt(fn.UserID, 10), fn.User, fn.TeamID})
@@ -272,7 +276,7 @@ func (f *Follower) fire(g *game, team string, e Event, label string) {
 		}
 		p := conf.People[fn.userID]
 		k, pal := key, conf.paletteFor(us, p)
-		if p.Off {
+		if !p.lightsFor(us.key()) {
 			continue
 		}
 		if key == "opp_score" {

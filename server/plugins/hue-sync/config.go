@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"sync"
 )
 
@@ -15,6 +17,24 @@ type Config struct {
 	Bridge   string            `json:"bridge"`
 	Username string            `json:"username"`
 	Lights   map[string]string `json:"lights"` // light id → zone
+	// People is how each person (profile) wants their lights: "sync" or
+	// "theater", by user id. Missing means off: Hue Sync is opt-in.
+	People map[string]string `json:"people,omitempty"`
+}
+
+// Modes a person can pick for themselves.
+const (
+	ModeOff     = "off"
+	ModeSync    = "sync"    // the lights follow the picture
+	ModeTheater = "theater" // the lights dim while something plays
+)
+
+// mode is how a person wants their lights.
+func (c Config) mode(userID int64) string {
+	if m := c.People[strconv.FormatInt(userID, 10)]; m == ModeSync || m == ModeTheater {
+		return m
+	}
+	return ModeOff
 }
 
 type configStore struct {
@@ -28,6 +48,11 @@ func (s *configStore) file() string { return filepath.Join(s.dir(), "bridge.json
 func (s *configStore) get() Config {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.load()
+}
+
+// load reads the file the first time and returns a copy; s.mu is held.
+func (s *configStore) load() Config {
 	if s.c == nil {
 		s.c = &Config{}
 		if b, err := os.ReadFile(s.file()); err == nil {
@@ -39,12 +64,26 @@ func (s *configStore) get() Config {
 	for k, v := range s.c.Lights {
 		c.Lights[k] = v
 	}
+	c.People = maps.Clone(s.c.People)
 	return c
 }
 
 func (s *configStore) set(c Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.save(c)
+}
+
+// update changes the config in one step.
+func (s *configStore) update(f func(*Config)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := s.load()
+	f(&c)
+	return s.save(c)
+}
+
+func (s *configStore) save(c Config) error {
 	s.c = &c
 	b, _ := json.MarshalIndent(c, "", "  ")
 	tmp := s.file() + ".tmp"

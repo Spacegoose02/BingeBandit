@@ -90,7 +90,7 @@ func (a *app) saveMine(w http.ResponseWriter, r *http.Request, uid string) {
 		return
 	}
 	p.Source = strings.TrimSpace(p.Source)
-	if len(p.Source) > 40 || len(p.Area) > 20 || len(p.Delays) > 20 || len(p.Colours) > 100 {
+	if len(p.Source) > 40 || len(p.Area) > 20 || len(p.Delays) > 20 || len(p.Colours) > 100 || len(p.Skip) > 100 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too long"})
 		return
 	}
