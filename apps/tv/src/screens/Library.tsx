@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { api, cached } from '../api'
 import { Icon } from '../icons'
-import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard } from '../components'
+import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, Row } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, units } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
@@ -134,13 +134,14 @@ function chunk<T>(list: T[], size: number): T[][] {
  * thousands of titles costs no more than a screenful. Rows have a fixed
  * height, which lets a letter jump scroll straight to any row.
  */
-function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, listRef }: {
+function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, footer, listRef }: {
   rows: T[][]
   keyOf: (t: T) => string
   renderTile: (t: T) => React.ReactElement
   onEnd?: () => void
   busy?: boolean
   header?: React.ReactElement
+  footer?: React.ReactElement | null
   listRef?: React.Ref<FlatList<T[]>>
 }) {
   // In a row, as the Library section has it beside its A–Z bar: on the onn
@@ -156,7 +157,7 @@ function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, listRef }: {
         // Offsets only line up without a header above the rows.
         getItemLayout={header ? undefined : (_, i) => ({ length: px(ROW_H), offset: px(ROW_H) * i, index: i })}
         ListHeaderComponent={header}
-        ListFooterComponent={busy ? <ActivityIndicator color={colors.accent} style={st.footer} /> : null}
+        ListFooterComponent={busy ? <ActivityIndicator color={colors.accent} style={st.footer} /> : footer}
         contentContainerStyle={st.grid}
         initialNumToRender={4}
         maxToRenderPerBatch={3}
@@ -350,12 +351,19 @@ function Collections({ library }: { library: Library }) {
   )
 }
 
+/** A same-named collection in another library, with its first titles. */
+interface OtherCollection {
+  collection: Collection
+  library: string
+  items: Item[]
+}
+
 /** A collection's titles, pushed from a library's Collections section; big ones load a page at a time. */
 export function CollectionScreen({ id }: { id: number }) {
   const nav = useNav()
   const cols = useColumns(false)
   const path = `/api/collections/${id}?limit=${PAGE}`
-  const { data, error, load } = useLoad<{ collection: Collection; items: Item[]; total?: number }>(path)
+  const { data, error, load } = useLoad<{ collection: Collection; items: Item[]; total?: number; others?: OtherCollection[] }>(path)
   const [more, setMore] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
@@ -394,6 +402,14 @@ export function CollectionScreen({ id }: { id: number }) {
         keyOf={(t) => String(t.item.id)}
         busy={busy}
         onEnd={next}
+        // The same-named collections in other libraries, once every title
+        // here has loaded: "Marvel Universe in Kids Movies".
+        footer={items.length >= total || ended.current ? <>{data.others?.map((o) => (
+          <Row key={o.collection.id} title={`${o.collection.name} in ${o.library}`}>
+            {o.items.map((it) => <PosterCard key={it.id} item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />)}
+            <CollectionCard collection={o.collection} onPress={() => nav.push({ name: 'collection', id: o.collection.id })} />
+          </Row>
+        ))}</> : null}
         header={
           <View style={st.collectionHead}>
             <Text style={st.title}>{data.collection.name}</Text>

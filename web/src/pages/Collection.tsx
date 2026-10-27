@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
+import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { smartRuleText } from '../format'
 import type { Collection, Item } from '../types'
@@ -15,6 +16,8 @@ interface CollectionPageData {
   collection: Collection
   items: Item[]
   total: number
+  /** The same-named collections in other libraries the viewer can see. */
+  others?: { collection: Collection; library: string; items: Item[] }[]
 }
 
 export default function CollectionPage() {
@@ -99,6 +102,17 @@ export default function CollectionPage() {
             ))}
           </div>
           <div ref={sentinel} style={{ height: 1 }} />
+          {data.others?.map((o) => (
+            <Row
+              key={o.collection.id}
+              title={`${o.collection.name} in ${o.library}`}
+              action={<Link to={`/collection/${o.collection.id}`} className="muted small">See all</Link>}
+            >
+              {o.items.map((it) => (
+                <PosterCard key={it.id} item={it} />
+              ))}
+            </Row>
+          ))}
         </div>
       </div>
       {editing && (

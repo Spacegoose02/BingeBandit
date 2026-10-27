@@ -488,3 +488,12 @@ func (s *Store) SyncCollectionList(id int64, itemIDs []int64, failed string) err
 	}
 	return tx.Commit()
 }
+
+// SameNamedCollections lists the collections named like collection id in
+// other libraries, movies and shows alike, so "Marvel Universe" in Movies can
+// point to "Marvel Universe" in Kids Movies and TV Shows.
+func (s *Store) SameNamedCollections(id int64) ([]*Collection, error) {
+	return s.queryCollections(collectionSelect+` JOIN collections o ON o.id = ? AND c.id != o.id AND c.name = o.name COLLATE NOCASE
+		JOIN libraries l ON l.id = c.library_id
+		ORDER BY l.name COLLATE NOCASE`, id)
+}
