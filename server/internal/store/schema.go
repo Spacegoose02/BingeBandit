@@ -798,6 +798,7 @@ CREATE INDEX kid_titles_item ON kid_titles(item_id);
 	// that (verified) email lands in that user, even as a profile.
 	`
 ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX users_email ON users(email COLLATE NOCASE) WHERE email != '';
 `,
 	// 44: more of each guide programme from the XMLTV feed, for the live
 	// player's info bar: the year it was made, its age rating, its star
@@ -807,6 +808,5 @@ ALTER TABLE epg_programs ADD COLUMN year INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE epg_programs ADD COLUMN rating TEXT NOT NULL DEFAULT '';
 ALTER TABLE epg_programs ADD COLUMN stars TEXT NOT NULL DEFAULT '';
 ALTER TABLE epg_programs ADD COLUMN genres TEXT NOT NULL DEFAULT '';
-CREATE UNIQUE INDEX users_email ON users(email COLLATE NOCASE) WHERE email != '';
 `,
 }
