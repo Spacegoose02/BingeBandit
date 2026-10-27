@@ -10,7 +10,7 @@ import { EditItem } from './EditItem'
 import { Icon } from './Icon'
 import { KidsDialog, type KidState } from './KidsApprove'
 import { MatchDialog } from './MatchDialog'
-import { RecommendDialog } from './Recommend'
+import { RecommendDialog, useRecommendationsOn } from './Recommend'
 
 /**
  * The ⋮ button in a card's corner and the menu it opens. The menu is drawn
@@ -284,6 +284,7 @@ function ItemMenuBody({
   }, [item.id])
   const it = detail?.item ?? item
   const top: Item | undefined = it.kind === 'movie' || it.kind === 'show' ? it : detail?.show
+  const recommendOn = useRecommendationsOn()
   useEffect(() => {
     if (canApprove && top) api.get<KidState[]>(`/api/items/${top.id}/kids`).then(setKids, () => setKids([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -437,7 +438,7 @@ function ItemMenuBody({
       <button role="menuitem" onClick={() => openPage('playlists')}>
         <Icon name="list" size={16} /> Add to playlist…
       </button>
-      {top && (
+      {top && recommendOn && (
         <button role="menuitem" onClick={() => open('recommend')}>
           <Icon name="users" size={16} /> Recommend to…
         </button>

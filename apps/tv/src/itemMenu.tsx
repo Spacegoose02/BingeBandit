@@ -43,8 +43,10 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
   const [mine, setMine] = useState<string[]>([])
   const [newName, setNewName] = useState('')
   const [msg, setMsg] = useState('')
+  const [recommendOn, setRecommendOn] = useState(true)
   useEffect(() => {
     api.get<ItemDetail>(`/api/items/${item.id}`).then(setD, (e) => setMsg(e.message))
+    api.get<{ enabled?: boolean }>('/api/me/recommendations').then((r) => setRecommendOn(r.enabled !== false), () => undefined)
   }, [item.id])
 
   const it = d?.item ?? item
@@ -115,7 +117,7 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
             />
           )}
           <Opt label="Add to playlist…" onPress={() => openPage('playlists')} />
-          {top && <Opt label="Recommend to…" onPress={() => openPage('recommend')} />}
+          {top && recommendOn && <Opt label="Recommend to…" onPress={() => openPage('recommend')} />}
           {admin && top && <Opt label="Add to collection…" onPress={() => openPage('collections')} />}
           {admin && <Opt label="Manage…" onPress={() => openPage('manage')} />}
           <Opt label="Close" onPress={onClose} />

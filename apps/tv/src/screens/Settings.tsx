@@ -12,8 +12,8 @@ import { fetchHousehold, PinPad } from './Profiles'
 
 // The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
 // always show, so there's always a way back to turn them on.
-export type HideableTab = 'sports' | 'live' | 'more'
-export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', more: 'More' }
+export type HideableTab = 'sports' | 'live' | 'discover' | 'more'
+export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', discover: 'Discover', more: 'More' }
 
 /** What the menu shows, and how to change it; Home owns both. */
 export interface MenuChoices {
@@ -145,6 +145,17 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
     setHueArea(id)
     setAreaState(id)
   }
+  // Recommendations from other people, unless an admin turned them off.
+  const [recs, setRecs] = useState<{ accept: boolean; enabled?: boolean } | null>(null)
+  useEffect(() => {
+    api.get<{ accept: boolean; enabled?: boolean }>('/api/me/recommendations').then(setRecs, () => undefined)
+  }, [])
+  const toggleRecs = () => {
+    if (!recs) return
+    const accept = !recs.accept
+    setRecs({ ...recs, accept })
+    api.put('/api/me/recommendations', { accept }).catch(() => setRecs(recs))
+  }
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
@@ -237,6 +248,17 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           <Text style={st.value}>Hue lights: {areaName}</Text>
           <Text style={st.hint}>
             The room or zone this {isPhone ? 'phone' : 'TV'} is in: all its lights follow the picture, and other rooms can sync their own. {isPhone ? 'Tap' : 'Press OK'} for the next one.
+          </Text>
+        </Focusable>
+      )}
+      {recs && recs.enabled !== false && (
+        <Focusable onPress={toggleRecs} style={st.option}>
+          <Text style={st.value}>Recommendations to me: {recs.accept ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {recs.accept
+              ? 'Other people here can recommend movies and shows to you; they show up in a row on Home.'
+              : 'Nobody can recommend titles to you.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to turn it {recs.accept ? 'off' : 'on'}.
           </Text>
         </Focusable>
       )}

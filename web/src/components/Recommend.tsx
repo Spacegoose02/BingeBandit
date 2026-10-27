@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useApi } from '../hooks'
@@ -11,10 +11,32 @@ interface Recipient {
   name: string
 }
 
+// Whether an admin left recommendations on; asked once per page load.
+let enabled: Promise<boolean> | null = null
+
+/** False once the server says an admin turned recommendations off. */
+export function useRecommendationsOn(): boolean {
+  const [on, setOn] = useState(true)
+  useEffect(() => {
+    enabled ??= api.get<{ enabled?: boolean }>('/api/me/recommendations').then(
+      (r) => r.enabled !== false,
+      () => true,
+    )
+    let live = true
+    enabled.then((v) => live && setOn(v))
+    return () => {
+      live = false
+    }
+  }, [])
+  return on
+}
+
 /** Button and dialog for recommending a movie or show to other people. */
 export function RecommendButton({ item }: { item: Item }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState('')
+  const on = useRecommendationsOn()
+  if (!on) return null
   return (
     <div className="menu-anchor">
       <button className="btn btn-glass icon-only" onClick={() => setOpen(true)} title="Recommend to someone">

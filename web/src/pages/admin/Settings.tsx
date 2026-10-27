@@ -253,6 +253,11 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
             Let users download original files
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.recommendations_enabled !== 'false'} onChange={set('recommendations_enabled')} />
+            Let people recommend movies and shows to each other
+          </label>
+          <p className="muted small">Off hides the Recommend buttons, the opt-in under Account and the “Recommended for You” row on Home, on the web and in the TV app.</p>
           <label>
             Count as watched after (% of the runtime)
             <input type="number" min={50} max={100} value={s.watched_percent ?? '90'} onChange={set('watched_percent')} />

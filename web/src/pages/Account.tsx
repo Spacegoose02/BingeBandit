@@ -177,8 +177,8 @@ function Sharing() {
 }
 
 function RecommendOptIn() {
-  const { data, reload } = useApi<{ accept: boolean }>('/api/me/recommendations')
-  if (!data) return null
+  const { data, reload } = useApi<{ accept: boolean; enabled?: boolean }>('/api/me/recommendations')
+  if (!data || data.enabled === false) return null
   const toggle = async (accept: boolean) => {
     await api.put('/api/me/recommendations', { accept }).catch((e) => alert(e.message))
     reload()

@@ -119,4 +119,17 @@ func TestRecommendations(t *testing.T) {
 	if c := call("dana", "POST", item+"/recommend", `{"userIds":[]}`, nil); c != http.StatusBadRequest {
 		t.Fatalf("no recipients: %d", c)
 	}
+
+	// An admin turns recommendations off: the row goes and nobody can send any.
+	st.SetSettings(map[string]string{store.SettingRecommendations: "false"})
+	if recommendedIn("sam") != 0 {
+		t.Fatal("the Recommended row stayed after an admin turned it off")
+	}
+	if c := call("dana", "POST", item+"/recommend", `{"userIds":[`+itoa(sam.ID)+`]}`, nil); c != http.StatusForbidden {
+		t.Fatalf("recommend while off: %d", c)
+	}
+	call("sam", "GET", "/api/me/recommendations", "", &opt)
+	if opt["enabled"] || !opt["accept"] {
+		t.Fatalf("opt-in while off: %v", opt)
+	}
 }

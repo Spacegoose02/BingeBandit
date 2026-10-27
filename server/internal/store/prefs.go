@@ -37,7 +37,13 @@ type Prefs struct {
 	// Home, Search and Settings always show; libraries come and go by pinning.
 	// Never set (null) means DefaultHiddenTabs; an empty list shows them all.
 	HiddenTabs []string `json:"hiddenTabs"`
+	// PinnedTabs are app menu tabs that stay under More until pinned
+	// (OptInTabs), so turning one on never surprises anyone's saved menu.
+	PinnedTabs []string `json:"pinnedTabs"`
 }
+
+// OptInTabs are the app menu tabs PinnedTabs may name.
+var OptInTabs = []string{"discover"}
 
 // DefaultHiddenTabs start out under More instead of in the menu, until the
 // person pins them. Kept out of DefaultPrefs: decoding into a shared slice
@@ -78,6 +84,11 @@ func (p *Prefs) Validate() error {
 	for _, t := range p.HiddenTabs {
 		if !slices.Contains(HideableTabs, t) {
 			return fmt.Errorf("only the sports, live and more tabs can be hidden")
+		}
+	}
+	for _, t := range p.PinnedTabs {
+		if !slices.Contains(OptInTabs, t) {
+			return fmt.Errorf("only the discover tab can be pinned this way")
 		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {
