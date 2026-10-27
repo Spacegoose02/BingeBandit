@@ -30,14 +30,16 @@ Needs Node 22, JDK 17 and the Android SDK (platform 36, build-tools 36, NDK 27.1
 cd apps/tv
 npm install
 cd android
-.\gradlew assembleRelease -PbbVersion=0.4.0
+.\gradlew assembleSideloadRelease -PbbVersion=0.4.0
 ```
 
-The APK lands in `android/app/build/outputs/apk/release/`. Install it on a Fire TV or Android TV with `adb install`, or with the Downloader app.
+The APK lands in `android/app/build/outputs/apk/sideload/release/`. Install it on a Fire TV or Android TV with `adb install`, or with the Downloader app.
 
 `-PbbVersion` sets the version name, and the version code is derived from it (`major*10000 + minor*100 + patch`). Releases pass the git tag.
 
 On Windows inside a sandboxed or packaged environment, Gradle can fail with "Unable to establish loopback connection". Set `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=C:\Users\<you>\.jdk-uds` (a folder outside AppData).
+
+There are two flavors. **sideload** is the APK above, which updates itself from GitHub. **play** (`bundlePlayRelease`) is the bundle for Google Play, without the self-updater: see [docs/GOOGLE_PLAY.md](../../docs/GOOGLE_PLAY.md).
 
 ## Signing
 

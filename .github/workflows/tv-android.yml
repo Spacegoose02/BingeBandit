@@ -1,0 +1,47 @@
+# Builds both TV app flavors when the Android project changes, and checks the
+# Google Play build leaves out the self-updater's install permission.
+name: TV Android build
+
+on:
+  pull_request:
+    paths:
+      - 'apps/tv/android/**'
+      - 'apps/tv/package*.json'
+      - '.github/workflows/tv-android.yml'
+      - '.github/workflows/release.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/tv/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install JS dependencies
+        working-directory: apps/tv
+        run: npm ci
+      - name: Build sideload APK and Play bundle
+        working-directory: apps/tv/android
+        run: ./gradlew assembleSideloadRelease assemblePlayRelease bundlePlayRelease -PbbVersion=0.0.1 -PreactNativeArchitectures=arm64-v8a
+      - name: Check permissions and TV features
+        working-directory: apps/tv/android/app/build/outputs/apk
+        run: |
+          aapt2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | tail -1)
+          "$aapt2" dump badging sideload/release/app-sideload-release.apk > sideload.txt
+          "$aapt2" dump badging play/release/app-play-release.apk > play.txt
+          grep -E "uses-permission|uses-feature|leanback" sideload.txt play.txt
+          grep -q "REQUEST_INSTALL_PACKAGES" sideload.txt
+          ! grep -q "REQUEST_INSTALL_PACKAGES" play.txt
+          # Phones and TVs: neither leanback nor a touchscreen may be required.
+          for f in sideload.txt play.txt; do
+            ! grep -q "uses-feature: name='android.software.leanback'" $f
+            ! grep -q "uses-feature: name='android.hardware.touchscreen'" $f
+          done

@@ -26,7 +26,12 @@ class AppUpdaterModule(private val ctx: ReactApplicationContext) : ReactContextB
   override fun getConstants(): Map<String, Any> {
     val info = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
     val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
-    return mapOf("versionName" to (info.versionName ?: ""), "versionCode" to code.toDouble())
+    return mapOf(
+      "versionName" to (info.versionName ?: ""),
+      "versionCode" to code.toDouble(),
+      // False in the Google Play build, which Play keeps up to date.
+      "selfUpdate" to BuildConfig.SELF_UPDATE,
+    )
   }
 
   /** Whether Android lets this app install packages (the "install unknown apps" switch). */
@@ -52,6 +57,10 @@ class AppUpdaterModule(private val ctx: ReactApplicationContext) : ReactContextB
 
   @ReactMethod
   fun downloadAndInstall(url: String, promise: Promise) {
+    if (!BuildConfig.SELF_UPDATE) {
+      promise.reject("store", "Google Play updates this app.")
+      return
+    }
     Thread {
       try {
         val dir = File(ctx.cacheDir, "updates").apply { mkdirs() }

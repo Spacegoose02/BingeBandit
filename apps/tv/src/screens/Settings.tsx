@@ -6,7 +6,7 @@ import { hueArea, hueSyncOn, setHueArea, setHueSync, type MenuPosition } from '.
 import { Icon } from '../icons'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
 import type { Library, Member } from '../types'
-import { checkForUpdate, installed, installUpdate, type AppRelease } from '../updates'
+import { checkForUpdate, installed, installUpdate, selfUpdates, type AppRelease } from '../updates'
 import { fetchHousehold, PinPad } from './Profiles'
 
 // The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
@@ -178,10 +178,12 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
             {Math.round(found.size / 1e6)} MB · {isPhone ? 'tap to download, then confirm the install.' : 'press OK to download, then confirm the install on the TV.'}
           </Text>
         </Focusable>
-      ) : (
+      ) : selfUpdates ? (
         <View style={st.buttons}>
           <Button label="Check for updates" onPress={check} />
         </View>
+      ) : (
+        <Text style={st.hint}>Google Play keeps this app up to date.</Text>
       )}
       {!!msg && <Text style={st.msg}>{msg}</Text>}
       {!isPhone && (
