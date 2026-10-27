@@ -32,7 +32,7 @@ export function KidsApproveButton({ item }: { item: Item }) {
 
 /**
  * The same for a whole collection: the kids get every title in it, including
- * ones added later, and the collection itself under Approved Movies or Shows.
+ * ones added later, under Approved Movies or Approved Shows.
  */
 export function KidsApproveCollectionButton({ collection, shows }: { collection: Collection; shows: boolean }) {
   return (
