@@ -50,6 +50,14 @@ type session struct {
 	saved   map[string]LightState // how its lights were before, for putting back
 	sent    map[string]Colour     // last colour sent to each light; guarded by Engine.mu
 	problem string                // the last error, for the status; guarded by Engine.mu
+	// fps is how many frames a second the sampler reads (0: sampleFPS).
+	fps float64
+	// stream is the open entertainment stream, when the device picked an
+	// entertainment area; guarded by Engine.mu.
+	stream *Stream
+	// streamDone closes once the session is done with entertainment
+	// streaming (or never used it), so the lights take commands again.
+	streamDone chan struct{}
 }
 
 func (s *session) position(now time.Time) float64 {
@@ -157,7 +165,7 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 	if cur.sampler != nil && drift > 2.5 && !cur.sampler.Covers(p.Position) {
 		// A seek outside what's been read: read again from there.
 		cur.sampler.Stop()
-		cur.sampler = e.newSampler(cur.ctx, p.FileID, p.Position)
+		cur.sampler = e.newSampler(cur, p.Position)
 	}
 	if p.Paused && !wasPaused {
 		e.pauseLocked(ctx, cur)
@@ -198,13 +206,16 @@ func (e *Engine) switchLocked(ctx context.Context, s *session, mode string) {
 		return
 	}
 	if s.sampler == nil {
-		s.sampler = e.newSampler(s.ctx, s.ev.FileID, s.position(time.Now()))
+		s.sampler = e.newSampler(s, s.position(time.Now()))
 	}
 }
 
 // dimLocked brings a theater-mode session's lights down to a warm glow (or
 // off), as the admin set.
 func (e *Engine) dimLocked(ctx context.Context, s *session) {
+	if s.stream != nil {
+		return // the stream sends the dimmed colour
+	}
 	conf := e.a.conf.get()
 	b := newBridge(conf.Bridge, conf.Username)
 	pct, err := strconv.ParseFloat(e.a.setting(ctx, "theater_brightness"), 64)
@@ -260,10 +271,14 @@ func (a *app) lightsFor(ctx context.Context, area string) (lights [][2]string, e
 	return lights, ""
 }
 
-func (e *Engine) newSampler(ctx context.Context, fileID int64, from float64) *Sampler {
-	url, key := e.a.fileURL(fileID)
+func (e *Engine) newSampler(s *session, from float64) *Sampler {
+	url, key := e.a.fileURL(s.ev.FileID)
+	fps := s.fps
+	if fps == 0 {
+		fps = sampleFPS
+	}
 	// Start a moment early so the first frames are there when the lights need them.
-	return startSampler(ctx, e.a.ffmpeg, url, key, math.Max(0, from-1), sampleFPS, 45)
+	return startSampler(s.ctx, e.a.ffmpeg, url, key, math.Max(0, from-1), fps, 45)
 }
 
 func (e *Engine) startLocked(ctx context.Context, p playerEvent, lights [][2]string, mode string) {
@@ -281,26 +296,29 @@ func (e *Engine) startLocked(ctx context.Context, p playerEvent, lights [][2]str
 	}
 	sctx, cancel := context.WithCancel(ctx)
 	s := &session{ev: p, pos: p.Position, at: time.Now(), paused: p.Paused, mode: mode, ctx: sctx, cancel: cancel,
-		lights: lights, saved: saved, sent: map[string]Colour{}}
+		lights: lights, saved: saved, sent: map[string]Colour{}, streamDone: make(chan struct{})}
 	if mode == ModeTheater {
 		if !p.Paused {
 			e.dimLocked(ctx, s)
 		}
 	} else {
-		s.sampler = e.newSampler(sctx, p.FileID, p.Position)
+		s.sampler = e.newSampler(s, p.Position)
 	}
 	e.sessions[p.SessionID] = s
 	log.Printf("following %s on %s (%s): %s (%d lights)", p.User, p.Client, mode, p.Title, len(lights))
 	go e.run(sctx, s, b)
 }
 
-// activeLights counts the lights every session drives, which share the bridge.
+// activeLights counts the lights every session drives with light commands,
+// which share the bridge. Streamed lights don't count.
 func (e *Engine) activeLights() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	n := 0
 	for _, s := range e.sessions {
-		n += len(s.lights)
+		if s.stream == nil {
+			n += len(s.lights)
+		}
 	}
 	return n
 }
@@ -309,6 +327,10 @@ func (e *Engine) activeLights() int {
 // light commands a second, so more lights (in every room playing) mean
 // fewer updates each.
 func (e *Engine) run(ctx context.Context, s *session, b *Bridge) {
+	if e.stream(ctx, s, b) {
+		return
+	}
+	close(s.streamDone)
 	lights := s.lights
 	ups, _ := strconv.ParseFloat(e.a.setting(ctx, "updates_per_second"), 64)
 	ups = math.Max(0.5, math.Min(10, ups))
@@ -385,8 +407,8 @@ func (e *Engine) setProblem(s *session, msg string) {
 
 // pauseLocked brings the lights up to a warm white when the admin chose that.
 func (e *Engine) pauseLocked(ctx context.Context, s *session) {
-	if e.a.setting(ctx, "on_pause") != "bright" {
-		return
+	if e.a.setting(ctx, "on_pause") != "bright" || s.stream != nil {
+		return // keep the colours, or the stream brightens them
 	}
 	conf := e.a.conf.get()
 	b := newBridge(conf.Bridge, conf.Username)
@@ -413,6 +435,11 @@ func (e *Engine) endLocked(ctx context.Context, s *session, why string) {
 	b := newBridge(conf.Bridge, conf.Username)
 	mode := e.a.setting(ctx, "on_stop")
 	go func() {
+		// The bridge ignores light commands until streaming has stopped.
+		select {
+		case <-s.streamDone:
+		case <-time.After(5 * time.Second):
+		}
 		for _, l := range s.lights {
 			switch mode {
 			case "off":
@@ -442,6 +469,9 @@ func (e *Engine) Status() (string, bool) {
 		line := fmt.Sprintf("Following %s (%s): %s, %d lights", s.ev.User, s.ev.Client, s.ev.Title, len(s.lights))
 		if s.mode == ModeTheater {
 			line = fmt.Sprintf("Theater mode for %s (%s): %s, %d lights dimmed", s.ev.User, s.ev.Client, s.ev.Title, len(s.lights))
+		}
+		if s.stream != nil {
+			line += ", streaming to " + s.stream.area.Name
 		}
 		if s.problem != "" {
 			line += " (" + s.problem + ")"

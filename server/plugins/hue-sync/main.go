@@ -18,7 +18,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "hue-sync",
 	Name:        "Hue Sync",
-	Version:     "1.3.0",
+	Version:     "1.4.0",
 	Description: "Philips Hue lights follow the colours on screen while movies and shows play.",
 	Author:      "BingeBandit",
 	Events:      []string{"player.play", "player.pause", "player.resume", "player.progress", "player.stop"},
@@ -26,7 +26,8 @@ var manifest = bbplugin.Manifest{
 		{Key: "users", Label: "Only for these people (comma-separated; empty for everyone)", Type: "text"},
 		{Key: "clients", Label: "Only on these devices (comma-separated, e.g. Android TV; empty for all)", Type: "text"},
 		{Key: "brightness", Label: "Maximum brightness (%)", Type: "number", Default: "80"},
-		{Key: "updates_per_second", Label: "Updates per second (the bridge takes about 10 light changes a second in total)", Type: "number", Default: "4"},
+		{Key: "updates_per_second", Label: "Updates per second (the bridge takes about 10 light changes a second in total)", Type: "number", Default: "4",
+			Help: "For rooms and zones. Entertainment areas stream 25 updates a second to every light"},
 		{Key: "delay_ms", Label: "Delay (ms): raise it if the lights change before the picture", Type: "number", Default: "0"},
 		{Key: "theater_brightness", Label: "Theater mode brightness (%)", Type: "number", Default: "8",
 			Help: "How far the lights dim for people who pick Theater; 0 turns them off"},

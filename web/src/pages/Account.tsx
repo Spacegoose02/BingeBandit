@@ -105,11 +105,11 @@ function HueSync() {
           Lights in
           <select value={area} onChange={(e) => pickArea(e.target.value)}>
             <option value="">Every light Hue Sync uses</option>
-            {(['Room', 'Zone'] as const).map((type) => {
-              const list = areas.filter((a) => (a.type === 'Zone') === (type === 'Zone'))
+            {(['Room', 'Zone', 'Entertainment'] as const).map((type) => {
+              const list = areas.filter((a) => (a.type === 'Zone' || a.type === 'Entertainment' ? a.type : 'Room') === type)
               return (
                 !!list.length && (
-                  <optgroup key={type} label={type === 'Zone' ? 'Zones' : 'Rooms'}>
+                  <optgroup key={type} label={{ Room: 'Rooms', Zone: 'Zones', Entertainment: 'Entertainment areas (smoothest)' }[type]}>
                     {list.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
@@ -121,7 +121,7 @@ function HueSync() {
             })}
           </select>
           <span className="muted small">
-            Pick the room or zone this screen is in: all of its lights follow the picture, and a TV in another room can sync its own lights at the same time.
+            Pick the room or zone this screen is in: all of its lights follow the picture, and a TV in another room can sync its own lights at the same time. An entertainment area (made in the Hue app) streams 25 updates a second.
           </span>
         </label>
       )}

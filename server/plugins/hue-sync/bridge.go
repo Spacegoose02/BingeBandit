@@ -18,10 +18,17 @@ type Bridge struct {
 	Addr     string // host or host:port; "http://" is added when missing
 	Username string
 	client   *http.Client
+	// v2URL and streamAddr override where the v2 API and the entertainment
+	// stream are (https://host and host:2100), for tests.
+	v2URL, streamAddr string
 }
 
+// Set by tests to point every bridge at fakes.
+var testV2URL, testStreamAddr string
+
 func newBridge(addr, username string) *Bridge {
-	return &Bridge{Addr: addr, Username: username, client: &http.Client{Timeout: 4 * time.Second}}
+	return &Bridge{Addr: addr, Username: username, client: &http.Client{Timeout: 4 * time.Second},
+		v2URL: testV2URL, streamAddr: testStreamAddr}
 }
 
 func (b *Bridge) base() string {
@@ -86,20 +93,23 @@ func (b *Bridge) do(ctx context.Context, method, path string, body, out any) err
 	return nil
 }
 
-// Pair asks the bridge for a username; the link button must have been pressed.
-func (b *Bridge) Pair(ctx context.Context) (string, error) {
+// Pair asks the bridge for a username, and the client key entertainment
+// streaming needs (bridges too old to stream leave it empty); the link
+// button must have been pressed.
+func (b *Bridge) Pair(ctx context.Context) (username, clientKey string, err error) {
 	var res []struct {
 		Success struct {
-			Username string `json:"username"`
+			Username  string `json:"username"`
+			ClientKey string `json:"clientkey"`
 		} `json:"success"`
 	}
-	if err := b.do(ctx, http.MethodPost, "", map[string]string{"devicetype": "bingebandit#hue-sync"}, &res); err != nil {
-		return "", err
+	if err := b.do(ctx, http.MethodPost, "", map[string]any{"devicetype": "bingebandit#hue-sync", "generateclientkey": true}, &res); err != nil {
+		return "", "", err
 	}
 	if len(res) == 0 || res[0].Success.Username == "" {
-		return "", errors.New("the bridge didn't answer with a username")
+		return "", "", errors.New("the bridge didn't answer with a username")
 	}
-	return res[0].Success.Username, nil
+	return res[0].Success.Username, res[0].Success.ClientKey, nil
 }
 
 // LightState is what the bridge reports, and what restoring puts back.
@@ -154,15 +164,16 @@ func (b *Bridge) Lights(ctx context.Context) ([]Light, error) {
 	return out, nil
 }
 
-// Area is one of the Hue app's rooms or zones.
+// Area is one of the Hue app's rooms, zones or entertainment areas.
 type Area struct {
 	ID     string   `json:"id"`
 	Name   string   `json:"name"`
-	Type   string   `json:"type"` // Room or Zone
+	Type   string   `json:"type"` // Room, Zone or Entertainment
 	Lights []string `json:"lights"`
 }
 
-// Areas lists the bridge's rooms, then its zones, by name.
+// Areas lists the bridge's rooms, then its zones, then its entertainment
+// areas, by name.
 func (b *Bridge) Areas(ctx context.Context) ([]Area, error) {
 	var groups map[string]Area
 	if err := b.do(ctx, http.MethodGet, "/"+b.Username+"/groups", nil, &groups); err != nil {
@@ -170,14 +181,15 @@ func (b *Bridge) Areas(ctx context.Context) ([]Area, error) {
 	}
 	out := []Area{}
 	for id, g := range groups {
-		if g.Type == "Room" || g.Type == "Zone" {
+		if g.Type == "Room" || g.Type == "Zone" || g.Type == "Entertainment" {
 			g.ID = id
 			out = append(out, g)
 		}
 	}
+	order := map[string]int{"Room": 0, "Zone": 1, "Entertainment": 2}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Type != out[j].Type {
-			return out[i].Type == "Room"
+			return order[out[i].Type] < order[out[j].Type]
 		}
 		return out[i].Name < out[j].Name
 	})

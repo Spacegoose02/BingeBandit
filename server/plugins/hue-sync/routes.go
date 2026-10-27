@@ -60,7 +60,8 @@ func (a *app) routes() http.Handler {
 func (a *app) status(w http.ResponseWriter, r *http.Request) {
 	conf := a.conf.get()
 	status, active := a.engine.Status()
-	resp := map[string]any{"bridge": conf.Bridge, "paired": conf.Username != "", "status": status, "active": active, "zones": Zones}
+	resp := map[string]any{"bridge": conf.Bridge, "paired": conf.Username != "", "streaming": conf.ClientKey != "",
+		"status": status, "active": active, "zones": Zones}
 	if conf.Username != "" {
 		lights, err := newBridge(conf.Bridge, conf.Username).Lights(r.Context())
 		if err != nil {
@@ -167,13 +168,13 @@ func (a *app) pair(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enter the bridge's address"})
 		return
 	}
-	user, err := newBridge(req.Address, "").Pair(r.Context())
+	user, key, err := newBridge(req.Address, "").Pair(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	conf := a.conf.get()
-	conf.Bridge, conf.Username = req.Address, user
+	conf.Bridge, conf.Username, conf.ClientKey = req.Address, user, key
 	if err := a.conf.set(conf); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

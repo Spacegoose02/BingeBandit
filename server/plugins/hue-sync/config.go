@@ -14,9 +14,12 @@ import (
 // It lives in bridge.json in the plugin's data folder (the bridge username
 // is a credential, so it isn't a plugin setting the web app would show).
 type Config struct {
-	Bridge   string            `json:"bridge"`
-	Username string            `json:"username"`
-	Lights   map[string]string `json:"lights"` // light id → zone
+	Bridge   string `json:"bridge"`
+	Username string `json:"username"`
+	// ClientKey is the key for entertainment streaming, which the bridge
+	// hands out when pairing. Bridges paired before streaming have none.
+	ClientKey string            `json:"clientKey,omitempty"`
+	Lights    map[string]string `json:"lights"` // light id → zone
 	// People is how each person (profile) wants their lights: "sync" or
 	// "theater", by user id. Missing means off: Hue Sync is opt-in.
 	People map[string]string `json:"people,omitempty"`
