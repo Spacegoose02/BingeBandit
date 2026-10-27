@@ -77,6 +77,11 @@ func TestAudioArgs(t *testing.T) {
 		{"stereo AAC is copied", stereo, Options{AudioCodecs: []string{"aac"}}, "-c:a copy", "aac", 2},
 		{"unknown channels are converted", &store.Stream{Index: 4, Type: "audio", Codec: "ac3"}, surround, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
 		{"no audio", nil, surround, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
+		{"passthrough device gets DTS as Dolby Digital", dts, Options{AudioCodecs: []string{"aac", "ac3"}, MaxAudioChannels: 6, SurroundCodec: "ac3"},
+			"-c:a ac3 -ac 6 -b:a 640k", "ac3", 6},
+		{"or as Dolby Digital Plus", dts, Options{AudioCodecs: []string{"aac", "eac3"}, MaxAudioChannels: 6, SurroundCodec: "eac3"},
+			"-c:a eac3 -ac 6 -b:a 768k", "eac3", 6},
+		{"stereo source stays AAC", stereo, Options{MaxAudioChannels: 6, SurroundCodec: "ac3"}, "-c:a aac -ac 2 -b:a 192k", "aac", 2},
 	} {
 		s := &Session{}
 		got := strings.Join(audioArgs(s, c.a, c.o), " ")

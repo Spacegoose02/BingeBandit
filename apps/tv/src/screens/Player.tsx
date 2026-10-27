@@ -29,6 +29,12 @@ const DIRECT_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac'])
 // TV/receiver. Without either ExoPlayer plays the video silently, so ask first.
 const SURROUND_AUDIO = new Set(['ac3', 'eac3', 'dts', 'truehd'])
 
+/** The audio formats to ask the server for when converting. */
+function surroundCaps(): { audioCodecs: string[]; surroundCodec?: string } {
+  const dolby = ['ac3', 'eac3'].filter(surroundPlayable)
+  return { audioCodecs: ['aac', ...dolby], surroundCodec: dolby[0] }
+}
+
 /** Whether this device can play the file as is with the chosen audio track. */
 function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
@@ -301,9 +307,11 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           // instead of copying it, so a slow device gets something lighter.
           encodeVideo: qualityRef.current >= 0,
           // Android's AAC decoder handles 5.1 everywhere (and mixes down for
-          // stereo TVs), so surround tracks stay surround. AC-3/E-AC-3 copy
-          // waits until passthrough is tested on real boxes.
-          audioCodecs: ['aac'],
+          // stereo TVs), so surround tracks stay surround. AC-3/E-AC-3 the
+          // box can decode or pass through to a receiver is copied as is,
+          // and DTS/TrueHD becomes Dolby Digital for it (a soundbar on HDMI
+          // ARC takes Dolby but not 5.1 PCM).
+          ...surroundCaps(),
           maxAudioChannels: 6,
         })
         transcodeId.current = res.session.id
