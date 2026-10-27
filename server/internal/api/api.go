@@ -349,6 +349,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/live/channels/{id}", s.updateChannel)
 				r.Delete("/live/channels/{id}", s.deleteChannel)
 				r.Get("/live/epg-channels", s.epgChannels)
+				r.Get("/live/epg-preview", s.epgPreview)
 				r.Get("/live/kids", s.kidChannels)
 				r.Put("/live/kids/channels", s.setKidChannels)
 				r.Put("/live/kids/group", s.setKidGroup)
