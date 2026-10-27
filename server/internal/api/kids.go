@@ -79,7 +79,7 @@ func (s *Server) setUserKid(w http.ResponseWriter, r *http.Request) {
 }
 
 // kidTitles lists the movies (?kind=movie) or shows (?kind=show) approved
-// for the signed-in kid: their Kids Movies and Kids Shows.
+// for the signed-in kid: their Approved Movies and Approved Shows.
 func (s *Server) kidTitles(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
 	if kind != "movie" && kind != "show" {

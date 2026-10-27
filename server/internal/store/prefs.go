@@ -35,8 +35,14 @@ type Prefs struct {
 	NotifyGameScores bool `json:"notifyGameScores"`
 	// HiddenTabs are the TV and phone app menu tabs this person turned off.
 	// Home, Search and Settings always show; libraries come and go by pinning.
+	// Never set (null) means DefaultHiddenTabs; an empty list shows them all.
 	HiddenTabs []string `json:"hiddenTabs"`
 }
+
+// DefaultHiddenTabs start out under More instead of in the menu, until the
+// person pins them. Kept out of DefaultPrefs: decoding into a shared slice
+// would write over it.
+var DefaultHiddenTabs = []string{"sports"}
 
 // HideableTabs are the app menu tabs that HiddenTabs may name.
 var HideableTabs = []string{"sports", "live", "more"}
@@ -89,6 +95,9 @@ func (s *Store) UserPrefs(userID int64) (Prefs, error) {
 		return p, err
 	}
 	json.Unmarshal([]byte(raw), &p)
+	if p.HiddenTabs == nil {
+		p.HiddenTabs = slices.Clone(DefaultHiddenTabs)
+	}
 	return p, nil
 }
 
