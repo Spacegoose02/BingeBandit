@@ -151,7 +151,8 @@ func refresh(ctx context.Context, st *store.Store, src *store.LiveSource) (int, 
 			func(c GuideChannel) error { return gi.Channel(c.ID, c.DisplayName, c.Icon) },
 			func(p Program) error {
 				return gi.Program(&store.GuideProgram{EPGID: p.ChannelID, Start: p.Start.Unix(), Stop: p.Stop.Unix(),
-					Title: p.Title, Subtitle: p.Subtitle, Description: p.Description, Category: p.Category, Icon: p.Icon, Episode: p.Episode})
+					Title: p.Title, Subtitle: p.Subtitle, Description: p.Description, Category: p.Category, Icon: p.Icon, Episode: p.Episode,
+					Year: p.Year, Rating: p.Rating, Stars: p.Stars, Genres: p.Genres})
 			})
 		if err != nil {
 			gi.Abort()

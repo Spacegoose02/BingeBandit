@@ -4,7 +4,7 @@ import { SvgXml } from 'react-native-svg'
 import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Center } from '../components'
-import { joinChannel, leaveChannel } from '../live'
+import { clock, episodeLabel, joinChannel, leaveChannel } from '../live'
 import { FocusMemoryContext, useNav, useScreen, type FocusTarget } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
 import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
@@ -54,12 +54,6 @@ interface Seg {
 }
 
 const floorHalf = (t: number) => Math.floor(t / HALF) * HALF
-
-export function clock(t: number): string {
-  const d = new Date(t * 1000)
-  const h = d.getHours()
-  return `${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
-}
 
 function day(t: number): string {
   const d = new Date(t * 1000)
@@ -270,12 +264,12 @@ export default function LiveGuide() {
     <View style={st.flex}>
       <View style={[st.header, wide && st.headerWide]}>
         <View style={st.info}>
-          <Text style={st.title} numberOfLines={isPhone ? 2 : 1}>{p?.title ?? sel?.channel.name ?? ''}</Text>
+          <Text style={st.title} numberOfLines={isPhone ? 2 : 1}>{p ? `${p.title}${p.year ? ` (${p.year})` : ''}` : sel?.channel.name ?? ''}</Text>
           {sel && (
             <Text style={st.meta} numberOfLines={2}>
               {p ? `${day(p.start)} ${clock(p.start)} – ${clock(p.stop)}  ·  ` : ''}
               {sel.channel.number}  {sel.channel.name}
-              {p?.episode ? `  ·  ${p.episode}` : ''}
+              {p?.episode ? `  ·  ${episodeLabel(p.episode)}` : ''}
             </Text>
           )}
           {!!p?.subtitle && <Text style={st.subtitle} numberOfLines={1}>{p.subtitle}</Text>}

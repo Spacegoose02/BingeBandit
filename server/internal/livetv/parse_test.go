@@ -41,6 +41,11 @@ func TestParseXMLTV(t *testing.T) {
     <title lang="en">SportsCenter</title><sub-title>Evening</sub-title><desc>Highlights.</desc>
     <category>Sports</category><episode-num system="xmltv_ns">0.1.</episode-num><episode-num system="onscreen">S1E2</episode-num>
   </programme>
+  <programme start="20261023190000 +0000" stop="20261023210000 +0000" channel="espn.us">
+    <title>Friday the 13th</title><date>19800509</date><category>Movie</category><category>Horror</category><category>Movie</category>
+    <rating system="BBFC"><value>18</value></rating><rating system="MPAA"><value>R</value></rating>
+    <star-rating><value>6.4/10</value></star-rating>
+  </programme>
   <programme start="20200101000000 +0000" stop="20200101010000 +0000" channel="espn.us"><title>Old</title></programme>
 </tv>`
 	from := time.Date(2026, 10, 23, 0, 0, 0, 0, time.UTC)
@@ -55,12 +60,19 @@ func TestParseXMLTV(t *testing.T) {
 	if len(chans) != 1 || chans[0].DisplayName != "ESPN" || chans[0].Icon != "http://logo/espn.png" {
 		t.Errorf("channels = %+v", chans)
 	}
-	if len(progs) != 1 {
+	if len(progs) != 2 {
 		t.Fatalf("programs = %+v (old program should be skipped)", progs)
 	}
 	p := progs[0]
 	if p.Title != "SportsCenter" || p.Subtitle != "Evening" || p.Episode != "S1E2" || p.Category != "Sports" ||
 		!p.Start.Equal(time.Date(2026, 10, 23, 18, 0, 0, 0, time.UTC)) || p.Stop.Sub(p.Start) != time.Hour {
 		t.Errorf("program = %+v", p)
+	}
+	if p.Year != 0 || p.Genres != "Sports" {
+		t.Errorf("program = %+v", p)
+	}
+	m := progs[1]
+	if m.Year != 1980 || m.Rating != "R" || m.Stars != "6.4/10" || m.Category != "Movie" || m.Genres != "Movie, Horror" {
+		t.Errorf("movie = %+v", m)
 	}
 }

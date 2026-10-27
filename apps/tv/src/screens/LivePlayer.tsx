@@ -4,7 +4,7 @@ import Video, { type OnProgressData, type VideoRef } from 'react-native-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
 import { Button } from '../components'
-import { DEFAULT_BUFFER_SECS, fmtBehind, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
+import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { useLock } from '../lock'
 import { backInterceptor, showLiveGuide, useNav } from '../nav'
 import { useLandscape } from '../screen'
@@ -19,9 +19,9 @@ const TUNE_DELAY = 700
 export const lastChannel = { id: 0 }
 
 /**
- * Watches a live channel. Up/Down changes channel; OK pauses; Left/Right
- * rewind 10 s and skip 30 s within the server's pause window; the info bar
- * shows what's on.
+ * Watches a live channel. Up/Down changes channel; Left/Right rewind 10 s and
+ * skip 30 s within the server's pause window; OK brings up the info bar with
+ * buttons (pause, rewind, skip, live, guide); the info bar shows what's on.
  */
 export default function LivePlayer({ channelId }: { channelId: number }) {
   const [channels, setChannels] = useState<LiveChannel[]>([])
@@ -35,7 +35,9 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [buffering, setBuffering] = useState(true)
   const [paused, setPaused] = useState(false)
   const [behind, setBehind] = useState(0)
+  const nav = useNav()
   const [info, setInfo] = useState(true)
+  const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
   const viewer = useRef('')
   const failures = useRef(0)
   const stallSecs = useRef(12)
@@ -48,16 +50,29 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   useLandscape()
   const insets = useSafeAreaInsets()
   const lock = useLock()
-  // A locked player swallows Back (the keypad unlocks it).
+  const pausedRef = useRef(false)
+  pausedRef.current = paused
+  // A locked player swallows Back (the keypad unlocks it); Back then puts the buttons away.
   useEffect(() => {
-    backInterceptor.current = lock.handleBack
+    backInterceptor.current = () => {
+      if (lock.handleBack()) return true
+      if (controls) {
+        setControls(false)
+        return true
+      }
+      return false
+    }
     return () => {
       backInterceptor.current = null
     }
   })
 
+  // Refetched now and then so the info bar keeps up with what's on.
   useEffect(() => {
-    api.get<LiveChannel[]>('/api/live/channels').then(setChannels, () => undefined)
+    const load = () => api.get<LiveChannel[]>('/api/live/channels').then(setChannels, () => undefined)
+    load()
+    const t = setInterval(load, 5 * 60 * 1000)
+    return () => clearInterval(t)
   }, [])
 
   // A new channel starts with a clean slate.
@@ -120,10 +135,18 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     if (hide.current) clearTimeout(hide.current)
   }, [])
 
-  const showInfo = (keep = false) => {
+  // The bar (and its buttons, if up) hides a while after the last key, unless paused.
+  const showInfo = (keep = false, buttons = false) => {
     setInfo(true)
+    if (buttons) setControls(true)
     if (hide.current) clearTimeout(hide.current)
-    if (!keep) hide.current = setTimeout(() => setInfo(false), 5000)
+    if (!keep) {
+      hide.current = setTimeout(() => {
+        if (pausedRef.current) return
+        setInfo(false)
+        setControls(false)
+      }, buttons || controls ? 6000 : 5000)
+    }
   }
 
   // Flipping through channels only updates the info bar; the stream is
@@ -165,6 +188,11 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     showInfo(!paused) // the bar stays up while paused
   }
 
+  const openGuide = () => {
+    showLiveGuide.current?.()
+    nav.back()
+  }
+
   // ExoPlayer doesn't report progress while paused; live keeps moving on.
   useEffect(() => {
     if (!paused) return
@@ -173,22 +201,38 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   }, [paused])
 
   // Holding Select opens the guide (on the channel being watched). The key-up
-  // that ends the hold mustn't also pause.
-  const nav = useNav()
+  // that ends the hold mustn't also bring up the buttons.
   const held = useRef(false)
   useTVEventHandler((evt) => {
     if (!evt) return
     if (evt.eventType === 'longSelect') {
       if (!held.current) {
         held.current = true
-        showLiveGuide.current?.()
-        nav.back()
+        openGuide()
       }
       return
     }
     if (evt.eventKeyAction === 0) return // act on key up, as in Player
     if (held.current && evt.eventType === 'select') {
       held.current = false
+      return
+    }
+    if (controls) {
+      // The buttons have focus, so ◀▶ and OK work them. They're one row, so
+      // ▲▼ still change channel.
+      switch (evt.eventType) {
+        case 'up':
+          step(-1)
+          break
+        case 'down':
+          step(1)
+          break
+        case 'playPause':
+          togglePause()
+          break
+        default:
+          showInfo(pausedRef.current)
+      }
       return
     }
     switch (evt.eventType) {
@@ -199,6 +243,8 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         step(1)
         break
       case 'select':
+        showInfo(paused, true)
+        break
       case 'playPause':
         togglePause()
         break
@@ -220,7 +266,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         break
       case 'info':
       case 'menu':
-        showInfo()
+        showInfo(paused, true)
         break
     }
   })
@@ -263,6 +309,9 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   }
 
   const ch = channels.find((c) => c.id === id)
+  // The channel list's "now" goes stale as the evening goes on: once it ends, its "next" is on.
+  const nowSecs = Date.now() / 1000
+  const now = ch?.now && ch.now.stop > nowSecs ? ch.now : ch?.next && ch.next.start <= nowSecs ? ch.next : ch?.now
   return (
     <View style={st.screen}>
       {src && (
@@ -300,7 +349,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         />
       ) : (
         // Something must hold focus or Android never hands the remote's keys to the app.
-        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus focusable />
+        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!controls} focusable={!controls} />
       )}
       {(buffering || reconnecting || id !== tuned) && !error && !paused && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {!!error && id === tuned && (
@@ -311,36 +360,48 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       )}
       {(info || paused || !!error) && ch && !lock.locked && (
         <View style={[st.bar, isPhone && { left: insets.left + px(gutter), right: insets.right + px(gutter) }]}>
-          <Text style={st.number}>{ch.number}</Text>
-          <View style={st.flex}>
-            <Text style={st.name}>{ch.name}</Text>
-            <Text style={st.now} numberOfLines={1}>{ch.now ? `Now: ${ch.now.title}` : 'No guide information'}{ch.next ? `   ·   Next: ${ch.next.title}` : ''}</Text>
+          <View style={st.row}>
+            <Text style={st.number}>{ch.number}</Text>
+            <View style={st.flex}>
+              <Text style={st.name} numberOfLines={1}>{ch.name}</Text>
+              {now ? (
+                <>
+                  <Text style={st.title} numberOfLines={1}>{now.title}{now.year ? ` (${now.year})` : ''}{now.subtitle ? `  —  ${now.subtitle}` : ''}</Text>
+                  <Text style={st.facts} numberOfLines={1}>{programFacts(now)}</Text>
+                  {!!now.description && <Text style={st.desc} numberOfLines={paused ? 4 : 2}>{now.description}</Text>}
+                </>
+              ) : (
+                <Text style={st.now}>No guide information</Text>
+              )}
+              {ch.next && <Text style={st.next} numberOfLines={1}>Next at {clock(ch.next.start)}: {ch.next.title}{ch.next.year ? ` (${ch.next.year})` : ''}</Text>}
+            </View>
+            {id === tuned && (paused || behind > 0) ? (
+              <Text style={st.timeshift}>{paused ? '❚❚ Paused' : '◀◀'}{behind > 0 ? `  −${fmtBehind(behind)}` : ''}</Text>
+            ) : (
+              id === tuned && <Text style={st.liveTag}>LIVE</Text>
+            )}
           </View>
-          {id === tuned && (paused || behind > 0) ? (
-            <Text style={st.timeshift}>{paused ? '❚❚ Paused' : '◀◀'}{behind > 0 ? `  −${fmtBehind(behind)}` : ''}</Text>
+          {isPhone || controls ? (
+            <View style={st.buttons}>
+              <Button small label="⟲ 10s" onPress={() => seekBy(-10)} />
+              <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={togglePause} />
+              <Button small label="30s ⟳" onPress={() => seekBy(30)} />
+              {/* Always there, so pressing it never leaves the remote's focus on nothing. */}
+              <Button small label="Go live" onPress={goLive} />
+              <Button small label="Guide" onPress={openGuide} />
+              {isPhone && (
+                <Button
+                  small
+                  label="Lock"
+                  onPress={() => {
+                    setInfo(false)
+                    lock.startLock()
+                  }}
+                />
+              )}
+            </View>
           ) : (
-            id === tuned && <Text style={st.liveTag}>LIVE</Text>
-          )}
-          {isPhone ? (
-            <>
-              <Button small label="−10s" style={st.lockBtn} onPress={() => seekBy(-10)} />
-              <Button small label={paused ? 'Play' : 'Pause'} style={st.lockBtn} onPress={togglePause} />
-              <Button small label="+30s" style={st.lockBtn} onPress={() => seekBy(30)} />
-              {behind > 0 && <Button small label="Live" style={st.lockBtn} onPress={goLive} />}
-            </>
-          ) : (
-            <Text style={st.hint}>▲▼ channel   OK pause   ◀▶ rewind / skip</Text>
-          )}
-          {isPhone && (
-            <Button
-              small
-              label="Lock"
-              style={st.lockBtn}
-              onPress={() => {
-                setInfo(false)
-                lock.startLock()
-              }}
-            />
+            <Text style={st.hint}>OK for controls   ▲▼ channel   ◀▶ rewind / skip   hold OK for the guide</Text>
           )}
         </View>
       )}
@@ -358,10 +419,15 @@ const st = StyleSheet.create(scaled({
   errorHint: { color: colors.muted, fontSize: font.small, marginTop: 8 },
   liveTag: { color: '#fff', backgroundColor: '#e11d48', fontSize: font.small, fontWeight: '800', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, marginLeft: 20 },
   timeshift: { color: colors.text, fontSize: font.body, fontWeight: '700', marginLeft: 20 },
-  bar: { position: 'absolute', left: gutter, right: gutter, bottom: 60, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,24,29,0.92)', borderRadius: 22, padding: 34 },
+  bar: { position: 'absolute', left: gutter, right: gutter, bottom: 60, backgroundColor: 'rgba(20,24,29,0.92)', borderRadius: 22, padding: 34 },
   number: { color: colors.accent, fontSize: font.title, fontWeight: '900', width: 160 },
   name: { color: colors.text, fontSize: font.heading, fontWeight: '800' },
   now: { color: colors.muted, fontSize: font.body, marginTop: 4 },
-  hint: { color: colors.muted, fontSize: font.small, marginLeft: 20, flexShrink: 0 }, // the Now/Next line gives way instead
-  lockBtn: { marginLeft: 24, marginRight: 0, marginBottom: 0 },
+  title: { color: colors.text, fontSize: font.body, fontWeight: '700', marginTop: 6 },
+  facts: { color: colors.muted, fontSize: font.small, marginTop: 4 },
+  desc: { color: colors.text, fontSize: font.small, marginTop: 8, opacity: 0.85 },
+  next: { color: colors.muted, fontSize: font.small, marginTop: 8 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  buttons: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 24, marginLeft: isPhone ? 0 : 160 },
+  hint: { color: colors.muted, fontSize: font.small, marginTop: 20, marginLeft: 160 },
 }))

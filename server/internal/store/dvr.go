@@ -282,8 +282,8 @@ func (s *Store) ProgramByID(id int64) (*GuideProgram, error) {
 		p.ID, p.EPGID = -p.ID, CustomEPGID(ch)
 		return &p, err
 	}
-	err := s.db.QueryRow(`SELECT id, xmltv_id, start_at, stop_at, title, subtitle, description, category, icon, episode FROM epg_programs WHERE id = ?`, id).
-		Scan(&p.ID, &p.EPGID, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon, &p.Episode)
+	err := s.db.QueryRow(`SELECT id, xmltv_id, start_at, stop_at, title, subtitle, description, category, icon, episode, year, rating, stars, genres FROM epg_programs WHERE id = ?`, id).
+		Scan(&p.ID, &p.EPGID, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon, &p.Episode, &p.Year, &p.Rating, &p.Stars, &p.Genres)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

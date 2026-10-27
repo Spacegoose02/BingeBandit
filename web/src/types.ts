@@ -344,6 +344,14 @@ export interface GuideProgram {
   category?: string
   icon?: string
   episode?: string
+  /** Every category, comma separated. */
+  genres?: string
+  /** The year it was made. */
+  year?: number
+  /** Age rating, such as "TV-14" or "R". */
+  rating?: string
+  /** Star rating, such as "7.5/10". */
+  stars?: string
 }
 
 export interface LiveChannel {

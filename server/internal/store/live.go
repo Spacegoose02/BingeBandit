@@ -368,8 +368,8 @@ func (s *Store) BeginGuideImport(sourceID int64) (*GuideImport, error) {
 		tx.Rollback()
 		return nil, err
 	}
-	p, err := tx.Prepare(`INSERT INTO epg_programs (source_id, xmltv_id, start_at, stop_at, title, subtitle, description, category, icon, episode)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	p, err := tx.Prepare(`INSERT INTO epg_programs (source_id, xmltv_id, start_at, stop_at, title, subtitle, description, category, icon, episode, year, rating, stars, genres)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		tx.Rollback()
 		return nil, err
@@ -384,7 +384,8 @@ func (g *GuideImport) Channel(id, name, icon string) error {
 
 func (g *GuideImport) Program(p *GuideProgram) error {
 	g.count++
-	_, err := g.pStmt.Exec(g.sourceID, p.EPGID, p.Start, p.Stop, p.Title, p.Subtitle, p.Description, p.Category, p.Icon, p.Episode)
+	_, err := g.pStmt.Exec(g.sourceID, p.EPGID, p.Start, p.Stop, p.Title, p.Subtitle, p.Description, p.Category, p.Icon, p.Episode,
+		p.Year, p.Rating, p.Stars, p.Genres)
 	return err
 }
 
@@ -433,6 +434,10 @@ type GuideProgram struct {
 	Category    string `json:"category,omitempty"`
 	Icon        string `json:"icon,omitempty"`
 	Episode     string `json:"episode,omitempty"`
+	Year        int    `json:"year,omitempty"`   // the year it was made, from the guide's <date>
+	Rating      string `json:"rating,omitempty"` // age rating, such as "TV-14" or "R"
+	Stars       string `json:"stars,omitempty"`  // star rating, such as "7.5/10"
+	Genres      string `json:"genres,omitempty"` // every category, comma separated
 }
 
 // Programs lists guide entries overlapping [from, to) for the given XMLTV ids.
@@ -446,7 +451,8 @@ func (s *Store) Programs(epgIDs []string, from, to int64) ([]GuideProgram, error
 		args = append(args, id)
 	}
 	args = append(args, to, from)
-	rows, err := s.db.Query(`SELECT MIN(id), xmltv_id, start_at, MAX(stop_at), title, subtitle, description, category, icon, episode
+	rows, err := s.db.Query(`SELECT MIN(id), xmltv_id, start_at, MAX(stop_at), title, subtitle, description, category, icon, episode,
+		year, rating, stars, genres
 		FROM epg_programs WHERE xmltv_id IN (`+ph+`) AND start_at < ? AND stop_at > ?
 		GROUP BY xmltv_id, start_at ORDER BY xmltv_id, start_at`, args...)
 	if err != nil {
@@ -456,7 +462,8 @@ func (s *Store) Programs(epgIDs []string, from, to int64) ([]GuideProgram, error
 	out := []GuideProgram{}
 	for rows.Next() {
 		var p GuideProgram
-		if err := rows.Scan(&p.ID, &p.EPGID, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon, &p.Episode); err != nil {
+		if err := rows.Scan(&p.ID, &p.EPGID, &p.Start, &p.Stop, &p.Title, &p.Subtitle, &p.Description, &p.Category, &p.Icon, &p.Episode,
+			&p.Year, &p.Rating, &p.Stars, &p.Genres); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
