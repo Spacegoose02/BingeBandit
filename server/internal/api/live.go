@@ -261,7 +261,11 @@ func (s *Server) liveHLS(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusServiceUnavailable, err.Error())
 			return
 		}
-		w.Write(s.Live.Playlist(id, b))
+		b = s.Live.Playlist(id, b)
+		if q := playlistQuery(r); q != "" {
+			b = rewritePlaylist(b, q, false)
+		}
+		w.Write(b)
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp2t")

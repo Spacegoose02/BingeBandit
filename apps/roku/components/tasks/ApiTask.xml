@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ApiTask" extends="Task">
+  <interface>
+    <!-- { method, path, body?, timeout?, server? (an unsigned-in server), build? } -->
+    <field id="request" type="assocarray" />
+    <!-- Set before response when the request asked for a build. -->
+    <field id="content" type="node" />
+    <!-- { ok, status, data, error } -->
+    <field id="response" type="assocarray" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/tasks/ApiTask.brs" />
+</component>

@@ -2,7 +2,16 @@
 
 Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
 
-_Last updated: 2026-10-26, the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+_Last updated: 2026-10-27, the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+
+## Roku channel (2026-10-27)
+
+- **`apps/roku`**: a BrightScript/SceneGraph channel, separate from the React Native TV app. `MainScene` keeps a stack of screens (`BaseScreen`: `params` in, `navigate` out, `resumed` when the screen above closes, `closing` as it's removed). `ApiTask` does every request off the render thread and builds ContentNodes there (`build`: home, items, library, details, channels); `apiSendDetached` parks a task on the scene so the player's last progress report outlives the player. Fonts are bundled Inter (subset, OFL) because system font URIs differ between firmware and the simulator.
+- **Flow:** Connect (LAN /24 scan on :8484 or typed address, same candidates as the TV app) → SignIn (pairing code via `/api/link/start` + poll) → household check like the TV app's `needsPicker` → Profiles (own 4–8 digit PIN pad) → Home (menu + RowsView/GridView/SearchView/LiveView) → Details → Player / LivePlayer.
+- **Playback:** direct play when `roDeviceInfo.CanDecodeVideo/Audio` accept the container, codecs and audio (no HDR without HDR10, nothing taller than the TV mode), else `/api/files/{id}/transcode` (AAC, plus AC-3/E-AC-3 copy when the Roku can pass them through). Own controls so a seek past what's converted restarts the transcode with `replace`. Progress every 10 s, `client: "Roku"`.
+- **Server:** `hlstoken.go` rewrites transcode and live playlists requested with `?token=` so every URI carries the token (Roku's Video node doesn't reliably send headers on segments), and `fromStart=1` adds `EXT-X-START:TIME-OFFSET=0`.
+- **CI:** `roku-app` job runs BrighterScript and uploads `BingeBandit-Roku.zip`; releases attach `BingeBandit-Roku-vX.Y.Z.zip` with the manifest version from the tag.
+- **Tested:** in the brs-engine simulator (`brs-node`, `brs-cli app.zip -e` with ECP keypresses and Ctrl+S screenshots) against a local server and fakeiptv: sign-in, PIN pad, Home, libraries, show/season pages, search, resume position saved on exit, Live TV join/flip/leave, sign out. The simulator can't decode video and its roUrlTransfer is synchronous, so playback and the network scan are untested. **Never run on a real Roku.**
 
 ## Second feature board (2026-10-26)
 

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Search: a keyboard on the left, results as you type on the right. -->
+<component name="SearchView" extends="BaseView">
+  <children>
+    <Label text="Search" translation="[0, 40]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <MiniKeyboard id="keyboard" translation="[0, 140]" />
+    <MarkupGrid id="grid" translation="[620, 140]" itemComponentName="PosterItem" itemSize="[200, 366]" itemSpacing="[16, 30]" numColumns="4" numRows="3"
+      vertFocusAnimationStyle="fixedFocusWrap" focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true" />
+    <Label id="status" width="860" translation="[620, 400]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+    </Label>
+    <Timer id="debounce" duration="0.6" repeat="false" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/SearchView.brs" />
+</component>

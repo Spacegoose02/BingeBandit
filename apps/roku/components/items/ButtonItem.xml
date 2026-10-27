@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One button in a ButtonRow. -->
+<component name="ButtonItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onContent" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+    <field id="gridHasFocus" type="boolean" onChange="onFocus" />
+  </interface>
+  <children>
+    <Poster id="bg" uri="pkg:/images/button.9.png" />
+    <Label id="label" horizAlign="center" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/items/ButtonItem.brs" />
+</component>

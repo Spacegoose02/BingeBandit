@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A movie, show, season or episode: artwork, facts, Play/Resume, and its seasons or episodes. -->
+<component name="DetailsScreen" extends="BaseScreen">
+  <children>
+    <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.4" />
+    <Rectangle width="1920" height="1080" color="0x0B0D10B0" />
+    <Poster id="poster" width="300" height="450" translation="[110, 110]" loadDisplayMode="scaleToZoom" loadingBitmapUri="pkg:/images/tile.9.png" failedBitmapUri="pkg:/images/tile.9.png" />
+    <Label id="kicker" width="1300" translation="[470, 110]" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </Label>
+    <Label id="title" width="1340" translation="[470, 150]" wrap="true" maxLines="2" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="64" />
+    </Label>
+    <Label id="meta" width="1340" translation="[470, 300]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+    </Label>
+    <Label id="overview" width="1300" translation="[470, 350]" wrap="true" maxLines="5" lineSpacing="6" color="0xD8DCE2FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+    </Label>
+    <ButtonRow id="buttons" translation="[470, 590]" buttonWidth="320" />
+    <RowList id="children" translation="[110, 700]" itemComponentName="PosterItem" itemSize="[1720, 380]" numRows="1"
+      rowItemSize="[[200, 366]]" rowItemSpacing="[[18, 0]]" showRowLabel="[true]" rowLabelOffset="[[0, 10]]" rowLabelColor="0xF2F4F7FF"
+      rowFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true">
+      <Font role="rowLabelFont" uri="pkg:/fonts/Inter-Bold.otf" size="32" />
+    </RowList>
+    <Label id="status" width="1920" translation="[0, 500]" horizAlign="center" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/DetailsScreen.brs" />
+</component>

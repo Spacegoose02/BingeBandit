@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- First screen: find the server on the home network, or type its address. -->
+<component name="ConnectScreen" extends="BaseScreen">
+  <children>
+    <Poster uri="pkg:/images/logo.png" width="440" height="112" translation="[740, 110]" />
+    <Label text="Choose your server" width="1920" translation="[0, 270]" horizAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="56" />
+    </Label>
+    <Label id="status" width="1200" translation="[360, 360]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+    </Label>
+    <LabelList id="list" translation="[560, 470]" itemSize="[800, 84]" itemSpacing="[0, 14]" numRows="6" vertFocusAnimationStyle="floatingFocus" color="0xF2F4F7FF" focusedColor="0xF2F4F7FF" focusBitmapUri="pkg:/images/focus.9.png" focusFootprintBitmapUri="pkg:/images/tile.9.png">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="34" />
+      <Font role="focusedFont" uri="pkg:/fonts/Inter-Bold.otf" size="34" />
+    </LabelList>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/ConnectScreen.brs" />
+</component>

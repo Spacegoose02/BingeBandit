@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="ScanTask" extends="Task">
+  <interface>
+    <!-- Each server as it answers: { url, name, version } -->
+    <field id="found" type="assocarray" alwaysNotify="true" />
+    <field id="done" type="boolean" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/tasks/ScanTask.brs" />
+</component>

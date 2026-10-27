@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="MainScene" extends="Scene">
+  <children>
+    <Rectangle id="bg" width="1920" height="1080" color="0x0B0D10FF" />
+    <Group id="screens" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+</component>

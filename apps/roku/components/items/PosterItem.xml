@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A title in a row or grid: artwork, a progress bar, its name and one line under it. -->
+<component name="PosterItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onContent" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+  </interface>
+  <children>
+    <Rectangle id="tile" color="0x1C2128FF" />
+    <Poster id="art" loadDisplayMode="scaleToZoom" loadingBitmapUri="pkg:/images/tile.9.png" failedBitmapUri="pkg:/images/tile.9.png" />
+    <Label id="fallback" color="0x98A1ADFF" horizAlign="center" vertAlign="center" wrap="true" maxLines="3">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+    </Label>
+    <Rectangle id="track" color="0x00000099" height="8" visible="false" />
+    <Rectangle id="bar" color="0x2DD4BFFF" height="8" visible="false" />
+    <Rectangle id="badge" color="0x2DD4BFFF" width="44" height="40" visible="false">
+      <Label id="badgeText" width="44" height="40" horizAlign="center" vertAlign="center" color="0x04211DFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="24" />
+      </Label>
+    </Rectangle>
+    <Label id="title" color="0xF2F4F7FF" horizAlign="left">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="24" />
+    </Label>
+    <Label id="sub" color="0x98A1ADFF" horizAlign="left">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="20" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/items/PosterItem.brs" />
+</component>
