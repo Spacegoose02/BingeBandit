@@ -712,6 +712,13 @@ func (m *Manager) openStream(ctx context.Context, url, userAgent string) (io.Rea
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return nil, fmt.Errorf("only http(s) streams are supported")
 	}
+	if isYouTube(url) {
+		hls, err := resolveYouTube(ctx, url)
+		if err != nil {
+			return nil, err
+		}
+		url = hls
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
