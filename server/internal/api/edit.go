@@ -525,7 +525,46 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"collection": c, "items": items, "total": c.ItemCount})
+	out := map[string]any{"collection": c, "items": items, "total": c.ItemCount}
+	if offset <= 0 {
+		out["others"] = s.sameNamedRows(currentUser(r), id)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// otherCollection is a collection with the same name in another library,
+// shown as a row under a collection's titles ("Marvel Universe in Kids
+// Movies").
+type otherCollection struct {
+	Collection *store.Collection `json:"collection"`
+	Library    string            `json:"library"`
+	Items      []*store.Item     `json:"items"`
+}
+
+// sameNamedRows are the same-named collections in the libraries u may see,
+// each with its first titles; ones with nothing u may see are left out, so a
+// kid with only Kids Movies never sees a "Marvel Universe in Movies" row.
+func (s *Server) sameNamedRows(u *store.User, id int64) []otherCollection {
+	out := []otherCollection{}
+	cols, err := s.Store.SameNamedCollections(id)
+	if err != nil {
+		return out
+	}
+	for _, c := range cols {
+		if !s.Store.CanSeeLibrary(u, c.LibraryID) {
+			continue
+		}
+		lib, err := s.Store.Library(c.LibraryID)
+		if err != nil {
+			continue
+		}
+		items, err := s.Store.CollectionPage(u.ID, c.ID, 0, rowSize)
+		if err != nil || len(items) == 0 {
+			continue
+		}
+		out = append(out, otherCollection{Collection: c, Library: lib.Name, Items: items})
+	}
+	return out
 }
 
 type collectionReq struct {
