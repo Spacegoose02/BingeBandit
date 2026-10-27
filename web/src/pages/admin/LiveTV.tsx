@@ -8,7 +8,7 @@ import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
 import type { AdminChannel, GuideProgram, LiveSource, LiveStream, RelayStat } from '../../types'
 import { ChannelLogo, channelNo, clock } from '../LiveGuide'
-import { CustomChannelEditor } from './CustomChannel'
+import { CustomChannelEditor, StepButtons, type StepProps } from './CustomChannel'
 import { DispatcharrImport } from './DispatcharrImport'
 import { KidChannels } from './KidChannels'
 import { Logos } from './Logos'
@@ -294,6 +294,19 @@ function Channels() {
   const shown = data?.filter(
     (c) => (!q || c.name.toLowerCase().includes(q.toLowerCase()) || String(c.number).startsWith(q)) && (!onlyAttention || attention === 0 || needsAttention(c)),
   )
+  const open = (c: AdminChannel) => {
+    setCustom(c.custom ? c : null)
+    setEditing(c.custom ? null : c)
+  }
+  // Previous / Next walk the list as it's shown, custom channels included.
+  const stepFrom = (c: AdminChannel): StepProps => {
+    const list = shown ?? []
+    const i = list.findIndex((x) => x.id === c.id)
+    return {
+      prev: i > 0 ? () => open(list[i - 1]) : undefined,
+      next: i >= 0 && i < list.length - 1 ? () => open(list[i + 1]) : undefined,
+    }
+  }
 
   return (
     <>
@@ -337,7 +350,7 @@ function Channels() {
               <input type="checkbox" checked={c.enabled} onChange={() => toggle(c)} />
               <span />
             </label>
-            <button className="btn btn-glass btn-sm" onClick={() => (c.custom ? setCustom(c) : setEditing(c))}><Icon name="edit" size={16} /> Edit</button>
+            <button className="btn btn-glass btn-sm" onClick={() => open(c)}><Icon name="edit" size={16} /> Edit</button>
             <button className="btn btn-glass btn-sm danger" onClick={() => remove(c)} aria-label="Delete channel"><Icon name="trash" size={16} /></button>
           </div>
         ))}
@@ -346,13 +359,24 @@ function Channels() {
       {adding && <AddChannels onClose={() => setAdding(false)} onDone={() => { setAdding(false); reload() }} nextNumber={nextNumber} />}
       {custom && (
         <CustomChannelEditor
+          key={custom === 'new' ? 'new' : custom.id}
           channel={custom === 'new' ? undefined : custom}
           nextNumber={nextNumber}
           onClose={() => setCustom(null)}
           onSaved={reload}
+          step={custom === 'new' ? undefined : stepFrom(custom)}
         />
       )}
-      {editing && <ChannelEditor channel={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} />}
+      {editing && (
+        <ChannelEditor
+          key={editing.id}
+          channel={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); reload() }}
+          onApplied={reload}
+          step={stepFrom(editing)}
+        />
+      )}
     </>
   )
 }
@@ -448,9 +472,10 @@ function AddChannels({ onClose, onDone, nextNumber }: { onClose: () => void; onD
   )
 }
 
-function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; onClose: () => void; onSaved: () => void }) {
+function ChannelEditor({ channel, onClose, onSaved, onApplied, step }: { channel: AdminChannel; onClose: () => void; onSaved: () => void; onApplied: () => void; step: StepProps }) {
   const [c, setC] = useState(channel)
   const [streams, setStreams] = useState(channel.streams ?? [])
+  const dirty = JSON.stringify(c) !== JSON.stringify(channel) || streams.map((s) => s.streamId).join() !== (channel.streams ?? []).map((s) => s.streamId).join()
   const [epgQ, setEpgQ] = useState('')
   const [streamQ, setStreamQ] = useState('')
   const { data: epg } = useApi<{ id: string; displayName: string; now?: string }[]>(epgQ ? `/api/admin/live/epg-channels?q=${encodeURIComponent(epgQ)}` : null)
@@ -464,13 +489,23 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
     ;[n[i], n[j]] = [n[j], n[i]]
     setStreams(n)
   }
-  const save = async (e: FormEvent) => {
-    e.preventDefault()
+  const put = async () => {
     try {
       await api.put(`/api/admin/live/channels/${c.id}`, { ...c, streamIds: streams.map((s) => s.streamId) })
-      onSaved()
+      return true
     } catch (err) {
       setError((err as Error).message)
+      return false
+    }
+  }
+  const save = async (e: FormEvent) => {
+    e.preventDefault()
+    if (await put()) onSaved()
+  }
+  const saveAndNext = async () => {
+    if (await put()) {
+      onApplied()
+      step.next?.()
     }
   }
 
@@ -550,7 +585,14 @@ function ChannelEditor({ channel, onClose, onSaved }: { channel: AdminChannel; o
         )}
         {error && <div className="form-error">{error}</div>}
         <div className="actions end">
+          <span className="grow" />
+          <StepButtons step={step} dirty={dirty} />
           <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>
+          {dirty && step.next && (
+            <button type="button" className="btn btn-glass" onClick={saveAndNext} title="Save and open the next channel">
+              Save and next
+            </button>
+          )}
           <button className="btn btn-primary">Save</button>
         </div>
       </form>

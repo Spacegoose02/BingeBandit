@@ -3,6 +3,7 @@ package overlay
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
 	"time"
 
@@ -112,5 +113,33 @@ func TestDraw(t *testing.T) {
 	}
 	if !yellow {
 		t.Error("no IMDb rating at the bottom")
+	}
+}
+
+func TestRatingsFitNarrowPoster(t *testing.T) {
+	base := image.NewRGBA(image.Rect(0, 0, 680, 1000))
+	for i := range base.Pix {
+		base.Pix[i] = 200
+	}
+	plan := Plan{Ratings: []Rating{{"imdb", "6.6"}, {"rt", "68%"}, {"tmdb", "69%"}}}
+	for _, w := range []int{150, 220, 342} {
+		out := Draw(base, w, plan, nil)
+		h := out.Bounds().Dy()
+		margin := int(math.Round(3 * float64(w) / 100))
+		left, right := w, -1
+		for y := h / 2; y < h; y++ {
+			for x := 0; x < w; x++ {
+				r, g, b, _ := out.At(x, y).RGBA()
+				if r>>8 != 200 || g>>8 != 200 || b>>8 != 200 {
+					left, right = min(left, x), max(right, x)
+				}
+			}
+		}
+		if right < 0 {
+			t.Fatalf("width %d: no ratings drawn", w)
+		}
+		if left < margin-1 || right > w-margin {
+			t.Errorf("width %d: ratings span %d..%d, past the %dpx margins", w, left, right, margin)
+		}
 	}
 }

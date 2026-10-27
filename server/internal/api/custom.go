@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"net/http"
 	"strings"
 	"time"
@@ -127,6 +128,52 @@ func (s *Server) customSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, progs)
+}
+
+// cancelScheduled takes one entry off a custom channel's schedule; the rest
+// moves up. Cancelling what airs now skips to the next one.
+func (s *Server) cancelScheduled(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	entry, ok2 := idParam(r, "entry")
+	if !ok || !ok2 {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	now := time.Now()
+	airing, err := s.Store.CancelPlayout(id, entry, now.Unix())
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	if _, err := livetv.BuildPlayout(s.Store, id, now); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if airing {
+		s.Live.Stop(id) // viewers reconnect to the next entry
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// restartCustomChannel builds the schedule again from now and restarts the
+// stream for anyone watching.
+func (s *Server) restartCustomChannel(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	if ch, err := s.Store.Channel(0, id); err != nil || !ch.Custom {
+		writeStoreErr(w, cmp.Or(err, store.ErrNotFound))
+		return
+	}
+	n, err := livetv.RestartPlayout(s.Store, id, time.Now())
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.Live.Stop(id)
+	writeJSON(w, http.StatusOK, map[string]any{"scheduled": n})
 }
 
 type sourceOption struct {

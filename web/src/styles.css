@@ -791,6 +791,10 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .schedule-row { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; font-size: 14px; }
 .schedule-row + .schedule-row { border-top: 1px solid var(--border); }
 .schedule-row .mono { width: 70px; flex: none; }
+.schedule-row .schedule-cancel { margin-left: auto; align-self: center; opacity: 0.55; padding: 2px; }
+.schedule-row:hover .schedule-cancel, .schedule-row .schedule-cancel:focus-visible { opacity: 1; }
+.schedule-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.step-buttons { display: flex; gap: 6px; }
 .rec-when { width: 120px; flex: none; font-variant-numeric: tabular-nums; }
 .rec-conflict { color: var(--warn); margin-top: 2px; }
 .rec-keep { display: flex; align-items: center; gap: 6px; flex: none; }

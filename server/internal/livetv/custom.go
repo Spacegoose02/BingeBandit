@@ -51,6 +51,20 @@ func activeBlock(blocks []*store.Block, t time.Time) *store.Block {
 // repeating; order walks the sources in sequence. Cursors persist, so a
 // series continues where it left off. Returns how many entries were added.
 func BuildPlayout(st *store.Store, channelID int64, now time.Time) (int, error) {
+	return buildPlayout(st, channelID, now, false)
+}
+
+// RestartPlayout throws away the rest of today's schedule and starts the
+// channel over from now: in-order blocks go back to their first video and
+// shuffled ones start a new order.
+func RestartPlayout(st *store.Store, channelID int64, now time.Time) (int, error) {
+	if err := st.EndPlayoutAt(channelID, now.Unix()); err != nil {
+		return 0, err
+	}
+	return buildPlayout(st, channelID, now, true)
+}
+
+func buildPlayout(st *store.Store, channelID int64, now time.Time, restart bool) (int, error) {
 	blocks, err := st.CustomBlocks(channelID)
 	if err != nil {
 		return 0, err
@@ -83,10 +97,19 @@ func BuildPlayout(st *store.Store, channelID int64, now time.Time) (int, error) 
 	if end < now.Unix() {
 		t = now.Truncate(time.Minute)
 	}
+	if restart {
+		t = now
+	}
 	horizon := now.Add(playoutHorizon)
 	cursors := map[int64]int{}
 	for _, b := range blocks {
 		cursors[b.ID] = b.Cursor
+		if restart {
+			cursors[b.ID] = 0
+			if n := len(pools[b.ID]); b.Mode == "shuffle" && n > 0 {
+				cursors[b.ID] = (b.Cursor/n + 1) * n // the start of the next shuffle
+			}
+		}
 	}
 	perms := map[string][]int{}
 	var items []store.PlayoutItem
@@ -121,7 +144,7 @@ func BuildPlayout(st *store.Store, channelID int64, now time.Time) (int, error) 
 		cursors[b.ID] = c + 1
 		t = t.Add(dur)
 	}
-	if len(items) == 0 && end < now.Unix() {
+	if len(items) == 0 && (end < now.Unix() || restart) {
 		return 0, errors.New("the channel's sources have no playable videos")
 	}
 	if err := st.AddPlayout(items); err != nil {

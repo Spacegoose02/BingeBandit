@@ -87,3 +87,64 @@ func TestBuildPlayout(t *testing.T) {
 		t.Errorf("PlayoutAt = %+v, %v", it, err)
 	}
 }
+
+func TestCancelAndRestartPlayout(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	lib := &store.Library{Name: "Shows", Kind: "movies", Paths: []string{}}
+	st.CreateLibrary(lib)
+	for i := 0; i < 4; i++ {
+		title := fmt.Sprintf("Ep %d", i)
+		id, _ := st.UpsertItem(&store.Item{LibraryID: lib.ID, Kind: "movie", Title: title, SortTitle: title, MatchKey: "m:" + title})
+		st.UpsertFile(&store.MediaFile{ItemID: id, Path: "/x/" + title + ".mkv", Duration: 3600, ProbedAt: 1}, 1)
+	}
+	ch := &store.Channel{Number: 5, Name: "Eps", Enabled: true}
+	if err := st.SaveCustomChannel(ch, []*store.Block{{StartMinute: -1, EndMinute: -1, Mode: "order", Sources: []store.ContentSource{{Type: "library", ID: lib.ID}}}}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.Local)
+	if _, err := BuildPlayout(st, ch.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	day := func() []store.GuideProgram {
+		p, _ := st.PlayoutPrograms(ch.ID, now.Unix(), now.Add(48*time.Hour).Unix())
+		return p
+	}
+	before := day()
+
+	// Cancel the second entry: the third moves into its slot.
+	if airing, err := st.CancelPlayout(ch.ID, -before[1].ID, now.Unix()); err != nil || airing {
+		t.Fatalf("cancel: airing=%v err=%v", airing, err)
+	}
+	after := day()
+	if after[1].Title != before[2].Title || after[1].Start != before[1].Start {
+		t.Errorf("slot 2 = %q at %d, want %q at %d", after[1].Title, after[1].Start, before[2].Title, before[1].Start)
+	}
+
+	// Cancel what airs now, 20 minutes in: the next entry starts right away.
+	mid := now.Add(20 * time.Minute)
+	if airing, err := st.CancelPlayout(ch.ID, -after[0].ID, mid.Unix()); err != nil || !airing {
+		t.Fatalf("cancel airing: airing=%v err=%v", airing, err)
+	}
+	if it, err := st.PlayoutAt(ch.ID, mid.Unix()); err != nil || it.Title != after[1].Title {
+		t.Errorf("airing after cancel = %v (%v), want %q", it, err, after[1].Title)
+	}
+
+	// Restart from mid: in order starts over at the first episode.
+	if _, err := RestartPlayout(st, ch.ID, mid); err != nil {
+		t.Fatal(err)
+	}
+	it, err := st.PlayoutAt(ch.ID, mid.Unix())
+	if err != nil || it.Title != "Ep 0" || it.Start != mid.Unix() {
+		t.Errorf("after restart airing %v (%v), want Ep 0 from now", it, err)
+	}
+	p := day()
+	for i := 1; i < len(p); i++ {
+		if p[i].Start != p[i-1].Stop {
+			t.Fatalf("gap after restart between %q and %q", p[i-1].Title, p[i].Title)
+		}
+	}
+}

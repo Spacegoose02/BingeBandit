@@ -211,6 +211,57 @@ func (s *Store) ClearPlayoutAfter(channelID, t int64) error {
 	return err
 }
 
+// CancelPlayout takes one entry off a custom channel's schedule and moves
+// everything after it up to fill the gap. An entry that is airing ends now.
+// Reports whether it was airing, so the caller can restart the stream.
+func (s *Store) CancelPlayout(channelID, entryID, now int64) (bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var start, stop int64
+	err = tx.QueryRow(`SELECT start_at, stop_at FROM playout_items WHERE id = ? AND channel_id = ?`, entryID, channelID).Scan(&start, &stop)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && stop <= now {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, err
+	}
+	airing := start <= now
+	shift := stop - max(start, now)
+	if start < now {
+		_, err = tx.Exec(`UPDATE playout_items SET stop_at = ? WHERE id = ?`, now, entryID)
+	} else {
+		_, err = tx.Exec(`DELETE FROM playout_items WHERE id = ?`, entryID)
+	}
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`UPDATE playout_items SET start_at = start_at - ?, stop_at = stop_at - ? WHERE channel_id = ? AND start_at >= ?`,
+		shift, shift, channelID, stop); err != nil {
+		return false, err
+	}
+	return airing, tx.Commit()
+}
+
+// EndPlayoutAt ends whatever airs at t and drops everything after it, so the
+// schedule can be built again from t.
+func (s *Store) EndPlayoutAt(channelID, t int64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM playout_items WHERE channel_id = ? AND start_at >= ?`, channelID, t); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE playout_items SET stop_at = ? WHERE channel_id = ? AND stop_at > ?`, t, channelID, t); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) PrunePlayout(before int64) error {
 	_, err := s.db.Exec(`DELETE FROM playout_items WHERE stop_at < ?`, before)
 	return err
