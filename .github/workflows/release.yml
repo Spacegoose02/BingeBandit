@@ -109,6 +109,23 @@ jobs:
         with:
           files: release/*.apk
 
+  # The Roku channel, as a zip to sideload in developer mode (apps/roku/README.md).
+  roku:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the channel zip
+        working-directory: apps/roku
+        run: |
+          IFS=. read -r major minor patch <<< "${GITHUB_REF_NAME#v}"
+          sed -i "s/^major_version=.*/major_version=${major:-0}/; s/^minor_version=.*/minor_version=${minor:-0}/; s/^build_version=.*/build_version=${patch%%[^0-9]*}/" manifest
+          ./build.sh
+          mkdir -p ../../release
+          cp build/BingeBandit-Roku.zip "../../release/BingeBandit-Roku-${GITHUB_REF_NAME}.zip"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+
   docker:
     runs-on: ubuntu-latest
     steps:

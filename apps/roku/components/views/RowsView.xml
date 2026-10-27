@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home: Continue Watching and the server's rows. -->
+<component name="RowsView" extends="BaseView">
+  <children>
+    <RowList id="rows" translation="[0, 40]" itemComponentName="PosterItem" itemSize="[1500, 430]" numRows="3"
+      rowItemSize="[[200, 366]]" rowItemSpacing="[[18, 0]]" itemSpacing="[0, 30]"
+      showRowLabel="[true]" rowLabelOffset="[[0, 12]]" rowLabelColor="0xF2F4F7FF"
+      rowFocusAnimationStyle="floatingFocus" vertFocusAnimationStyle="fixedFocus"
+      focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true">
+      <Font role="rowLabelFont" uri="pkg:/fonts/Inter-Bold.otf" size="34" />
+    </RowList>
+    <Label id="status" width="1400" translation="[0, 400]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/RowsView.brs" />
+</component>

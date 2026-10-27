@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A Live TV channel: logo, number and name, what's on now with progress, and what's next. -->
+<component name="ChannelItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onContent" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+  </interface>
+  <children>
+    <Rectangle id="bg" height="110" color="0x14181DFF" />
+    <Poster id="logo" width="150" height="84" translation="[16, 13]" loadDisplayMode="scaleToFit" />
+    <Label id="number" width="90" height="110" translation="[180, 0]" vertAlign="center" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </Label>
+    <Label id="name" width="360" height="110" translation="[270, 0]" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </Label>
+    <Label id="now" translation="[650, 18]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+    </Label>
+    <Rectangle id="track" translation="[650, 62]" height="6" color="0x262C35FF" />
+    <Rectangle id="bar" translation="[650, 62]" height="6" color="0x2DD4BFFF" />
+    <Label id="next" translation="[650, 74]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="22" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/items/ChannelItem.brs" />
+</component>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A collection's titles as a full-screen grid. -->
+<component name="GridScreen" extends="BaseScreen">
+  <children>
+    <Poster id="backdrop" width="1920" height="1080" loadDisplayMode="scaleToZoom" opacity="0.25" />
+    <Rectangle width="1920" height="1080" color="0x0B0D10A0" />
+    <GridView id="view" translation="[110, 0]" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/screens/GridScreen.brs" />
+</component>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A panel shown beside Home's menu (Home rows, a library, Search, Live TV). -->
+<component name="BaseView" extends="Group">
+  <interface>
+    <field id="params" type="assocarray" />
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+    <!-- Reload (after coming back from the player). -->
+    <field id="refresh" type="boolean" alwaysNotify="true" />
+    <!-- Artwork for the screen behind the focused tile. -->
+    <field id="backdrop" type="string" />
+  </interface>
+</component>

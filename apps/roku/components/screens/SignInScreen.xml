@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Signing in with a pairing code approved from a phone or computer that's already signed in. -->
+<component name="SignInScreen" extends="BaseScreen">
+  <children>
+    <Label id="title" width="1920" translation="[0, 120]" horizAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="56" />
+    </Label>
+    <Label text="1. On your phone or computer, go to" width="1920" translation="[0, 270]" horizAlign="center" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="34" />
+    </Label>
+    <Label id="url" width="1920" translation="[0, 330]" horizAlign="center" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <Label text="2. Enter this code" width="1920" translation="[0, 450]" horizAlign="center" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="34" />
+    </Label>
+    <Label id="code" width="1920" translation="[0, 510]" horizAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="120" />
+    </Label>
+    <Label id="status" width="1400" translation="[260, 690]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+    </Label>
+    <ButtonRow id="buttons" translation="[620, 810]" buttonWidth="330" />
+    <Timer id="poll" duration="2" repeat="false" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/SignInScreen.brs" />
+</component>

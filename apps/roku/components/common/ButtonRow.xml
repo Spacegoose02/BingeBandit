@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A row of buttons (a simpler, predictable stand-in for ButtonGroup). -->
+<component name="ButtonRow" extends="Group">
+  <interface>
+    <field id="buttons" type="stringarray" onChange="onButtons" />
+    <field id="buttonWidth" type="float" value="320" onChange="onButtons" />
+    <field id="buttonSelected" type="integer" alwaysNotify="true" />
+    <field id="jumpTo" type="integer" onChange="onJump" />
+  </interface>
+  <children>
+    <MarkupGrid id="grid" itemComponentName="ButtonItem" itemSize="[320, 76]" itemSpacing="[18, 0]" numColumns="1" numRows="1" drawFocusFeedback="false" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/ButtonRow.brs" />
+</component>

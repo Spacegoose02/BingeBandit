@@ -156,7 +156,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Unraid container template and install guide (`unraid/`, `docs/UNRAID.md`) |
 | | iPhone / iPad and Apple TV (react-native-tvos supports tvOS; needs a Mac to build) |
 | | **Windows EXE** client (desktop wrapper around the web UI with mpv for full codec support) |
-| | Roku app (BrightScript; separate codebase) |
+| 🟡 | **Roku app** (`apps/roku`, BrightScript/SceneGraph): pairing-code sign-in, Who's watching? with PINs, Home, libraries, search, details, direct play or HLS conversion with resume, Live TV; sideloaded zip from CI. Not yet: audio/subtitle choice, guide grid, Channel Store listing. Untested on a real Roku |
 | | Casting to devices (Chromecast, DLNA) |
 | | Push notifications |
 

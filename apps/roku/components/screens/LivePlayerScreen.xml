@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Watches a Live TV channel. Up and Down change channel. -->
+<component name="LivePlayerScreen" extends="BaseScreen">
+  <children>
+    <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <Video id="video" width="1920" height="1080" enableUI="false" notificationInterval="1" />
+    <BusySpinner id="spinner" translation="[912, 492]" visible="false" />
+    <Label id="status" width="1600" translation="[160, 610]" horizAlign="center" wrap="true" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+    <Group id="overlay" visible="false">
+      <Rectangle width="1920" height="300" translation="[0, 780]" color="0x000000B0" />
+      <Poster id="logo" width="200" height="112" translation="[110, 830]" loadDisplayMode="scaleToFit" />
+      <Label id="channel" width="1400" translation="[340, 820]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="44" />
+      </Label>
+      <Label id="now" width="1400" translation="[340, 884]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+      </Label>
+      <Label id="next" width="1400" translation="[340, 934]" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+      </Label>
+      <Label text="Up/Down change channel  ·  OK pauses" width="1700" translation="[110, 1000]" horizAlign="right" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+      </Label>
+    </Group>
+    <Timer id="hideTimer" duration="5" repeat="false" />
+    <Timer id="tuneTimer" duration="0.7" repeat="false" />
+    <Timer id="bufferTimer" duration="3" repeat="true" />
+    <Timer id="pingTimer" duration="30" repeat="true" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/LivePlayerScreen.brs" />
+</component>

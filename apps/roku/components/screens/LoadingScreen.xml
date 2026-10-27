@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LoadingScreen" extends="BaseScreen">
+  <children>
+    <Poster uri="pkg:/images/logo.png" width="440" height="112" translation="[740, 400]" />
+    <BusySpinner id="spinner" translation="[912, 580]" spinInterval="1" control="start" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/screens/LoadingScreen.brs" />
+</component>

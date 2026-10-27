@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live TV: every channel with what's on now and next. -->
+<component name="LiveView" extends="BaseView">
+  <children>
+    <Label text="Live TV" translation="[0, 40]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <MarkupGrid id="list" translation="[0, 140]" itemComponentName="ChannelItem" itemSize="[1500, 110]" itemSpacing="[0, 10]" numColumns="1" numRows="8"
+      vertFocusAnimationStyle="floatingFocus" focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true" />
+    <Label id="status" width="1400" translation="[0, 420]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+    <Timer id="tick" duration="60" repeat="true" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/LiveView.brs" />
+</component>

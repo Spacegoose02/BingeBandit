@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log"
 	"mime"
 	"net/http"
@@ -238,6 +239,15 @@ func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(name, ".m3u8") {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "no-cache")
+		if q := playlistQuery(r); q != "" {
+			b, err := io.ReadAll(f)
+			if err != nil {
+				writeErr(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
+			w.Write(rewritePlaylist(b, q, r.URL.Query().Get("fromStart") == "1"))
+			return
+		}
 	} else {
 		w.Header().Set("Content-Type", "video/mp2t")
 	}

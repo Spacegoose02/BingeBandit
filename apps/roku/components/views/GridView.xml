@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A grid of titles: a library, a kid's approved titles, a collection. -->
+<component name="GridView" extends="BaseView">
+  <children>
+    <Label id="title" translation="[0, 40]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <Label id="count" translation="[0, 104]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+    </Label>
+    <MarkupGrid id="grid" translation="[0, 160]" itemComponentName="PosterItem" itemSize="[200, 366]" itemSpacing="[16, 30]" numColumns="7" numRows="3"
+      vertFocusAnimationStyle="fixedFocusWrap" focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true" />
+    <Label id="status" width="1400" translation="[0, 420]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/GridView.brs" />
+</component>

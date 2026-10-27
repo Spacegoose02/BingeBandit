@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What every screen shares with MainScene's stack. -->
+<component name="BaseScreen" extends="Group">
+  <interface>
+    <!-- Set once by MainScene before the screen is shown. -->
+    <field id="params" type="assocarray" />
+    <!-- The next step: { action?: push|replace|back|..., screen?, params? } -->
+    <field id="navigate" type="assocarray" alwaysNotify="true" />
+    <!-- Set when the screen above it closes, so it can refresh. -->
+    <field id="resumed" type="boolean" alwaysNotify="true" />
+    <!-- Set as the screen is removed, to stop players and timers. -->
+    <field id="closing" type="boolean" />
+  </interface>
+</component>

@@ -41,3 +41,23 @@ jobs:
       - name: Type-check and lint the TV app
         working-directory: apps/tv
         run: npm ci && npx tsc --noEmit && npx eslint App.tsx src
+
+  roku-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the Roku channel
+        working-directory: apps/roku
+        run: npx --yes brighterscript@0.69.13 --project bsconfig.json
+      - name: Build the sideload zip
+        working-directory: apps/roku
+        run: ./build.sh
+      # GitHub wraps artifacts in a zip of their own: unzip the download once
+      # to get BingeBandit-Roku.zip, which is what the Roku takes.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BingeBandit-Roku
+          path: apps/roku/build/BingeBandit-Roku.zip

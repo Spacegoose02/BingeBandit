@@ -5,7 +5,8 @@ This guide is for setting up a friend's or family member's TV so it watches from
 ## What you need
 
 - **A TV that runs Android apps:** Google TV, Android TV (including Sony, TCL, Hisense and Philips models with Google TV), Nvidia Shield, or an Amazon Fire TV / Fire TV Stick. It needs Android 7 or newer, which covers anything from the last several years.
-- **Other TVs** (Samsung, LG, Roku, Apple TV, Vizio) can't run the app. Plug in a Google TV Streamer, Chromecast with Google TV or Fire TV Stick and use that instead.
+- **Roku:** there's an early Roku channel that has to be sideloaded with the Roku in developer mode (see `apps/roku/README.md`). It isn't in the Roku Channel Store yet.
+- **Other TVs** (Samsung, LG, Apple TV, Vizio) can't run the app. Plug in a Google TV Streamer, Chromecast with Google TV or Fire TV Stick and use that instead.
 - **Your phone**, signed in to BingeBandit, to approve the TV.
 - **An account or profile for them** on your server (see step 2).
 

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plays a movie or episode: direct play when this Roku can, the server's HLS conversion when it can't. -->
+<component name="PlayerScreen" extends="BaseScreen">
+  <children>
+    <Rectangle width="1920" height="1080" color="0x000000FF" />
+    <Video id="video" width="1920" height="1080" enableUI="false" notificationInterval="1" />
+    <BusySpinner id="spinner" translation="[912, 492]" visible="false" />
+    <Label id="status" width="1600" translation="[160, 610]" horizAlign="center" wrap="true" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+    <Group id="overlay" visible="false">
+      <Rectangle width="1920" height="200" color="0x000000A0" />
+      <Label id="title" width="1700" translation="[110, 50]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="44" />
+      </Label>
+      <Label id="subtitle" width="1700" translation="[110, 110]" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+      </Label>
+      <Rectangle width="1920" height="230" translation="[0, 850]" color="0x000000A0" />
+      <Label id="state" width="800" translation="[110, 880]" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+      </Label>
+      <Label id="hint" width="900" translation="[910, 880]" horizAlign="right" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+      </Label>
+      <Rectangle id="track" width="1700" height="8" translation="[110, 940]" color="0xFFFFFF40" />
+      <Rectangle id="bar" width="0" height="8" translation="[110, 940]" color="0x2DD4BFFF" />
+      <Rectangle id="handle" width="6" height="30" translation="[110, 929]" color="0xF2F4F7FF" />
+      <Label id="elapsed" width="400" translation="[110, 966]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+      </Label>
+      <Label id="total" width="400" translation="[1410, 966]" horizAlign="right" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+      </Label>
+    </Group>
+    <Group id="upNext" visible="false" translation="[1240, 760]">
+      <Rectangle width="600" height="220" color="0x14181DF0" />
+      <Label text="Up next" translation="[30, 24]" color="0x2DD4BFFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+      </Label>
+      <Label id="nextTitle" width="540" translation="[30, 66]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="32" />
+      </Label>
+      <Label id="nextCount" width="540" translation="[30, 116]" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+      </Label>
+      <Label text="OK plays it now. Back to leave." width="540" translation="[30, 160]" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="22" />
+      </Label>
+    </Group>
+    <Timer id="reportTimer" duration="10" repeat="true" />
+    <Timer id="hideTimer" duration="5" repeat="false" />
+    <Timer id="seekTimer" duration="0.9" repeat="false" />
+    <Timer id="stallTimer" duration="12" repeat="false" />
+    <Timer id="nextTimer" duration="1" repeat="true" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/PlayerScreen.brs" />
+</component>

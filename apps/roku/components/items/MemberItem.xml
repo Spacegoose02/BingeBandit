@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Someone in "Who's watching?": avatar (or initial), name, and whether they need a PIN. -->
+<component name="MemberItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onContent" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+  </interface>
+  <children>
+    <Rectangle id="circle" width="220" height="220" color="0x2DD4BFFF" translation="[20, 10]">
+      <Label id="initial" width="220" height="220" horizAlign="center" vertAlign="center" color="0x04211DFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="110" />
+      </Label>
+      <Poster id="avatar" width="220" height="220" loadDisplayMode="scaleToZoom" />
+    </Rectangle>
+    <Label id="name" width="260" translation="[0, 246]" horizAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="32" />
+    </Label>
+    <Label id="hint" width="260" translation="[0, 290]" horizAlign="center" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="22" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/items/MemberItem.brs" />
+</component>
