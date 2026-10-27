@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { ApiError, api } from './api'
 import { Button } from './components'
 import { useNav } from './nav'
+import { quietNow } from './quiet'
 import { colors, font, scaled } from './theme'
 
 // Watch Together on the TV app: the same rooms as the web player. React
@@ -177,13 +178,16 @@ interface Invite {
  * Invitations to watch together pop up over anything, every few seconds'
  * look, so pairing a TV is one press: Join opens the player in the room.
  */
-export function TogetherInvites() {
+export function TogetherInvites({ playing }: { playing: boolean }) {
+  const playingRef = useRef(playing)
+  playingRef.current = playing
   const nav = useNav()
   const [invite, setInvite] = useState<Invite | null>(null)
   const dismissed = useRef(new Set<string>())
   useEffect(() => {
     const look = () =>
       api.get<Invite[]>('/api/together/invites').then((list) => {
+        if (quietNow(playingRef.current)) return
         setInvite((cur) => cur ?? list.find((i) => !dismissed.current.has(i.room)) ?? null)
       }, () => undefined)
     look()

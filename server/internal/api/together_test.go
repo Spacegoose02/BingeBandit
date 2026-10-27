@@ -150,3 +150,64 @@ func TestWatchTogether(t *testing.T) {
 	cancel()
 	res.Body.Close()
 }
+
+// Anyone who can play it may be invited, unless they turned invitations
+// off; a kid may only invite other kids.
+func TestTogetherInvitees(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
+	users := map[string]*store.User{}
+	for _, n := range []string{"mom", "dad", "quiet", "kid", "kid2"} {
+		u, _ := st.CreateUser(n, string(hash), false)
+		users[n] = u
+		st.CreateSession(n+"-token", u.ID, "Web", "")
+		st.SetUserLibraries(u.ID, true, nil)
+	}
+	st.SetKid(users["kid"].ID, true)
+	st.SetKid(users["kid2"].ID, true)
+	p, _ := st.UserPrefs(users["quiet"].ID)
+	p.NotifyTogether = false
+	st.SetUserPrefs(users["quiet"].ID, p)
+	lib := &store.Library{Name: "Movies", Kind: "movies", Paths: []string{dir}}
+	st.CreateLibrary(lib)
+	movie, _ := st.UpsertItem(&store.Item{LibraryID: lib.ID, Kind: "movie", Title: "Cars", MatchKey: "movie:cars"})
+
+	srv := httptest.NewServer((&Server{Store: st, DataDir: dir}).Router(context.Background()))
+	defer srv.Close()
+	names := func(token string) []string {
+		req, _ := http.NewRequest("POST", srv.URL+"/api/together", strings.NewReader(`{"itemId":`+itoa(movie)+`}`))
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var room map[string]any
+		json.NewDecoder(res.Body).Decode(&room)
+		res.Body.Close()
+		req, _ = http.NewRequest("GET", srv.URL+"/api/together/"+room["id"].(string)+"/people", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		res, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var people []store.Recipient
+		json.NewDecoder(res.Body).Decode(&people)
+		var out []string
+		for _, p := range people {
+			out = append(out, p.Name)
+		}
+		return out
+	}
+	if got := strings.Join(names("mom-token"), ","); got != "dad,kid,kid2" {
+		t.Errorf("mom can invite %q, want dad,kid,kid2", got)
+	}
+	if got := strings.Join(names("kid-token"), ","); got != "kid2" {
+		t.Errorf("a kid can invite %q, want only kid2", got)
+	}
+}

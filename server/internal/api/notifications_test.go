@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -142,3 +143,51 @@ func TestNotifications(t *testing.T) {
 }
 
 func ip(n int) *int { return &n }
+
+func TestLiveShowAlerts(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	u, _ := st.CreateUser("fan", "x", true)
+	p, _ := st.UserPrefs(u.ID)
+	p.LiveFollows = []string{"jeopardy!"}
+	st.SetUserPrefs(u.ID, p)
+	src := &store.LiveSource{Name: "Guide", Kind: "epg", URL: "http://x"}
+	if err := st.SaveLiveSource(src); err != nil {
+		t.Fatal(err)
+	}
+	ch := &store.Channel{Number: 4, Name: "ABC", EPGID: "abc.us", Enabled: true}
+	if err := st.CreateChannel(ch, nil); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Truncate(time.Minute)
+	start := now.Add(8 * time.Minute).Unix()
+	gi, err := st.BeginGuideImport(src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gi.Channel("abc.us", "ABC", "")
+	for _, pr := range []store.GuideProgram{
+		{EPGID: "abc.us", Start: start, Stop: start + 1800, Title: "Jeopardy!"},
+		{EPGID: "abc.us", Start: start + 1800, Stop: start + 3600, Title: "The News"},
+	} {
+		if err := gi.Program(&pr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := gi.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{Store: st}
+	s.notifyLiveShows(now)
+	s.notifyLiveShows(now.Add(time.Minute)) // once per airing
+	list, _, err := st.Notifications(u.ID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Kind != "live" || !strings.Contains(list[0].Title, "Jeopardy!") || !strings.Contains(list[0].Body, "ABC") {
+		t.Fatalf("notifications = %+v", list)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"bingebandit/internal/store"
@@ -88,17 +89,82 @@ func firstNonEmptyStr(v ...string) string {
 // RunNotifications looks for newly added episodes every few minutes until
 // ctx ends and tells the people who follow each show.
 func (s *Server) RunNotifications(ctx context.Context) {
-	t := time.NewTicker(notifyInterval)
+	t := time.NewTicker(time.Minute) // followed Live TV shows need to be on time
 	defer t.Stop()
+	var episodes time.Time
 	for {
-		s.notifyNewEpisodes()
-		if err := s.Store.PruneNotifications(); err != nil {
-			slog.Warn("prune notifications", "err", err)
+		if time.Since(episodes) >= notifyInterval {
+			episodes = time.Now()
+			s.notifyNewEpisodes()
+			if err := s.Store.PruneNotifications(); err != nil {
+				slog.Warn("prune notifications", "err", err)
+			}
 		}
+		s.notifyLiveShows(time.Now())
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		}
+	}
+}
+
+// notifyLiveShows tells people when a Live TV show they follow is about to
+// start on a channel they can watch, once per airing.
+func (s *Server) notifyLiveShows(now time.Time) {
+	users, err := s.Store.ListUsers()
+	if err != nil {
+		return
+	}
+	for _, u := range users {
+		if !u.LiveTV && !u.IsAdmin {
+			continue
+		}
+		p, err := s.Store.UserPrefs(u.ID)
+		if err != nil || len(p.LiveFollows) == 0 || p.LiveAlertMinutes == 0 {
+			continue
+		}
+		follows := map[string]bool{}
+		for _, t := range p.LiveFollows {
+			follows[strings.ToLower(strings.TrimSpace(t))] = true
+		}
+		chans, err := s.Store.Channels(u.ID, false)
+		if err != nil {
+			continue
+		}
+		byEPG := map[string]*store.Channel{}
+		var ids []string
+		for _, c := range chans {
+			if c.EPGID != "" && byEPG[c.EPGID] == nil {
+				byEPG[c.EPGID] = c
+				ids = append(ids, c.EPGID)
+			}
+		}
+		// Starting from now up to the lead time (a minute either side, so a
+		// tick that lands just after the start still catches it).
+		from, to := now.Add(-time.Minute).Unix(), now.Add(time.Duration(p.LiveAlertMinutes)*time.Minute).Unix()
+		progs, err := s.Store.Programs(ids, from, to)
+		if err != nil {
+			continue
+		}
+		for _, pr := range progs {
+			if pr.Start < from || pr.Start > to || !follows[strings.ToLower(strings.TrimSpace(pr.Title))] {
+				continue
+			}
+			if fresh, err := s.Store.MarkLiveAlert(u.ID, pr.EPGID, pr.Start); err != nil || !fresh {
+				continue
+			}
+			c := byEPG[pr.EPGID]
+			mins := int(time.Until(time.Unix(pr.Start, 0)).Round(time.Minute).Minutes())
+			n := &store.Notification{UserID: u.ID, Kind: "live", Link: fmt.Sprintf("/live/%d", c.ID), Image: pr.Icon}
+			n.Title = fmt.Sprintf("%s starts in %d minutes", pr.Title, mins)
+			if mins <= 1 {
+				n.Title = pr.Title + " is starting"
+			}
+			n.Body = strings.TrimPrefix(strings.Join([]string{pr.Subtitle, "On " + c.Name}, " · "), " · ")
+			if err := s.Store.AddNotification(n); err != nil {
+				slog.Warn("notification", "err", err)
+			}
 		}
 	}
 }

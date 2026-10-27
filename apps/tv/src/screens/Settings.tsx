@@ -26,7 +26,7 @@ export interface MenuChoices {
   setPosition: (p: MenuPosition) => void
 }
 
-type Section = 'device' | 'menu' | 'profiles' | 'admin'
+type Section = 'device' | 'menu' | 'alerts' | 'profiles' | 'admin'
 
 /**
  * Runs a settings change, asking for the settings passcode first when the
@@ -75,6 +75,7 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
   const names: [Section, string][] = [
     ['device', isPhone ? 'This phone' : 'This TV'],
     ['menu', 'Menu'],
+    ['alerts', 'Alerts'],
     ['profiles', 'Profiles & PINs'],
     ...(admin ? ([['admin', 'Server']] as [Section, string][]) : []),
   ]
@@ -91,6 +92,7 @@ export default function Settings({ onSignOut, onSwitchProfile, update, menu }: {
       </View>
       {section === 'device' && <Device update={update} menu={menu} onSignOut={onSignOut} onSwitchProfile={onSwitchProfile} />}
       {section === 'menu' && <MenuSection menu={menu} />}
+      {section === 'alerts' && <AlertsSection />}
       {section === 'profiles' && <ProfilesSection guard={guard} />}
       {section === 'admin' && admin && <AdminSection guard={guard} />}
       {prompt}
@@ -293,6 +295,69 @@ function MenuSection({ menu }: { menu: MenuChoices }) {
           </View>
         </Focusable>
       ))}
+    </>
+  )
+}
+
+interface AlertPrefs {
+  gameAlertMinutes: number
+  notifyGameScores: boolean
+  liveAlertMinutes: number
+  liveFollows?: string[] | null
+  notifyTogether: boolean
+  quietWhilePlaying: boolean
+}
+
+const minutesLabel = (m: number) => (m === 0 ? 'Off' : m < 60 ? `${m} minutes before` : m === 60 ? 'An hour before' : '2 hours before')
+
+/** This profile's pop-ups and alerts, saved with its other preferences. */
+function AlertsSection() {
+  const [p, setP] = useState<AlertPrefs | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    api.get<AlertPrefs>('/api/me/prefs').then(setP, (e) => setMsg(e.message))
+  }, [])
+  if (!p) return <Text style={st.hint}>{msg || 'Loading…'}</Text>
+  const save = (patch: Partial<AlertPrefs>) => {
+    const before = p
+    setP({ ...p, ...patch })
+    // The rest of the preferences go back as they are.
+    api
+      .get<AlertPrefs>('/api/me/prefs')
+      .then((cur) => api.put<AlertPrefs>('/api/me/prefs', { ...cur, ...patch }))
+      .then(() => api.get('/api/me/prefs'))
+      .catch((e) => {
+        setP(before)
+        setMsg(e.message)
+      })
+  }
+  const cycle = (list: number[], now: number) => list[(list.indexOf(now) + 1) % list.length]
+  const press = isPhone ? 'Tap' : 'Press OK'
+  return (
+    <>
+      {!!msg && <Text style={st.msg}>{msg}</Text>}
+      <Focusable onPress={() => save({ gameAlertMinutes: cycle([0, 5, 15, 30, 60, 120], p.gameAlertMinutes) })} style={st.option}>
+        <Text style={st.value}>Before my teams' games: {minutesLabel(p.gameAlertMinutes)}</Text>
+        <Text style={st.hint}>A pop-up before games of the teams you follow in Sports. {press} for the next choice.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ notifyGameScores: !p.notifyGameScores })} style={st.option}>
+        <Text style={st.value}>Final scores: {p.notifyGameScores ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>The score when your teams' games end. {press} to turn it {p.notifyGameScores ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ liveAlertMinutes: cycle([0, 5, 10, 15, 30, 60], p.liveAlertMinutes) })} style={st.option}>
+        <Text style={st.value}>Before Live TV shows I follow: {minutesLabel(p.liveAlertMinutes)}</Text>
+        <Text style={st.hint}>
+          {p.liveFollows?.length ? `Following ${p.liveFollows.join(', ')}.` : 'Not following any shows yet.'} Hold OK on a show in the guide to follow it. {press} for the next choice.
+        </Text>
+      </Focusable>
+      <Focusable onPress={() => save({ notifyTogether: !p.notifyTogether })} style={st.option}>
+        <Text style={st.value}>Watch together invitations: {p.notifyTogether ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>{p.notifyTogether ? 'People can invite you to watch with them.' : "Nobody can invite you, and you aren't listed when they try."} {press} to turn it {p.notifyTogether ? 'off' : 'on'}.</Text>
+      </Focusable>
+      <Focusable onPress={() => save({ quietWhilePlaying: !p.quietWhilePlaying })} style={st.option}>
+        <Text style={st.value}>Pop-ups while watching: {p.quietWhilePlaying ? 'Wait until I stop' : 'Show them'}</Text>
+        <Text style={st.hint}>Alerts and invitations over a movie, show or channel. {press} to switch.</Text>
+      </Focusable>
     </>
   )
 }

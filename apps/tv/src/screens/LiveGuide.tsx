@@ -407,6 +407,27 @@ function GuideMenu({
   const status = p ? guide.recordings?.[`${channel.epgId}:${p.start}`] : undefined
   const canRecord = !!guide.canRecord && !!p && p.id !== undefined && p.id > 0 && p.stop > now && !status
   const ask = !!guide.recordNeedsApproval
+  // Following the show: a pop-up before it airs, on any channel.
+  const [follows, setFollows] = useState<string[] | null>(null)
+  useEffect(() => {
+    api.get<{ liveFollows?: string[] | null }>('/api/me/prefs').then((pr) => setFollows(pr.liveFollows ?? []), () => undefined)
+  }, [])
+  const following = !!p && !!follows?.some((t) => t.toLowerCase() === p.title.toLowerCase())
+  const toggleFollow = () => {
+    if (!p || !follows) return
+    const next = following ? follows.filter((t) => t.toLowerCase() !== p.title.toLowerCase()) : [...follows, p.title]
+    api
+      .get<Record<string, unknown>>('/api/me/prefs')
+      .then((cur) => api.put('/api/me/prefs', { ...cur, liveFollows: next }))
+      .then(
+        () => {
+          setFollows(next)
+          setMsg(following ? `You'll no longer hear about “${p.title}”.` : `You'll get a pop-up before “${p.title}” comes on.`)
+          api.get('/api/me/prefs').catch(() => undefined)
+        },
+        (e) => setMsg(e.message),
+      )
+  }
   const toggleFav = () =>
     api[fav ? 'del' : 'post'](`/api/live/channels/${channel.id}/favorite`).then(
       () => {
@@ -441,6 +462,7 @@ function GuideMenu({
           <View style={st.holdButtons}>
             <Button small preferFocus label={`Watch ${channel.name}`} onPress={onWatch} />
             <Button small label={fav ? '★ Remove from favourites' : '☆ Add to favourites'} onPress={toggleFav} />
+            {p && follows && <Button small label={following ? 'Following: stop alerts' : 'Follow show'} onPress={toggleFollow} />}
             {canRecord && <Button small label={ask ? 'Ask to record' : '● Record'} onPress={() => record(false)} />}
             {canRecord && <Button small label={ask ? 'Ask to record the series' : '● Record series'} onPress={() => record(true)} />}
             <Button small label="Close" onPress={onClose} />

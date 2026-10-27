@@ -7,7 +7,7 @@ import { Icon } from './Icon'
 
 type Notification = {
   id: number
-  kind: 'episodes' | 'recording' | 'sports'
+  kind: 'episodes' | 'recording' | 'sports' | 'live'
   title: string
   body?: string
   link?: string
@@ -38,6 +38,24 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', close)
   }, [open, reload])
 
+  // Game and Live TV show alerts also pop up in a corner for a few seconds.
+  const seen = useRef<Set<number> | null>(null)
+  const [popup, setPopup] = useState<Notification | null>(null)
+  useEffect(() => {
+    if (!data) return
+    const fresh = data.notifications.filter((n) => (n.kind === 'sports' || n.kind === 'live') && !n.readAt && Date.now() / 1000 - n.createdAt < 15 * 60)
+    if (!seen.current) {
+      seen.current = new Set(fresh.map((n) => n.id)) // the first look only learns what's there
+      return
+    }
+    const next = fresh.find((n) => !seen.current!.has(n.id))
+    if (!next) return
+    seen.current.add(next.id)
+    setPopup(next)
+    const t = window.setTimeout(() => setPopup((p) => (p?.id === next.id ? null : p)), 10_000)
+    return () => window.clearTimeout(t)
+  }, [data])
+
   const unread = data?.unread ?? 0
   const markRead = async (ids?: number[]) => {
     if (!data) return
@@ -61,6 +79,15 @@ export function NotificationBell() {
 
   return (
     <div className="notify" ref={box}>
+      {popup && (
+        <button className="notify-popup" onClick={() => (setPopup(null), openOne(popup))}>
+          {popup.image && <img src={img(popup.image, 'w92')} alt="" />}
+          <span className="notify-text">
+            <span className="notify-title">{popup.title}</span>
+            {popup.body && <span className="notify-body">{popup.body}</span>}
+          </span>
+        </button>
+      )}
       <button
         className="icon-btn notify-bell"
         onClick={() => setOpen((o) => !o)}

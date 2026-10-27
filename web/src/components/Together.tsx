@@ -187,7 +187,7 @@ export function TogetherPanel({
         </>
       )}
       {people && others.length === 0 && (
-        <p className="muted small">Only people who accept recommendations from others can be invited by name. Share the link with anyone else.</p>
+        <p className="muted small">Anyone who can play this can be invited by name, unless they turned invitations off (kids can invite other kids). Share the link with anyone else.</p>
       )}
       {msg && <div className="muted small">{msg}</div>}
       <button className="btn btn-glass btn-sm danger" onClick={onLeave}>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
 import { api } from './api'
+import { quietNow } from './quiet'
 import { scaled, colors, font } from './theme'
 
 interface Note {
@@ -14,25 +15,28 @@ interface Note {
 }
 
 /**
- * Game alerts pop up in a corner for a few seconds, over whatever is on
- * screen (a movie included). They stay unread, so the web app's bell still
- * shows them.
+ * Game alerts and followed Live TV shows pop up in a corner for a few
+ * seconds, over whatever is on screen (a movie included, unless the person
+ * asked for quiet while watching: then they wait until playback ends). They
+ * stay unread, so the web app's bell still shows them.
  */
-export function Toasts() {
+export function Toasts({ playing }: { playing: boolean }) {
+  const playingRef = useRef(playing)
+  playingRef.current = playing
   const [shown, setShown] = useState<Note | null>(null)
   const seen = useRef<Set<number> | null>(null)
   useEffect(() => {
     let hide: ReturnType<typeof setTimeout> | undefined
     const look = () =>
       api.get<{ notifications: Note[] }>('/api/notifications').then(({ notifications }) => {
-        const fresh = notifications.filter((n) => n.kind === 'sports' && !n.readAt && Date.now() / 1000 - n.createdAt < 15 * 60)
+        const fresh = notifications.filter((n) => (n.kind === 'sports' || n.kind === 'live') && !n.readAt && Date.now() / 1000 - n.createdAt < 15 * 60)
         // The first look only learns what's already there.
         if (!seen.current) {
           seen.current = new Set(fresh.map((n) => n.id))
           return
         }
         const next = fresh.find((n) => !seen.current!.has(n.id))
-        if (!next) return
+        if (!next || quietNow(playingRef.current)) return
         seen.current.add(next.id)
         setShown(next)
         if (hide) clearTimeout(hide)

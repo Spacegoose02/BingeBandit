@@ -150,6 +150,7 @@ export default function App() {
       ))
   }
 
+  const playing = top.name === 'player' || top.name === 'live' || top.name === 'trailer'
   const fullScreen = !isPhone || top.name === 'player' || top.name === 'live' || top.name === 'trailer'
   return (
     <SafeAreaProvider>
@@ -158,8 +159,8 @@ export default function App() {
         <ItemMenuHost>
           <Insets enabled={!fullScreen}>{screen}</Insets>
         </ItemMenuHost>
-        {phase.name === 'app' && <Toasts />}
-        {phase.name === 'app' && <TogetherInvites />}
+        {phase.name === 'app' && <Toasts playing={playing} />}
+        {phase.name === 'app' && <TogetherInvites playing={playing} />}
         {exitHint && (
           <View style={styles.exitHint} pointerEvents="none">
             <Text style={styles.exitHintText}>Press Back again to exit</Text>
