@@ -103,8 +103,8 @@ func TestResolveYouTubeFromPage(t *testing.T) {
 	defer func() { YTDLP, youtubeClient = oldBin, oldClient }()
 
 	got, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCa/live")
-	if err != nil || got != srv.URL+"/v/1080.m3u8" {
-		t.Fatalf("resolved %q %v", got, err)
+	if err != nil || got.URL != srv.URL+"/v/1080.m3u8" || got.Program != -1 {
+		t.Fatalf("resolved %+v %v", got, err)
 	}
 	if _, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCb/live"); err == nil || !strings.Contains(err.Error(), "yt-dlp isn't installed") {
 		t.Fatalf("both failing: %v", err)
@@ -153,8 +153,8 @@ func TestResolveYouTubeFromPlayerAPI(t *testing.T) {
 	defer func() { YTDLP, youtubeClient = oldBin, oldClient }()
 
 	got, err := resolveYouTube(t.Context(), srv.URL+"/channel/UCa/live")
-	if err != nil || got != srv.URL+"/v/720.m3u8" {
-		t.Fatalf("resolved %q %v", got, err)
+	if err != nil || got.URL != srv.URL+"/v/720.m3u8" || got.Program != -1 {
+		t.Fatalf("resolved %+v %v", got, err)
 	}
 }
 
@@ -212,5 +212,32 @@ echo '{"id":"OQpgz8u7YCA","formats":[{"url":"dash","protocol":"http_dash_segment
 	defer func() { YTDLP = old }()
 	if got, err := ytdlpHLS(t.Context(), "https://www.youtube.com/channel/UCa/live"); err != nil || got != "hls720" {
 		t.Fatalf("got %q %v", got, err)
+	}
+}
+
+// YouTube's live masters keep the sound in an audio rendition: the variant's
+// own playlist has no sound, so the master is opened with that variant's
+// program instead.
+func TestYouTubeSeparateAudio(t *testing.T) {
+	master := "#EXTM3U\n" +
+		`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="234",NAME="Default",DEFAULT=YES,URI="/a/234.m3u8"` + "\n" +
+		`#EXT-X-STREAM-INF:BANDWIDTH=900000,RESOLUTION=854x480,AUDIO="234"` + "\n/v/480.m3u8\n" +
+		`#EXT-X-STREAM-INF:BANDWIDTH=20000000,RESOLUTION=3840x2160,AUDIO="234"` + "\n/v/2160.m3u8\n" +
+		`#EXT-X-STREAM-INF:BANDWIDTH=4500000,RESOLUTION=1920x1080,AUDIO="234"` + "\n/v/1080.m3u8\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(master))
+	}))
+	defer srv.Close()
+	old := youtubeClient
+	youtubeClient = srv.Client()
+	defer func() { youtubeClient = old }()
+	got := pickVariant(t.Context(), srv.URL+"/master.m3u8")
+	if got.URL != srv.URL+"/master.m3u8" || got.Program != 2 {
+		t.Fatalf("picked %+v", got)
+	}
+	// A media playlist is played as it is.
+	master = "#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXTINF:5,\n/s/1.ts\n"
+	if got := pickVariant(t.Context(), srv.URL+"/media.m3u8"); got.URL != srv.URL+"/media.m3u8" || got.Program != -1 {
+		t.Fatalf("media playlist: %+v", got)
 	}
 }

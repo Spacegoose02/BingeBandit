@@ -42,16 +42,44 @@ func isYouTube(raw string) bool {
 // hlsManifestUrl is used, or else YouTube's player API is asked as its apps
 // ask it, which still hands live streams out as HLS. The address expires
 // after some hours, so it's looked up each time the stream is opened.
-func resolveYouTube(ctx context.Context, link string) (string, error) {
+func resolveYouTube(ctx context.Context, link string) (ytStream, error) {
 	hls, ytErr := ytdlpHLS(ctx, link)
 	if ytErr == nil {
-		return hls, nil
+		return pickVariant(ctx, hls), nil
 	}
 	hls, pageErr := pageHLS(ctx, link)
 	if pageErr == nil {
-		return hls, nil
+		return pickVariant(ctx, hls), nil
 	}
-	return "", fmt.Errorf("%v; reading the page: %v", ytErr, pageErr)
+	return ytStream{}, fmt.Errorf("%v; reading the page: %v", ytErr, pageErr)
+}
+
+// ytStream is what the relay opens for a YouTube live stream. With Program
+// set, URL is a master playlist and Program the variant to pass on, as
+// ffmpeg numbers them (from 0, in the playlist's order): YouTube keeps a
+// live stream's sound in a separate rendition the variant only points to,
+// so opening the variant's own playlist plays it silent.
+type ytStream struct {
+	URL     string
+	Program int // -1: play URL as it is
+}
+
+// pickVariant chooses what to open from an HLS address: a media playlist
+// as it is, a master's best variant directly when its sound is muxed in,
+// or the master with that variant's program when the sound is separate.
+func pickVariant(ctx context.Context, hls string) ytStream {
+	playlist, err := youtubeGet(ctx, hls)
+	if err != nil {
+		return ytStream{URL: hls, Program: -1}
+	}
+	v, idx, separate := bestVariantOf(hls, playlist)
+	switch {
+	case v == "":
+		return ytStream{URL: hls, Program: -1}
+	case separate:
+		return ytStream{URL: hls, Program: idx}
+	}
+	return ytStream{URL: v, Program: -1}
 }
 
 // ytdlpInfo is the part of yt-dlp's JSON that holds the streams.
@@ -98,12 +126,7 @@ func ytdlpHLS(ctx context.Context, link string) (string, error) {
 	}
 	for _, f := range info.Formats {
 		if f.ManifestURL != "" && isHLSManifest(f.ManifestURL) {
-			if playlist, err := youtubeGet(ctx, f.ManifestURL); err == nil {
-				if v := bestVariant(f.ManifestURL, playlist); v != "" {
-					return v, nil
-				}
-			}
-			return f.ManifestURL, nil
+			return f.ManifestURL, nil // pickVariant chooses the variant
 		}
 	}
 	msg := "found no stream with sound and picture; the channel may not be live"
@@ -195,14 +218,7 @@ func pageHLS(ctx context.Context, link string) (string, error) {
 			return "", err
 		}
 	}
-	playlist, err := youtubeGet(ctx, master)
-	if err != nil {
-		return "", err
-	}
-	if v := bestVariant(master, playlist); v != "" {
-		return v, nil
-	}
-	return master, nil
+	return master, nil // pickVariant chooses the variant
 }
 
 func unescapeJSONURL(s string) string {
@@ -344,19 +360,23 @@ func youtubeGet(ctx context.Context, link string) (string, error) {
 // maxVariantHeight keeps the relay from pulling 4K it would only pass on.
 const maxVariantHeight = 1080
 
-// bestVariant picks the tallest variant up to 1080p (then the highest
-// bandwidth) from a master playlist, or "" when it isn't one.
-func bestVariant(master, playlist string) string {
+// bestVariantOf picks the tallest variant up to 1080p (then the highest
+// bandwidth) from a master playlist: its address, its place among the
+// variants, and whether its sound is a separate rendition (AUDIO=). The
+// address is "" when the playlist isn't a master.
+func bestVariantOf(master, playlist string) (variant string, index int, separateAudio bool) {
 	base, err := url.Parse(master)
 	if err != nil {
-		return ""
+		return "", -1, false
 	}
-	var best string
+	index = -1
 	bestH, bestBW := -1, -1
 	sc := bufio.NewScanner(strings.NewReader(playlist))
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	var h, bw int
+	var audio bool
 	inf := false
+	n := 0
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		switch {
@@ -369,17 +389,20 @@ func bestVariant(master, playlist string) string {
 			if m := reBandwidth.FindStringSubmatch(attrs); m != nil {
 				bw, _ = strconv.Atoi(m[1])
 			}
+			audio = strings.Contains(attrs, "AUDIO=")
 		case inf && line != "" && !strings.HasPrefix(line, "#"):
 			inf = false
+			i := n
+			n++
 			if h > maxVariantHeight {
 				continue
 			}
 			if h > bestH || (h == bestH && bw > bestBW) {
 				if u, err := base.Parse(line); err == nil {
-					best, bestH, bestBW = u.String(), h, bw
+					variant, index, separateAudio, bestH, bestBW = u.String(), i, audio, h, bw
 				}
 			}
 		}
 	}
-	return best
+	return variant, index, separateAudio
 }
