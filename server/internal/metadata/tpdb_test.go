@@ -6,6 +6,7 @@ import (
 	"image"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,42 @@ func TestTPDbSearchEmptyIsList(t *testing.T) {
 	b, _ := json.Marshal(got)
 	if string(b) != "[]" {
 		t.Fatalf("got %s, want []", b)
+	}
+}
+
+// Trimmed from a real title page (2026-10-27): single-quoted poster ids, and
+// the preview image just before each poster's overlay.
+const tpdbRealTitlePage = `<div class="col-6 col-lg-2 p-1"><div class="hovereffect rounded-poster"><picture >
+<source class="w-100 rounded-poster" type="image/webp" srcset="https://images.theposterdb.com/prod/public/images/posters/optimized/movies/171449/a.webp">
+<source class="w-100 rounded-poster" type="image/jpeg" srcset="https://images.theposterdb.com/prod/public/images/posters/optimized/movies/171449/a.jpg">
+<img class="w-100 rounded-poster tpdb-poster" loading="lazy" src="/images/defaults/missing_poster.jpg"></picture>
+<div class="overlay rounded-poster" data-poster-id='320500' data-poster-type='movie' data-mobile-click="false">
+<p class="p-0 mb-1 text-break">Ant-Man and the Wasp: Quantumania (2023)</p>
+<p class="uploaded-by text-white d-inline-block text-truncate w-100">by <a href="https://theposterdb.com/user/RedHeadJedi">RedHeadJedi</a></p>
+<a href="https://theposterdb.com/set/4475" class="badge">41</a>
+<a class="text-white" href="https://theposterdb.com/posters/171449" title="Movie"></a></div></div></div>
+<div class="col-6 col-lg-2 p-1"><div class="hovereffect rounded-poster"><picture >
+<source class="w-100 rounded-poster" type="image/jpeg" srcset="https://images.theposterdb.com/prod/public/images/posters/optimized/movies/171449/b.jpg">
+</picture><div class="overlay rounded-poster" data-poster-id='295039' data-poster-type='movie'>
+<p class="p-0 mb-1 text-break">Quantumania Textless</p>
+<p class="uploaded-by">by <a href="https://theposterdb.com/user/DIIIVOY">DIIIVOY</a></p></div></div></div>`
+
+func TestParseTPDbRealPosters(t *testing.T) {
+	tp := NewTPDb("https://theposterdb.com", "")
+	got := tp.parsePosters(tpdbRealTitlePage)
+	if len(got) != 2 {
+		t.Fatalf("got %d posters, want 2: %+v", len(got), got)
+	}
+	if got[0].ID != 320500 || got[0].Uploader != "RedHeadJedi" || got[0].Title != "Ant-Man and the Wasp: Quantumania (2023)" || got[0].Download != "https://theposterdb.com/api/assets/320500" {
+		t.Errorf("first poster = %+v", got[0])
+	}
+	if got[1].ID != 295039 || got[1].Uploader != "DIIIVOY" || got[1].Title != "Quantumania Textless" {
+		t.Errorf("second poster = %+v", got[1])
+	}
+	if p := tp.previews[320500]; !strings.HasSuffix(p, "/a.jpg") {
+		t.Errorf("preview for 320500 = %q", p)
+	}
+	if p := tp.previews[295039]; !strings.HasSuffix(p, "/b.jpg") {
+		t.Errorf("preview for 295039 = %q", p)
 	}
 }
