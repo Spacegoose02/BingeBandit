@@ -180,9 +180,11 @@ function AllTitles({ library }: { library: Library }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
-  // The title a letter jump lands on (focused and scrolled to), and the one focused now.
+  // The title a letter jump lands on (focused and scrolled to), and the
+  // letter of the one focused now. Only the letter is state: redrawing the
+  // grid on every D-pad press made long libraries clunky.
   const [target, setTarget] = useState(-1)
-  const [focused, setFocused] = useState(-1)
+  const [current, setCurrent] = useState<string | undefined>()
   const list = useRef<FlatList<Tile[]>>(null)
   const cols = useColumns(true)
   const more = useCallback(
@@ -261,15 +263,18 @@ function AllTitles({ library }: { library: Library }) {
     setPending(-1)
   }, [pending, items.length, tiles, cols])
 
+  const rows = useMemo(() => chunk(tiles, cols), [tiles, cols])
+  const lettersRef = useRef(letters)
+  lettersRef.current = letters
+
   if (error) return <Problem error={error} retry={() => { setError(''); more(items.length) }} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
   if (total === 0 && collections.length === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
-  const current = letters.filter((l) => l.offset <= Math.max(focused, 0)).pop()?.letter
   return (
     <View style={st.titles}>
       <Grid
         listRef={list}
-        rows={chunk(tiles, cols)}
+        rows={rows}
         keyOf={(t) => ('item' in t ? String(t.item.id) : `c${t.collection.id}`)}
         busy={busy && items.length > 0}
         onEnd={() => items.length < total && more(items.length)}
@@ -283,7 +288,7 @@ function AllTitles({ library }: { library: Library }) {
                 preferFocus={t.index === target}
                 onPress={() => nav.push({ name: 'details', id: t.item.id })}
                 onFocus={() => {
-                  setFocused(t.index)
+                  setCurrent(lettersRef.current.filter((l) => l.offset <= t.index).pop()?.letter)
                   // Landed: stop preferring it, or scrolling back to its row later would pull focus there again.
                   if (t.index === target) setTarget(-1)
                   // Reaching the last rows loads the next page.
@@ -295,7 +300,7 @@ function AllTitles({ library }: { library: Library }) {
           )
         }
       />
-      {letters.length > 1 && <LetterBar letters={letters} current={current} onPick={jump} />}
+      {letters.length > 1 && <LetterBar letters={letters} current={current ?? letters.filter((l) => l.offset <= 0).pop()?.letter} onPick={jump} />}
     </View>
   )
 }

@@ -231,14 +231,15 @@ func (s *Server) tpdbThumb(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) localImage(w http.ResponseWriter, r *http.Request) {
-	path, err := s.Artwork.Path(chi.URLParam(r, "file"))
+	file := chi.URLParam(r, "file")
+	path, err := s.Artwork.Path(file)
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
 	// Content-addressed names never change content.
 	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	http.ServeFile(w, r, path)
+	http.ServeFile(w, r, s.sizedLocalImage(r, path, file))
 }
 
 func (s *Server) matchSearch(w http.ResponseWriter, r *http.Request) {
