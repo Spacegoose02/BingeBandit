@@ -13,8 +13,19 @@ import type { SportsGame, SportsSide } from './types'
 /** Has the score bug read its switch again at once (Live TV's Options changes it). */
 export const refreshScoreBug = { current: () => undefined as void }
 
-export function ScoreBug({ playing, channelId }: { playing: boolean; channelId?: number }) {
+/** The Live TV player says which channel it has tuned, since flipping channels doesn't change the screen. */
+export const scoreBugChannel = { set: (_id: number | undefined) => undefined as void }
+
+export function ScoreBug({ playing, channelId: screenChannel }: { playing: boolean; channelId?: number }) {
   const [games, setGames] = useState<SportsGame[]>([])
+  const [tuned, setTuned] = useState<number | undefined>(undefined)
+  useEffect(() => {
+    scoreBugChannel.set = setTuned
+    return () => {
+      scoreBugChannel.set = () => undefined
+    }
+  }, [])
+  const channelId = screenChannel === undefined ? undefined : (tuned ?? screenChannel)
   useEffect(() => {
     if (!playing) {
       setGames([])
@@ -28,7 +39,7 @@ export function ScoreBug({ playing, channelId }: { playing: boolean; channelId?:
           if (on) setGames([])
           return
         }
-        const { games } = await api.get<{ games: SportsGame[] }>('/api/sports/live')
+        const { games } = await api.get<{ games: SportsGame[] }>(`/api/sports/live${channelId ? `?channel=${channelId}` : ''}`)
         if (on) setGames(games)
       } catch {
         // No sports, or offline: just no bug.
@@ -42,7 +53,7 @@ export function ScoreBug({ playing, channelId }: { playing: boolean; channelId?:
       refreshScoreBug.current = () => undefined
       clearInterval(t)
     }
-  }, [playing])
+  }, [playing, channelId])
   const shown = games.filter((g) => !g.channels?.some((c) => c.id === channelId)).slice(0, 2)
   if (!playing || shown.length === 0) return null
   return (

@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,6 +84,9 @@ func (s *Server) sportsLive(w http.ResponseWriter, r *http.Request) {
 	sortGames(live, time.Now())
 	if u.LiveTV {
 		s.findChannels(u.ID, live)
+		if id, err := strconv.ParseInt(r.URL.Query().Get("channel"), 10, 64); err == nil {
+			s.onChannel(u.ID, id, live)
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"games": orEmpty(live)})
 }
@@ -199,7 +204,7 @@ func (s *Server) findChannels(uid int64, games []sportsGame) {
 			if p.Start > st+30*60 || p.Stop <= st || p.Start < st-90*60 {
 				continue
 			}
-			text := p.Title + " " + p.Subtitle
+			text := p.Title + " " + p.Subtitle + " " + p.Description
 			if !namesTeam(text, g.Home.Team) || !namesTeam(text, g.Away.Team) {
 				continue
 			}
@@ -207,6 +212,44 @@ func (s *Server) findChannels(uid int64, games []sportsGame) {
 				if len(g.Channels) < 6 {
 					g.Channels = append(g.Channels, sportChannel{c.ID, c.Number, c.Name, p.Title})
 				}
+			}
+		}
+	}
+}
+
+// onChannel adds the channel someone is watching to each game whose
+// programme on it now names either team, so the score bug, which hides on
+// a game's own channels, hides while they watch it there even when the
+// guide's title doesn't name both teams ("NFL Football", "Bills Pregame").
+func (s *Server) onChannel(uid, channelID int64, games []sportsGame) {
+	chans, err := s.Store.Channels(uid, false)
+	if err != nil {
+		return
+	}
+	var ch *store.Channel
+	for _, c := range chans {
+		if c.ID == channelID {
+			ch = c
+		}
+	}
+	if ch == nil || ch.EPGID == "" {
+		return
+	}
+	now := time.Now().Unix()
+	progs, err := s.Store.Programs([]string{ch.EPGID}, now, now+1)
+	if err != nil {
+		return
+	}
+	for i := range games {
+		g := &games[i]
+		if slices.ContainsFunc(g.Channels, func(c sportChannel) bool { return c.ID == ch.ID }) {
+			continue
+		}
+		for _, p := range progs {
+			text := p.Title + " " + p.Subtitle + " " + p.Description
+			if namesTeam(text, g.Home.Team) || namesTeam(text, g.Away.Team) {
+				g.Channels = append(g.Channels, sportChannel{ch.ID, ch.Number, ch.Name, p.Title})
+				break
 			}
 		}
 	}

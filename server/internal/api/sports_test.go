@@ -181,3 +181,59 @@ func TestNamesTeam(t *testing.T) {
 		t.Error("matched part of a word")
 	}
 }
+
+// The score bug hides while someone watches the game, even when the guide
+// calls it "College Football" and names only one team.
+func TestScoreBugOnChannel(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	u, _ := st.CreateUser("fan", "x", true)
+	src := &store.LiveSource{Name: "Guide", Kind: "epg", URL: "http://x"}
+	if err := st.SaveLiveSource(src); err != nil {
+		t.Fatal(err)
+	}
+	acc := &store.Channel{Number: 40, Name: "ACC Network", EPGID: "acc.us", Enabled: true}
+	news := &store.Channel{Number: 4, Name: "ABC", EPGID: "abc.us", Enabled: true}
+	for _, c := range []*store.Channel{acc, news} {
+		if err := st.CreateChannel(c, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now().Truncate(time.Minute)
+	gi, err := st.BeginGuideImport(src.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gi.Channel("acc.us", "ACC Network", "")
+	gi.Channel("abc.us", "ABC", "")
+	for _, pr := range []store.GuideProgram{
+		{EPGID: "acc.us", Start: now.Add(-time.Hour).Unix(), Stop: now.Add(2 * time.Hour).Unix(), Title: "College Football", Description: "The Hokies host their rivals."},
+		{EPGID: "abc.us", Start: now.Add(-time.Hour).Unix(), Stop: now.Add(2 * time.Hour).Unix(), Title: "The News"},
+	} {
+		if err := gi.Program(&pr); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := gi.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	game := func() []sportsGame {
+		return []sportsGame{{Game: sports.Game{ID: "401", State: "in", Start: now.Add(-time.Hour),
+			Home: sports.Side{Team: sports.Team{ID: "259", Name: "Virginia Tech Hokies", Short: "Hokies"}},
+			Away: sports.Side{Team: sports.Team{ID: "2390", Name: "Miami Hurricanes", Short: "Hurricanes"}}}}}
+	}
+	s := &Server{Store: st}
+	g := game()
+	s.onChannel(u.ID, acc.ID, g)
+	if len(g[0].Channels) != 1 || g[0].Channels[0].ID != acc.ID {
+		t.Errorf("watching the game: %+v", g[0].Channels)
+	}
+	g = game()
+	s.onChannel(u.ID, news.ID, g)
+	if len(g[0].Channels) != 0 {
+		t.Errorf("watching the news: %+v", g[0].Channels)
+	}
+}
