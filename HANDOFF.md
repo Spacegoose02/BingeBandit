@@ -4,6 +4,10 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-27, the third feature board (player options, alerts, Cinemask collections, score bug), the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
 
+## Admin files for Cinemask (2026-10-28, no migration)
+
+- `GET /api/admin/files` is the plugin API's `/files` (`pluginFiles`, `Store.FileSummaries`) for an admin's key, so Cinemask's library sync gets every movie and episode file's quality in a few requests instead of opening each title. Tested in `adminfiles_test.go`.
+
 ## Working without the internet (2026-10-28, no migration)
 
 - **Server id:** `/api/health` now also returns `id` (`Store.ServerID`, setting row `server_id`, made on first use, not listed with the admin settings, carried by backups). Apps use it so another server on a network is never taken for theirs.
