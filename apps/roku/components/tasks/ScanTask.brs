@@ -42,7 +42,7 @@ sub scan()
                         if type(data) = "roAssociativeArray" and (getOr(data, "product", "") = "BingeBandit" or getOr(data, "status", "") = "ok")
                             name = getOr(data, "name", "")
                             if name = "" then name = "BingeBandit"
-                            m.top.found = { url: p.url, name: name, version: getOr(data, "version", "") }
+                            m.top.found = { url: p.url, name: name, version: getOr(data, "version", ""), id: getOr(data, "id", "") }
                         end if
                     end if
                 end if

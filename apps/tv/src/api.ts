@@ -4,6 +4,14 @@ import type { User } from './types'
 /** A signed-in server: where it is and the session token for it. */
 export interface Session {
   server: string // e.g. http://192.168.1.10:8484
+  /**
+   * The same server's other addresses (its LAN address, its public URL),
+   * tried when `server` stops answering: at home with the internet down, or
+   * away from home.
+   */
+  alternates?: string[]
+  /** The server's id from /api/health, so another server is never taken for it. */
+  serverId?: string
   token: string
   user: User
   /** Linked straight to a profile: opens as it without asking who's watching. */
@@ -34,6 +42,24 @@ export function current(): Session | null {
   return session
 }
 
+/**
+ * Saves a change to the same server and profile (an address learnt or
+ * switched to), keeping what screens have cached.
+ */
+export async function patchSession(patch: Partial<Session>) {
+  if (!session) return
+  session = { ...session, ...patch }
+  await AsyncStorage.setItem(KEY, JSON.stringify(session)).catch(() => undefined)
+}
+
+// Called when the signed-in server's address doesn't answer; resolves the
+// address it switched to, if another one answered (see addresses.ts).
+let reconnect: ((failed: string) => Promise<string | null>) | null = null
+
+export function onUnreachable(fn: (failed: string) => Promise<string | null>) {
+  reconnect = fn
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: Record<string, unknown>) {
     super(message)
@@ -50,15 +76,22 @@ export function normalizeServer(input: string): string {
 
 export async function request<T>(method: string, path: string, body?: unknown, server = session?.server, timeoutMs = 15000): Promise<T> {
   if (!server) throw new ApiError(0, 'No server chosen')
+  const signedIn = !!session && server === session.server
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (session?.token && server === session.server) headers.Authorization = `Bearer ${session.token}`
+  if (session?.token && signedIn) headers.Authorization = `Bearer ${session.token}`
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   let res: Response
   try {
     res = await fetch(server + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined, signal: ctl.signal })
   } catch {
+    // Try the server's other addresses. A request that never got through
+    // is sent again there; one that timed out might have landed, so only a
+    // read is repeated.
+    const timedOut = ctl.signal.aborted
+    const next = signedIn && reconnect ? await reconnect(server) : null
+    if (next && (!timedOut || method === 'GET')) return request<T>(method, path, body, next, timeoutMs)
     throw new ApiError(0, `Can't reach ${server.replace(/^https?:\/\//, '')}. Is the server on?`)
   } finally {
     clearTimeout(timer)

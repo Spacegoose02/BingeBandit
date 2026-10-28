@@ -12,7 +12,7 @@ export async function probe(url: string, timeoutMs = 1500): Promise<ServerInfo |
     const res = await fetch(url + '/api/health', { signal: ctl.signal })
     const data = await res.json()
     if (data?.product !== 'BingeBandit' && data?.status !== 'ok') return null
-    return { url, name: data.name || 'BingeBandit', version: data.version || '' }
+    return { url, name: data.name || 'BingeBandit', version: data.version || '', id: data.id || undefined }
   } catch {
     return null
   } finally {

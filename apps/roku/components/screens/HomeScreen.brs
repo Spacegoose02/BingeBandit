@@ -32,6 +32,8 @@ sub onMe(event as object)
         s = currentSession()
         s.user = res.data
         saveSession(s)
+        ' In the background: the server's other addresses, for when this one stops answering.
+        api("GET", "", invalid, "onFireAndForget", { build: "learn" })
     end if
     api("GET", "/api/libraries", invalid, "onLibraries")
 end sub

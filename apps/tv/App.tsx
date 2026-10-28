@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ApiError, api, loadSession, saveSession, type Session } from './src/api'
+import { ApiError, api, current, loadSession, saveSession, type Session } from './src/api'
+import { learnAddresses } from './src/addresses'
 import { backInterceptor, FocusMemoryContext, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
@@ -48,7 +49,9 @@ export default function App() {
       if (!s) return setPhase({ name: 'connect' })
       try {
         const user = await api.get<User>('/api/me')
-        await saveSession({ ...s, user })
+        // current(): the request may have moved to another address of the server.
+        await saveSession({ ...(current() ?? s), user })
+        learnAddresses().catch(() => undefined)
         setPhase(!s.profileChosen && (await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
@@ -108,6 +111,7 @@ export default function App() {
 
   const signedIn = useCallback(async (s: Session) => {
     await saveSession(s)
+    learnAddresses().catch(() => undefined)
     setStack(homeStack())
     // An account with profiles asks who's watching first, unless whoever
     // linked this TV picked the profile it opens as.

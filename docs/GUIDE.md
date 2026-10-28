@@ -227,6 +227,15 @@ TVs never need a password typed on the remote. The app finds your server on the 
 
 To set up a TV in someone else's home, follow [docs/TV-SETUP.md](TV-SETUP.md). It covers making your server reachable from outside, installing the app, and linking it.
 
+### When the internet is down
+
+BingeBandit keeps working on your home network without the internet. Signing in with a password, PIN or TV code, browsing, and playing your own files only need the server.
+
+- **Apps switch addresses on their own.** The Android, Fire TV and Roku apps remember both your server's home address (like `192.168.1.10:8484`) and its public URL, and use whichever answers. A TV linked with your public URL finds the server on the home network when the internet is out, and a phone linked at home uses the public URL on the road. A TV linked with the public URL looks for the home address once a day while it's on Wi-Fi or Ethernet.
+- **Make your public URL work at home too (optional).** If you open BingeBandit in a browser at `https://tv.example.com`, that name needs the internet to look up. Add a local DNS entry for it in your router or Pi-hole (for example `tv.example.com → 192.168.1.10`, the machine running your reverse proxy) so the same address keeps working at home. Browsers can always use `http://<server-ip>:8484` directly.
+- **Artwork is saved ahead of time.** The **Cache artwork** task downloads posters, backgrounds and logos after each library scan, so they show without the internet.
+- **What needs the internet:** single sign-on (Google and other OIDC providers), passkeys made on your public address (they belong to that name, and browsers only allow passkeys on `https` or `localhost`), metadata for newly added files, ratings, Trakt, Discover, sports scores, Live TV channels from internet providers, and the plugin catalogue and app updates. Keep a password (or a PIN profile) for at least one account so someone can always sign in at home.
+
 ## 11. Running the server
 
 ### Dashboard

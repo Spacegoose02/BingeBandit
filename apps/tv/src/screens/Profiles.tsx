@@ -25,7 +25,7 @@ export async function needsPicker(): Promise<boolean> {
   if (!s) return true
   try {
     const res = await api.post<{ token: string; user: User }>(`/api/household/${auto.id}/switch`, { pin: '' })
-    await saveSession({ server: s.server, token: res.token, user: res.user })
+    await saveSession({ server: s.server, alternates: s.alternates, serverId: s.serverId, token: res.token, user: res.user })
     return false
   } catch {
     return true
@@ -52,7 +52,7 @@ export default function Profiles({ onDone, onCancel }: { onDone: (s: Session) =>
     if (m.hasPin && !pin) return setAsking(m)
     try {
       const res = await api.post<{ token: string; user: User }>(`/api/household/${m.id}/switch`, { pin })
-      const next = { server: s.server, token: res.token, user: res.user }
+      const next = { server: s.server, alternates: s.alternates, serverId: s.serverId, token: res.token, user: res.user }
       await saveSession(next)
       onDone(next)
     } catch (e) {
