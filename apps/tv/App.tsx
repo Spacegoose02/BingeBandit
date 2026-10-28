@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ApiError, api, current, loadSession, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
@@ -36,6 +36,9 @@ const entry = (route: Route): Entry => ({ route, key: nextKey++ })
 const homeStack = () => [entry({ name: 'home' })]
 // A second Back within this long leaves the app.
 const EXIT_WINDOW = 2500
+// Away from the app this long (the TV turned off for the night, say), it
+// opens on Home again instead of carrying on with what was playing.
+const FRESH_AFTER = 5 * 60 * 1000
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'loading' })
@@ -72,6 +75,25 @@ export default function App() {
     }),
     [],
   )
+
+  // Android keeps the app alive while the TV sleeps, so waking it would
+  // resume the player right where it was. After a while away, start over on Home.
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  useEffect(() => {
+    let leftAt = 0
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        if (!leftAt) leftAt = Date.now()
+        return
+      }
+      if (state !== 'active') return
+      const away = leftAt ? Date.now() - leftAt : 0
+      leftAt = 0
+      if (away >= FRESH_AFTER && phaseRef.current.name === 'app') setStack(homeStack())
+    })
+    return () => sub.remove()
+  }, [])
 
   // Leaving takes a second Back while the hint shows, so a stray press doesn't close the app.
   const lastBack = useRef(0)
