@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"bingebandit/internal/discover"
@@ -28,6 +29,7 @@ type Deps struct {
 	Metadata *metadata.Service
 	Scanner  *library.Scanner
 	Markers  *markers.Detector
+	Images   *metadata.ImageCache
 	DataDir  string
 	FFprobe  string
 }
@@ -64,6 +66,12 @@ func Builtin(d Deps) []*Task {
 			Description:    "Fetch the newest videos from the YouTube playlists and channels on the Discover page.",
 			DefaultEnabled: true, DefaultHours: 3,
 			Run: func(ctx context.Context) (string, error) { return discover.RefreshAll(ctx, d.Store) },
+		},
+		{
+			ID: "cache_artwork", Name: "Cache artwork",
+			Description:    "Download posters, backgrounds and logos from TMDB before anyone opens them, so they still show when the internet is down (up to 1,500 images a run, newest titles first). Also runs after each library scan.",
+			DefaultEnabled: true, DefaultHours: 6,
+			Run: d.cacheArtwork,
 		},
 		{
 			ID: "refresh_metadata", Name: "Refresh metadata",
@@ -140,7 +148,83 @@ func (d Deps) eachLibrary(fn func(id int64) error) (string, error) {
 }
 
 func (d Deps) scanLibraries(ctx context.Context) (string, error) {
-	return d.eachLibrary(d.Scanner.ScanWait)
+	out, err := d.eachLibrary(d.Scanner.ScanWait)
+	if err == nil && d.Images != nil {
+		go d.cacheArtwork(context.WithoutCancel(ctx))
+	}
+	return out, err
+}
+
+// artworkPerRun caps downloads per run so a first run on a big library
+// doesn't hammer TMDB; later runs pick up where it left off.
+const artworkPerRun = 1500
+
+// cacheArtwork downloads the TMDB artwork that isn't on disk yet, at the
+// sizes the apps ask for most: posters for rows and grids, backgrounds for
+// details pages and Home, logos for titles.
+func (d Deps) cacheArtwork(ctx context.Context) (string, error) {
+	if d.Images == nil {
+		return "skipped: no image cache", nil
+	}
+	posters, backdrops, logos, err := d.Store.TMDBArtwork()
+	if err != nil {
+		return "", err
+	}
+	type job struct{ size, file string }
+	var todo []job
+	add := func(files []string, sizes ...string) {
+		for _, f := range files {
+			for _, size := range sizes {
+				if len(todo) < artworkPerRun && !d.Images.Has(size, f) {
+					todo = append(todo, job{size, f})
+				}
+			}
+		}
+	}
+	add(posters, "w342")
+	add(backdrops, "w1280", "w780")
+	add(logos, "w500")
+	if len(todo) == 0 {
+		return "all artwork is cached", nil
+	}
+
+	jobs := make(chan job)
+	var mu sync.Mutex
+	fetched, failed := 0, 0
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				_, err := d.Images.TMDB(ctx, j.size, j.file)
+				mu.Lock()
+				if err != nil {
+					failed++
+				} else {
+					fetched++
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, j := range todo {
+		mu.Lock()
+		// TMDB can't be reached (the internet is down): stop rather than
+		// fail 1,500 times; the next run tries again.
+		offline := fetched == 0 && failed >= 20
+		mu.Unlock()
+		if offline || ctx.Err() != nil {
+			break
+		}
+		jobs <- j
+	}
+	close(jobs)
+	wg.Wait()
+	if fetched == 0 && failed > 0 {
+		return "", fmt.Errorf("couldn't download artwork from TMDB (%d failed)", failed)
+	}
+	return fmt.Sprintf("cached %d images, %d failed", fetched, failed), nil
 }
 
 func (d Deps) refreshMetadata(ctx context.Context) (string, error) {

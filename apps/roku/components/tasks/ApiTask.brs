@@ -17,6 +17,11 @@ sub execute()
         m.top.response = loadLibrary(req)
         return
     end if
+    if build = "learn"
+        learnAddresses()
+        m.top.response = { ok: true, status: 200 }
+        return
+    end if
     res = httpRequest(req)
     if res.ok and build <> ""
         content = invalid
@@ -79,13 +84,17 @@ function httpRequest(req as object) as object
 
     msg = wait(timeout, port)
     host = server.Replace("http://", "").Replace("https://", "")
+    unreachable = { ok: false, status: 0, error: "Can't reach " + host + ". Is the server on?" }
     if type(msg) <> "roUrlEvent"
         xfer.AsyncCancel()
-        return { ok: false, status: 0, error: "Can't reach " + host + ". Is the server on?" }
+        ' Timed out: it may have landed, so only a read is sent again.
+        if useToken and method = "GET" and getOr(req, "retried", false) <> true and reconnect(server) then return httpRequest(retryOf(req))
+        return unreachable
     end if
     code = msg.GetResponseCode()
     if code <= 0
-        return { ok: false, status: 0, error: "Can't reach " + host + ". Is the server on?" }
+        if useToken and getOr(req, "retried", false) <> true and reconnect(server) then return httpRequest(retryOf(req))
+        return unreachable
     end if
     body = msg.GetString()
     data = invalid
@@ -147,8 +156,172 @@ function probe(url as string, timeout as integer) as dynamic
     if getOr(res.data, "product", "") <> "BingeBandit" and getOr(res.data, "status", "") <> "ok" then return invalid
     name = getOr(res.data, "name", "")
     if name = "" then name = "BingeBandit"
-    return { url: url, name: name, version: getOr(res.data, "version", "") }
+    return { url: url, name: name, version: getOr(res.data, "version", ""), id: getOr(res.data, "id", "") }
 end function
+
+' --- Other addresses of the signed-in server ---------------------------------
+
+' A Roku signed in with the public URL can't reach the server when the
+' internet is down, even on the same network. The channel learns the server's
+' LAN address and public URL while it works, and switches when the address it
+' uses stops answering. The id from /api/health keeps it to the same server.
+
+function retryOf(req as object) as object
+    r = {}
+    r.Append(req)
+    r.retried = true
+    return r
+end function
+
+function knownAddresses() as object
+    out = [m.global.server]
+    for each a in m.global.alternates
+        out.Push(a)
+    end for
+    return out
+end function
+
+' Uses `url` from now on, keeping the other addresses, and saves the session.
+sub switchTo(url as string)
+    others = []
+    for each a in knownAddresses()
+        if a <> url then others.Push(a)
+    end for
+    s = currentSession()
+    s.server = url
+    s.alternates = others
+    saveSession(s)
+end sub
+
+sub rememberAddress(url as string)
+    for each a in knownAddresses()
+        if a = url then return
+    end for
+    s = currentSession()
+    alts = []
+    alts.Append(m.global.alternates)
+    alts.Push(url)
+    s.alternates = alts
+    saveSession(s)
+end sub
+
+function sameServer(url as string, timeout as integer) as boolean
+    info = probe(url, timeout)
+    if info = invalid then return false
+    id = m.global.serverId
+    return id = "" or info.id = "" or info.id = id
+end function
+
+' After `failed` didn't answer: true when another address of the server
+' answers (now m.global.server). Requests failing together wait for the
+' first one's look around instead of each starting their own.
+function reconnect(failed as string) as boolean
+    if m.global.server <> failed then return true
+    if m.global.reconnecting
+        waited = CreateObject("roTimespan")
+        while m.global.reconnecting and waited.TotalMilliseconds() < 20000
+            sleep(250)
+        end while
+        return m.global.server <> failed
+    end if
+    m.global.reconnecting = true
+    found = ""
+    for each a in knownAddresses()
+        if a <> failed and sameServer(a, 3000)
+            found = a
+            exit for
+        end if
+    end for
+    if found = "" and m.global.serverId <> "" then found = findOnLan(m.global.serverId)
+    if found <> "" then switchTo(found)
+    m.global.reconnecting = false
+    return found <> ""
+end function
+
+function isLocalAddress(url as string) as boolean
+    return CreateObject("roRegex", "^https?://(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[^/:]+\.local([:/]|$))", "i").IsMatch(url)
+end function
+
+' The server on the Roku's network, by its id: every address in its /24 on
+' port 8484, a batch at a time (like ScanTask).
+function findOnLan(id as string) as string
+    sec = CreateObject("roRegistrySection", "bingebandit")
+    sec.Write("lanScanAt." + id, CreateObject("roDateTime").AsSeconds().ToStr())
+    sec.Flush()
+    prefix = ""
+    ips = CreateObject("roDeviceInfo").GetIPAddrs()
+    for each name in ips
+        parts = ips[name].Split(".")
+        if parts.Count() = 4 then prefix = parts[0] + "." + parts[1] + "." + parts[2] + "."
+        if prefix <> "" then exit for
+    end for
+    if prefix = "" then return ""
+    batch = 30
+    for start = 1 to 254 step batch
+        port = CreateObject("roMessagePort")
+        pending = {}
+        for host = start to start + batch - 1
+            if host > 254 then exit for
+            url = "http://" + prefix + host.ToStr() + ":8484"
+            x = CreateObject("roUrlTransfer")
+            x.SetMessagePort(port)
+            x.SetUrl(url + "/api/health")
+            if x.AsyncGetToString() then pending[x.GetIdentity().ToStr()] = { xfer: x, url: url }
+        end for
+        found = ""
+        deadline = CreateObject("roTimespan")
+        while pending.Count() > 0 and deadline.TotalMilliseconds() < 1200 and found = ""
+            msg = wait(1200 - deadline.TotalMilliseconds(), port)
+            if type(msg) = "roUrlEvent"
+                key = msg.GetSourceIdentity().ToStr()
+                p = pending[key]
+                if p <> invalid
+                    pending.Delete(key)
+                    if msg.GetResponseCode() = 200
+                        data = ParseJson(msg.GetString())
+                        if type(data) = "roAssociativeArray" and getOr(data, "id", "") = id then found = p.url
+                    end if
+                end if
+            end if
+        end while
+        for each key in pending
+            pending[key].xfer.AsyncCancel()
+        end for
+        if found <> "" then return found
+    end for
+    return ""
+end function
+
+' While the server answers: note its id and public URL, and when only
+' public addresses are known, look for it on this network (once a day).
+sub learnAddresses()
+    info = probe(m.global.server, 4000)
+    if info = invalid then return
+    if info.id <> "" and info.id <> m.global.serverId
+        s = currentSession()
+        s.serverId = info.id
+        saveSession(s)
+    end if
+    res = httpRequest({ path: "/api/link/info", retried: true })
+    if res.ok and type(res.data) = "roAssociativeArray"
+        pub = asString(res.data.serverUrl)
+        while Right(pub, 1) = "/"
+            pub = Left(pub, Len(pub) - 1)
+        end while
+        if LCase(Left(pub, 4)) = "http" then rememberAddress(pub)
+    end if
+    id = m.global.serverId
+    if id = "" then return
+    for each a in knownAddresses()
+        if isLocalAddress(a) then return
+    end for
+    sec = CreateObject("roRegistrySection", "bingebandit")
+    last = 0
+    if sec.Exists("lanScanAt." + id) then last = sec.Read("lanScanAt." + id).ToInt()
+    if CreateObject("roDateTime").AsSeconds() - last < 86400 then return
+    lan = findOnLan(id)
+    if lan <> "" then rememberAddress(lan)
+end sub
 
 ' --- Content builders --------------------------------------------------------
 

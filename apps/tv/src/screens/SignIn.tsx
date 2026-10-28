@@ -41,7 +41,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
               server.url,
             )
             if (stopped) return
-            if (res) onSignedIn({ server: server.url, token: res.token, user: res.user, profileChosen: res.profileChosen })
+            if (res) onSignedIn({ server: server.url, serverId: server.id, token: res.token, user: res.user, profileChosen: res.profileChosen })
             else timer = setTimeout(poll, 2000)
           } catch (err) {
             if (!stopped) setError((err as Error).message)
@@ -54,7 +54,7 @@ export default function SignIn({ server, onSignedIn, onBack }: { server: ServerI
       stopped = true
       clearTimeout(timer)
     }
-  }, [attempt, usePassword, server.url, onSignedIn])
+  }, [attempt, usePassword, server.url, server.id, onSignedIn])
 
   if (usePassword) return <PasswordSignIn server={server} onSignedIn={onSignedIn} onBack={() => setUsePassword(false)} onServer={onBack} />
 
@@ -122,7 +122,7 @@ function PasswordSignIn({
         { username, password, code: needsCode ? code : undefined, device: deviceName() },
         server.url,
       )
-      onSignedIn({ server: server.url, token: res.token, user: res.user })
+      onSignedIn({ server: server.url, serverId: server.id, token: res.token, user: res.user })
     } catch (err) {
       if (err instanceof ApiError && err.data?.needsCode) {
         if (needsCode) setError(err.message)

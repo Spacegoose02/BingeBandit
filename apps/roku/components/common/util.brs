@@ -29,9 +29,15 @@ sub applySession(s as dynamic)
         m.global.token = ""
         m.global.user = {}
         m.global.profileChosen = false
+        m.global.alternates = []
+        m.global.serverId = ""
         return
     end if
     m.global.server = s.server
+    ' The same server's other addresses (LAN, public URL), tried when this
+    ' one stops answering; the id makes sure an address is this server.
+    if type(s.alternates) = "roArray" then m.global.alternates = s.alternates else m.global.alternates = []
+    m.global.serverId = asString(s.serverId)
     m.global.token = s.token
     if s.user <> invalid then m.global.user = s.user else m.global.user = {}
     m.global.profileChosen = isTrue(s.profileChosen)
@@ -51,7 +57,7 @@ sub rememberServer(info as object)
 end sub
 
 function currentSession() as object
-    return { server: m.global.server, token: m.global.token, user: m.global.user, profileChosen: m.global.profileChosen }
+    return { server: m.global.server, alternates: m.global.alternates, serverId: m.global.serverId, token: m.global.token, user: m.global.user, profileChosen: m.global.profileChosen }
 end function
 
 ' --- URLs --------------------------------------------------------------------

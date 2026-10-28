@@ -160,6 +160,7 @@ export interface ServerInfo {
   url: string
   name: string
   version: string
+  id?: string // older servers don't send one
 }
 
 export interface SportsLeague {

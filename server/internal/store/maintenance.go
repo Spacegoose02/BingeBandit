@@ -100,6 +100,35 @@ func (s *Store) ReferencedImages() (map[string]bool, error) {
 	return refs, rows.Err()
 }
 
+// TMDBArtwork lists the TMDB images titles and collections show (file
+// names, newest titles first), for caching them before anyone asks.
+func (s *Store) TMDBArtwork() (posters, backdrops, logos []string, err error) {
+	rows, err := s.db.Query(`SELECT poster, backdrop, logo FROM (
+		SELECT poster, backdrop, logo, added_at FROM items
+		UNION ALL SELECT poster, backdrop, '', 0 FROM collections) ORDER BY added_at DESC`)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer rows.Close()
+	seen := map[string]bool{}
+	add := func(list *[]string, ref string) {
+		if f, ok := strings.CutPrefix(ref, "tmdb:/"); ok && f != "" && !seen[ref] {
+			seen[ref] = true
+			*list = append(*list, f)
+		}
+	}
+	for rows.Next() {
+		var poster, backdrop, logo string
+		if err := rows.Scan(&poster, &backdrop, &logo); err != nil {
+			return nil, nil, nil, err
+		}
+		add(&posters, poster)
+		add(&backdrops, backdrop)
+		add(&logos, logo)
+	}
+	return posters, backdrops, logos, rows.Err()
+}
+
 // FileSizes maps media file id → size, for validating cached subtitles.
 func (s *Store) FileSizes() (map[int64]int64, error) {
 	rows, err := s.db.Query(`SELECT id, size FROM media_files`)

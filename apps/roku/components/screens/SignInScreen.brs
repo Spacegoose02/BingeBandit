@@ -68,7 +68,7 @@ sub onPoll(event as object)
     res = event.getData()
     if res.status = 200 and type(res.data) = "roAssociativeArray" and res.data.token <> invalid
         m.pollToken = ""
-        m.top.navigate = { action: "signedIn", session: { server: m.server.url, token: res.data.token, user: res.data.user, profileChosen: isTrue(res.data.profileChosen) } }
+        m.top.navigate = { action: "signedIn", session: { server: m.server.url, serverId: getOr(m.server, "id", ""), token: res.data.token, user: res.data.user, profileChosen: isTrue(res.data.profileChosen) } }
     else if res.status = 202 or res.status = 0
         ' Still waiting (or a passing network blip): ask again shortly.
         m.timer.control = "start"

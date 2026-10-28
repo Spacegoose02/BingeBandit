@@ -58,8 +58,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	detector := markers.NewDetector(st, cfg.FFmpeg, filepath.Join(cfg.DataDir, "cache", "fingerprints"))
+	images := metadata.NewImageCache(filepath.Join(cfg.DataDir, "cache", "images"))
 	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{
-		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
+		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, Images: images, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
 	})...)
 	go scheduler.Start(ctx)
 	go scanner.Watch(ctx)
@@ -75,7 +76,7 @@ func main() {
 		Store:      st,
 		Scanner:    scanner,
 		Metadata:   meta,
-		Images:     metadata.NewImageCache(filepath.Join(cfg.DataDir, "cache", "images")),
+		Images:     images,
 		Artwork:    artwork,
 		TPDb:       metadata.NewTPDb(cfg.TPDbURL, filepath.Join(cfg.DataDir, "cache", "tpdb")),
 		Transcoder: transcoder,

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <component name="ScanTask" extends="Task">
   <interface>
-    <!-- Each server as it answers: { url, name, version } -->
+    <!-- Each server as it answers: { url, name, version, id } -->
     <field id="found" type="assocarray" alwaysNotify="true" />
     <field id="done" type="boolean" alwaysNotify="true" />
   </interface>

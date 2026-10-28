@@ -1,5 +1,10 @@
 package store
 
+import (
+	"crypto/rand"
+	"encoding/hex"
+)
+
 // Setting keys an admin can change at runtime.
 const (
 	SettingServerName        = "server_name"
@@ -187,4 +192,22 @@ func (s *Store) SetSettings(values map[string]string) error {
 	}
 	s.loadOverlayTag()
 	return nil
+}
+
+// settingServerID names this server for apps that know it by more than one
+// address (its LAN address and its public URL): they check it before
+// switching. It isn't an admin setting, so Settings leaves it out.
+const settingServerID = "server_id"
+
+// ServerID returns this server's id, making one the first time.
+func (s *Store) ServerID() string {
+	var v string
+	if err := s.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, settingServerID).Scan(&v); err == nil && v != "" {
+		return v
+	}
+	b := make([]byte, 16)
+	rand.Read(b)
+	s.db.Exec(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING`, settingServerID, hex.EncodeToString(b))
+	s.db.QueryRow(`SELECT value FROM settings WHERE key = ?`, settingServerID).Scan(&v)
+	return v
 }

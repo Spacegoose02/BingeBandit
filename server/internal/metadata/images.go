@@ -22,13 +22,26 @@ var (
 // artwork keeps loading when TMDB is slow or the server is offline.
 type ImageCache struct {
 	dir      string
+	base     string // TMDB's image server; tests point it elsewhere
 	hc       *http.Client
 	mu       sync.Mutex
 	inflight map[string]*sync.WaitGroup
 }
 
 func NewImageCache(dir string) *ImageCache {
-	return &ImageCache{dir: dir, hc: &http.Client{Timeout: 30 * time.Second}, inflight: map[string]*sync.WaitGroup{}}
+	return &ImageCache{dir: dir, base: "https://image.tmdb.org/t/p/", hc: &http.Client{Timeout: 30 * time.Second}, inflight: map[string]*sync.WaitGroup{}}
+}
+
+// Has reports whether a TMDB image is already on disk at that size.
+func (c *ImageCache) Has(size, file string) bool {
+	if !reImageFile.MatchString(file) || !imageSizes[size] {
+		return false
+	}
+	if strings.HasSuffix(file, ".svg") {
+		size = "original"
+	}
+	_, err := os.Stat(filepath.Join(c.dir, "tmdb", size, file))
+	return err == nil
 }
 
 // TMDB returns the local path for a TMDB image, downloading it if needed.
@@ -73,7 +86,7 @@ func (c *ImageCache) TMDB(ctx context.Context, size, file string) (string, error
 	// requests waiting on the same image or leave it uncached.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://image.tmdb.org/t/p/"+size+"/"+file, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+size+"/"+file, nil)
 	if err != nil {
 		return "", err
 	}
