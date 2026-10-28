@@ -134,7 +134,7 @@ type Dialog = null | 'recommend' | 'kids' | 'edit' | 'match' | 'move'
  * for kids for parents; collections, editing (details, poster, artwork),
  * fixing the match and refreshing for admins.
  */
-export function ItemMenu({ item, onChanged }: { item: Item; onChanged: (it: Item) => void }) {
+export function ItemMenu({ item, onChanged, onMembership }: { item: Item; onChanged: (it: Item) => void; onMembership?: () => void }) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [detail, setDetail] = useState<ItemDetail | null>(null)
   const [kids, setKids] = useState<KidState[]>([])
@@ -187,6 +187,7 @@ export function ItemMenu({ item, onChanged }: { item: Item; onChanged: (it: Item
             setKids={setKids}
             canApprove={!!user && (user.isAdmin || !user.ownerId)}
             admin={!!user?.isAdmin}
+            onMembership={onMembership}
             close={close}
             done={(msg) => {
               close()
@@ -228,6 +229,7 @@ export function ItemMenu({ item, onChanged }: { item: Item; onChanged: (it: Item
             onSaved={() => {
               setDialog(null)
               reload()
+              onMembership?.()
             }}
           />,
         )}
@@ -241,6 +243,7 @@ export function ItemMenu({ item, onChanged }: { item: Item; onChanged: (it: Item
               setDialog(null)
               setToast(msg)
               reload()
+              onMembership?.()
             }}
           />,
         )}
@@ -269,6 +272,7 @@ function ItemMenuBody({
   setKids,
   canApprove,
   admin,
+  onMembership,
   close,
   done,
   open,
@@ -280,6 +284,7 @@ function ItemMenuBody({
   setKids: (k: KidState[]) => void
   canApprove: boolean
   admin: boolean
+  onMembership?: () => void
   close: () => void
   done: (msg?: string) => void
   open: (d: Dialog) => void
@@ -382,6 +387,7 @@ function ItemMenuBody({
       try {
         await api.put(`/api/admin/items/${top.id}/collections`, { collections: next })
         setCols({ ...cols, collections: next })
+        onMembership?.()
       } catch (e) {
         setError((e as Error).message)
       }

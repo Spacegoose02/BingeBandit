@@ -48,9 +48,20 @@ function Progress({ item }: { item: Item }) {
 /**
  * Movie, show or season poster. The ⋮ in its corner (on hover, or always on
  * touch screens) opens the options menu; changes made there show on the card
- * straight away.
+ * straight away. onMembership runs when the menu may have taken the title out
+ * of the page's list (collections, edit, move), so the page can reload.
  */
-export function PosterCard({ item: given, subtitle, domId }: { item: Item; subtitle?: string; domId?: string }) {
+export function PosterCard({
+  item: given,
+  subtitle,
+  domId,
+  onMembership,
+}: {
+  item: Item
+  subtitle?: string
+  domId?: string
+  onMembership?: () => void
+}) {
   const [changed, setChanged] = useState<Item | null>(null)
   useEffect(() => setChanged(null), [given])
   const item = changed ?? given
@@ -69,7 +80,7 @@ export function PosterCard({ item: given, subtitle, domId }: { item: Item; subti
         <div className="card-title" title={item.title}>{item.title}</div>
         <div className="card-sub">{subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '')}</div>
       </Link>
-      <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} />
+      <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} />
     </div>
   )
 }
