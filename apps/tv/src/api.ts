@@ -104,7 +104,10 @@ export async function request<T>(method: string, path: string, body?: unknown, s
 
 // The last answer to each GET, so a screen that comes back (Back from the
 // player or details remounts it) can draw at once while it refreshes.
+// Capped: every guide window, search and library page has its own path, and
+// a TV left on for days would otherwise keep all of them.
 const cache = new Map<string, unknown>()
+const CACHE_MAX = 60
 
 /** What the server last said for this path, if anything. */
 export function cached<T>(path: string): T | undefined {
@@ -128,7 +131,9 @@ export function writesDone(): Promise<unknown> {
 export const api = {
   get: <T>(path: string) =>
     request<T>('GET', path).then((data) => {
+      cache.delete(path) // newest last, so the oldest goes first
       cache.set(path, data)
+      if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!)
       return data
     }),
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
