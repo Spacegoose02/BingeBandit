@@ -144,15 +144,21 @@ export default function LiveGuide() {
       (e) => setError(e.message),
     )
   }, [])
+  // Only while the guide is on screen: watching a channel leaves the preview.
+  const { active, returns } = useScreen()
+  // Hidden under a channel, the big grid would redraw every half minute
+  // during playback, so it refreshes when it comes back instead.
   useEffect(() => {
+    if (!active) return
     load()
+    setNow(Date.now() / 1000)
     const reload = setInterval(load, 5 * 60000)
     const tick = setInterval(() => setNow(Date.now() / 1000), 30000)
     return () => {
       clearInterval(reload)
       clearInterval(tick)
     }
-  }, [load])
+  }, [active, load])
 
   const gridFrom = guide?.from ?? 0
   const gridTo = guide?.to ?? 0
@@ -216,8 +222,6 @@ export default function LiveGuide() {
   const activeFilter = filters.some((f) => f.key === filter) ? filter : 'all'
   const shown = useMemo(() => (guide ? filterChannels(guide, activeFilter) : []), [guide, activeFilter])
 
-  // Only while the guide is on screen: watching a channel leaves the preview.
-  const { active, returns } = useScreen()
   // Back from watching full screen: the preview carries on with the channel
   // that was being watched (which may have been flipped to there), and the
   // guide's selection moves to it, with focus on what's on now. The menu
