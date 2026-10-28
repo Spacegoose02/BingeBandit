@@ -1,8 +1,11 @@
 package library
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -166,6 +169,73 @@ func normKey(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// plainShowKey is the match key of a show called title, from its folder or
+// a loose file's name.
+func plainShowKey(title string, year int) string {
+	return fmt.Sprintf("show:%s:%d", normKey(title), year)
+}
+
+// folderKeys gives every show folder in the library's roots its own match
+// key, by folder name. Names that differ only in punctuation or case
+// ("Mickey Mouse Clubhouse" and "Mickey Mouse Clubhouse+") reduce to the same
+// plain key, which made them one show. The plainest name (fewest symbols,
+// then shortest) keeps the plain key, so a show already in the library stays
+// the same item, and each other folder adds its name to its key. Folders with
+// no such twin aren't listed and use the plain key.
+func folderKeys(roots []string) map[string]string {
+	byKey := map[string][]string{}
+	seen := map[string]bool{}
+	for _, root := range roots {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() || seen[e.Name()] {
+				continue
+			}
+			seen[e.Name()] = true
+			title, year, _ := parseTitleYear(e.Name())
+			if title == "" {
+				continue
+			}
+			k := plainShowKey(title, year)
+			byKey[k] = append(byKey[k], e.Name())
+		}
+	}
+	out := map[string]string{}
+	for k, names := range byKey {
+		if len(names) < 2 {
+			continue
+		}
+		sort.Slice(names, func(i, j int) bool {
+			a, b := names[i], names[j]
+			if sa, sb := symbols(a), symbols(b); sa != sb {
+				return sa < sb
+			}
+			if len(a) != len(b) {
+				return len(a) < len(b)
+			}
+			return a < b
+		})
+		for _, n := range names[1:] {
+			out[n] = k + "|" + n
+		}
+	}
+	return out
+}
+
+// symbols counts the characters of a name other than letters, digits and spaces.
+func symbols(s string) int {
+	n := 0
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !unicode.IsSpace(r) {
+			n++
+		}
+	}
+	return n
 }
 
 // reMoreEpisodes matches one more episode right after the S01E01 marker of a

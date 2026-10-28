@@ -23,7 +23,8 @@ const orders = [
  * Search TMDB and re-point a movie or show at the chosen result. A show can
  * use TheTVDB instead, with its aired, DVD or absolute episode numbering.
  * Or leave it unmatched (home videos, shows no source has yet). A match that
- * makes it another copy of a title in the library merges the two; onMatched
+ * makes a movie another copy of one in the library merges the two (shows
+ * never merge: each folder is its own show); onMatched
  * gets the id that now holds it.
  */
 export function MatchDialog({

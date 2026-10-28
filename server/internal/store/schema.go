@@ -833,4 +833,9 @@ CREATE TABLE media_file_episodes (
 );
 CREATE INDEX media_file_episodes_item ON media_file_episodes(item_id);
 `,
+	// 47: shows are no longer merged (each folder is its own show), so the
+	// folders merged into another show go back to their own on the next scan.
+	`
+DELETE FROM item_aliases WHERE item_id IN (SELECT id FROM items WHERE kind = 'show');
+`,
 }

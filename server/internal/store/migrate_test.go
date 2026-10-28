@@ -61,6 +61,7 @@ var shipped = []string{
 	"25fd05469f325854663a4a7e0eea91704f52d89f628d78bc609a6e388b137659",
 	"6133c331b54fefa7a4de50491a67a81d66af1119b3ee80708d1ae1d42f223c80",
 	"c263b91b42c49a1667efd7b4ae61743e8f53af052301dcff39afb107fc8bcf9f",
+	"29aecb3f4adc958128685b4e44f926c946301e1b4d42768d8daa36243f98f6ca",
 }
 
 func TestShippedMigrationsUnchanged(t *testing.T) {
