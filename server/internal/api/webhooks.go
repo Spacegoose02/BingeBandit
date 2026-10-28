@@ -7,9 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -124,8 +126,11 @@ func (s *Server) deliver(h *store.Webhook, event string, data any) string {
 	if err != nil {
 		status = "error: " + err.Error()
 	} else {
-		resp.Body.Close()
 		status = resp.Status
+		if resp.StatusCode >= 300 {
+			status += replySnippet(resp.Body)
+		}
+		resp.Body.Close()
 	}
 	s.Store.SetWebhookResult(h.ID, status)
 	if err != nil || resp.StatusCode >= 300 {
@@ -133,6 +138,24 @@ func (s *Server) deliver(h *store.Webhook, event string, data any) string {
 	}
 	return status
 }
+
+// replySnippet returns the start of an error reply's text (" (Invalid JSON)"), so
+// "last response" says why a receiver refused, not just the status. HTML error
+// pages are reduced to their text.
+func replySnippet(body io.Reader) string {
+	b, _ := io.ReadAll(io.LimitReader(body, 4096))
+	text := htmlTag.ReplaceAllString(string(b), " ")
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > 160 {
+		text = strings.ToValidUTF8(text[:160], "") + "…"
+	}
+	if text == "" {
+		return ""
+	}
+	return " (" + text + ")"
+}
+
+var htmlTag = regexp.MustCompile(`(?s)<(script|style)[^>]*>.*?</(script|style)>|<[^>]*>`)
 
 func (s *Server) webhooks(w http.ResponseWriter, r *http.Request) {
 	hooks, err := s.Store.Webhooks()

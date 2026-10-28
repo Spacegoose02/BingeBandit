@@ -615,6 +615,7 @@ function Webhooks() {
               <div>{h.name}</div>
               <div className="muted small mono" style={{ wordBreak: 'break-all' }}>{h.url}</div>
               <div className="muted small">
+                {h.format === 'plex' && 'Plex-style · '}
                 {h.events.length ? h.events.map((e) => eventLabels[e] ?? e).join(', ') : 'No events chosen'}
                 {(results[h.id] || h.lastStatus) && <> · last response: {results[h.id] || h.lastStatus}</>}
               </div>
@@ -676,8 +677,11 @@ function WebhookEditor({ hook, events, onClose, onSaved }: { hook: Partial<Webho
           Format
           <select value={h.format ?? ''} onChange={(e) => setH({ ...h, format: e.target.value })}>
             <option value="">BingeBandit JSON</option>
-            <option value="plex">Plex-style (for Yamtrack and other apps that accept Plex webhooks; playback events only)</option>
+            <option value="plex">Plex-style (for apps that accept Plex webhooks, like Yamtrack's Plex URL; playback events only)</option>
           </select>
+          {h.format === 'plex' && /\/webhook\/bingebandit\//i.test(h.url ?? '') && (
+            <span className="muted small">This is a BingeBandit webhook URL, which expects BingeBandit JSON. Plex-style will be refused.</span>
+          )}
         </label>
         <label>
           Secret (optional, for signing)
