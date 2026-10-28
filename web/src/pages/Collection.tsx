@@ -26,7 +26,7 @@ export default function CollectionPage() {
   const { user } = useAuth()
   const nav = useNavigate()
   // The first page comes with the collection; the rest load as you scroll.
-  const { data, error, reload } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${PAGE}`)
+  const { data, error, reload, setData } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${PAGE}`)
   const [more, setMore] = useState<Item[]>([])
   const [ended, setEnded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -58,6 +58,11 @@ export default function CollectionPage() {
     obs.observe(el)
     return () => obs.disconnect()
   }, [data, ended, id, items, total])
+
+  // A title taken out of (or added to) this collection from its ⋮ menu shows
+  // at once: everything loaded so far comes again in one go.
+  const refresh = () =>
+    api.get<CollectionPageData>(`/api/collections/${id}?limit=${Math.max(PAGE, items.length + 1)}`).then(setData, () => undefined)
 
   if (error) return <div className="page"><div className="empty">{error}</div></div>
   if (!data) return <div className="page-loading" />
@@ -102,7 +107,7 @@ export default function CollectionPage() {
           {items.length === 0 && <div className="empty">Nothing in this collection yet.</div>}
           <div className="poster-grid">
             {items.map((it) => (
-              <PosterCard key={it.id} item={it} />
+              <PosterCard key={it.id} item={it} onMembership={refresh} />
             ))}
           </div>
           <div ref={sentinel} style={{ height: 1 }} />
@@ -113,7 +118,7 @@ export default function CollectionPage() {
               to={`/collection/${o.collection.id}`}
             >
               {o.items.map((it) => (
-                <PosterCard key={it.id} item={it} />
+                <PosterCard key={it.id} item={it} onMembership={refresh} />
               ))}
             </Row>
           ))}
