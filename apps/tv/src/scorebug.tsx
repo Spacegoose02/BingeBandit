@@ -10,6 +10,9 @@ import type { SportsGame, SportsSide } from './types'
  * channel showing that game, which has its own, and not when turned off
  * under Settings → Alerts.
  */
+/** Has the score bug read its switch again at once (Live TV's Options changes it). */
+export const refreshScoreBug = { current: () => undefined as void }
+
 export function ScoreBug({ playing, channelId }: { playing: boolean; channelId?: number }) {
   const [games, setGames] = useState<SportsGame[]>([])
   useEffect(() => {
@@ -32,9 +35,11 @@ export function ScoreBug({ playing, channelId }: { playing: boolean; channelId?:
       }
     }
     look()
+    refreshScoreBug.current = () => void look()
     const t = setInterval(look, 30000)
     return () => {
       on = false
+      refreshScoreBug.current = () => undefined
       clearInterval(t)
     }
   }, [playing])

@@ -8,6 +8,8 @@ import { guideEpisode } from '../format'
 import type { LiveChannel } from '../types'
 import { ChannelLogo, channelNo, clock } from './LiveGuide'
 import { ScoreBug } from '../components/ScoreBug'
+import { useGameLights } from '../lights'
+import type { Prefs } from '../types'
 
 /** Full-screen live channel player with channel up/down and a mini guide. */
 export default function LivePlayer() {
@@ -33,7 +35,12 @@ export default function LivePlayer() {
   const [guide, setGuide] = useState(() => localStorage.getItem('bb.miniGuide') === '1')
   const [controls, setControls] = useState(true)
   const [muted, setMuted] = useState(false)
+  const [menu, setMenu] = useState(false)
+  const [toast, setToast] = useState('')
   const [, tick] = useState(0)
+  const lights = useGameLights()
+  const { data: prefs, reload: reloadPrefs } = useApi<Prefs>('/api/me/prefs')
+  const [bugKey, setBugKey] = useState(0) // remounts the score bug after its switch changes
 
   // A new channel starts with a clean slate.
   useEffect(() => {
@@ -242,7 +249,8 @@ export default function LivePlayer() {
         ArrowRight: () => seekBy(30),
         l: goLive,
         f: () => (document.fullscreenElement ? document.exitFullscreen() : containerRef.current?.requestFullscreen()),
-        Escape: () => !document.fullscreenElement && nav('/live'),
+        o: () => setMenu((m) => !m),
+        Escape: () => (menu ? setMenu(false) : !document.fullscreenElement && nav('/live')),
       }
       if (map[e.key]) {
         e.preventDefault()
@@ -252,7 +260,36 @@ export default function LivePlayer() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, poke, nav, togglePause, seekBy, goLive])
+  }, [step, poke, nav, togglePause, seekBy, goLive, menu])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(''), 3000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  // A new channel brings its own sound and caption tracks.
+  useEffect(() => setMenu(false), [id])
+  const audioTracks = menu ? (hlsRef.current?.audioTracks ?? []) : []
+  const textTracks = menu && videoRef.current ? Array.from(videoRef.current.textTracks).filter((t) => t.kind === 'captions' || t.kind === 'subtitles') : []
+  const pickAudio = (i: number) => {
+    if (hlsRef.current) hlsRef.current.audioTrack = i
+    tick((n) => n + 1)
+  }
+  const pickText = (t: TextTrack | null) => {
+    for (const x of textTracks) x.mode = x === t ? 'showing' : 'disabled'
+    tick((n) => n + 1)
+  }
+  const setScoreBug = async (on: boolean) => {
+    if (!prefs) return
+    try {
+      await api.put('/api/me/prefs', { ...prefs, scoreBug: on })
+      reloadPrefs()
+      setBugKey((k) => k + 1)
+    } catch (e) {
+      setToast((e as Error).message)
+    }
+  }
 
   const now = Date.now() / 1000
   const prog = channel?.now
@@ -265,10 +302,10 @@ export default function LivePlayer() {
   }
 
   return (
-    <div ref={containerRef} className={`live-player ${guide ? 'with-guide' : ''} ${controls ? 'show-controls' : ''}`} onMouseMove={poke}>
+    <div ref={containerRef} className={`live-player ${guide ? 'with-guide' : ''} ${controls || menu ? 'show-controls' : ''}`} onMouseMove={poke}>
       <div className="live-stage">
-        <ScoreBug channelId={Number(id)} />
-      <video
+        <ScoreBug key={bugKey} channelId={Number(id)} />
+        <video
           ref={videoRef}
           className="player-video"
           playsInline
@@ -335,6 +372,65 @@ export default function LivePlayer() {
             </button>
           )}
           <div className="spacer" />
+          {toast && <span className="muted small">{toast}</span>}
+          <div className="menu-anchor">
+            <button className={`icon-btn ${menu ? 'active' : ''}`} onClick={() => setMenu((m) => !m)} aria-label="Options" title="Options (O)">
+              <Icon name="sliders" size={22} />
+            </button>
+            {menu && (
+              <div className="menu player-menu">
+                {lights.person && (
+                  <>
+                    <div className="menu-section">Game Lights</div>
+                    {([true, false] as const).map((run) => (
+                      <button
+                        key={String(run)}
+                        className={!lights.person?.off === run ? 'active' : ''}
+                        onClick={() => lights.setRunning(run).then(() => setToast(run ? 'Game Lights on' : 'Game Lights stopped'), (e) => setToast(e.message))}
+                      >
+                        {run ? 'On' : 'Stopped'}
+                      </button>
+                    ))}
+                  </>
+                )}
+                {prefs && (
+                  <>
+                    <div className="menu-section">Score bug</div>
+                    <button className={prefs.scoreBug ? 'active' : ''} onClick={() => setScoreBug(true)}>
+                      On
+                    </button>
+                    <button className={!prefs.scoreBug ? 'active' : ''} onClick={() => setScoreBug(false)}>
+                      Off
+                    </button>
+                  </>
+                )}
+                {audioTracks.length > 1 && <div className="menu-section">Audio</div>}
+                {audioTracks.length > 1 &&
+                  audioTracks.map((t, i) => (
+                    <button key={i} className={hlsRef.current?.audioTrack === i ? 'active' : ''} onClick={() => pickAudio(i)}>
+                      {t.name || t.lang || `Track ${i + 1}`}
+                    </button>
+                  ))}
+                {textTracks.length > 0 && (
+                  <>
+                    <div className="menu-section">Captions</div>
+                    <button className={textTracks.every((t) => t.mode !== 'showing') ? 'active' : ''} onClick={() => pickText(null)}>
+                      Off
+                    </button>
+                    {textTracks.map((t, i) => (
+                      <button key={i} className={t.mode === 'showing' ? 'active' : ''} onClick={() => pickText(t)}>
+                        {t.label || t.language || `Captions ${i + 1}`}
+                      </button>
+                    ))}
+                  </>
+                )}
+                <div className="menu-section">Guide</div>
+                <button className={guide ? 'active' : ''} onClick={() => setGuide((g) => !g)}>
+                  Mini guide {guide ? 'on' : 'off'}
+                </button>
+              </div>
+            )}
+          </div>
           <button className={`btn btn-glass btn-sm ${guide ? 'active' : ''}`} onClick={() => setGuide((g) => !g)}>
             <Icon name="list" size={16} /> Guide
           </button>
