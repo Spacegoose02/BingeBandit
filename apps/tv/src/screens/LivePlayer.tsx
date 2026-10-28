@@ -7,7 +7,7 @@ import { Button } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { fetchGameLights, saveGameLights, type GameLightsPerson } from '../lights'
 import { useLock } from '../lock'
-import { refreshScoreBug } from '../scorebug'
+import { refreshScoreBug, scoreBugChannel } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav } from '../nav'
 import { useLandscape } from '../screen'
 import { px, scaled, colors, font, gutter, isPhone } from '../theme'
@@ -144,6 +144,9 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   // Join the channel's shared stream; leave it when switching or exiting.
   // Failures rejoin on their own (quickly at first, then every 15 s) so an
   // error never just sits on screen.
+  useEffect(() => scoreBugChannel.set(tuned), [tuned])
+  useEffect(() => () => scoreBugChannel.set(undefined), [])
+
   useEffect(() => {
     lastChannel.id = tuned
     let cancelled = false
