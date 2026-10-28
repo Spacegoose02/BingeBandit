@@ -23,7 +23,7 @@ import (
 type Status struct {
 	LibraryID int64  `json:"libraryId"`
 	Running   bool   `json:"running"`
-	Phase     string `json:"phase"` // scanning | metadata | done
+	Phase     string `json:"phase"` // scanning | metadata | moving | done
 	Found     int    `json:"found"`
 	Processed int    `json:"processed"`
 	Started   int64  `json:"started"`

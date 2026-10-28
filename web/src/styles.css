@@ -88,7 +88,7 @@ img { display: block; }
 .form label, .label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 500; }
 .form label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 14px; }
 .check input { width: 18px; height: 18px; accent-color: var(--accent); }
-input:not([type='checkbox']):not([type='range']), select {
+input:not([type='checkbox']):not([type='radio']):not([type='range']), select {
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
   border-radius: 8px;

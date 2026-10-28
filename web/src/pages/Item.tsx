@@ -6,6 +6,7 @@ import { PersonCard, PosterCard } from '../components/Cards'
 import { AddToPlaylist, WatchlistButton } from '../components/AddToPlaylist'
 import { EditItem } from '../components/EditItem'
 import { MatchDialog } from '../components/MatchDialog'
+import { locationPath, MoveDialog, type ItemLocation } from '../components/MoveItem'
 import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
 import { KidsApproveButton } from '../components/KidsApprove'
@@ -32,7 +33,10 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
   const [fileIdx, setFileIdx] = useState(0)
   const [trailer, setTrailer] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [dialog, setDialog] = useState<null | 'edit' | 'match'>(null)
+  const [dialog, setDialog] = useState<null | 'edit' | 'match' | 'move'>(null)
+  const [note, setNote] = useState('')
+  // A movie's path shows with its file; a show's folder is shown here.
+  const { data: where, reload: reloadWhere } = useApi<ItemLocation>(user?.isAdmin && item.kind === 'show' ? locationPath(item.id) : null)
   const file: MediaFile | undefined = files[fileIdx]
 
   const backdrop = img(item.backdrop || show?.backdrop || item.showBackdrop, 'original')
@@ -164,6 +168,11 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="search" size={18} />
                 </button>
               )}
+              {user?.isAdmin && (item.kind === 'movie' || item.kind === 'show') && (
+                <button className="btn btn-glass icon-only" onClick={() => setDialog('move')} title="Move to another library">
+                  <Icon name="folder" size={18} />
+                </button>
+              )}
               {user?.isAdmin && (item.kind === 'show' || item.kind === 'season' || item.kind === 'movie') && (
                 <button className="btn btn-glass icon-only" onClick={detectMarkers} title="Detect intros and credits now">
                   <Icon name="activity" size={18} />
@@ -204,6 +213,17 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               )}
             </dl>
 
+            {note && <p className="muted small">{note}</p>}
+            {where && where.location.paths.length > 0 && (
+              <div className="file-info">
+                <div className="track-line">
+                  <span className="muted">In {where.location.library}</span>
+                </div>
+                {where.location.paths.map((p) => (
+                  <div key={p} className="track-line path" title={p}>{p}</div>
+                ))}
+              </div>
+            )}
             {file && <FileInfo files={files} index={fileIdx} onChange={setFileIdx} admin={!!user?.isAdmin} />}
           </div>
         </div>
@@ -262,6 +282,19 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
             // Matching a movie to one already in the library merged the two.
             if (kept && kept !== item.id) nav(`/item/${kept}`, { replace: true })
             else reload()
+          }}
+        />
+      )}
+
+      {dialog === 'move' && (
+        <MoveDialog
+          item={item}
+          onClose={() => setDialog(null)}
+          onMoved={(msg) => {
+            setDialog(null)
+            setNote(msg)
+            reload()
+            reloadWhere()
           }}
         />
       )}
