@@ -186,6 +186,8 @@ Passkeys belong to the address they were added on (the page's host), so add them
 
 ## Admin
 
+`GET /api/admin/files?offset=&limit=` (up to 1000 a page) is the plugin API's `/files` for an admin's key: every movie and episode file with its item and quality, `{files, total}`. Cinemask reads quality this way instead of opening every title.
+
 Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editing and matching, users and library access, settings, Live TV sources and channels, tasks, logs, statistics, webhooks and single sign-on. They change often, so read the web app's source (`web/src/pages/admin`) to see how they're used.
 
 ## Plugins

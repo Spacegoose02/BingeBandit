@@ -313,6 +313,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/libraries/{id}/refresh", s.refreshLibrary)
 				r.Post("/scan", s.scanAll)
 				r.Get("/scan", s.scanStatus)
+				// Every file with its quality, as plugins get it: Cinemask reads the whole library this way.
+				r.Get("/files", s.pluginFiles)
 				r.Post("/items/{id}/refresh", s.refreshItem)
 				r.Put("/items/{id}", s.editItem)
 				r.Get("/items/{id}/collections", s.itemCollections)
