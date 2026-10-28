@@ -259,7 +259,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
           onClose={() => setDialog(null)}
           onMatched={(kept) => {
             setDialog(null)
-            // Matching it to a title already in the library merged the two.
+            // Matching a movie to one already in the library merged the two.
             if (kept && kept !== item.id) nav(`/item/${kept}`, { replace: true })
             else reload()
           }}

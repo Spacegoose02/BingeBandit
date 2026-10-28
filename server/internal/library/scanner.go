@@ -261,6 +261,10 @@ func rootFor(lib *store.Library, path string) string {
 
 func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status, files []found, gen int64) error {
 	s.update(st, func(st *Status) { st.Found, st.Processed = len(files), 0 })
+	var folders map[string]string
+	if lib.Kind == "shows" {
+		folders = folderKeys(lib.Paths)
+	}
 	var done atomic.Int64
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, probeWorkers)
@@ -272,7 +276,7 @@ func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status
 		wg.Add(1)
 		go func(f found) {
 			defer func() { <-sem; wg.Done() }()
-			if err := s.processFile(ctx, lib, f, gen); err != nil {
+			if err := s.processFile(ctx, lib, f, gen, folders); err != nil {
 				log.Printf("scan %q: %v", lib.Name, err)
 			}
 			n := int(done.Add(1))
@@ -283,7 +287,8 @@ func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status
 	return ctx.Err()
 }
 
-func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64) error {
+// folders is folderKeys for a shows library.
+func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64, folders map[string]string) error {
 	info, err := os.Stat(f.path)
 	if err != nil {
 		return err
@@ -294,7 +299,7 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 	case "movies":
 		itemID, err = s.movieItem(lib, f)
 	case "shows":
-		itemID, more, err = s.episodeItems(lib, f)
+		itemID, more, err = s.episodeItems(lib, f, folders)
 	default:
 		err = fmt.Errorf("unknown library kind %q", lib.Kind)
 	}
@@ -373,8 +378,9 @@ func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 // layouts) onto show, season and episode rows, creating them as needed. The
 // file belongs to the first episode; a multi-episode file (S01E01E02) also
 // gets a row for each later episode, returned in more, which plays the same
-// file.
-func (s *Scanner) episodeItems(lib *store.Library, f found) (id int64, more []int64, err error) {
+// file. Each show folder is its own show: folders gives the ones whose name
+// alone would share another folder's key their own (see folderKeys).
+func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]string) (id int64, more []int64, err error) {
 	rel, err := filepath.Rel(f.root, f.path)
 	if err != nil {
 		return 0, nil, err
@@ -408,20 +414,15 @@ func (s *Scanner) episodeItems(lib *store.Library, f found) (id int64, more []in
 	if showTitle == "" {
 		return 0, nil, fmt.Errorf("cannot find show name for %s", f.path)
 	}
-	showKey := fmt.Sprintf("show:%s:%d", normKey(showTitle), showYear)
-
-	// A folder whose show was merged into another (same TMDB/TVDB show)
-	// adds its episodes there.
-	showID, aliasKey, merged := s.st.ItemAlias(lib.ID, showKey)
-	if merged {
-		showKey = aliasKey
-	} else {
-		showID, err = s.st.UpsertItem(&store.Item{
-			LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, TVDBID: tvdb, IMDbID: imdb, MatchKey: showKey,
-		})
-		if err != nil {
-			return 0, nil, err
-		}
+	showKey := plainShowKey(showTitle, showYear)
+	if k, ok := folders[showName]; ok && len(parts) > 1 {
+		showKey = k
+	}
+	showID, err := s.st.UpsertItem(&store.Item{
+		LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, TVDBID: tvdb, IMDbID: imdb, MatchKey: showKey,
+	})
+	if err != nil {
+		return 0, nil, err
 	}
 	seasonTitle := fmt.Sprintf("Season %d", season)
 	if season == 0 {

@@ -102,11 +102,11 @@ func TestMatchAcrossSources(t *testing.T) {
 		t.Errorf("TheTVDB hint on TMDB: tmdb %d source %q", h.TMDBID, h.MetadataSource)
 	}
 
-	// Both copies of each title come together.
-	for _, lib := range []int64{movies.ID, shows.ID} {
+	// Both copies of a movie come together; each show folder stays its own show.
+	for lib, want := range map[int64]int{movies.ID: 1, shows.ID: 0} {
 		merged, err := st.MergeDuplicates(lib)
-		if err != nil || len(merged) != 1 {
-			t.Fatalf("library %d merged %+v, %v", lib, merged, err)
+		if err != nil || len(merged) != want {
+			t.Fatalf("library %d merged %+v, %v; want %d", lib, merged, err, want)
 		}
 	}
 	if _, err := st.Item(0, inception4k); err == nil {
@@ -114,10 +114,11 @@ func TestMatchAcrossSources(t *testing.T) {
 			t.Error("both Inceptions still listed")
 		}
 	}
-	if _, err := st.Item(0, firefly); err == nil {
-		if _, err := st.Item(0, fireflyHint); err == nil {
-			t.Error("both Fireflys still listed")
-		}
+	if _, err := st.Item(0, firefly); err != nil {
+		t.Error("show folder merged away")
+	}
+	if _, err := st.Item(0, fireflyHint); err != nil {
+		t.Error("show folder merged away")
 	}
 
 	// Left unmatched on purpose: refreshes don't search, and it never merges.
