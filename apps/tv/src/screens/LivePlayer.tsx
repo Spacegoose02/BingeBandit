@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
-import Video, { type OnProgressData, type VideoRef } from 'react-native-video'
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
+import Video, { SelectedTrackType, type AudioTrack, type OnProgressData, type TextTrack, type VideoRef } from 'react-native-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
 import { Button } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
+import { fetchGameLights, saveGameLights, type GameLightsPerson } from '../lights'
 import { useLock } from '../lock'
+import { refreshScoreBug } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav } from '../nav'
 import { useLandscape } from '../screen'
 import { px, scaled, colors, font, gutter, isPhone } from '../theme'
@@ -38,6 +40,20 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const nav = useNav()
   const [info, setInfo] = useState(true)
   const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
+  // Options: Game Lights and the score bug for an easy on / off, and the
+  // channel's sound and caption tracks when it has more than one.
+  const [menu, setMenu] = useState(false)
+  const [lights, setLights] = useState<GameLightsPerson | null>(null)
+  const [scoreBug, setScoreBug] = useState<boolean | null>(null)
+  const [audios, setAudios] = useState<AudioTrack[]>([])
+  const [texts, setTexts] = useState<TextTrack[]>([])
+  const [audio, setAudio] = useState(-1) // -1: the stream's own choice
+  const [text, setText] = useState(-2) // -2: as the device's caption setting says; -1: off
+  const [notice, setNotice] = useState('')
+  const say = (t: string) => {
+    setNotice(t)
+    setTimeout(() => setNotice((n) => (n === t ? '' : n)), 4000)
+  }
   const viewer = useRef('')
   const failures = useRef(0)
   const stallSecs = useRef(12)
@@ -56,6 +72,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   useEffect(() => {
     backInterceptor.current = () => {
       if (lock.handleBack()) return true
+      if (menu) {
+        setMenu(false)
+        return true
+      }
       if (controls) {
         setControls(false)
         return true
@@ -79,7 +99,47 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   useEffect(() => {
     failures.current = 0
     setError('')
+    setAudios([])
+    setTexts([])
+    setAudio(-1)
+    setText(-2)
   }, [tuned])
+
+  const openMenu = () => {
+    setMenu(true)
+    setControls(false)
+    fetchGameLights().then(setLights)
+    api.get<{ scoreBug?: boolean }>('/api/me/prefs').then((p) => setScoreBug(p.scoreBug !== false), () => setScoreBug(null))
+  }
+  const setLightsRunning = (run: boolean) => {
+    if (!lights) return
+    const was = lights
+    const next = { ...lights, off: !run }
+    setLights(next)
+    saveGameLights(next).then(
+      () => say(run ? 'Game Lights on' : 'Game Lights stopped'),
+      (e: Error) => {
+        setLights(was)
+        say(e.message)
+      },
+    )
+  }
+  const pickScoreBug = (on: boolean) => {
+    setScoreBug(on)
+    api
+      .get<Record<string, unknown>>('/api/me/prefs')
+      .then((cur) => api.put('/api/me/prefs', { ...cur, scoreBug: on }))
+      .then(
+        () => {
+          refreshScoreBug.current()
+          say(on ? 'Score bug on' : 'Score bug off')
+        },
+        (e: Error) => {
+          setScoreBug(!on)
+          say(e.message)
+        },
+      )
+  }
 
   // Join the channel's shared stream; leave it when switching or exiting.
   // Failures rejoin on their own (quickly at first, then every 15 s) so an
@@ -217,6 +277,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       held.current = false
       return
     }
+    if (menu) return // the menu's buttons handle the keys
     if (controls) {
       // The buttons have focus, so ◀▶ and OK work them. They're one row, so
       // ▲▼ still change channel.
@@ -342,6 +403,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           }}
           onBuffer={({ isBuffering }) => (isBuffering ? setBuffering(true) : playing())}
           onProgress={onProgress}
+          onAudioTracks={(e) => setAudios(e.audioTracks)}
+          onTextTracks={(e) => setTexts(e.textTracks)}
+          selectedAudioTrack={audio >= 0 ? { type: SelectedTrackType.INDEX, value: audio } : undefined}
+          selectedTextTrack={text >= 0 ? { type: SelectedTrackType.INDEX, value: text } : text === -1 ? { type: SelectedTrackType.DISABLED } : undefined}
           progressUpdateInterval={1000}
           onError={() => failRef.current('This channel stopped.')}
         />
@@ -362,7 +427,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         />
       ) : (
         // Something must hold focus or Android never hands the remote's keys to the app.
-        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!controls} focusable={!controls} />
+        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!controls && !menu} focusable={!controls && !menu} />
       )}
       {(buffering || reconnecting || id !== tuned) && !error && !paused && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {!!error && id === tuned && (
@@ -371,7 +436,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           <Text style={st.errorHint}>Retrying on its own{isPhone ? '' : ' · ▲▼ to pick another channel'}</Text>
         </View>
       )}
-      {(info || paused || !!error) && ch && !lock.locked && (
+      {(info || paused || !!error) && ch && !lock.locked && !menu && (
         <View style={[st.bar, isPhone && { left: insets.left + px(gutter), right: insets.right + px(gutter) }]}>
           <View style={st.row}>
             <Text style={st.number}>{ch.number}</Text>
@@ -402,6 +467,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
               {/* Always there, so pressing it never leaves the remote's focus on nothing. */}
               <Button small label="Go live" onPress={goLive} />
               <Button small label="Guide" onPress={openGuide} />
+              <Button small label="Options" onPress={openMenu} />
               {isPhone && (
                 <Button
                   small
@@ -418,6 +484,62 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           )}
         </View>
       )}
+      {menu && (
+        <View style={st.menu}>
+          {lights && (
+            <>
+              <Text style={st.menuTitle}>Game Lights</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small primary={!lights.off} preferFocus label="On" onPress={() => setLightsRunning(true)} />
+                <Button small primary={!!lights.off} label="Stopped" onPress={() => setLightsRunning(false)} />
+              </ScrollView>
+            </>
+          )}
+          {scoreBug !== null && (
+            <>
+              <Text style={st.menuTitle}>Score bug</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small primary={scoreBug} preferFocus={!lights} label="On" onPress={() => pickScoreBug(true)} />
+                <Button small primary={!scoreBug} label="Off" onPress={() => pickScoreBug(false)} />
+              </ScrollView>
+            </>
+          )}
+          {audios.length > 1 && (
+            <>
+              <Text style={st.menuTitle}>Audio</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {audios.map((a, i) => (
+                  <Button
+                    key={a.index}
+                    small
+                    primary={audio >= 0 ? audio === a.index : !!a.selected}
+                    label={a.title || a.language || `Track ${i + 1}`}
+                    onPress={() => setAudio(a.index)}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          )}
+          {texts.length > 0 && (
+            <>
+              <Text style={st.menuTitle}>Captions</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small primary={text === -1 || (text === -2 && !texts.some((t) => t.selected))} label="Off" onPress={() => setText(-1)} />
+                {texts.map((t, i) => (
+                  <Button key={t.index} small primary={text === t.index || (text === -2 && !!t.selected)} label={t.title || t.language || `Captions ${i + 1}`} onPress={() => setText(t.index)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+          <Text style={st.menuTitle}>Guide</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button small preferFocus={!lights && scoreBug === null} label="Open the guide" onPress={openGuide} />
+          </ScrollView>
+          {!!notice && <Text style={st.hint}>{notice}</Text>}
+          {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} /> : <Text style={st.menuHint}>Back closes this menu</Text>}
+        </View>
+      )}
+      {!menu && !!notice && <Text style={st.notice}>{notice}</Text>}
       {lock.layer}
     </View>
   )
@@ -443,4 +565,9 @@ const st = StyleSheet.create(scaled({
   row: { flexDirection: 'row', alignItems: 'center' },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 24, marginLeft: isPhone ? 0 : 160 },
   hint: { color: colors.muted, fontSize: font.small, marginTop: 20, marginLeft: 160 },
+  menu: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 50, backgroundColor: 'rgba(11,13,16,0.94)' },
+  menuTitle: { color: colors.muted, fontSize: font.small, fontWeight: '700', marginTop: 10, marginBottom: 6 },
+  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  menuHint: { color: colors.muted, fontSize: font.small, marginTop: 16 },
+  notice: { position: 'absolute', top: 40, right: 40, color: colors.text, fontSize: font.small, backgroundColor: 'rgba(20,24,29,0.92)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
 }))

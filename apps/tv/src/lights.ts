@@ -26,3 +26,22 @@ export function fetchGameLightsOn(): Promise<boolean> {
     () => false,
   )
 }
+
+/** This profile's Game Lights settings, as the plugin keeps them. */
+export interface GameLightsPerson {
+  enabled?: boolean
+  off?: boolean
+  [key: string]: unknown
+}
+
+/** This profile's Game Lights settings; null when the plugin isn't running or the profile hasn't turned it on. */
+export function fetchGameLights(): Promise<GameLightsPerson | null> {
+  return api.get<{ person?: GameLightsPerson }>('/api/plugins/game-lights/me/state').then(
+    (s) => (s.person?.enabled ? s.person : null),
+    () => null,
+  )
+}
+
+export function saveGameLights(person: GameLightsPerson): Promise<unknown> {
+  return api.put('/api/plugins/game-lights/me/settings', person)
+}
