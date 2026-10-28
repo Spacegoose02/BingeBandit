@@ -661,7 +661,7 @@ export interface Recommendation {
 export interface ScanStatus {
   libraryId: number
   running: boolean
-  phase: 'scanning' | 'metadata' | 'done'
+  phase: 'scanning' | 'metadata' | 'moving' | 'done'
   found: number
   processed: number
   started: number

@@ -10,6 +10,7 @@ import { EditItem } from './EditItem'
 import { Icon } from './Icon'
 import { KidsDialog, type KidState } from './KidsApprove'
 import { MatchDialog } from './MatchDialog'
+import { MoveDialog } from './MoveItem'
 import { RecommendDialog, useRecommendationsOn } from './Recommend'
 
 /**
@@ -125,7 +126,7 @@ function Popover({ anchor, onClose, children }: { anchor: HTMLElement; onClose: 
 }
 
 type Page = 'main' | 'playlists' | 'collections'
-type Dialog = null | 'recommend' | 'kids' | 'edit' | 'match'
+type Dialog = null | 'recommend' | 'kids' | 'edit' | 'match' | 'move'
 
 /**
  * The poster menu, like the TV app's long-press one: play, watch together,
@@ -226,6 +227,19 @@ export function ItemMenu({ item, onChanged }: { item: Item; onChanged: (it: Item
             onChanged={reload}
             onSaved={() => {
               setDialog(null)
+              reload()
+            }}
+          />,
+        )}
+      {dialog === 'move' &&
+        top &&
+        portal(
+          <MoveDialog
+            item={top}
+            onClose={() => setDialog(null)}
+            onMoved={(msg) => {
+              setDialog(null)
+              setToast(msg)
               reload()
             }}
           />,
@@ -474,6 +488,11 @@ function ItemMenuBody({
           {(it.kind === 'movie' || it.kind === 'show') && (
             <button role="menuitem" disabled={!detail} onClick={() => open('match')}>
               <Icon name="search" size={16} /> Fix match…
+            </button>
+          )}
+          {(it.kind === 'movie' || it.kind === 'show') && (
+            <button role="menuitem" onClick={() => open('move')}>
+              <Icon name="folder" size={16} /> Move to library…
             </button>
           )}
           {it.kind !== 'episode' && (

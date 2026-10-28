@@ -183,27 +183,36 @@ func plainShowKey(title string, year int) string {
 // plain key, which made them one show. The plainest name (fewest symbols,
 // then shortest) keeps the plain key, so a show already in the library stays
 // the same item, and each other folder adds its name to its key. Folders with
-// no such twin aren't listed and use the plain key.
-func folderKeys(roots []string) map[string]string {
+// no such twin aren't listed and use the plain key. extra names folders
+// counted as if they were there already (one about to be moved in).
+func folderKeys(roots []string, extra ...string) map[string]string {
 	byKey := map[string][]string{}
 	seen := map[string]bool{}
+	add := func(name string) {
+		if seen[name] {
+			return
+		}
+		seen[name] = true
+		title, year, _ := parseTitleYear(name)
+		if title == "" {
+			return
+		}
+		k := plainShowKey(title, year)
+		byKey[k] = append(byKey[k], name)
+	}
 	for _, root := range roots {
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			continue
 		}
 		for _, e := range entries {
-			if !e.IsDir() || seen[e.Name()] {
-				continue
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				add(e.Name())
 			}
-			seen[e.Name()] = true
-			title, year, _ := parseTitleYear(e.Name())
-			if title == "" {
-				continue
-			}
-			k := plainShowKey(title, year)
-			byKey[k] = append(byKey[k], e.Name())
 		}
+	}
+	for _, name := range extra {
+		add(name)
 	}
 	out := map[string]string{}
 	for k, names := range byKey {

@@ -144,7 +144,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 }
 
 export function ScanBadge({ scan }: { scan: ScanStatus }) {
-  const label = scan.phase === 'metadata' ? 'Fetching metadata' : 'Scanning'
+  const label = scan.phase === 'metadata' ? 'Fetching metadata' : scan.phase === 'moving' ? 'Moving a title' : 'Scanning'
   return (
     <span className="pill warn">
       <Icon name="refresh" size={12} className="spin" /> {label} {scan.found ? `${scan.processed}/${scan.found}` : ''}

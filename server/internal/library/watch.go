@@ -182,6 +182,9 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 		return
 	}
 	for _, l := range libs {
+		if root := rootFor(l, ev.Name); root != "" && hiddenBelow(root, ev.Name) {
+			continue // e.g. a title being copied in by Move
+		}
 		switch {
 		case rootFor(l, dir) != "":
 			w.queue(l.ID, dir)
@@ -223,6 +226,21 @@ func (w *watcher) flush(libraryID int64) {
 			w.queue(libraryID, d)
 		}
 	}
+}
+
+// hiddenBelow says whether a path below root is in (or is) a dot folder,
+// which scans skip.
+func hiddenBelow(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	if err != nil || rel == "." {
+		return false
+	}
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 // collapse drops folders already covered by a parent in the list.
