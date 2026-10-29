@@ -64,11 +64,13 @@ export function PosterCard({
   onMembership?: () => void
 }) {
   const [changed, setChanged] = useState<Item | null>(null)
+  const [deleted, setDeleted] = useState(false)
   useEffect(() => setChanged(null), [given])
   const item = changed ?? given
   const poster = img(item.poster || item.showPoster, 'w342')
   const pick = useMemo<Picked>(() => ({ key: `i${item.id}`, kind: 'item', item, reload: onMembership }), [item, onMembership])
   const sel = useSelectable(pick)
+  if (deleted) return null
   return (
     <div className={`poster-card has-menu${sel?.selected ? ' selected' : ''}`} id={domId} {...sel?.cardProps}>
       <Link to={`/item/${item.id}`} className="poster-link">
@@ -83,7 +85,7 @@ export function PosterCard({
         <div className="card-title" title={item.title}>{item.title}</div>
         <div className="card-sub">{subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '')}</div>
       </Link>
-      <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} />
+      <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} onDeleted={() => setDeleted(true)} />
       {sel?.circle}
     </div>
   )

@@ -135,6 +135,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .btn-primary:hover { background: #5eead4; color: var(--accent-ink); }
 .btn-glass { background: rgba(255, 255, 255, 0.08); border-color: var(--border); backdrop-filter: blur(10px); }
 .btn-glass:hover { background: rgba(255, 255, 255, 0.15); color: var(--text); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 85%, #000); color: #fff; }
 .btn-glass.danger:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
 .btn-block { width: 100%; padding: 12px; }
 .btn-sm { padding: 7px 13px; font-size: 13px; }

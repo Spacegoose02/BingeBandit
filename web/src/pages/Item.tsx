@@ -6,6 +6,7 @@ import { PersonCard, PosterCard } from '../components/Cards'
 import { AddToPlaylist, WatchlistButton } from '../components/AddToPlaylist'
 import { EditItem } from '../components/EditItem'
 import { MatchDialog } from '../components/MatchDialog'
+import { DeleteDialog } from '../components/DeleteItem'
 import { locationPath, MoveDialog, type ItemLocation } from '../components/MoveItem'
 import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
@@ -33,7 +34,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
   const [fileIdx, setFileIdx] = useState(0)
   const [trailer, setTrailer] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [dialog, setDialog] = useState<null | 'edit' | 'match' | 'move'>(null)
+  const [dialog, setDialog] = useState<null | 'edit' | 'match' | 'move' | 'delete'>(null)
   const [note, setNote] = useState('')
   // A movie's path shows with its file; a show's folder is shown here.
   const { data: where, reload: reloadWhere } = useApi<ItemLocation>(user?.isAdmin && item.kind === 'show' ? locationPath(item.id) : null)
@@ -183,6 +184,11 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="refresh" size={18} className={busy ? 'spin' : ''} />
                 </button>
               )}
+              {user?.isAdmin && (
+                <button className="btn btn-glass icon-only danger" onClick={() => setDialog('delete')} title="Delete from server">
+                  <Icon name="trash" size={18} />
+                </button>
+              )}
             </div>
             {playable && progressFraction(item) > 0 && (
               <div className="progress inline">
@@ -282,6 +288,27 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
             // Matching a movie to one already in the library merged the two.
             if (kept && kept !== item.id) nav(`/item/${kept}`, { replace: true })
             else reload()
+          }}
+        />
+      )}
+
+      {dialog === 'delete' && (
+        <DeleteDialog
+          item={item}
+          onClose={() => setDialog(null)}
+          onDeleted={async () => {
+            // Back to the season or show it was in, if that's still there.
+            for (const id of [season?.id, show?.id]) {
+              if (!id) continue
+              try {
+                await api.get(`/api/items/${id}`)
+                nav(`/item/${id}`, { replace: true })
+                return
+              } catch {
+                // gone with it
+              }
+            }
+            nav(`/library/${item.libraryId}`, { replace: true })
           }}
         />
       )}
