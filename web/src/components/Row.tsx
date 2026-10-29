@@ -4,7 +4,8 @@ import { useBackScrollLeft } from '../backState'
 import { Icon } from './Icon'
 
 /** Horizontally scrolling shelf with arrow buttons on hover. With `to`, the
- *  heading links there and a "See all" link sits on the right. */
+ *  heading links there, a "See all" link sits on the right and a blank
+ *  "See all" poster ends the row. */
 export function Row({ title, children, action, to }: { title: string; children: ReactNode; action?: ReactNode; to?: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   useBackScrollLeft(`row:${title}`, scroller, Children.count(children) > 0)
@@ -24,6 +25,15 @@ export function Row({ title, children, action, to }: { title: string; children: 
         </button>
         <div className="row-scroller" ref={scroller}>
           {children}
+          {to && Children.count(children) > 0 && (
+            <div className="poster-card see-all-card">
+              <Link to={to} className="poster-link" aria-label={`See all of ${title}`}>
+                <div className="poster-frame see-all-frame">
+                  <span>See all</span>
+                </div>
+              </Link>
+            </div>
+          )}
         </div>
         <button className="row-arrow right" onClick={() => scroll(1)} aria-label="Scroll right">
           <Icon name="next" size={28} />

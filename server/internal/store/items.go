@@ -294,14 +294,29 @@ func (s *Store) LibraryLetters(uid, libraryID int64, hide []int64) ([]Letter, er
 }
 
 // RecentlyAdded returns movies by add date, or shows ordered by their newest
-// episode, from the libraries the user pinned.
+// episode, from the libraries the user pinned, going back recently_added_days.
 func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error) {
-	order := "i.added_at DESC"
+	added := addedAt(kind)
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` AND `+added+` >= @since ORDER BY `+added+` DESC LIMIT @limit`,
+		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit), sql.Named("since", s.recentSince()))
+}
+
+// addedAt is when a movie was added, or a show's newest episode.
+func addedAt(kind string) string {
 	if kind == "show" {
-		order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
+		return "COALESCE((SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id), i.added_at)"
 	}
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` ORDER BY `+order+` LIMIT @limit`,
-		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
+	return "i.added_at"
+}
+
+// recentSince is the oldest add that still counts for Recently Added (the
+// recently_added_days setting; 0 = any).
+func (s *Store) recentSince() int64 {
+	days, _ := strconv.Atoi(s.Setting(SettingRecentDays))
+	if days <= 0 {
+		return 0
+	}
+	return now() - int64(days)*86400
 }
 
 // TrailerCandidates are the newest movies the user can see and hasn't
