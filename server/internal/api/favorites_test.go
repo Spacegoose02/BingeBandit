@@ -64,7 +64,9 @@ func TestFavorites(t *testing.T) {
 	if len(favs) != 3 {
 		t.Fatalf("favorites: %d, want 3", len(favs))
 	}
-	var it struct{ Item store.Item `json:"item"` }
+	var it struct {
+		Item store.Item `json:"item"`
+	}
 	call("sam", "GET", "/api/items/"+itoa(episode), "", &it)
 	if !it.Item.Favorite {
 		t.Error("the episode should say it's a favorite")
