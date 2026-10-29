@@ -339,6 +339,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/collections/{id}/visibility", s.setCollectionVisibility)
 				r.Put("/collections/{id}/artwork", s.setCollectionArtwork)
 				r.Post("/collections/{id}/artwork", s.setCollectionArtwork)
+				r.Get("/collections/{id}/tpdb", s.collectionTPDbSearch)
 				r.Post("/libraries/{id}/kometa", s.importKometa)
 				r.Get("/libraries/{id}/rows", s.libraryRows)
 				r.Put("/libraries/{id}/rows", s.setLibraryRows)
