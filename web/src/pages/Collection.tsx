@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
+import { readBack, writeBack } from '../backState'
 import { useAuth } from '../auth'
 import { PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
@@ -25,8 +26,11 @@ export default function CollectionPage() {
   const { id } = useParams()
   const { user } = useAuth()
   const nav = useNavigate()
+  const { key } = useLocation()
   // The first page comes with the collection; the rest load as you scroll.
-  const { data, error, reload, setData } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${PAGE}`)
+  // Back to it loads as many as were showing, so the scroll position is there.
+  const first = useMemo(() => Math.min(500, Math.max(PAGE, readBack<number>(key, 'loaded') ?? 0)), [id, key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { data, error, reload, setData } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${first}`)
   const [more, setMore] = useState<Item[]>([])
   const [ended, setEnded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -40,6 +44,9 @@ export default function CollectionPage() {
 
   const items = data ? [...data.items, ...more] : []
   const total = data?.total ?? 0
+  useEffect(() => {
+    if (items.length) writeBack(key, 'loaded', items.length)
+  }, [key, items.length])
   useEffect(() => {
     const el = sentinel.current
     if (!el || !data || ended || items.length >= total) return

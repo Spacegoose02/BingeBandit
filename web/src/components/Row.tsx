@@ -1,11 +1,13 @@
-import { useRef, type ReactNode } from 'react'
+import { Children, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useBackScrollLeft } from '../backState'
 import { Icon } from './Icon'
 
 /** Horizontally scrolling shelf with arrow buttons on hover. With `to`, the
  *  heading links there and a "See all" link sits on the right. */
 export function Row({ title, children, action, to }: { title: string; children: ReactNode; action?: ReactNode; to?: string }) {
   const scroller = useRef<HTMLDivElement>(null)
+  useBackScrollLeft(`row:${title}`, scroller, Children.count(children) > 0)
   const scroll = (dir: number) => {
     const el = scroller.current
     if (el) el.scrollBy({ left: dir * el.clientWidth * 0.85, behavior: 'smooth' })
