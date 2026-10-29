@@ -6,7 +6,8 @@ import "database/sql"
 // approved for kids, either one at a time or by the channel's group. Parents
 // can also approve single movies and shows for a kid from libraries the kid
 // can't browse, one at a time (kid_titles) or a whole collection at once
-// (kid_collections); visible in items.go honours both.
+// (kid_collections), less titles kept out of those collections
+// (kid_blocked); visible in items.go honours all three.
 
 // kidChannels is a condition on channels c for the user bound to its one
 // parameter: anyone who isn't a kid gets every channel (so does uid 0, used
@@ -89,7 +90,8 @@ func (s *Store) SetKidGroup(name string, on bool) error {
 // for them.
 func (s *Store) KidTitles(uid int64, kind string) ([]*Item, error) {
 	return s.queryItems(listSelect+` WHERE i.kind = @kind AND (i.id IN (SELECT item_id FROM kid_titles WHERE user_id = @uid)
-			OR EXISTS (SELECT 1 FROM kid_collections kc JOIN collections c ON c.id = kc.collection_id WHERE kc.user_id = @uid AND `+memberOf+`))
+			OR (EXISTS (SELECT 1 FROM kid_collections kc JOIN collections c ON c.id = kc.collection_id WHERE kc.user_id = @uid AND `+memberOf+`)
+				AND i.id NOT IN (SELECT item_id FROM kid_blocked WHERE user_id = @uid)))
 		ORDER BY i.sort_title COLLATE NOCASE, i.id`, uidArg(uid), sql.Named("kind", kind))
 }
 
@@ -119,6 +121,56 @@ func (s *Store) SetKidTitle(userID, itemID, by int64, on bool) error {
 		return err
 	}
 	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_titles (user_id, item_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, itemID, by, now())
+	return err
+}
+
+// KidTitleCollections maps each kid with a collection approved for them
+// that has this title to that collection's name, and lists the kids it's
+// kept out for.
+func (s *Store) KidTitleCollections(itemID int64) (map[int64]string, map[int64]bool, error) {
+	rows, err := s.db.Query(`SELECT kc.user_id, MIN(c.name) FROM kid_collections kc JOIN collections c ON c.id = kc.collection_id
+		JOIN items i ON i.id = ? WHERE `+memberOf+` GROUP BY kc.user_id`, itemID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	via := map[int64]string{}
+	for rows.Next() {
+		var uid int64
+		var name string
+		if err := rows.Scan(&uid, &name); err != nil {
+			return nil, nil, err
+		}
+		via[uid] = name
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	rows.Close()
+	rows, err = s.db.Query(`SELECT user_id FROM kid_blocked WHERE item_id = ?`, itemID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	blocked := map[int64]bool{}
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, nil, err
+		}
+		blocked[uid] = true
+	}
+	return via, blocked, rows.Err()
+}
+
+// SetKidBlocked keeps a title out for a kid even when a collection approved
+// for them has it (by is who did it), or lets it back in.
+func (s *Store) SetKidBlocked(userID, itemID, by int64, on bool) error {
+	if !on {
+		_, err := s.db.Exec(`DELETE FROM kid_blocked WHERE user_id = ? AND item_id = ?`, userID, itemID)
+		return err
+	}
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO kid_blocked (user_id, item_id, added_by, created_at) VALUES (?, ?, ?, ?)`, userID, itemID, by, now())
 	return err
 }
 
