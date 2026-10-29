@@ -99,6 +99,24 @@ func TestTPDbSearchEmptyIsList(t *testing.T) {
 	}
 }
 
+// Collections search ThePosterDB's collections section.
+func TestTPDbSearchCollectionSection(t *testing.T) {
+	var section string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/search" {
+			section = r.URL.Query().Get("section")
+		}
+		w.Write([]byte("<html><body>No results</body></html>"))
+	}))
+	defer srv.Close()
+	if _, err := NewTPDb(srv.URL, t.TempDir()).Search(context.Background(), "collection", "Marvel", 0); err != nil {
+		t.Fatal(err)
+	}
+	if section != "collections" {
+		t.Fatalf("section = %q, want collections", section)
+	}
+}
+
 // Trimmed from a real title page (2026-10-27): single-quoted poster ids, and
 // the preview image just before each poster's overlay.
 const tpdbRealTitlePage = `<div class="col-6 col-lg-2 p-1"><div class="hovereffect rounded-poster"><picture >

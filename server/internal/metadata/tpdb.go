@@ -188,7 +188,7 @@ func (t *TPDb) get(ctx context.Context, u string) (string, error) {
 }
 
 // Search finds titles on ThePosterDB and the posters on the best few. kind is
-// "movie" or "show"; year (0 if unknown) puts titles from that year first. A
+// "movie", "show" or "collection"; year (0 if unknown) puts titles from that year first. A
 // pasted ThePosterDB link is opened directly instead of searched.
 func (t *TPDb) Search(ctx context.Context, kind, query string, year int) ([]TPDbTitle, error) {
 	query = strings.TrimSpace(query)
@@ -234,8 +234,11 @@ func (t *TPDb) search(ctx context.Context, kind, query string, year int) ([]TPDb
 	}
 
 	section := "movies"
-	if kind == "show" {
+	switch kind {
+	case "show":
 		section = "shows"
+	case "collection":
+		section = "collections"
 	}
 	page, err := t.get(ctx, fmt.Sprintf("%s/search?term=%s&section=%s", t.base, url.QueryEscape(query), section))
 	if err != nil {

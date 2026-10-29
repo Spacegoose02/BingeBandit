@@ -213,6 +213,31 @@ func (s *Server) tpdbSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"query": q, "titles": titles})
 }
 
+// collectionTPDbSearch looks a collection up on ThePosterDB (or opens a pasted
+// ThePosterDB link), like tpdbSearch does for movies and shows.
+func (s *Server) collectionTPDbSearch(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	c, err := s.Store.Collection(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		q = c.Name
+	}
+	titles, err := s.TPDb.Search(r.Context(), "collection", q, 0)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"query": q, "titles": titles})
+}
+
 // tpdbThumb serves a small copy of a ThePosterDB poster for the picker.
 func (s *Server) tpdbThumb(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "poster")

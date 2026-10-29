@@ -4,6 +4,7 @@ import { chartsFor } from '../charts'
 import { useApi } from '../hooks'
 import type { Collection, CollectionMode, CollectionSort } from '../types'
 import { Modal } from './Modal'
+import { TPDbSearch } from './TPDbSearch'
 
 interface Facets {
   labels: string[]
@@ -178,6 +179,7 @@ export function CollectionEditor({
                   </button>
                 )}
               </div>
+              <TPDbSearch endpoint={`/api/admin/collections/${collection.id}/tpdb`} title={collection.name} busy={posterBusy} onPick={(url) => changePoster({ url })} />
             </div>
           </div>
         )}
