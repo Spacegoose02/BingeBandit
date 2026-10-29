@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { img } from '../api'
 import { episodeLabel, progressFraction, smartRuleText } from '../format'
 import type { Collection, Item } from '../types'
 import { CollectionMenu, ItemMenu } from './CardMenu'
 import { Icon } from './Icon'
+import { useSelectable, type Picked } from './Selection'
 
 /**
  * Card artwork. A poster that fails to load (the server couldn't reach TMDB
@@ -66,8 +67,10 @@ export function PosterCard({
   useEffect(() => setChanged(null), [given])
   const item = changed ?? given
   const poster = img(item.poster || item.showPoster, 'w342')
+  const pick = useMemo<Picked>(() => ({ key: `i${item.id}`, kind: 'item', item, reload: onMembership }), [item, onMembership])
+  const sel = useSelectable(pick)
   return (
-    <div className="poster-card has-menu" id={domId}>
+    <div className={`poster-card has-menu${sel?.selected ? ' selected' : ''}`} id={domId} {...sel?.cardProps}>
       <Link to={`/item/${item.id}`} className="poster-link">
         <div className="poster-frame">
           <Art src={poster} label={item.title} />
@@ -81,6 +84,7 @@ export function PosterCard({
         <div className="card-sub">{subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '')}</div>
       </Link>
       <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} />
+      {sel?.circle}
     </div>
   )
 }
@@ -108,8 +112,10 @@ export function WideCard({ item }: { item: Item }) {
 
 export function CollectionCard({ collection, libraryKind, onChanged }: { collection: Collection; libraryKind?: string; onChanged?: () => void }) {
   const poster = img(collection.poster, 'w342')
+  const pick = useMemo<Picked>(() => ({ key: `c${collection.id}`, kind: 'collection', collection, reload: onChanged }), [collection, onChanged])
+  const sel = useSelectable(pick)
   return (
-    <div className="poster-card has-menu">
+    <div className={`poster-card has-menu${sel?.selected ? ' selected' : ''}`} {...sel?.cardProps}>
       <Link to={`/collection/${collection.id}`} className="poster-link">
         <div className="poster-frame collection-frame">
           <Art src={poster} label={collection.name} />
@@ -124,6 +130,7 @@ export function CollectionCard({ collection, libraryKind, onChanged }: { collect
         <div className="card-sub">{collection.itemCount} {collection.itemCount === 1 ? 'item' : 'items'}</div>
       </Link>
       <CollectionMenu collection={collection} libraryKind={libraryKind} onChanged={onChanged} />
+      {sel?.circle}
     </div>
   )
 }

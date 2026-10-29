@@ -333,6 +333,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Get("/match", s.matchSearch)
 
 				r.Get("/libraries/{id}/labels", s.libraryLabels)
+				r.Get("/collection-labels", s.collectionLabels)
+				r.Post("/bulk", s.bulkEdit)
 				r.Get("/libraries/{id}/facets", s.libraryFacets)
 				r.Post("/libraries/{id}/collections", s.createCollection)
 				r.Put("/collections/{id}", s.updateCollection)

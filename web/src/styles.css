@@ -648,7 +648,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .collection-frame::after { content: ''; position: absolute; inset: auto 6% -6px 6%; height: 6px; border-radius: 0 0 8px 8px; background: var(--surface-3); }
 .collection-frame { overflow: visible; }
 .collection-frame img, .collection-frame .poster-fallback { border-radius: var(--radius); }
-.badge-smart { position: absolute; left: 8px; top: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: rgba(11, 13, 16, 0.8); color: var(--accent); }
+.badge-smart { position: absolute; left: 40px; top: 10px; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: rgba(11, 13, 16, 0.8); color: var(--accent); }
 .detail-backdrop.short, .detail-shade.short { height: 50vh; }
 .collection-head { display: flex; flex-direction: column; gap: 6px; max-width: 760px; }
 .collection-head .muted svg { display: inline; vertical-align: -2px; }
@@ -1222,3 +1222,24 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .score-bug-detail { padding: 0 10px; color: rgba(255, 255, 255, 0.7); white-space: nowrap; }
 @media (max-width: 600px) { .score-bug-detail { display: none; } }
 .player .score-bug { top: 76px; }
+
+/* Multi-select: the circle in a poster's top left corner, and the bar along the bottom. */
+.card-select { position: absolute; left: 8px; top: 8px; z-index: 3; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border-radius: 99px; border: 2px solid rgba(255, 255, 255, 0.9); background: rgba(11, 13, 16, 0.45); color: #fff; opacity: 0; transition: opacity 0.15s, background 0.15s; cursor: pointer; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5); }
+.card-select svg { stroke-width: 3; }
+.card-select:hover { background: rgba(11, 13, 16, 0.7); }
+.card-select.on { background: var(--accent); border-color: var(--accent); }
+.poster-card:hover .card-select, .card-select:focus-visible, .selecting .card-select { opacity: 1; }
+@media (hover: none) { .card-select { opacity: 0.85; } }
+.poster-card.selected .poster-frame { box-shadow: 0 0 0 3px var(--accent), 0 6px 18px rgba(0, 0, 0, 0.35); }
+.selecting .poster-card .card-menu-btn, .selecting .poster-card .poster-hover { display: none; }
+.selecting .poster-card .poster-frame { transform: none; }
+.select-bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 55; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; max-width: calc(100vw - 32px); padding: 8px 10px 8px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55); }
+.select-count { font-weight: 700; margin-right: 6px; }
+.select-note { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 55; padding: 8px 14px; border-radius: 10px; background: rgba(11, 13, 16, 0.92); font-size: 13px; pointer-events: none; }
+.bulk-edit { display: flex; flex-direction: column; gap: 14px; }
+.bulk-edit section { display: flex; flex-direction: column; gap: 12px; }
+.bulk-edit h4 { margin: 4px 0 0; }
+.bulk-edit .field > span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+.bulk-lists { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; max-height: 50vh; overflow-y: auto; }
+.bulk-list { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.bulk-list:hover { background: rgba(255, 255, 255, 0.08); }
