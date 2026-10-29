@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached, image, writesDone } from '../api'
-import { Button, Center, CollectionCard, Focusable, PosterCard } from '../components'
+import { Button, Center, Focusable, PosterCard } from '../components'
 import { useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Credit, Item, ItemDetail } from '../types'
@@ -136,12 +136,14 @@ export default function Details({ id }: { id: number }) {
         )}
         {d.collections?.map(({ collection, items }) => (
           <React.Fragment key={collection.id}>
-            <Text style={st.section}>{collection.name}</Text>
+            {/* The row holds only the collection's titles; its name opens the whole collection. */}
+            <Focusable onPress={() => nav.push({ name: 'collection', id: collection.id })} style={st.sectionLink}>
+              <Text style={[st.section, st.sectionLinkText]}>{collection.name} ›</Text>
+            </Focusable>
             <ScrollView horizontal contentContainerStyle={st.hlist}>
               {items.map((m) => (
                 <PosterCard key={m.id} item={m} onPress={() => nav.push({ name: 'details', id: m.id })} />
               ))}
-              <CollectionCard collection={collection} onPress={() => nav.push({ name: 'collection', id: collection.id })} />
             </ScrollView>
           </React.Fragment>
         ))}
@@ -194,6 +196,8 @@ const st = StyleSheet.create(scaled({
   muted: { color: colors.muted, fontSize: font.body, marginRight: 20 },
   error: { color: colors.danger, fontSize: font.body },
   section: { color: colors.text, fontSize: font.heading, fontWeight: '800', marginTop: 20, marginBottom: 10 },
+  sectionLink: { alignSelf: 'flex-start', borderRadius: 10, paddingHorizontal: 10, marginLeft: -10, marginTop: 20, marginBottom: 10 },
+  sectionLinkText: { marginTop: 0, marginBottom: 0 },
   hlist: { paddingVertical: 10 },
   episode: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(20,24,29,0.85)', padding: 20, marginBottom: 16, maxWidth: 1600 },
   epThumb: { width: isPhone ? 240 : 320, height: isPhone ? 135 : 180, marginRight: isPhone ? 20 : 30 },

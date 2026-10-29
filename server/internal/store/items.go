@@ -332,6 +332,7 @@ func (s *Store) continueSince() int64 {
 }
 
 type ShowProgress struct {
+	ItemID    int64 // the finished episode
 	ShowID    int64
 	Season    int
 	Episode   int
@@ -340,7 +341,7 @@ type ShowProgress struct {
 
 // RecentlyFinishedShows reports, per show, the most recently completed episode.
 func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, error) {
-	rows, err := s.db.Query(`SELECT e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
+	rows, err := s.db.Query(`SELECT e.id, e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
 		FROM watch_state w JOIN items e ON e.id = w.item_id
 		WHERE w.user_id = ? AND w.watched = 1 AND e.kind = 'episode' AND w.updated_at >= ?
 			AND NOT EXISTS (SELECT 1 FROM library_pins lp WHERE lp.user_id = w.user_id AND lp.library_id = e.library_id AND lp.pinned = 0)
@@ -352,7 +353,7 @@ func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, err
 	var out []ShowProgress
 	for rows.Next() {
 		var p ShowProgress
-		if err := rows.Scan(&p.ShowID, &p.Season, &p.Episode, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ItemID, &p.ShowID, &p.Season, &p.Episode, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -390,6 +391,14 @@ func (s *Store) UpNext(uid, showID int64, season, episode int) (*Item, error) {
 		return next, nil
 	}
 	return unwatched, err
+}
+
+// FirstUnwatchedEpisode is the show's earliest regular-season episode the
+// user hasn't watched.
+func (s *Store) FirstUnwatchedEpisode(uid, showID int64) (*Item, error) {
+	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0
+		AND COALESCE(w.watched, 0) = 0 AND `+visible+` ORDER BY i.season_number, i.episode_number LIMIT 1`,
+		uidArg(uid), sql.Named("show", showID)))
 }
 
 func (s *Store) Search(uid int64, q string, limit int) ([]*Item, error) {
