@@ -25,7 +25,7 @@ type Merged struct {
 // Tables whose rows follow a merged item to the one kept. A row the kept
 // item already has (the same user's watch state, say) stays with the
 // duplicate and goes when it is deleted.
-var mergeTables = []string{"watch_state", "watchlist", "collection_items", "playlist_items", "markers",
+var mergeTables = []string{"watch_state", "watchlist", "favorites", "collection_items", "playlist_items", "markers",
 	"plays", "playout_items", "external_ratings", "recommendations"}
 
 type mergeCandidate struct {

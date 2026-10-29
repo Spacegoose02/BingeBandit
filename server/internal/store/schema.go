@@ -855,4 +855,14 @@ CREATE TABLE kid_blocked (
 );
 CREATE INDEX kid_blocked_item ON kid_blocked(item_id);
 `,
+	// 50: each person's favorite movies, shows and episodes, added from the
+	// hold (or ⋮) menu and shown under Favorites.
+	`
+CREATE TABLE favorites (
+	user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+`,
 }

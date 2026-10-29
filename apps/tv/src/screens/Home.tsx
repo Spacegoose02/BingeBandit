@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { Icon, type IconName } from '../icons'
-import { homeBack, showLiveGuide, useNav, useScreen } from '../nav'
+import { favoritesChanged, homeBack, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -18,14 +18,15 @@ import Sports from './Sports'
 // Pinned libraries sit between Search and Live TV, as `lib:<id>`. More lists
 // every library to open or pin; an unpinned one opened from there joins the
 // menu while it's open.
-type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'discover' | 'settings' | 'more' | `lib:${number}`
-// Discover stays under More until pinned (pinnedTabs), so it never lands in a saved menu by surprise.
+type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'discover' | 'favorites' | 'settings' | 'more' | `lib:${number}`
+// Discover and Favorites stay under More until pinned (pinnedTabs), so they never land in a saved menu by surprise.
 type MenuPrefs = { hiddenTabs?: HideableTab[] | null; pinnedTabs?: string[] | null }
+const optIn: HideableTab[] = ['discover', 'favorites']
 const hiddenFrom = (p?: MenuPrefs | null): HideableTab[] => [
-  ...(p?.hiddenTabs ?? ['sports']).filter((t) => t !== 'discover'),
-  ...(p?.pinnedTabs?.includes('discover') ? [] : (['discover'] as HideableTab[])),
+  ...(p?.hiddenTabs ?? ['sports']).filter((t) => !optIn.includes(t)),
+  ...optIn.filter((t) => !p?.pinnedTabs?.includes(t)),
 ]
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', discover: 'Discover', settings: 'Settings', more: 'More' }
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', discover: 'Discover', favorites: 'Favorites', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -33,7 +34,7 @@ let lastTab: Tab = 'home'
 let updateCheck: Promise<AppRelease | null> | null = null
 
 
-const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', discover: 'discover', settings: 'settings', more: 'more' }
+const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', discover: 'discover', favorites: 'favorites', settings: 'settings', more: 'more' }
 
 /** What holding OK on a menu entry pins or unpins: a library, or the Sports or Live TV tab. */
 interface Pinnable {
@@ -167,7 +168,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const [hidden, setHidden] = useState<HideableTab[]>(() => hiddenFrom(cached<MenuPrefs>('/api/me/prefs')))
   useEffect(() => {
     api.get<MenuPrefs>('/api/me/prefs').then((p) => {
-      const h = hiddenFrom(p) // Sports and Discover start under More
+      const h = hiddenFrom(p) // Sports, Discover and Favorites start under More
       setHidden(h)
       if ((h as Tab[]).includes(lastTab)) setTab('home')
     }, () => undefined)
@@ -182,8 +183,8 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       .then((p) =>
         api.put('/api/me/prefs', {
           ...p,
-          hiddenTabs: next.filter((x) => x !== 'discover'),
-          pinnedTabs: next.includes('discover') ? [] : ['discover'],
+          hiddenTabs: next.filter((x) => !optIn.includes(x)),
+          pinnedTabs: optIn.filter((x) => !next.includes(x)),
         }),
       )
       .then(() => api.get('/api/me/prefs'))
@@ -224,6 +225,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ...(shows('sports') ? (['sports'] as Tab[]) : []),
     ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
     ...(shows('discover') ? (['discover'] as Tab[]) : []),
+    ...(shows('favorites') ? (['favorites'] as Tab[]) : []),
     ...(libraries.length && shows('more') ? (['more'] as Tab[]) : []),
     'settings',
   ]
@@ -245,7 +247,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     )
     // Phones: a bottom tab bar you tap. TVs: a side or top menu that switches as focus moves along it.
     const lib = libraries.find((l) => `lib:${l.id}` === t)
-    const hold = lib ? () => setPinMenu(pinLibrary(lib)) : t === 'sports' || t === 'live' || t === 'discover' ? () => setPinMenu(pinTab(t)) : undefined
+    const hold = lib ? () => setPinMenu(pinLibrary(lib)) : t === 'sports' || t === 'live' || t === 'discover' || t === 'favorites' ? () => setPinMenu(pinTab(t)) : undefined
     if (side)
       return (
         <Focusable
@@ -326,7 +328,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'more' && (
         <More
           libraries={libraries}
-          tabs={(liveTV ? (['sports', 'live', 'discover'] as HideableTab[]) : (['sports', 'discover'] as HideableTab[])).map((t) => ({ tab: t, ...pinTab(t) }))}
+          tabs={(liveTV ? (['sports', 'live', 'discover', 'favorites'] as HideableTab[]) : (['sports', 'discover', 'favorites'] as HideableTab[])).map((t) => ({ tab: t, ...pinTab(t) }))}
           onOpen={(t) => setTab(t)}
           onHold={setPinMenu}
           pinLibrary={pinLibrary}
@@ -334,6 +336,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       )}
       {tab === 'sports' && <Sports />}
       {tab === 'discover' && <Discover />}
+      {tab === 'favorites' && <Favorites />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
@@ -341,7 +344,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           menu={{
             libraries,
             hidden,
-            tabs: liveTV ? ['sports', 'live', 'discover', 'more'] : ['sports', 'discover', 'more'],
+            tabs: liveTV ? ['sports', 'live', 'discover', 'favorites', 'more'] : ['sports', 'discover', 'favorites', 'more'],
             togglePin,
             toggleTab,
             position,
@@ -593,6 +596,45 @@ function KidsTitles({ kind }: { kind: 'movie' | 'show' }) {
               <View key={it.id} style={st.gridCell}>
                 <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
                 <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </TVFocusGuideView>
+  )
+}
+
+/** The movies, shows and episodes this person favorited from the hold menu. */
+function Favorites() {
+  const nav = useNav()
+  const [items, setItems] = useState<Item[] | null>(() => cached<Item[]>('/api/favorites') ?? null)
+  const [error, setError] = useState('')
+  const load = useCallback(() => {
+    api.get<Item[]>('/api/favorites').then(setItems, (e) => setError(e.message))
+  }, [])
+  const { returns } = useScreen()
+  useEffect(load, [load, returns])
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(favoritesChanged, load)
+    return () => sub.remove()
+  }, [load])
+  // Like Approved Movies/Shows, the guide spans the screen so Right from the side menu lands on a poster.
+  return (
+    <TVFocusGuideView style={st.flex} autoFocus>
+      <ScrollView contentContainerStyle={st.search}>
+        {!!error && <Text style={st.error}>{error}</Text>}
+        {items && items.length === 0 && (
+          <Text style={st.mutedLeft}>Nothing here yet. {isPhone ? 'Hold' : 'Hold OK on'} a movie, show or episode and pick Add to favorites.</Text>
+        )}
+        {items && items.length > 0 && (
+          <View style={st.grid}>
+            {items.map((it) => (
+              <View key={it.id} style={st.gridCell}>
+                <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
+                <Text style={st.gridTitle} numberOfLines={1}>
+                  {it.kind === 'episode' ? `${it.showTitle ?? ''} · S${it.seasonNumber} E${it.episodeNumber}` : it.title}
+                </Text>
               </View>
             ))}
           </View>

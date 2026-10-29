@@ -4,10 +4,10 @@ import { useAuth } from '../auth'
 import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
 import { Avatar } from './Avatar'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
-import { PinsDialog, savePins } from './Pins'
+import { PinsDialog, savePins, setFavoritesPinned } from './Pins'
 import { SelectionProvider } from './Selection'
 import { TogetherInvites } from './Together'
 
@@ -17,6 +17,15 @@ export default function Layout() {
   const displayName = user?.profileName ?? user?.username ?? ''
   const { data: libraries, reload: reloadLibraries, setData: setLibraries } = useApi<Library[]>('/api/libraries')
   const { data: pins, reload: reloadPins } = useApi<{ chosen: boolean }>(user ? '/api/me/pins' : null)
+  const { data: prefs, reload: reloadPrefs, setData: setPrefs } = useApi<{ pinnedTabs?: string[] | null }>(user ? '/api/me/prefs' : null)
+  // Favorites starts unpinned, under More, until the person pins it.
+  const favoritesPinned = !!prefs?.pinnedTabs?.includes('favorites')
+  const toggleFavorites = () => {
+    if (!prefs) return
+    const others = (prefs.pinnedTabs ?? []).filter((t) => t !== 'favorites')
+    setPrefs({ ...prefs, pinnedTabs: favoritesPinned ? others : [...others, 'favorites'] })
+    setFavoritesPinned(!favoritesPinned).finally(reloadPrefs)
+  }
   const [editingPins, setEditingPins] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -92,7 +101,7 @@ export default function Layout() {
             <Icon name="list" />
             <span>Playlists</span>
           </NavLink>
-          {libraries && libraries.length > 0 && (
+          {((libraries && libraries.length > 0) || favoritesPinned) && (
             <div className="nav-section nav-section-row">
               <span>Pinned</span>
               <button className="nav-section-btn" onClick={() => setEditingPins(true)}>
@@ -103,13 +112,15 @@ export default function Layout() {
           {libraries?.filter((l) => l.pinned).map((l) => (
             <LibraryLink key={l.id} library={l} onTogglePin={() => togglePin(l)} />
           ))}
-          {unpinned.length > 0 && (
+          {favoritesPinned && <PinnableLink to="/favorites" icon="heart" name="Favorites" pinned onTogglePin={toggleFavorites} />}
+          {(unpinned.length > 0 || (prefs && !favoritesPinned)) && (
             <>
               <button className="nav-item nav-more" onClick={() => setShowMore((m) => !m)} aria-expanded={showMore}>
                 <Icon name="more" />
-                <span>{showMore ? 'Less' : `More (${unpinned.length})`}</span>
+                <span>{showMore ? 'Less' : `More (${unpinned.length + (favoritesPinned ? 0 : 1)})`}</span>
               </button>
               {showMore && unpinned.map((l) => <LibraryLink key={l.id} library={l} onTogglePin={() => togglePin(l)} />)}
+              {showMore && !favoritesPinned && <PinnableLink to="/favorites" icon="heart" name="Favorites" pinned={false} onTogglePin={toggleFavorites} />}
             </>
           )}
           {user?.isAdmin && (
@@ -217,14 +228,18 @@ export default function Layout() {
 }
 
 function LibraryLink({ library: l, onTogglePin }: { library: Library; onTogglePin: () => void }) {
+  return <PinnableLink to={`/library/${l.id}`} icon={l.kind === 'movies' ? 'film' : 'tv'} name={l.name} pinned={l.pinned} onTogglePin={onTogglePin} />
+}
+
+function PinnableLink({ to, icon, name, pinned, onTogglePin }: { to: string; icon: IconName; name: string; pinned: boolean; onTogglePin: () => void }) {
   return (
-    <NavLink to={`/library/${l.id}`} className="nav-item nav-library">
-      <Icon name={l.kind === 'movies' ? 'film' : 'tv'} />
-      <span>{l.name}</span>
+    <NavLink to={to} className="nav-item nav-library">
+      <Icon name={icon} />
+      <span>{name}</span>
       <button
-        className={`nav-pin ${l.pinned ? 'on' : ''}`}
-        title={l.pinned ? 'Unpin' : 'Pin'}
-        aria-label={l.pinned ? `Unpin ${l.name}` : `Pin ${l.name}`}
+        className={`nav-pin ${pinned ? 'on' : ''}`}
+        title={pinned ? 'Unpin' : 'Pin'}
+        aria-label={pinned ? `Unpin ${name}` : `Pin ${name}`}
         onClick={(e) => {
           e.preventDefault()
           e.stopPropagation()

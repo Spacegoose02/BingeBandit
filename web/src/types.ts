@@ -170,6 +170,7 @@ export interface Item {
   showPoster?: string
   showBackdrop?: string
   onWatchlist?: boolean
+  favorite?: boolean
 }
 
 export interface Playlist {

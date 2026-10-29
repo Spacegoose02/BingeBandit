@@ -49,6 +49,47 @@ func (s *Server) setWatchlist(add bool) http.HandlerFunc {
 	}
 }
 
+func (s *Server) favorites(w http.ResponseWriter, r *http.Request) {
+	items, err := s.Store.Favorites(currentUser(r).ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
+
+// setFavorite adds or removes a movie, show or episode from the user's
+// favorites.
+func (s *Server) setFavorite(add bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, ok := idParam(r, "id")
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "bad id")
+			return
+		}
+		uid := currentUser(r).ID
+		it, err := s.Store.Item(uid, id)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		if it.Kind != "movie" && it.Kind != "show" && it.Kind != "episode" {
+			writeErr(w, http.StatusBadRequest, "only movies, shows and episodes can be favorites")
+			return
+		}
+		if add {
+			err = s.Store.AddFavorite(uid, id)
+		} else {
+			err = s.Store.RemoveFavorite(uid, id)
+		}
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func (s *Server) playlists(w http.ResponseWriter, r *http.Request) {
 	lists, err := s.Store.Playlists(currentUser(r).ID)
 	if err != nil {

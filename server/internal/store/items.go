@@ -71,6 +71,7 @@ type Item struct {
 	ShowPoster     string     `json:"showPoster,omitempty"`
 	ShowBackdrop   string     `json:"showBackdrop,omitempty"`
 	OnWatchlist    bool       `json:"onWatchlist,omitempty"`
+	Favorite       bool       `json:"favorite,omitempty"`
 
 	MatchKey   string `json:"-"`
 	MetadataAt int64  `json:"-"`
@@ -108,7 +109,8 @@ const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i
 			AND NOT EXISTS (SELECT 1 FROM watch_state x WHERE x.item_id = e.id AND x.user_id = @uid AND x.watched = 1))
 		ELSE 0 END,
 	COALESCE(sh.title, ''), COALESCE(sh.poster, ''), COALESCE(sh.backdrop, ''),
-	EXISTS (SELECT 1 FROM watchlist wl WHERE wl.user_id = @uid AND wl.item_id = i.id)
+	EXISTS (SELECT 1 FROM watchlist wl WHERE wl.user_id = @uid AND wl.item_id = i.id),
+	EXISTS (SELECT 1 FROM favorites fv WHERE fv.user_id = @uid AND fv.item_id = i.id)
 FROM items i
 LEFT JOIN watch_state w ON w.item_id = i.id AND w.user_id = @uid
 LEFT JOIN items sh ON sh.id = i.show_id`
@@ -144,7 +146,7 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 		&it.AddedAt, &it.MatchKey, &it.MetadataAt, &it.TVDBID, &it.IMDbID, &it.MetadataSource,
 		&it.Watch.Position, &it.Watch.Duration, &watched, &it.Watch.UpdatedAt,
 		&it.ChildCount, &it.UnwatchedCount,
-		&it.ShowTitle, &it.ShowPoster, &it.ShowBackdrop, &it.OnWatchlist)
+		&it.ShowTitle, &it.ShowPoster, &it.ShowBackdrop, &it.OnWatchlist, &it.Favorite)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, img } from '../api'
+import { favoritesChanged } from '../components/AddToPlaylist'
 import { PosterCard } from '../components/Cards'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
@@ -22,6 +23,36 @@ export function WatchlistPage() {
       {data?.length === 0 && (
         <div className="empty">
           Nothing saved yet. Use the <Icon name="bookmark" size={14} /> button on any movie or show.
+        </div>
+      )}
+      <div className="poster-grid">
+        {data?.map((it) => (
+          <PosterCard key={it.id} item={it} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function FavoritesPage() {
+  useDocumentTitle('Favorites')
+  const { data, reload } = useApi<Item[]>('/api/favorites')
+  // Removing one from its ⋮ menu takes it off the page.
+  useEffect(() => {
+    window.addEventListener(favoritesChanged, reload)
+    return () => window.removeEventListener(favoritesChanged, reload)
+  }, [reload])
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>Favorites</h1>
+          <div className="muted">Your favorite movies, shows and episodes. Pin Favorites in the sidebar to see them on Home too.</div>
+        </div>
+      </header>
+      {data?.length === 0 && (
+        <div className="empty">
+          Nothing here yet. Use <Icon name="heart" size={14} /> Add to favorites in the ⋮ menu of any movie, show or episode.
         </div>
       )}
       <div className="poster-grid">

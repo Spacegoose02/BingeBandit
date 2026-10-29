@@ -12,8 +12,8 @@ import { fetchHousehold, PinPad } from './Profiles'
 
 // The tabs a person can turn off (prefs.hiddenTabs). Home, Search and Settings
 // always show, so there's always a way back to turn them on.
-export type HideableTab = 'sports' | 'live' | 'discover' | 'more'
-export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', discover: 'Discover', more: 'More' }
+export type HideableTab = 'sports' | 'live' | 'discover' | 'favorites' | 'more'
+export const hideableNames: Record<HideableTab, string> = { sports: 'Sports', live: 'Live TV', discover: 'Discover', favorites: 'Favorites', more: 'More' }
 
 /** What the menu shows, and how to change it; Home owns both. */
 export interface MenuChoices {

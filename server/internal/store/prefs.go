@@ -55,7 +55,7 @@ type Prefs struct {
 }
 
 // OptInTabs are the app menu tabs PinnedTabs may name.
-var OptInTabs = []string{"discover"}
+var OptInTabs = []string{"discover", "favorites"}
 
 // DefaultHiddenTabs start out under More instead of in the menu, until the
 // person pins them. Kept out of DefaultPrefs: decoding into a shared slice
@@ -101,7 +101,7 @@ func (p *Prefs) Validate() error {
 	}
 	for _, t := range p.PinnedTabs {
 		if !slices.Contains(OptInTabs, t) {
-			return fmt.Errorf("only the discover tab can be pinned this way")
+			return fmt.Errorf("only the discover and favorites tabs can be pinned this way")
 		}
 	}
 	if p.LiveAlertMinutes < 0 || p.LiveAlertMinutes > 180 {

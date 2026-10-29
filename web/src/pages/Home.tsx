@@ -4,6 +4,7 @@ import { useAuth } from '../auth'
 import { PosterCard, WideCard } from '../components/Cards'
 import { Hero } from '../components/Hero'
 import { Icon } from '../components/Icon'
+import { favoritesChanged } from '../components/AddToPlaylist'
 import { pinsChanged } from '../components/Pins'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
@@ -75,7 +76,11 @@ export default function Home() {
   const { data, loading, error, reload } = useApi<HomeData>('/api/home')
   useEffect(() => {
     window.addEventListener(pinsChanged, reload)
-    return () => window.removeEventListener(pinsChanged, reload)
+    window.addEventListener(favoritesChanged, reload)
+    return () => {
+      window.removeEventListener(pinsChanged, reload)
+      window.removeEventListener(favoritesChanged, reload)
+    }
   }, [reload])
 
   if (loading) return <div className="page-loading" />
@@ -123,7 +128,7 @@ export default function Home() {
             <Row
               key={row.id}
               title={row.title}
-              to={row.collectionId ? `/collection/${row.collectionId}` : undefined}
+              to={row.collectionId ? `/collection/${row.collectionId}` : row.id === 'favorites' ? '/favorites' : row.id === 'watchlist' ? '/watchlist' : undefined}
             >
               {row.items.map((it) => (
                 <PosterCard key={it.id} item={it} />

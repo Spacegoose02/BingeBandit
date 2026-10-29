@@ -10,7 +10,7 @@ import ItemPage from './pages/Item'
 import CollectionPage from './pages/Collection'
 import { DiscoverPage } from './pages/Discover'
 import SportsPage from './pages/Sports'
-import { KidsTitlesPage, PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
+import { FavoritesPage, KidsTitlesPage, PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
 import ProfilePage from './pages/Profile'
 import AdminStatistics from './pages/admin/Statistics'
 import AdminLiveTV from './pages/admin/LiveTV'
@@ -85,6 +85,7 @@ export default function App() {
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/sports" element={<SportsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/kids/movies" element={<KidsTitlesPage key="movie" kind="movie" />} />
           <Route path="/kids/shows" element={<KidsTitlesPage key="show" kind="show" />} />
           <Route path="/playlists" element={<PlaylistsPage />} />

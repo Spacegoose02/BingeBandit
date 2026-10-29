@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useState } from 'react'
 import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
-import { useNav, useScreen } from '../nav'
+import { ItemMenuContext, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Credit, Item, ItemDetail } from '../types'
 
@@ -15,6 +15,7 @@ function fmtDuration(min?: number) {
 /** A movie, show, season or episode, with Play and its seasons/episodes. */
 export default function Details({ id }: { id: number }) {
   const nav = useNav()
+  const menu = useContext(ItemMenuContext)
   const [d, setD] = useState<ItemDetail | null>(() => cached<ItemDetail>(`/api/items/${id}`) ?? null)
   const [error, setError] = useState('')
 
@@ -110,7 +111,13 @@ export default function Details({ id }: { id: number }) {
           <>
             <Text style={st.section}>Episodes</Text>
             {d.children.map((ep, i) => (
-              <Focusable key={ep.id} onPress={() => nav.push({ name: 'details', id: ep.id })} style={st.episode} hasTVPreferredFocus={!target && i === 0}>
+              <Focusable
+                key={ep.id}
+                onPress={() => nav.push({ name: 'details', id: ep.id })}
+                onLongPress={() => menu(ep)} // the hold menu, to favorite an episode and the rest
+                style={st.episode}
+                hasTVPreferredFocus={!target && i === 0}
+              >
                 <View style={st.epThumb}>
                   <WideCardImage item={ep} />
                 </View>

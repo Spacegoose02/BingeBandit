@@ -83,7 +83,12 @@ export function PosterCard({
           </div>
         </div>
         <div className="card-title" title={item.title}>{item.title}</div>
-        <div className="card-sub">{subtitle ?? (item.kind === 'season' ? `${item.childCount ?? 0} episodes` : item.year || '')}</div>
+        <div className="card-sub">{subtitle ??
+            (item.kind === 'season'
+              ? `${item.childCount ?? 0} episodes`
+              : item.kind === 'episode'
+                ? [item.showTitle, episodeLabel(item)].filter(Boolean).join(' · ')
+                : item.year || '')}</div>
       </Link>
       <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} onDeleted={() => setDeleted(true)} />
       {sel?.circle}

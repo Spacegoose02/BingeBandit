@@ -21,6 +21,17 @@ export async function savePins(libraries: Library[]) {
 }
 
 /**
+ * Pins or unpins Favorites (prefs.pinnedTabs), which starts out unpinned. The
+ * rest of the preferences go back as they are.
+ */
+export async function setFavoritesPinned(on: boolean) {
+  const p = await api.get<{ pinnedTabs?: string[] | null }>('/api/me/prefs')
+  const others = (p.pinnedTabs ?? []).filter((t) => t !== 'favorites')
+  await api.put('/api/me/prefs', { ...p, pinnedTabs: on ? [...others, 'favorites'] : others })
+  window.dispatchEvent(new Event(pinsChanged))
+}
+
+/**
  * Pick which libraries sit in the sidebar and feed Home, and drag them into
  * order. Shown once after the first sign-in, and from the sidebar's Edit.
  */
