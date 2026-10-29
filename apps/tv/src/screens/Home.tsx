@@ -701,6 +701,7 @@ function HomeRows() {
                 onPress={() => open(it)}
               />
             )}
+            onSeeAll={row.collectionId ? () => nav.push({ name: 'collection', id: row.collectionId! }) : undefined}
           />
         ))}
       </ScrollView>

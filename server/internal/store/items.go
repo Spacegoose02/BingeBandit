@@ -79,7 +79,8 @@ type Item struct {
 
 // visible restricts items to libraries the @uid user may see, plus the
 // movies and shows (with their seasons and episodes) a parent approved for
-// a kid, one by one or as a whole collection. @uid = 0 is the server itself
+// a kid, one by one or as a whole collection (less the titles kept out of
+// it in kid_blocked). @uid = 0 is the server itself
 // (scanner, metadata), which sees everything.
 var visible = `(@uid = 0
 	OR EXISTS (SELECT 1 FROM users u WHERE u.id = @uid AND (u.all_libraries = 1 OR u.is_admin = 1))
@@ -87,7 +88,8 @@ var visible = `(@uid = 0
 	OR EXISTS (SELECT 1 FROM kid_titles kt WHERE kt.user_id = @uid AND kt.item_id IN (i.id, i.show_id))
 	OR EXISTS (SELECT 1 FROM kid_collections kc JOIN collections kcc ON kcc.id = kc.collection_id
 		JOIN items kci ON kci.id IN (i.id, i.show_id)
-		WHERE kc.user_id = @uid AND ` + memberOfAs("kci", "kcc") + `))`
+		WHERE kc.user_id = @uid AND ` + memberOfAs("kci", "kcc") + `
+			AND NOT EXISTS (SELECT 1 FROM kid_blocked kb WHERE kb.user_id = @uid AND kb.item_id = kci.id)))`
 
 // Every item query binds @uid so watch state and unwatched counts are per user.
 const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i.title, i.sort_title, i.original_title, i.year,
@@ -296,14 +298,29 @@ func (s *Store) LibraryLetters(uid, libraryID int64, hide []int64) ([]Letter, er
 }
 
 // RecentlyAdded returns movies by add date, or shows ordered by their newest
-// episode, from the libraries the user pinned.
+// episode, from the libraries the user pinned, going back recently_added_days.
 func (s *Store) RecentlyAdded(uid int64, kind string, limit int) ([]*Item, error) {
-	order := "i.added_at DESC"
+	added := addedAt(kind)
+	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` AND `+added+` >= @since ORDER BY `+added+` DESC LIMIT @limit`,
+		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit), sql.Named("since", s.recentSince()))
+}
+
+// addedAt is when a movie was added, or a show's newest episode.
+func addedAt(kind string) string {
 	if kind == "show" {
-		order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
+		return "COALESCE((SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id), i.added_at)"
 	}
-	return s.queryItems(itemSelect+` WHERE i.kind = @kind AND `+visible+` AND `+pinned+` ORDER BY `+order+` LIMIT @limit`,
-		uidArg(uid), sql.Named("kind", kind), sql.Named("limit", limit))
+	return "i.added_at"
+}
+
+// recentSince is the oldest add that still counts for Recently Added (the
+// recently_added_days setting; 0 = any).
+func (s *Store) recentSince() int64 {
+	days, _ := strconv.Atoi(s.Setting(SettingRecentDays))
+	if days <= 0 {
+		return 0
+	}
+	return now() - int64(days)*86400
 }
 
 // TrailerCandidates are the newest movies the user can see and hasn't
@@ -332,6 +349,7 @@ func (s *Store) continueSince() int64 {
 }
 
 type ShowProgress struct {
+	ItemID    int64 // the finished episode
 	ShowID    int64
 	Season    int
 	Episode   int
@@ -340,7 +358,7 @@ type ShowProgress struct {
 
 // RecentlyFinishedShows reports, per show, the most recently completed episode.
 func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, error) {
-	rows, err := s.db.Query(`SELECT e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
+	rows, err := s.db.Query(`SELECT e.id, e.show_id, e.season_number, e.episode_number, MAX(w.updated_at)
 		FROM watch_state w JOIN items e ON e.id = w.item_id
 		WHERE w.user_id = ? AND w.watched = 1 AND e.kind = 'episode' AND w.updated_at >= ?
 			AND NOT EXISTS (SELECT 1 FROM library_pins lp WHERE lp.user_id = w.user_id AND lp.library_id = e.library_id AND lp.pinned = 0)
@@ -352,7 +370,7 @@ func (s *Store) RecentlyFinishedShows(uid int64, limit int) ([]ShowProgress, err
 	var out []ShowProgress
 	for rows.Next() {
 		var p ShowProgress
-		if err := rows.Scan(&p.ShowID, &p.Season, &p.Episode, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ItemID, &p.ShowID, &p.Season, &p.Episode, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)
@@ -390,6 +408,14 @@ func (s *Store) UpNext(uid, showID int64, season, episode int) (*Item, error) {
 		return next, nil
 	}
 	return unwatched, err
+}
+
+// FirstUnwatchedEpisode is the show's earliest regular-season episode the
+// user hasn't watched.
+func (s *Store) FirstUnwatchedEpisode(uid, showID int64) (*Item, error) {
+	return scanItem(s.db.QueryRow(itemSelect+` WHERE i.show_id = @show AND i.kind = 'episode' AND i.season_number > 0
+		AND COALESCE(w.watched, 0) = 0 AND `+visible+` ORDER BY i.season_number, i.episode_number LIMIT 1`,
+		uidArg(uid), sql.Named("show", showID)))
 }
 
 func (s *Store) Search(uid int64, q string, limit int) ([]*Item, error) {

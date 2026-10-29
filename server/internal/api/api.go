@@ -333,6 +333,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/items/{id}/detect-markers", s.detectMarkers)
 				r.Get("/items/{id}/location", s.itemLocation)
 				r.Post("/items/{id}/move", s.moveItem)
+				r.Get("/items/{id}/delete", s.deletePlan)
+				r.Post("/items/{id}/delete", s.deleteFromServer)
 				r.Get("/match", s.matchSearch)
 
 				r.Get("/libraries/{id}/labels", s.libraryLabels)

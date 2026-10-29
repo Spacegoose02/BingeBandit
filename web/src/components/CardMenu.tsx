@@ -7,6 +7,7 @@ import { useAuth } from '../auth'
 import { episodeLabel } from '../format'
 import type { Collection, Item, ItemDetail, Playlist, Visibility } from '../types'
 import { CollectionEditor } from './CollectionEditor'
+import { DeleteDialog } from './DeleteItem'
 import { EditItem } from './EditItem'
 import { Icon } from './Icon'
 import { KidsDialog, type KidState } from './KidsApprove'
@@ -127,15 +128,25 @@ function Popover({ anchor, onClose, children }: { anchor: HTMLElement; onClose: 
 }
 
 type Page = 'main' | 'playlists' | 'collections'
-type Dialog = null | 'recommend' | 'kids' | 'edit' | 'match' | 'move'
+type Dialog = null | 'recommend' | 'kids' | 'edit' | 'match' | 'move' | 'delete'
 
 /**
  * The poster menu, like the TV app's long-press one: play, watch together,
  * mark watched, watchlist, playlists and recommend for everyone; approving
  * for kids for parents; collections, editing (details, poster, artwork),
- * fixing the match and refreshing for admins.
+ * fixing the match, refreshing and deleting from the server for admins.
  */
-export function ItemMenu({ item, onChanged, onMembership }: { item: Item; onChanged: (it: Item) => void; onMembership?: () => void }) {
+export function ItemMenu({
+  item,
+  onChanged,
+  onMembership,
+  onDeleted,
+}: {
+  item: Item
+  onChanged: (it: Item) => void
+  onMembership?: () => void
+  onDeleted?: () => void
+}) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [detail, setDetail] = useState<ItemDetail | null>(null)
   const [kids, setKids] = useState<KidState[]>([])
@@ -244,6 +255,19 @@ export function ItemMenu({ item, onChanged, onMembership }: { item: Item; onChan
               setDialog(null)
               setToast(msg)
               reload()
+              onMembership?.()
+            }}
+          />,
+        )}
+      {dialog === 'delete' &&
+        portal(
+          <DeleteDialog
+            item={detail?.item ?? item}
+            onClose={() => setDialog(null)}
+            onDeleted={(msg) => {
+              setDialog(null)
+              setToast(msg)
+              onDeleted?.()
               onMembership?.()
             }}
           />,
@@ -525,6 +549,9 @@ function ItemMenuBody({
               <Icon name="refresh" size={16} /> Refresh metadata
             </button>
           )}
+          <button role="menuitem" className="danger" onClick={() => open('delete')}>
+            <Icon name="trash" size={16} /> Delete from server…
+          </button>
         </>
       )}
       {err}

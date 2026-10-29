@@ -12,6 +12,10 @@ export interface KidState {
   name: string
   approved: boolean
   avatar?: string
+  /** A collection approved for the kid that has this title. */
+  via?: string
+  /** Kept out even though `via` has it. */
+  blocked?: boolean
 }
 
 /**
@@ -115,6 +119,12 @@ export function KidsDialog({ path, name, what, kids, onClose }: { path: string; 
             <label key={k.id} className="check">
               <input type="checkbox" checked={picked.has(k.id)} onChange={() => toggle(k.id)} />
               {k.name}
+              {k.via && (
+                <span className="muted">
+                  {' '}
+                  {picked.has(k.id) ? `(from ${k.via}; untick to keep it out)` : `(kept out of ${k.via})`}
+                </span>
+              )}
             </label>
           ))}
         </div>

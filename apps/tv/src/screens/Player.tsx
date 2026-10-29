@@ -187,6 +187,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const played = useRef(0)
   const lastTime = useRef(0)
   const lastReport = useRef(0)
+  const lastReportAt = useRef(0) // wall clock of the last report, in ms
   const posRef = useRef(start)
   const hideTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const finished = useRef(false)
@@ -247,6 +248,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const report = useCallback(
     (stopped = false, done = false) => {
       if (!item || !file) return
+      lastReportAt.current = Date.now()
       const sent = api
         .post('/api/progress', {
           playSessionId: playSession.current,
@@ -408,6 +410,15 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     }, 2000)
     return () => clearInterval(t)
   }, [mode, src, paused, transcode])
+
+  // Position-based reports stop while paused or buffering, and the server
+  // drops a player from Now Playing after 45 s without one.
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (lastReportAt.current && Date.now() - lastReportAt.current >= REPORT_EVERY * 1000) report()
+    }, 5000)
+    return () => clearInterval(t)
+  }, [report])
 
   const onProgress = (p: OnProgressData) => {
     const step = p.currentTime - lastTime.current

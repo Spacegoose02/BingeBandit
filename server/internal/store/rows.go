@@ -178,11 +178,8 @@ func (s *Store) RowItems(uid int64, libs []int64, libraryKind, key, genre string
 	var q, order string
 	switch key {
 	case "recent":
-		order = "i.added_at DESC"
-		if kind == "show" {
-			order = "(SELECT MAX(e.added_at) FROM items e WHERE e.show_id = i.id) DESC"
-		}
-		q = where
+		args = append(args, sql.Named("since", s.recentSince()))
+		q, order = where+` AND `+addedAt(kind)+` >= @since`, addedAt(kind)+` DESC`
 	case "released":
 		args = append(args, sql.Named("today", time.Now().Format("2006-01-02")))
 		q, order = where+` AND i.release_date != '' AND i.release_date <= @today`, `i.release_date DESC`
