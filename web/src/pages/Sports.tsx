@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import { useBackState } from '../backState'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
@@ -149,8 +150,8 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
 
 /** Every game in one league on one day. */
 function Scoreboard({ leagues, first }: { leagues: SportsLeague[]; first?: string }) {
-  const [league, setLeague] = useState(first ?? leagues[0].id)
-  const [offset, setOffset] = useState(0)
+  const [league, setLeague] = useBackState('scoreboard.league', first ?? leagues[0].id)
+  const [offset, setOffset] = useBackState('scoreboard.day', 0)
   const { data, error } = useApi<SportsGame[]>(`/api/sports/${league}/scores?date=${espnDay(offset)}`, offset === 0 ? 30000 : undefined)
   const dayLabel = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : offset === 1 ? 'Tomorrow' : new Date(Date.now() + offset * 86400000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
   const name = leagues.find((l) => l.id === league)?.name ?? league

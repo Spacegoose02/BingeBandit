@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
+import { readBack, writeBack } from '../backState'
 import { useAuth } from '../auth'
 import { CollectionCard, PosterCard } from '../components/Cards'
 import { ChartRows } from '../components/ChartRows'
@@ -68,6 +69,7 @@ export default function LibraryPage() {
 
 function LibraryView({ id }: { id: string }) {
   const [params, setParams] = useSearchParams()
+  const { key } = useLocation()
   // Recommended is the library's front page (Plex's default tab).
   const tab = params.get('tab') === 'collections' ? 'collections' : params.get('tab') === 'library' ? 'library' : 'recommended'
   const [sort, setSort] = useState(() => localStorage.getItem(`bb.sort.${id}`) ?? 'title')
@@ -81,9 +83,16 @@ function LibraryView({ id }: { id: string }) {
   const loadingRef = useRef(false)
   useDocumentTitle(library?.name)
 
+  // Back to this page loads as many titles as were showing, in one go, so
+  // the scroll position is there to return to.
+  const [restore] = useState(() => ({ sort, count: readBack<number>(key, 'loaded') ?? 0 }))
+  useEffect(() => {
+    if (items.length) writeBack(key, 'loaded', items.length)
+  }, [key, items.length])
+
   const generation = useRef(0)
   const load = useCallback(
-    async (offset: number) => {
+    async (offset: number, limit = PAGE) => {
       // A new first page (another library or sort) always goes ahead, and a
       // page still on its way for the old one is dropped when it lands.
       if (offset === 0) generation.current++
@@ -92,7 +101,7 @@ function LibraryView({ id }: { id: string }) {
       loadingRef.current = true
       setLoading(true)
       try {
-        const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${offset}&limit=${PAGE}`)
+        const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${offset}&limit=${limit}`)
         if (gen !== generation.current) return
         setLibrary(page.library)
         setTotal(page.total)
@@ -117,8 +126,8 @@ function LibraryView({ id }: { id: string }) {
 
   useEffect(() => {
     setItems([])
-    load(0)
-  }, [load])
+    load(0, restore.sort === sort ? Math.min(500, Math.max(PAGE, restore.count)) : PAGE)
+  }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = sentinel.current
