@@ -281,7 +281,10 @@ sub onStall()
 end sub
 
 sub onReportTimer()
-    if m.video.state = "playing" then report(false, false)
+    ' Keep pinging while paused or buffering too, or the server drops this
+    ' player from Now Playing after 45 s.
+    s = m.video.state
+    if s = "playing" or s = "paused" or s = "buffering" then report(false, false)
 end sub
 
 sub report(stopped as boolean, done as boolean, detached = false as boolean)
