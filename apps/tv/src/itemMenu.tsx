@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TVFocusGuideView, View } from 'react-native'
 import { api, current } from './api'
 import { Button } from './components'
 import { ItemMenuContext, useNav } from './nav'
@@ -194,13 +194,19 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
   const title = it.kind === 'episode' ? `${it.showTitle ?? ''} · S${it.seasonNumber} E${it.episodeNumber}` : it.title
   return (
     <Modal transparent animationType="fade" onRequestClose={back}>
-      <Pressable style={st.scrim} onPress={onClose}>
-        <Pressable style={st.box}>
+      {/* Neither the backdrop nor the box may take focus: on the Shield the
+          box (once a Pressable) grabbed it first and the D-pad couldn't
+          reach the options inside. The focus guide hands focus to the first
+          option, and keeps it in the menu. */}
+      <Pressable style={st.scrim} onPress={onClose} focusable={false}>
+        <View style={st.box} onStartShouldSetResponder={() => true}>
           <Text style={st.title} numberOfLines={1}>{title}</Text>
           {it.kind === 'episode' && <Text style={st.hint} numberOfLines={1}>{it.title}</Text>}
           {!!msg && <Text style={st.msg}>{msg}</Text>}
-          <ScrollView style={st.list}>{buttons}</ScrollView>
-        </Pressable>
+          <TVFocusGuideView style={st.guide} autoFocus trapFocusUp trapFocusDown trapFocusLeft trapFocusRight>
+            <ScrollView style={st.list}>{buttons}</ScrollView>
+          </TVFocusGuideView>
+        </View>
       </Pressable>
     </Modal>
   )
@@ -216,6 +222,7 @@ const st = StyleSheet.create(scaled({
   title: { color: colors.text, fontSize: font.heading, fontWeight: '800' },
   hint: { color: colors.muted, fontSize: font.small, marginTop: 6 },
   msg: { color: colors.accent, fontSize: font.small, marginTop: 10 },
+  guide: { flexShrink: 1 },
   list: { marginTop: 20 },
   opt: { marginRight: 0, marginBottom: 12, alignItems: 'flex-start' },
   newRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

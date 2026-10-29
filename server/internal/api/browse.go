@@ -73,7 +73,8 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 }
 
 // continueWatching merges in-progress items with the next episode of shows
-// the user recently finished an episode of (Plex's "On Deck").
+// the user recently finished an episode of (Plex's "On Deck"). A show stays
+// on the row after its last episode, so a rewatched show doesn't vanish.
 func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 	inProgress, err := s.Store.InProgress(uid, limit*2) // room for the repeats dropped below
 	if err != nil {
@@ -99,6 +100,15 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 	}
 	for _, p := range finished {
 		next, err := s.Store.UpNext(uid, p.ShowID, p.Season, p.Episode)
+		// Nothing after it (the finale, or a kid picking episodes out of
+		// order): keep the show with an episode they skipped, or else the
+		// one they just finished, so it doesn't drop off the row.
+		if errors.Is(err, store.ErrNotFound) {
+			next, err = s.Store.FirstUnwatchedEpisode(uid, p.ShowID)
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			next, err = s.Store.Item(uid, p.ItemID)
+		}
 		if errors.Is(err, store.ErrNotFound) {
 			continue
 		}

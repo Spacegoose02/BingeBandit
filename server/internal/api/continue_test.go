@@ -64,3 +64,56 @@ func TestContinueWatchingOneCardPerShow(t *testing.T) {
 		t.Fatalf("want the latest We Bare Bears episode, then Lost; got %d cards", len(got))
 	}
 }
+
+// Mickey Mouse Clubhouse dropped off Continue Watching: after the last
+// episode there was no next one, so the show vanished from the row.
+func TestContinueWatchingKeepsAShowAfterItsLastEpisode(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	u, _ := st.CreateUser("sam", "x", false)
+	st.SetUserLibraries(u.ID, true, nil)
+	l := &store.Library{Name: "Kids TV", Kind: "shows", Paths: []string{}}
+	st.CreateLibrary(l)
+	sh, _ := st.UpsertItem(&store.Item{LibraryID: l.ID, Kind: "show", Title: "Mickey Mouse Clubhouse", MatchKey: "mmc"})
+	sn := 1
+	season, _ := st.UpsertItem(&store.Item{LibraryID: l.ID, Kind: "season", ParentID: sh, ShowID: sh, SeasonNumber: &sn, MatchKey: "mmc:s1"})
+	var eps []int64
+	for e := 1; e <= 3; e++ {
+		en := e
+		id, _ := st.UpsertItem(&store.Item{LibraryID: l.ID, Kind: "episode", ParentID: season, ShowID: sh, SeasonNumber: &sn,
+			EpisodeNumber: &en, MatchKey: fmt.Sprintf("mmc:e%d", e)})
+		eps = append(eps, id)
+	}
+	srv := &Server{Store: st}
+	first := func() int64 {
+		got, err := srv.continueWatching(u.ID, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("want the show on the row, got %d cards", len(got))
+		}
+		return got[0].ID
+	}
+
+	// The finale watched first, episode 1 skipped: offer the skipped one.
+	st.SaveProgress(u.ID, eps[1], 100, 100)
+	time.Sleep(1100 * time.Millisecond)
+	st.SaveProgress(u.ID, eps[2], 100, 100)
+	if got := first(); got != eps[0] {
+		t.Fatalf("want the skipped episode 1, got %d", got)
+	}
+
+	// Everything watched: keep the last episode they finished.
+	time.Sleep(1100 * time.Millisecond)
+	st.SaveProgress(u.ID, eps[0], 100, 100)
+	time.Sleep(1100 * time.Millisecond)
+	st.SaveProgress(u.ID, eps[2], 100, 100)
+	if got := first(); got != eps[2] {
+		t.Fatalf("want the finale they just watched, got %d", got)
+	}
+}
