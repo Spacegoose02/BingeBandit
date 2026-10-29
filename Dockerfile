@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-alpine AS web
+# The web UI and Go binaries are built on the runner's own platform and
+# cross-compiled, not under QEMU: npm ci under arm64 emulation hangs.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -8,8 +10,10 @@ COPY web/ ./
 COPY server/internal/web/dist/.gitkeep /src/server/internal/web/dist/.gitkeep
 RUN npm run build
 
-FROM golang:1.27-alpine AS server
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS server
 ARG VERSION=dev
+ARG TARGETOS TARGETARCH
+ENV GOOS=$TARGETOS GOARCH=$TARGETARCH
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
