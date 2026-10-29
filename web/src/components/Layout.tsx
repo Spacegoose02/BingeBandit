@@ -8,6 +8,7 @@ import { Icon } from './Icon'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
 import { PinsDialog, savePins } from './Pins'
+import { SelectionProvider } from './Selection'
 import { TogetherInvites } from './Together'
 
 export default function Layout() {
@@ -191,7 +192,9 @@ export default function Layout() {
       </aside>
       <main className="main">
         <TogetherInvites />
-        <Outlet />
+        <SelectionProvider>
+          <Outlet />
+        </SelectionProvider>
       </main>
       <PasscodePrompt />
       {(editingPins || askPins) && libraries && (

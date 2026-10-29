@@ -616,6 +616,8 @@ export interface Collection {
   studioRule?: string
   yearFrom?: number
   yearTo?: number
+  /** Tags on the collection itself (not its titles). */
+  labels?: string[]
   itemCount: number
   visible?: Visibility // admins only: where it shows as a row
 }

@@ -3,6 +3,7 @@ import { api, img } from '../api'
 import { chartsFor } from '../charts'
 import { useApi } from '../hooks'
 import type { Collection, CollectionMode, CollectionSort } from '../types'
+import { ChipsInput } from './ChipsInput'
 import { Modal } from './Modal'
 import { TPDbSearch } from './TPDbSearch'
 
@@ -57,6 +58,8 @@ export function CollectionEditor({
   const [studioRule, setStudioRule] = useState(collection?.studioRule ?? '')
   const [yearFrom, setYearFrom] = useState(collection?.yearFrom ? String(collection.yearFrom) : '')
   const [yearTo, setYearTo] = useState(collection?.yearTo ? String(collection.yearTo) : '')
+  const [labels, setLabels] = useState<string[]>(collection?.labels ?? [])
+  const { data: usedLabels } = useApi<string[]>(`/api/admin/collection-labels?library=${libraryId}`)
   const [error, setError] = useState('')
   const [poster, setPoster] = useState(collection?.poster ?? '')
   const [posterUrl, setPosterUrl] = useState('')
@@ -66,7 +69,7 @@ export function CollectionEditor({
   const save = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    const rules = { listUrl, sort, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
+    const rules = { listUrl, sort, labels, labelRule, genreRule, studioRule, yearFrom: yearValue(yearFrom), yearTo: yearValue(yearTo) }
     try {
       if (collection) await api.put(`/api/admin/collections/${collection.id}`, { name, overview, mode, sortTitle, ...rules })
       else await api.post(`/api/admin/libraries/${libraryId}/collections`, { name, ...rules })
@@ -183,6 +186,11 @@ export function CollectionEditor({
             </div>
           </div>
         )}
+        <div className="field">
+          Labels
+          <ChipsInput value={labels} onChange={setLabels} suggestions={usedLabels ?? []} placeholder="Add a label" />
+          <span className="muted small">Tags for the collection itself, to keep collections organised. They don't change which titles are in it.</span>
+        </div>
         <label>
           Follow lists
           <textarea

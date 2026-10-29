@@ -605,6 +605,8 @@ type collectionReq struct {
 	Sort *string `json:"sort"`
 	// SortTitle orders the collection among others ("" = its name); left as it is when missing.
 	SortTitle *string `json:"sortTitle"`
+	// Labels tag the collection; left as they are when missing.
+	Labels *[]string `json:"labels"`
 	store.SmartRules
 }
 
@@ -676,6 +678,13 @@ func (s *Server) createCollection(w http.ResponseWriter, r *http.Request) {
 		}
 		c.Sort = *req.Sort
 	}
+	if req.Labels != nil && len(*req.Labels) > 0 {
+		c.Labels = cleanList(*req.Labels)
+		if err := s.Store.SetCollectionLabels(c.ID, c.Labels); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
 	if req.ListURL != "" {
 		if c, err = s.followList(r, c.ID, req.ListURL); err != nil {
 			writeStoreErr(w, err)
@@ -716,6 +725,12 @@ func (s *Server) updateCollection(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SortTitle != nil {
 		if err := s.Store.SetCollectionSortTitle(id, *req.SortTitle); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
+	if req.Labels != nil {
+		if err := s.Store.SetCollectionLabels(id, cleanList(*req.Labels)); err != nil {
 			writeStoreErr(w, err)
 			return
 		}

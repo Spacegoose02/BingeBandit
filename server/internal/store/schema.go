@@ -838,4 +838,9 @@ CREATE INDEX media_file_episodes_item ON media_file_episodes(item_id);
 	`
 DELETE FROM item_aliases WHERE item_id IN (SELECT id FROM items WHERE kind = 'show');
 `,
+	// 48: labels on collections (like Plex's), set from the collection editor
+	// or the web's multi-select editor.
+	`
+ALTER TABLE collections ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';
+`,
 }

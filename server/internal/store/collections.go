@@ -27,6 +27,8 @@ type Collection struct {
 	Sort string `json:"sort"`
 	// SortTitle orders the collection among others; "" uses its name.
 	SortTitle string `json:"sortTitle,omitempty"`
+	// Labels tag the collection itself (not its titles).
+	Labels []string `json:"labels"`
 	// ListURL is an MDBList list or RSS feed the collection follows.
 	ListURL      string `json:"listUrl,omitempty"`
 	ListSyncedAt int64  `json:"listSyncedAt,omitempty"`
@@ -69,15 +71,15 @@ func memberOfAs(item, coll string) string {
 	return regexp.MustCompile(`\bc\.`).ReplaceAllString(q, coll+".")
 }
 
-const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title,
+const collectionSelect = `SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title, c.labels,
 	(SELECT COUNT(*) FROM items i WHERE ` + memberOf + `),
 	COALESCE((SELECT i.poster FROM items i WHERE ` + memberOf + ` AND i.poster != '' ORDER BY i.release_date LIMIT 1), '')
 FROM collections c`
 
 func scanCollection(r interface{ Scan(...any) error }) (*Collection, error) {
 	var c Collection
-	var fallback string
-	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.Mode, &c.ListURL, &c.ListSyncedAt, &c.ListError, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.SortTitle, &c.ItemCount, &fallback)
+	var fallback, labels string
+	err := r.Scan(&c.ID, &c.LibraryID, &c.Name, &c.Overview, &c.Poster, &c.Backdrop, &c.TMDBID, &c.Mode, &c.ListURL, &c.ListSyncedAt, &c.ListError, &c.LabelRule, &c.GenreRule, &c.StudioRule, &c.YearFrom, &c.YearTo, &c.SortTitle, &labels, &c.ItemCount, &fallback)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -87,6 +89,8 @@ func scanCollection(r interface{ Scan(...any) error }) (*Collection, error) {
 	if c.Poster == "" {
 		c.Poster = fallback
 	}
+	c.Labels = []string{}
+	json.Unmarshal([]byte(labels), &c.Labels)
 	c.Poster, c.Backdrop = ImageURL(c.Poster), ImageURL(c.Backdrop)
 	return &c, nil
 }
@@ -137,7 +141,7 @@ func (s *Store) LibraryCollectionsHiding(libraryID int64, collapse func(*Collect
 
 func (s *Store) libraryCollectionMembers(libraryID int64, collapse func(*Collection) bool) ([]*Collection, map[int64]bool, error) {
 	collected := map[int64]bool{}
-	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title, 0, ''
+	cols, err := s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error, c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title, c.labels, 0, ''
 		FROM collections c WHERE c.library_id = ? ORDER BY `+collectionOrder, libraryID)
 	if err != nil || len(cols) == 0 {
 		return cols, collected, err
@@ -467,7 +471,7 @@ func (s *Store) SetCollectionList(id int64, url string) error {
 // ListCollections are the collections that follow a list.
 func (s *Store) ListCollections() ([]*Collection, error) {
 	return s.queryCollections(`SELECT c.id, c.library_id, c.name, c.overview, c.poster, c.backdrop, c.tmdb_id, c.mode, c.list_url, c.list_synced_at, c.list_error,
-		c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title, 0, '' FROM collections c WHERE c.list_url != '' ORDER BY c.id`)
+		c.label_rule, c.genre_rule, c.studio_rule, c.year_from, c.year_to, c.sort_title, c.labels, 0, '' FROM collections c WHERE c.list_url != '' ORDER BY c.id`)
 }
 
 // SyncCollectionList replaces the members a list added with itemIDs, in list
