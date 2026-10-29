@@ -513,6 +513,7 @@ function AccountMenu({ onClose, onSettings, onSwitchProfile, onSignOut }: { onCl
 function Search() {
   const nav = useNav()
   const [q, setQ] = useState('')
+  const [focused, setFocused] = useState(false)
   const [results, setResults] = useState<Item[] | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -531,31 +532,39 @@ function Search() {
     }, 350)
     return () => clearTimeout(t)
   }, [q])
+  // Like Approved Movies/Shows: the guide spans the whole screen, so Right
+  // from the side menu always lands in the search box (or the result you
+  // were last on). On a Shield, Right from the open menu found nothing to
+  // move to and stayed in the menu.
   return (
-    <ScrollView contentContainerStyle={st.search}>
-      <TextInput
-        style={st.searchInput}
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search movies and shows"
-        placeholderTextColor={colors.muted}
-        autoCorrect={false}
-        returnKeyType="search"
-        disableFullscreenUI // a sideways phone would otherwise cover the results with a full-screen editor
-      />
-      {!!error && <Text style={st.error}>{error}</Text>}
-      {results && results.length === 0 && <Text style={st.mutedLeft}>Nothing matches “{q.trim()}”.</Text>}
-      {results && results.length > 0 && (
-        <View style={st.grid}>
-          {results.map((it) => (
-            <View key={it.id} style={st.gridCell}>
-              <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
-              <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </ScrollView>
+    <TVFocusGuideView style={st.flex} autoFocus>
+      <ScrollView contentContainerStyle={st.search}>
+        <TextInput
+          style={[st.searchInput, focused && st.searchInputFocused]}
+          value={q}
+          onChangeText={setQ}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Search movies and shows"
+          placeholderTextColor={colors.muted}
+          autoCorrect={false}
+          returnKeyType="search"
+          disableFullscreenUI // a sideways phone would otherwise cover the results with a full-screen editor
+        />
+        {!!error && <Text style={st.error}>{error}</Text>}
+        {results && results.length === 0 && <Text style={st.mutedLeft}>Nothing matches “{q.trim()}”.</Text>}
+        {results && results.length > 0 && (
+          <View style={st.grid}>
+            {results.map((it) => (
+              <View key={it.id} style={st.gridCell}>
+                <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />
+                <Text style={st.gridTitle} numberOfLines={1}>{it.title}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </TVFocusGuideView>
   )
 }
 
@@ -745,6 +754,7 @@ const st = StyleSheet.create(scaled({
   pinMenuButtons: { flexDirection: 'row', marginTop: 30 },
   gapRight: { marginRight: 24 },
   searchInput: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 18, borderWidth: 2, borderColor: colors.border, maxWidth: 1100, marginBottom: 30 },
+  searchInputFocused: { borderColor: colors.accent },
   mutedLeft: { color: colors.muted, fontSize: font.body },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   gridCell: { marginBottom: 30 },
