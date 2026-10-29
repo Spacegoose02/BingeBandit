@@ -78,7 +78,8 @@ type Item struct {
 
 // visible restricts items to libraries the @uid user may see, plus the
 // movies and shows (with their seasons and episodes) a parent approved for
-// a kid, one by one or as a whole collection. @uid = 0 is the server itself
+// a kid, one by one or as a whole collection (less the titles kept out of
+// it in kid_blocked). @uid = 0 is the server itself
 // (scanner, metadata), which sees everything.
 var visible = `(@uid = 0
 	OR EXISTS (SELECT 1 FROM users u WHERE u.id = @uid AND (u.all_libraries = 1 OR u.is_admin = 1))
@@ -86,7 +87,8 @@ var visible = `(@uid = 0
 	OR EXISTS (SELECT 1 FROM kid_titles kt WHERE kt.user_id = @uid AND kt.item_id IN (i.id, i.show_id))
 	OR EXISTS (SELECT 1 FROM kid_collections kc JOIN collections kcc ON kcc.id = kc.collection_id
 		JOIN items kci ON kci.id IN (i.id, i.show_id)
-		WHERE kc.user_id = @uid AND ` + memberOfAs("kci", "kcc") + `))`
+		WHERE kc.user_id = @uid AND ` + memberOfAs("kci", "kcc") + `
+			AND NOT EXISTS (SELECT 1 FROM kid_blocked kb WHERE kb.user_id = @uid AND kb.item_id = kci.id)))`
 
 // Every item query binds @uid so watch state and unwatched counts are per user.
 const itemSelect = `SELECT i.id, i.library_id, i.kind, i.parent_id, i.show_id, i.title, i.sort_title, i.original_title, i.year,

@@ -843,4 +843,16 @@ DELETE FROM item_aliases WHERE item_id IN (SELECT id FROM items WHERE kind = 'sh
 	`
 ALTER TABLE collections ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';
 `,
+	// 49: titles a parent kept out for a kid even though a collection
+	// approved for them has it (Deadpool in an approved Marvel collection).
+	`
+CREATE TABLE kid_blocked (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_by   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+CREATE INDEX kid_blocked_item ON kid_blocked(item_id);
+`,
 }

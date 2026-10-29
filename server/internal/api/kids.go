@@ -124,6 +124,10 @@ type kidTitleState struct {
 	Name     string `json:"name"`
 	Approved bool   `json:"approved"`
 	Avatar   string `json:"avatar,omitempty"`
+	// Via names a collection approved for the kid that has this title; it
+	// counts as approved unless it was kept out (Blocked).
+	Via     string `json:"via,omitempty"`
+	Blocked bool   `json:"blocked,omitempty"`
 }
 
 // approvableItem loads movie or show {id} if the signed-in user can see it.
@@ -161,15 +165,24 @@ func (s *Server) itemKids(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	via, blocked, err := s.Store.KidTitleCollections(it.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	out := []kidTitleState{}
 	for _, k := range kids {
-		out = append(out, kidTitleState{ID: k.ID, Name: memberName(k), Approved: have[k.ID], Avatar: k.Avatar})
+		approved := have[k.ID] || (via[k.ID] != "" && !blocked[k.ID])
+		out = append(out, kidTitleState{ID: k.ID, Name: memberName(k), Approved: approved, Avatar: k.Avatar, Via: via[k.ID], Blocked: blocked[k.ID]})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
 // setItemKids sets which of the caller's kids this movie or show is
-// approved for; kids the caller doesn't manage are left alone.
+// approved for; kids the caller doesn't manage are left alone. Leaving out
+// a kid who gets it through an approved collection keeps it out for them
+// (so a Marvel collection can be approved without Deadpool); ticking them
+// again lets it back in.
 func (s *Server) setItemKids(w http.ResponseWriter, r *http.Request) {
 	it := s.approvableItem(w, r)
 	if it == nil {
@@ -192,8 +205,25 @@ func (s *Server) setItemKids(w http.ResponseWriter, r *http.Request) {
 	for _, id := range req.UserIDs {
 		want[id] = true
 	}
+	have, err := s.Store.KidTitleUsers(it.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	via, _, err := s.Store.KidTitleCollections(it.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
 	for _, k := range kids {
-		if err := s.Store.SetKidTitle(k.ID, it.ID, u.ID, want[k.ID]); err != nil {
+		// Through a collection, ticking just lifts any block (keeping an
+		// approval of its own if it had one); otherwise it takes one.
+		approve := want[k.ID] && (via[k.ID] == "" || have[k.ID])
+		err := s.Store.SetKidTitle(k.ID, it.ID, u.ID, approve)
+		if err == nil {
+			err = s.Store.SetKidBlocked(k.ID, it.ID, u.ID, !want[k.ID] && via[k.ID] != "")
+		}
+		if err != nil {
 			writeStoreErr(w, err)
 			return
 		}

@@ -322,6 +322,41 @@ func TestKidCollections(t *testing.T) {
 		t.Fatalf("approved shows: %+v", list)
 	}
 
+	// Unticking a title that came in through a collection keeps it out (and
+	// a show's episodes with it), even when the collection is approved again.
+	call("dana", "GET", "/api/items/"+id(cars)+"/kids", "", &kids)
+	if len(kids) != 1 || !kids[0].Approved || kids[0].Via != "Pixar" {
+		t.Fatalf("cars via pixar: %+v", kids)
+	}
+	for _, it := range []int64{cars, bluey} {
+		if c := call("dana", "PUT", "/api/items/"+id(it)+"/kids", `{"userIds":[]}`, nil); c != http.StatusNoContent {
+			t.Fatalf("keep out: %d", c)
+		}
+	}
+	for _, it := range []int64{cars, bluey, ep} {
+		if c := call("kid", "GET", "/api/items/"+id(it), "", nil); c != http.StatusNotFound {
+			t.Errorf("kid still opens kept-out %d: %d", it, c)
+		}
+	}
+	call("dana", "GET", "/api/items/"+id(cars)+"/kids", "", &kids)
+	if len(kids) != 1 || kids[0].Approved || !kids[0].Blocked {
+		t.Fatalf("cars kept out: %+v", kids)
+	}
+	call("kid", "GET", "/api/kids/titles?kind=movie", "", &list)
+	if len(list) != 1 || list[0].Title != "Toy Story" {
+		t.Fatalf("approved movies without cars: %+v", list)
+	}
+	call("dana", "PUT", "/api/collections/"+id(pixar)+"/kids", `{"userIds":[]}`, nil)
+	call("dana", "PUT", "/api/collections/"+id(pixar)+"/kids", `{"userIds":[`+id(kid.ID)+`]}`, nil)
+	if c := call("kid", "GET", "/api/items/"+id(cars), "", nil); c != http.StatusNotFound {
+		t.Fatalf("re-approving the collection let Cars back in: %d", c)
+	}
+	// Ticking it again lets it back in.
+	call("dana", "PUT", "/api/items/"+id(cars)+"/kids", `{"userIds":[`+id(kid.ID)+`]}`, nil)
+	if c := call("kid", "GET", "/api/items/"+id(cars), "", nil); c != http.StatusOK {
+		t.Fatalf("Cars not back: %d", c)
+	}
+
 	// Taking it away.
 	call("dana", "PUT", "/api/collections/"+id(pixar)+"/kids", `{"userIds":[]}`, nil)
 	if c := call("kid", "GET", "/api/items/"+id(toyStory), "", nil); c != http.StatusNotFound {
