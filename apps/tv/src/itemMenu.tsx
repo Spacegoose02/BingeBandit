@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { DeviceEventEmitter, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { api, current } from './api'
 import { Button } from './components'
-import { ItemMenuContext, useNav } from './nav'
+import { favoritesChanged, ItemMenuContext, useNav } from './nav'
 import { colors, font, scaled } from './theme'
 import type { Item, ItemDetail } from './types'
 
@@ -113,6 +113,17 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
               label={top.onWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
               onPress={() =>
                 act(top.onWatchlist ? api.del(`/api/watchlist/${top.id}`) : api.post(`/api/watchlist/${top.id}`), top.onWatchlist ? 'Removed from your watchlist.' : 'Added to your watchlist.')
+              }
+            />
+          )}
+          {(it.kind === 'movie' || it.kind === 'show' || it.kind === 'episode') && (
+            <Opt
+              label={it.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              onPress={() =>
+                act(
+                  (it.favorite ? api.del(`/api/favorites/${it.id}`) : api.post(`/api/favorites/${it.id}`)).then(() => DeviceEventEmitter.emit(favoritesChanged)),
+                  it.favorite ? 'Removed from your favorites.' : 'Added to your favorites.',
+                )
               }
             />
           )}

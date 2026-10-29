@@ -21,6 +21,23 @@ func (s *Store) Watchlist(uid int64) ([]*Item, error) {
 		WHERE `+visible+` ORDER BY wl2.added_at DESC`, uidArg(uid))
 }
 
+func (s *Store) AddFavorite(uid, itemID int64) error {
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO favorites (user_id, item_id, added_at) VALUES (?, ?, ?)`, uid, itemID, now())
+	return err
+}
+
+func (s *Store) RemoveFavorite(uid, itemID int64) error {
+	_, err := s.db.Exec(`DELETE FROM favorites WHERE user_id = ? AND item_id = ?`, uid, itemID)
+	return err
+}
+
+// Favorites lists the user's favorite movies, shows and episodes, newest
+// additions first.
+func (s *Store) Favorites(uid int64) ([]*Item, error) {
+	return s.queryItems(itemSelect+` JOIN favorites fv2 ON fv2.item_id = i.id AND fv2.user_id = @uid
+		WHERE `+visible+` ORDER BY fv2.added_at DESC`, uidArg(uid))
+}
+
 type Playlist struct {
 	ID        int64   `json:"id"`
 	UserID    int64   `json:"userId"`

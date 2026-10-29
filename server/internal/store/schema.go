@@ -843,4 +843,14 @@ DELETE FROM item_aliases WHERE item_id IN (SELECT id FROM items WHERE kind = 'sh
 	`
 ALTER TABLE collections ADD COLUMN labels TEXT NOT NULL DEFAULT '[]';
 `,
+	// 49: each person's favorite movies, shows and episodes, added from the
+	// hold (or ⋮) menu and shown under Favorites.
+	`
+CREATE TABLE favorites (
+	user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	added_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+`,
 }

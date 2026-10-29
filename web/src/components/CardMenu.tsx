@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import { toggleFavorite } from './AddToPlaylist'
 import { useAuth } from '../auth'
 import { episodeLabel } from '../format'
 import type { Collection, Item, ItemDetail, Playlist, Visibility } from '../types'
@@ -453,6 +454,19 @@ function ItemMenuBody({
           }
         >
           <Icon name="bookmark" size={16} fill={top.onWatchlist} /> {top.onWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+        </button>
+      )}
+      {(it.kind === 'movie' || it.kind === 'show' || it.kind === 'episode') && (
+        <button
+          role="menuitem"
+          onClick={() =>
+            act(
+              toggleFavorite(it),
+              it.favorite ? 'Removed from your favorites.' : 'Added to your favorites.',
+            )
+          }
+        >
+          <Icon name="heart" size={16} fill={it.favorite} /> {it.favorite ? 'Remove from favorites' : 'Add to favorites'}
         </button>
       )}
       <button role="menuitem" onClick={() => openPage('playlists')}>

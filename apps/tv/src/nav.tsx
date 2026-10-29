@@ -68,4 +68,7 @@ export const FocusMemoryContext = createContext<(view: FocusTarget | null) => vo
  * Opens the options for a title (holding OK on a card, or a long tap):
  * play, go to the show, mark watched, watchlist, playlists and more.
  */
+/** Emitted (DeviceEventEmitter) after a favorite is added or removed, so the Favorites tab reloads. */
+export const favoritesChanged = 'favoritesChanged'
+
 export const ItemMenuContext = createContext<(item: import('./types').Item) => void>(() => {})

@@ -51,6 +51,7 @@ export interface Item {
   childCount?: number
   unwatchedCount?: number
   onWatchlist?: boolean
+  favorite?: boolean
   credits?: Credit[] // movies and shows, on the details endpoint
   watch: WatchState
 }

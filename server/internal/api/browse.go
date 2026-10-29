@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -45,6 +46,14 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		add("watchlist", "On Your Watchlist", toWatch, nil)
+	}
+	// Favorites get a row once the person pins them, like the tab.
+	if p, err := s.Store.UserPrefs(uid); err == nil && slices.Contains(p.PinnedTabs, "favorites") {
+		favs, err := s.Store.Favorites(uid)
+		if len(favs) > 40 {
+			favs = favs[:40]
+		}
+		add("favorites", "Your Favorites", favs, err)
 	}
 	recommended, recommendedBy := s.recommendedRow(uid)
 	add("recommended", "Recommended for You", recommended, nil)

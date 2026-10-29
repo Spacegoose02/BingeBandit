@@ -73,6 +73,26 @@ export function AddToPlaylist({ item }: { item: Item }) {
 }
 
 /** Toggle for adding a movie or show to the watchlist. */
+/** Fired on window after a favorite is added or removed, so Favorites and Home reload. */
+export const favoritesChanged = 'bb:favorites-changed'
+
+export async function toggleFavorite(item: Item) {
+  await api[item.favorite ? 'del' : 'post'](`/api/favorites/${item.id}`)
+  window.dispatchEvent(new Event(favoritesChanged))
+}
+
+export function FavoriteButton({ item, onChange }: { item: Item; onChange: () => void }) {
+  return (
+    <button
+      className="btn btn-glass icon-only"
+      onClick={() => toggleFavorite(item).then(onChange)}
+      title={item.favorite ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      <Icon name="heart" size={18} fill={item.favorite} className={item.favorite ? 'accent' : ''} />
+    </button>
+  )
+}
+
 export function WatchlistButton({ item, onChange }: { item: Item; onChange: () => void }) {
   const toggle = async () => {
     await api[item.onWatchlist ? 'del' : 'post'](`/api/watchlist/${item.id}`)
