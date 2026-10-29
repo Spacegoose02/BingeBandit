@@ -136,6 +136,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingLiveStallSeconds:  {3, 120},
 		store.SettingWatchedPercent:    {50, 100},
 		store.SettingContinueDays:      {0, 3650},
+		store.SettingRecentDays:        {0, 3650},
 		store.SettingDefaultMinimum:    {1, 1000},
 	} {
 		if v, ok := in[key]; ok {

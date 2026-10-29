@@ -1212,6 +1212,8 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .notify-item img.notify-img-sports { height: 40px; object-fit: contain; background: none; }
 .row-title-link { color: inherit; text-decoration: none; }
 .row-title-link:hover { text-decoration: underline; }
+.see-all-frame { display: grid; place-items: center; border: 1px dashed var(--border-strong); color: var(--muted); font-weight: 600; }
+.see-all-card:hover .see-all-frame { color: var(--text); }
 
 /* Score bug: your teams' live scores over the player. */
 .score-bug { position: absolute; top: 16px; left: 16px; z-index: 5; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }

@@ -30,6 +30,7 @@ const (
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
 	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
 	SettingContinueDays      = "continue_watching_days"  // titles not played for this long leave Continue Watching; 0 = never
+	SettingRecentDays        = "recently_added_days"     // Recently Added only shows titles added this many days back; 0 = any
 	SettingWatchFolders      = "watch_folders"
 	SettingMaintenanceStart  = "maintenance_start" // hour 0-23
 	SettingMaintenanceEnd    = "maintenance_end"   // hour 0-23; equal to start = any time
@@ -102,6 +103,7 @@ var SettingDefaults = map[string]string{
 	SettingRecommendations:   "true",
 	SettingWatchedPercent:    "90",
 	SettingContinueDays:      "0",
+	SettingRecentDays:        "90",
 	SettingWatchFolders:      "true",
 	SettingMaintenanceStart:  "2",
 	SettingMaintenanceEnd:    "5",

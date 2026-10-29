@@ -174,8 +174,14 @@ const WideCardView = memo(function Wide({ item, onPress, onFocus, preferFocus }:
 /**
  * A titled row of items that only builds the cards near the screen, adding
  * more as focus moves along it, instead of every card of every row at once.
+ * With onSeeAll (a collection's row), a blank "See all" poster ends it.
  */
-export function ItemRow({ title, items, renderItem }: { title: string; items: Item[]; renderItem: (it: Item, index: number) => React.ReactElement }) {
+export function ItemRow({ title, items, renderItem, onSeeAll }: {
+  title: string
+  items: Item[]
+  renderItem: (it: Item, index: number) => React.ReactElement
+  onSeeAll?: () => void
+}) {
   return (
     <View style={s.row}>
       <Text style={s.rowTitle}>{title}</Text>
@@ -189,8 +195,18 @@ export function ItemRow({ title, items, renderItem }: { title: string; items: It
         initialNumToRender={8}
         maxToRenderPerBatch={6}
         windowSize={5}
+        ListFooterComponent={onSeeAll && items.length > 0 ? <SeeAllCard onPress={onSeeAll} /> : null}
       />
     </View>
+  )
+}
+
+/** The blank poster at the end of a collection's row that opens it. */
+export function SeeAllCard({ onPress }: { onPress: () => void }) {
+  return (
+    <Focusable onPress={onPress} style={s.poster}>
+      <View style={[s.posterImg, s.fallback, s.seeAll]}><Text style={s.seeAllText}>See all</Text></View>
+    </Focusable>
   )
 }
 
@@ -230,6 +246,8 @@ const s = StyleSheet.create(scaled({
   posterTitle: { width: 230, marginBottom: 30 },
   fallback: { alignItems: 'center', justifyContent: 'center', padding: 16, backgroundColor: colors.surface3 },
   fallbackText: { color: colors.muted, fontSize: font.small, textAlign: 'center' },
+  seeAll: { backgroundColor: colors.surface2 },
+  seeAllText: { color: colors.text, fontSize: font.body, fontWeight: '700' },
   badge: { position: 'absolute', top: 12, right: 12, minWidth: 44, height: 44, borderRadius: 22, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
   badgeText: { color: colors.accentText, fontWeight: '800', fontSize: 22 },
   progressTrack: { position: 'absolute', left: 14, right: 14, bottom: 14, height: 8, borderRadius: 4, backgroundColor: 'rgba(0,0,0,0.6)' },

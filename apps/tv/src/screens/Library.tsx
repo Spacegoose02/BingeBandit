@@ -90,7 +90,13 @@ function Recommended({ library }: { library: Library }) {
   return (
     <ScrollView style={st.flex} contentContainerStyle={st.rows}>
       {data.map((row) => (
-        <ItemRow key={row.id} title={row.title} items={row.items} renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />} />
+        <ItemRow
+          key={row.id}
+          title={row.title}
+          items={row.items}
+          renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />}
+          onSeeAll={row.collectionId ? () => nav.push({ name: 'collection', id: row.collectionId! }) : undefined}
+        />
       ))}
     </ScrollView>
   )
