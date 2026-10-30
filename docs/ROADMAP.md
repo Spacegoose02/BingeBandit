@@ -176,6 +176,26 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Hue Entertainment API streaming (25 updates a second, like the Hue Sync box): pick an entertainment area made in the Hue app as a screen's lights |
 | ✅ | Plugin catalogue: install, update and uninstall plugins from a list (BingeBandit's own, published with each release, plus catalogues the admin adds) instead of copying folders |
 
+## Board, 2026-10-30
+
+Cards added on the latest board. HANDOFF.md → Open work has more detail.
+
+| | Item |
+|---|---|
+| | **Sports hub on TV**: scores and schedules for many more leagues (college sports, Premier League, Champions League, MLS, cricket, rugby, AFL…), My Teams rows and a star everywhere, box scores, player stats, leaders and standings, game preview in the corner, spoiler-free mode, Multi-View of up to four games with saved layouts and "next game of my team" |
+| | Game Lights reachable from the Sports hub and the TV app's settings |
+| | Hue Sync and Game Lights switched on per profile from the web; hidden for people who haven't turned them on |
+| | Hue Sync room, mode (picture or theater) and on/off as per-device settings in the TV app |
+| | Game Lights off by default in the TV app; turned on and paired per profile in device settings |
+| | An easy way for older, non-technical people to get the app onto their TV |
+| | TV app: the remote's select button sounds like it clicks twice |
+| 🟡 | Bugs and security review |
+
 ## Docs
 
-- Good documentation site (install guides per platform, hardware transcoding guide, naming guide).
+| | Item |
+|---|---|
+| ✅ | User guide, Unraid guide, TV setup guide, HTTP API, plugins, architecture |
+| ✅ | Developer guide (`docs/DEVELOPMENT.md`): build, fakes, checks, code rules, releasing |
+| ✅ | HANDOFF.md with a "start here" section, open work and what's never been tried for real |
+| | Documentation site (install guides per platform, hardware transcoding guide, naming guide) |
