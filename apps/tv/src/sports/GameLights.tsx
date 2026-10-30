@@ -14,6 +14,7 @@ interface LightsPerson {
   delays: Record<string, number>
   opponent?: string
   colours: Record<string, [string, string]>
+  devices?: Record<string, unknown> // each TV's own switch and room, set in its Settings
 }
 
 interface LightsState {
@@ -103,10 +104,17 @@ export default function GameLights({ teams, onClose }: { teams: SportsTeam[]; on
               </View>
             )
           })}
-          <Focusable onPress={() => save({ ...p, area: cycle(areas.map((a) => a.id), p.area ?? '') })} style={st.lightsOption}>
-            <Text style={st.name}>Room: {areaName}</Text>
-            <Text style={st.small}>The room you watch in. OK for the next one.</Text>
-          </Focusable>
+          {p.devices ? (
+            <View style={st.lightsOption}>
+              <Text style={st.name}>Room</Text>
+              <Text style={st.small}>Each TV turns Game Lights on and picks its room in Settings, This TV.</Text>
+            </View>
+          ) : (
+            <Focusable onPress={() => save({ ...p, area: cycle(areas.map((a) => a.id), p.area ?? '') })} style={st.lightsOption}>
+              <Text style={st.name}>Room: {areaName}</Text>
+              <Text style={st.small}>The room you watch in. OK for the next one.</Text>
+            </Focusable>
+          )}
           <Focusable onPress={() => save({ ...p, source: cycle(state.sources, p.source) })} style={st.lightsOption}>
             <Text style={st.name}>Watching on: {p.source}</Text>
             <Text style={st.small}>Each way of watching keeps its own delay. OK for the next one.</Text>

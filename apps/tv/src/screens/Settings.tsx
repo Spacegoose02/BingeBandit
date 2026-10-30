@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { ApiError, api, current, saveSession } from '../api'
 import { Button, Focusable } from '../components'
-import { hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
-import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveHueMode, type GameLightsSetup, type HueMode } from '../lights'
+import { deviceId, hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
+import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveGameLightsDevice, saveHueMode, type GameLightsDevice, type GameLightsSetup, type HueMode } from '../lights'
 import { discoverHubs, hubAreas, LinkButton, loadHub, pairHub, refreshGameLights, saveHub, type Hub, type HubArea } from '../hue'
 import { Icon } from '../icons'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
@@ -175,19 +175,31 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   useEffect(() => {
     loadHub().then(setHub)
   }, [])
+  // Game Lights on this TV: its own switch and room, like Hue Sync (off until turned on here).
+  const [devId, setDevId] = useState('')
+  const deviceName = (Platform.constants as { Model?: string }).Model ?? (isPhone ? 'Phone' : 'TV')
+  useEffect(() => {
+    deviceId().then(setDevId)
+  }, [])
+  const lightsHere: GameLightsDevice = (devId && lights?.person.devices?.[devId]) || {}
+  const saveLightsHere = (d: GameLightsDevice) => {
+    if (!lights || !devId) return
+    const next = { ...d, name: deviceName }
+    setLights({ ...lights, person: { ...lights.person, devices: { ...lights.person.devices, [devId]: next } } })
+    saveGameLightsDevice(devId, next).then(refreshGameLights, () => setLights(lights))
+  }
   const hubChanged = (h: Hub | null) => {
     setHub(h)
-    // Game Lights cues come to this TV while it has a hub, else the server flashes its own.
-    if (lights && !!lights.person.local !== !!h) saveLights({ ...lights.person, local: !!h })
+    // With its own hub, this TV plays Game Lights cues; without, the server flashes its bridge.
+    if (lightsHere.on && !!lightsHere.local !== !!h) saveLightsHere({ ...lightsHere, local: !!h })
     else refreshGameLights()
   }
   const lightsAreas = [{ id: '', name: "The house's game lights" }, ...(lights?.areas ?? []).map((a) => ({ id: a.id, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))]
-  const lightsArea = lights?.person.area ?? ''
+  const lightsArea = lightsHere.area ?? ''
   const lightsAreaName = lightsAreas.find((a) => a.id === lightsArea)?.name ?? lightsAreas[0].name
   const nextLightsArea = () => {
-    if (!lights) return
     const i = lightsAreas.findIndex((a) => a.id === lightsArea)
-    saveLights({ ...lights.person, area: lightsAreas[(i + 1) % lightsAreas.length].id })
+    saveLightsHere({ ...lightsHere, area: lightsAreas[(i + 1) % lightsAreas.length].id })
   }
   // Recommendations from other people, unless an admin turned them off.
   const [recs, setRecs] = useState<{ accept: boolean; enabled?: boolean } | null>(null)
@@ -307,17 +319,28 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           <Text style={st.value}>Game Lights for {s?.user.profileName ?? s?.user.username}: {lights.person.enabled ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
             {lights.person.enabled
-              ? 'The Hue lights flash when your teams score. More choices are under Game Lights in Sports.'
-              : 'Flash the Hue lights when the teams you follow in Sports score. Off until you turn it on.'}{' '}
+              ? 'Your teams can flash the Hue lights when they score. Each device turns it on and picks its room below. More choices are under Game Lights in Sports.'
+              : 'Flash the Hue lights when the teams you follow in Sports score. Off until you turn it on, here or in Account on the web.'}{' '}
             {isPhone ? 'Tap' : 'Press OK'} to turn it {lights.person.enabled ? 'off' : 'on'}.
           </Text>
-          {!!lights.person.enabled && !lights.paired && !hub && <Text style={st.error}>Pair this home's Hue hub below, or ask an admin to pair one on the Game Lights setup page.</Text>}
         </Focusable>
       )}
-      {lights?.person.enabled && lights.paired && !hub && (
+      {lights?.person.enabled && !!devId && (
+        <Focusable onPress={() => saveLightsHere({ ...lightsHere, on: !lightsHere.on, local: !!hub })} style={st.option}>
+          <Text style={st.value}>Game Lights on this {isPhone ? 'phone' : 'TV'}: {lightsHere.on ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {lightsHere.on ? 'The Hue lights where this device is flash for your teams.' : 'The Hue lights here leave Game Lights alone.'} {isPhone ? 'Tap' : 'Press OK'} to turn it{' '}
+            {lightsHere.on ? 'off' : 'on'}.
+          </Text>
+          {!!lightsHere.on && !lights.paired && !hub && <Text style={st.error}>Pair this home's Hue hub below, or ask an admin to pair one on the Game Lights setup page.</Text>}
+        </Focusable>
+      )}
+      {lights?.person.enabled && lightsHere.on && lights.paired && !hub && (
         <Focusable onPress={nextLightsArea} style={st.option}>
           <Text style={st.value}>Game Lights room: {lightsAreaName}</Text>
-          <Text style={st.hint}>The room you watch games in; its lights flash for your profile. {isPhone ? 'Tap' : 'Press OK'} for the next one.</Text>
+          <Text style={st.hint}>
+            The room or zone this {isPhone ? 'phone' : 'TV'} is in; its lights flash for your teams, and other rooms have their own. {isPhone ? 'Tap' : 'Press OK'} for the next one.
+          </Text>
         </Focusable>
       )}
       {(hue || !!lights?.person.enabled) && <HueHub hub={hub} onChange={hubChanged} />}

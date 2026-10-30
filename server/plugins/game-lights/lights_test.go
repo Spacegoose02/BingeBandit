@@ -511,3 +511,61 @@ func TestLocalCues(t *testing.T) {
 		t.Errorf("the server's bridge changed lights for a TV-driven person: %v", fb.sets)
 	}
 }
+
+// Each TV has its own switch and room; once one has, only TVs that are
+// on flash, and a TV with its own hub gets its own cues.
+func TestDevices(t *testing.T) {
+	a, fb := testApp(t)
+	a.conf.update(func(c *Config) {
+		c.People = map[string]Person{"1": {Enabled: true, Area: "10"}}
+	})
+	a.settings["delay_seconds"] = "0"
+	put := func(path, body string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("PUT", path, strings.NewReader(body))
+		req.Header.Set("X-BingeBandit-User-Id", "1")
+		a.routes().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := put("/me/devices/den", `{"name":"Den TV","on":true,"area":"11"}`); c != 204 {
+		t.Fatalf("save device: %d", c)
+	}
+	put("/me/devices/living", `{"name":"Living room TV","on":false,"area":"10"}`)
+	put("/me/devices/cabin", `{"on":true,"local":true}`)
+	// Saving the rest of the person's choices keeps the TVs.
+	put("/me/settings", `{"enabled":true,"area":"10","opponent":"red"}`)
+	p := a.conf.get().People["1"]
+	if len(p.Devices) != 3 || !p.Devices["den"].On || p.Devices["den"].Area != "11" {
+		t.Fatalf("devices = %+v", p.Devices)
+	}
+	spots := p.spots("1")
+	if len(spots) != 2 {
+		t.Fatalf("spots = %+v, want the den and the cabin's cues", spots)
+	}
+
+	b, _ := json.Marshal(map[string]any{
+		"sport": "hockey", "scorer": "259",
+		"game": map[string]any{"id": "401", "league": "nhl", "shortName": "MIA @ VT", "state": "in",
+			"home": map[string]any{"id": "259", "shortName": "Hokies", "abbr": "VT", "color": "630031", "altColor": "cf4420", "score": "1"},
+			"away": map[string]any{"id": "2390", "shortName": "Hurricanes", "abbr": "MIA", "color": "005030", "altColor": "f47321", "score": "0"}},
+		"fans": []map[string]any{{"userId": 1, "user": "michael", "teamId": "259"}},
+	})
+	a.follower.onEvent(context.Background(), "sports.score", b)
+	wait(t, func() bool { return logged(a, "Lights: MIA @ VT") && a.runnerFor("11").Idle() })
+	fb.mu.Lock()
+	rooms := map[string]bool{}
+	for _, s := range fb.sets {
+		rooms[s[:1]] = true
+	}
+	fb.mu.Unlock()
+	if !rooms["3"] || rooms["1"] {
+		t.Errorf("lights changed: %v, want only the den (3), not the living room that's off", rooms)
+	}
+	if got := a.cues.after("1/cabin", 0); len(got) != 1 {
+		t.Errorf("cabin cues = %v, want one", got)
+	}
+	if got := a.cues.after("1", 0); len(got) != 0 {
+		t.Errorf("the profile's own box got %v; cues go to the TV", got)
+	}
+	a.resetAll()
+}

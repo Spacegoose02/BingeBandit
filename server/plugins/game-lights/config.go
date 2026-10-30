@@ -58,6 +58,48 @@ type Person struct {
 	// effects there (the server's bridge may be in another home), so the
 	// server queues cues for it instead of flashing its own lights.
 	Local bool `json:"local,omitempty"`
+	// Devices are the person's TVs, each with its own switch and room (TV
+	// Settings), by the id the app made for itself. Once any TV has set
+	// one, the lights flash only where a device has Game Lights on.
+	Devices map[string]Device `json:"devices,omitempty"`
+}
+
+// Device is one TV's Game Lights: on or off, and where its lights are.
+type Device struct {
+	Name string `json:"name,omitempty"`
+	On   bool   `json:"on,omitempty"`
+	Area string `json:"area,omitempty"` // Hue room or zone on the server's bridge; "" = the lights the admin ticked
+	// Local means this TV paired its own hub and plays cues on it.
+	Local bool `json:"local,omitempty"`
+}
+
+// spot is somewhere a person's effect plays: a room on the server's bridge,
+// or a cue box for a TV that drives its own hub.
+type spot struct {
+	area  string
+	local bool
+	box   string // cue box key, when local
+}
+
+// spots is where this person's effects play.
+func (p Person) spots(uid string) []spot {
+	if p.Devices == nil {
+		if p.Local {
+			return []spot{{local: true, box: uid}}
+		}
+		return []spot{{area: p.Area}}
+	}
+	var out []spot
+	for id, d := range p.Devices {
+		switch {
+		case !d.On:
+		case d.Local:
+			out = append(out, spot{local: true, box: uid + "/" + id})
+		default:
+			out = append(out, spot{area: d.Area})
+		}
+	}
+	return out
 }
 
 // lightsFor reports whether this person's lights flash for a team.

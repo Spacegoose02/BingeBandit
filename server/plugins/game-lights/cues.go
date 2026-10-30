@@ -83,12 +83,16 @@ func (a *app) fireLocal(uid, key string, pal Palette, label string, delay time.D
 	}
 }
 
-// myCues is what the TV polls: GET /me/cues?after=<id>.
+// myCues is what the TV polls: GET /me/cues?after=<id>&device=<its id>.
 func (a *app) myCues(w http.ResponseWriter, r *http.Request, uid string) {
 	after, err := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"cues": []any{}, "last": a.cues.latest()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"cues": a.cues.after(uid, after), "last": a.cues.latest()})
+	box := uid
+	if d := r.URL.Query().Get("device"); d != "" {
+		box += "/" + d
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"cues": a.cues.after(box, after), "last": a.cues.latest()})
 }

@@ -39,6 +39,7 @@ func (a *app) meRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /me/test", signedIn(a.testMine))
 	mux.HandleFunc("POST /me/calibrate", signedIn(a.calibrate))
 	mux.HandleFunc("GET /me/cues", signedIn(a.myCues))
+	mux.HandleFunc("PUT /me/devices/{id}", signedIn(a.saveDevice))
 }
 
 func (a *app) myState(w http.ResponseWriter, r *http.Request, uid string) {
@@ -115,6 +116,7 @@ func (a *app) saveMine(w http.ResponseWriter, r *http.Request, uid string) {
 		if c.People == nil {
 			c.People = map[string]Person{}
 		}
+		p.Devices = c.People[uid].Devices // each TV sets its own (PUT /me/devices/{id})
 		c.People[uid] = p
 	})
 }
@@ -142,16 +144,22 @@ func (a *app) testMine(w http.ResponseWriter, r *http.Request, uid string) {
 	if t.ID == "" {
 		t = a.sampleTeam("")
 	}
-	if p.Local {
-		a.fireLocal(uid, req.Effect, conf.paletteFor(t, p), "Test: "+req.Effect+" ("+t.Short+")", 0)
-		w.WriteHeader(http.StatusAccepted)
+	spots := p.spots(uid)
+	if len(spots) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "turn Game Lights on for a TV first, in its Settings"})
 		return
 	}
-	if conf.Username == "" || (p.Area == "" && len(conf.Lights) == 0) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an admin needs to pair the Hue bridge first"})
-		return
+	label := "Test for " + bbUser(r) + ": " + req.Effect + " (" + t.Short + ")"
+	for _, s := range spots {
+		if s.local {
+			a.fireLocal(s.box, req.Effect, conf.paletteFor(t, p), label, 0)
+		} else if conf.Username == "" || (s.area == "" && len(conf.Lights) == 0) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an admin needs to pair the Hue bridge first, or pair this home's hub in the TV's Settings"})
+			return
+		} else {
+			a.runnerFor(s.area).Fire(req.Effect, conf.paletteFor(t, p), label, 0)
+		}
 	}
-	a.runnerFor(p.Area).Fire(req.Effect, conf.paletteFor(t, p), "Test for "+bbUser(r)+": "+req.Effect+" ("+t.Short+")", 0)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -192,4 +200,39 @@ func (a *app) calibrate(w http.ResponseWriter, r *http.Request, uid string) {
 func bbUser(r *http.Request) string {
 	u, _ := bbplugin.UserOf(r)
 	return u.Username
+}
+
+// saveDevice sets one TV's own switch and room, leaving the person's other
+// choices (and other TVs) as they are.
+func (a *app) saveDevice(w http.ResponseWriter, r *http.Request, uid string) {
+	id := r.PathValue("id")
+	var d Device
+	if !readBody(w, r, &d) {
+		return
+	}
+	if len(id) > 64 || len(d.Name) > 60 || len(d.Area) > 20 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too long"})
+		return
+	}
+	a.save(w, func(c *Config) {
+		if c.People == nil {
+			c.People = map[string]Person{}
+		}
+		p := c.People[uid]
+		p.Devices = maps.Clone(p.Devices)
+		if p.Devices == nil {
+			p.Devices = map[string]Device{}
+		}
+		if _, known := p.Devices[id]; !known && len(p.Devices) >= 20 {
+			// Forget an old TV that's off rather than grow without end.
+			for k, o := range p.Devices {
+				if !o.On {
+					delete(p.Devices, k)
+					break
+				}
+			}
+		}
+		p.Devices[id] = d
+		c.People[uid] = p
+	})
 }
