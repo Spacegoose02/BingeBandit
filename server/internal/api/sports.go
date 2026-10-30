@@ -92,10 +92,26 @@ func (s *Server) sportsLive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"games": orEmpty(live)})
 }
 
+// myTeams is the user's teams in leagues the Sports Hub still has; a team
+// from a league since dropped stays saved but is left out.
+func (s *Server) myTeams(uid int64) ([]sports.Team, error) {
+	teams, err := s.Store.SportsTeams(uid)
+	if err != nil {
+		return nil, err
+	}
+	out := teams[:0]
+	for _, t := range teams {
+		if sports.LeagueByID(t.League) != nil {
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
 // myGames lists the games of the person's teams from before days ago to
 // after days ahead, with the leagues ESPN didn't answer for.
 func (s *Server) myGames(r *http.Request, before, after int) ([]sports.Team, []sportsGame, []string, error) {
-	teams, err := s.Store.SportsTeams(currentUser(r).ID)
+	teams, err := s.myTeams(currentUser(r).ID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -206,7 +222,12 @@ func (s *Server) findChannels(uid int64, games []sportsGame) {
 				continue
 			}
 			text := p.Title + " " + p.Subtitle + " " + p.Description
-			if !namesTeam(text, g.Home.Team) || !namesTeam(text, g.Away.Team) {
+			if g.Home.ID == "" && g.Away.ID == "" {
+				// A race: the guide names the series ("NASCAR Cup Series").
+				if l := sports.LeagueByID(g.League); l == nil || l.Sport != "racing" || !hasWord(strings.ToLower(text), "nascar") {
+					continue
+				}
+			} else if !namesTeam(text, g.Home.Team) || !namesTeam(text, g.Away.Team) {
 				continue
 			}
 			for _, c := range byEPG[p.EPGID] {
@@ -352,7 +373,7 @@ func (s *Server) sportsHub(w http.ResponseWriter, r *http.Request) {
 		leagues = sports.Leagues
 	}
 	u := currentUser(r)
-	teams, err := s.Store.SportsTeams(u.ID)
+	teams, err := s.myTeams(u.ID)
 	if err != nil {
 		writeStoreErr(w, err)
 		return

@@ -8,7 +8,7 @@ import { useLandscape } from '../screen'
 import { scaled, colors, font, isPhone } from '../theme'
 import type { LiveChannel, SportsDay, SportsGame, SportsHome } from '../types'
 import { MAX_SCREENS, byState, dayKey, isSportsChannel, loadSportsPrefs, multiViewPicks, patchPrefs, scoreShown, type MultiViewLayout } from '../sports/hub'
-import { ChannelCard } from '../sports/parts'
+import { ChannelCard, matchup, scoreLine } from '../sports/parts'
 import { usePreview } from './LiveGuide'
 import { NO_LIVE_BADGE } from './Player'
 
@@ -94,7 +94,7 @@ export default function MultiView({ channels: initial }: { channels: number[] })
       if (i < 0) i = focused
       put(i, id)
     }
-    say(`${g.away.shortName || g.away.name} at ${g.home.shortName || g.home.name} on ${g.channels![0].name}`)
+    say(`${matchup(g)} on ${g.channels![0].name}`)
   }
 
   const saveLayout = async () => {
@@ -286,7 +286,7 @@ function Screen({
 }) {
   const src = usePreview(channelId ?? undefined)
   const [focused, setFocused] = useState(false)
-  const score = game && scoreShown(game) ? `${game.away.abbr} ${game.away.score} · ${game.home.abbr} ${game.home.score} · ${game.detail}` : ''
+  const score = game && scoreShown(game) ? scoreLine(game) : ''
   return (
     <Focusable
       onPress={onPress}

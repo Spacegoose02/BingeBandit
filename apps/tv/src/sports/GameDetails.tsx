@@ -4,7 +4,7 @@ import { api } from '../api'
 import { Button, Focusable } from '../components'
 import { scaled, colors, font } from '../theme'
 import type { SportsGame, SportsSide, SportsSummary, SportsTeam } from '../types'
-import { revealScore, scoreShown, useSpoilers } from './hub'
+import { hasTeams, revealScore, scoreShown, useSpoilers } from './hub'
 import { Logo, gameStatus, leaderText } from './parts'
 
 type Tab = 'box' | 'stats' | 'leaders' | 'standings'
@@ -42,7 +42,8 @@ export default function GameDetails({
   const [tab, setTab] = useState<Tab>('box')
   const [sum, setSum] = useState<SportsSummary | null>(null)
   const [error, setError] = useState('')
-  const fights = sport === 'mma'
+  const fights = !hasTeams(sport) // UFC and NASCAR: no box score to read
+  const racing = sport === 'racing'
   useEffect(() => {
     if (fights) return
     let on = true
@@ -61,8 +62,8 @@ export default function GameDetails({
   const g = sum?.game?.id ? { ...game, ...sum.game, channels: game.channels, mine: game.mine } : game
   const shown = scoreShown(g)
   const isFollowed = (s: SportsSide) => followed.some((t) => t.league === g.league && t.id === s.id)
-  const title = `${g.away.name} at ${g.home.name}`
-  const sub = [gameStatus(g), shown ? `${g.away.abbr || g.away.shortName} ${g.away.score ?? ''} · ${g.home.abbr || g.home.shortName} ${g.home.score ?? ''}` : '', league]
+  const title = racing ? g.name : `${g.away.name} at ${g.home.name}`
+  const sub = [gameStatus(g), shown && !racing ? `${g.away.abbr || g.away.shortName} ${g.away.score ?? ''} · ${g.home.abbr || g.home.shortName} ${g.home.score ?? ''}` : '', league]
     .filter(Boolean)
     .join(' · ')
   const tabs: Tab[] = fights ? [] : ['box', 'stats', 'leaders', 'standings']
@@ -98,7 +99,9 @@ export default function GameDetails({
             <Button small label="Close" onPress={onClose} />
           </View>
           <ScrollView style={st.body} contentContainerStyle={st.bodyIn}>
-            {fights ? (
+            {racing ? (
+              <RunningOrder game={g} shown={shown} />
+            ) : fights ? (
               <FightCard game={g} shown={shown} />
             ) : hidden ? (
               <Text style={st.muted}>Spoiler-free: the score, stats and leaders stay hidden until you choose Show the score.</Text>
@@ -117,6 +120,27 @@ export default function GameDetails({
         </View>
       </View>
     </Modal>
+  )
+}
+
+/** A race's top ten (finishing order once it's over), hidden while spoiler-free. */
+function RunningOrder({ game: g, shown }: { game: SportsGame; shown: boolean }) {
+  const meta = <Text style={st.muted}>{[g.detail, g.venue, g.broadcasts?.join(', ')].filter(Boolean).join(' · ')}</Text>
+  if (g.state === 'pre') return meta
+  if (!shown) return <Text style={st.muted}>Spoiler-free: the running order stays hidden until you choose Show the score.</Text>
+  return (
+    <View>
+      {(g.race ?? []).map((d) => (
+        <View key={d.place} style={st.lineRow}>
+          <Text style={[st.abbr, st.place]}>{d.place}</Text>
+          <Text style={[st.lineName, d.place === 1 && st.strong]}>
+            {d.name}
+            {!!d.number && <Text style={st.muted}>  #{d.number}</Text>}
+          </Text>
+        </View>
+      ))}
+      {meta}
+    </View>
   )
 }
 
@@ -280,6 +304,7 @@ const st = StyleSheet.create(scaled({
   lineRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   lineRowIn: { flexDirection: 'row', alignItems: 'center' },
   lineTeam: { width: 460 },
+  place: { width: 50, textAlign: 'right' },
   abbr: { color: colors.muted, fontSize: font.small, fontWeight: '700', marginHorizontal: 14 },
   lineName: { flex: 1, color: colors.text, fontSize: font.small, fontWeight: '600', marginLeft: 8 },
   cell: { width: 64, color: colors.text, fontSize: font.small, textAlign: 'center' },

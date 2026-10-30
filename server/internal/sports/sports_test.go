@@ -251,3 +251,22 @@ func TestUFCBouts(t *testing.T) {
 		t.Errorf("early fight = %+v", early)
 	}
 }
+
+func TestRace(t *testing.T) {
+	var e espnEvent
+	if err := json.Unmarshal([]byte(`{"id":"700","date":"2026-11-02T18:00Z","name":"Xfinity 500","circuit":{"fullName":"Martinsville Speedway"},"competitions":[
+		{"id":"q","type":{"abbreviation":"Qual"},"date":"2026-11-01T17:00Z","status":{"type":{"state":"post"}},"competitors":[{"order":1,"athlete":{"displayName":"Pole Sitter"}}]},
+		{"id":"r","type":{"abbreviation":"Race"},"date":"2026-11-02T19:00Z","status":{"type":{"state":"in","detail":"Lap 120 of 500","shortDetail":"Lap 120"}},
+		 "broadcasts":[{"names":["NBC"]}],"competitors":[
+			{"order":2,"vehicle":{"number":"24"},"athlete":{"displayName":"Second Driver","shortName":"S. Driver"}},
+			{"order":1,"vehicle":{"number":"5"},"athlete":{"displayName":"Lead Driver","shortName":"L. Driver"}}]}]}`), &e); err != nil {
+		t.Fatal(err)
+	}
+	g := e.race().game("nascar")
+	if g.State != "in" || g.Detail != "Lap 120" || g.Venue != "Martinsville Speedway" || g.Broadcasts[0] != "NBC" || !g.Start.Equal(time.Date(2026, 11, 2, 19, 0, 0, 0, time.UTC)) {
+		t.Errorf("race = %+v", g)
+	}
+	if len(g.Race) != 2 || g.Race[0].Short != "L. Driver" || g.Race[0].Number != "5" || g.Race[1].Place != 2 || g.Home.ID != "" {
+		t.Errorf("running order = %+v", g.Race)
+	}
+}

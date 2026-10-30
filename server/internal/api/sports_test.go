@@ -109,6 +109,15 @@ func TestSports(t *testing.T) {
 		t.Fatalf("scores: %d %+v", code, day)
 	}
 
+	// A team from a league the hub has since dropped is left out, not an error.
+	st.SetSportsTeams(sam.ID, []sports.Team{{League: "premier-league", ID: "359", Name: "Arsenal"}, teams[0]})
+	var samPage struct {
+		Teams []sports.Team `json:"teams"`
+	}
+	if code := call("sam", "GET", "/api/sports", "", &samPage); code != 200 || len(samPage.Teams) != 1 || samPage.Teams[0].League != "college-football" {
+		t.Fatalf("dropped league: %d %+v", code, samPage)
+	}
+
 	// The Sports Hub: every league's day, Dana's team marked.
 	var hub struct {
 		Leagues []sports.League `json:"leagues"`

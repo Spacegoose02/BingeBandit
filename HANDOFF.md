@@ -5,6 +5,13 @@ Where BingeBandit stands, written so the next person (or AI session) can pick it
 _Last updated: 2026-10-30. Latest release v0.35.0, 50 schema migrations._
 
 
+
+## Sports Hub trimmed, NASCAR, Multi-View plays every screen (2026-10-30, no migration)
+
+- Leagues cut from 43 to 15 (football, basketball, baseball, hockey, MLS, UFC) plus **NASCAR Cup** (`racing/nascar-premier`): a race is a game with empty sides and `Race`, its top ten, from the weekend's Race session (practice and qualifying are skipped). Races find Live TV channels whose guide names NASCAR. Teams saved in a dropped league stay in the database but are left out (`myTeams`, and the tracker skips unknown leagues).
+- Multi-View passes `disableFocus` to react-native-video: each player took Android's audio focus as it started, and losing focus pauses a player, so only the newest screen played.
+- NASCAR's ESPN shape (competition `type.abbreviation`, competitor `order`, `vehicle.number`) is from memory, not checked against live ESPN.
+
 ## Start here
 
 ### What this is

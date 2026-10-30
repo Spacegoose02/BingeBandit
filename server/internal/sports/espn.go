@@ -34,8 +34,8 @@ type League struct {
 }
 
 // Leagues are every league the Sports Hub shows, in the order its rows
-// appear. Only two-sided games fit (no golf, tennis or racing). The soccer,
-// rugby and cricket ids are ESPN's own.
+// appear. UFC fights are games between two fighters; NASCAR races are games
+// with a running order (Race) instead of two sides.
 var Leagues = []League{
 	{ID: "nfl", Name: "NFL", Sport: "football", path: "football/nfl"},
 	{ID: "college-football", Name: "College football", Sport: "football", path: "football/college-football", groups: "80"},
@@ -50,37 +50,10 @@ var Leagues = []League{
 	{ID: "nhl", Name: "NHL", Sport: "hockey", path: "hockey/nhl"},
 	{ID: "mens-college-hockey", Name: "Men's college hockey", Sport: "hockey", path: "hockey/mens-college-hockey"},
 	{ID: "mls", Name: "MLS", Sport: "soccer", path: "soccer/usa.1"},
-	{ID: "nwsl", Name: "NWSL", Sport: "soccer", path: "soccer/usa.nwsl"},
-	{ID: "premier-league", Name: "Premier League", Sport: "soccer", path: "soccer/eng.1"},
-	{ID: "champions-league", Name: "Champions League", Sport: "soccer", path: "soccer/uefa.champions"},
-	{ID: "europa-league", Name: "Europa League", Sport: "soccer", path: "soccer/uefa.europa"},
-	{ID: "conference-league", Name: "Conference League", Sport: "soccer", path: "soccer/uefa.europa.conf"},
-	{ID: "la-liga", Name: "LaLiga", Sport: "soccer", path: "soccer/esp.1"},
-	{ID: "bundesliga", Name: "Bundesliga", Sport: "soccer", path: "soccer/ger.1"},
-	{ID: "serie-a", Name: "Serie A", Sport: "soccer", path: "soccer/ita.1"},
-	{ID: "ligue-1", Name: "Ligue 1", Sport: "soccer", path: "soccer/fra.1"},
-	{ID: "efl-championship", Name: "EFL Championship", Sport: "soccer", path: "soccer/eng.2"},
-	{ID: "fa-cup", Name: "FA Cup", Sport: "soccer", path: "soccer/eng.fa"},
-	{ID: "league-cup", Name: "Carabao Cup", Sport: "soccer", path: "soccer/eng.league_cup"},
-	{ID: "eredivisie", Name: "Eredivisie", Sport: "soccer", path: "soccer/ned.1"},
-	{ID: "primeira-liga", Name: "Primeira Liga", Sport: "soccer", path: "soccer/por.1"},
-	{ID: "scottish-premiership", Name: "Scottish Premiership", Sport: "soccer", path: "soccer/sco.1"},
-	{ID: "liga-mx", Name: "Liga MX", Sport: "soccer", path: "soccer/mex.1"},
-	{ID: "concacaf-champions", Name: "CONCACAF Champions Cup", Sport: "soccer", path: "soccer/concacaf.champions"},
-	{ID: "premiership-rugby", Name: "Premiership Rugby", Sport: "rugby", path: "rugby/267979"},
-	{ID: "urc", Name: "United Rugby Championship", Sport: "rugby", path: "rugby/270557"},
-	{ID: "top-14", Name: "Top 14", Sport: "rugby", path: "rugby/270559"},
-	{ID: "super-rugby", Name: "Super Rugby", Sport: "rugby", path: "rugby/242041"},
-	{ID: "six-nations", Name: "Six Nations", Sport: "rugby", path: "rugby/180659"},
-	{ID: "nrl", Name: "NRL", Sport: "rugby", path: "rugby-league/3"},
-	{ID: "afl", Name: "AFL", Sport: "australian-football", path: "australian-football/afl"},
-	{ID: "ipl", Name: "IPL", Sport: "cricket", path: "cricket/8048"},
-	{ID: "big-bash", Name: "Big Bash League", Sport: "cricket", path: "cricket/8044"},
-	{ID: "college-volleyball", Name: "Women's college volleyball", Sport: "volleyball", path: "volleyball/womens-college-volleyball"},
-	{ID: "pll", Name: "Premier Lacrosse League", Sport: "lacrosse", path: "lacrosse/pll"},
-	{ID: "college-lacrosse", Name: "Men's college lacrosse", Sport: "lacrosse", path: "lacrosse/mens-college-lacrosse"},
 	// UFC: each fight on a card is a game, the fighters its two sides.
 	{ID: "ufc", Name: "UFC", Sport: "mma", path: "mma/ufc"},
+	// NASCAR Cup Series: each race is a game with its running order.
+	{ID: "nascar", Name: "NASCAR Cup Series", Sport: "racing", path: "racing/nascar-premier"},
 }
 
 // LeagueByID finds a league, or nil.
@@ -119,6 +92,15 @@ type Side struct {
 	Leader *Leader `json:"leader,omitempty"`
 }
 
+// Driver is a place in a race.
+type Driver struct {
+	Place  int    `json:"place"`
+	Name   string `json:"name"`
+	Short  string `json:"shortName"`
+	Number string `json:"number,omitempty"` // the car's
+	Winner bool   `json:"winner,omitempty"`
+}
+
 // Leader is a player and what they've done ("1 REC, 16 YDS").
 type Leader struct {
 	Name     string `json:"name"`      // Malik Washington
@@ -140,6 +122,9 @@ type Game struct {
 	Clock  string    `json:"clock,omitempty"`
 	Home   Side      `json:"home"`
 	Away   Side      `json:"away"`
+	// Race is a race's running order (finishing order once it's over),
+	// leader first; racing games have no Home or Away.
+	Race []Driver `json:"race,omitempty"`
 	// Networks showing it, e.g. ESPN or FOX.
 	Broadcasts []string `json:"broadcasts,omitempty"`
 	Venue      string   `json:"venue,omitempty"`
@@ -230,8 +215,8 @@ func (c *Client) Teams(ctx context.Context, league string) ([]Team, error) {
 	if l == nil {
 		return nil, ErrUnknownLeague
 	}
-	if l.Sport == "mma" {
-		return []Team{}, nil // fighters, not teams, so nothing to follow
+	if l.Sport == "mma" || l.Sport == "racing" {
+		return []Team{}, nil // fighters and drivers, not teams, so nothing to follow
 	}
 	c.mu.Lock()
 	if e, ok := c.teams[league]; ok && c.Now().Before(e.exp) {
@@ -293,6 +278,9 @@ type espnEvent struct {
 	ShortName    string            `json:"shortName"`
 	Competitions []espnCompetition `json:"competitions"`
 	Status       espnStatus        `json:"status"`
+	Circuit      struct {
+		FullName string `json:"fullName"`
+	} `json:"circuit"`
 }
 
 type espnStatus struct {
@@ -306,7 +294,10 @@ type espnStatus struct {
 }
 
 type espnCompetition struct {
-	ID     string      `json:"id"`
+	ID   string `json:"id"`
+	Type struct {
+		Abbreviation string `json:"abbreviation"` // racing: FP1, Qual, Race
+	} `json:"type"`
 	Date   string      `json:"date"`
 	Status *espnStatus `json:"status"` // the game summary's header has it here
 	Venue  struct {
@@ -336,7 +327,11 @@ type espnCompetition struct {
 			Value        *float64 `json:"value"`
 			DisplayValue string   `json:"displayValue"`
 		} `json:"linescores"`
-		Leaders   []espnLeaders `json:"leaders"`
+		Leaders []espnLeaders `json:"leaders"`
+		Order   int           `json:"order"` // racing: the place
+		Vehicle struct {
+			Number string `json:"number"`
+		} `json:"vehicle"`
 		Probables []struct {
 			Athlete espnAthlete `json:"athlete"`
 			Record  string      `json:"record"`
@@ -403,6 +398,26 @@ func lineScore(v *float64, display string) string {
 	return strconv.FormatFloat(*v, 'f', -1, 64)
 }
 
+// race keeps a race weekend's race (not practice or qualifying) as the
+// event's only competition, so its status and start are the race's.
+func (e espnEvent) race() espnEvent {
+	if len(e.Competitions) == 0 {
+		return e
+	}
+	c := e.Competitions[len(e.Competitions)-1]
+	for _, x := range e.Competitions {
+		if strings.EqualFold(x.Type.Abbreviation, "Race") {
+			c = x
+		}
+	}
+	e.Competitions = []espnCompetition{c}
+	if c.Status != nil {
+		e.Status = *c.Status
+	}
+	e.Date = firstNonEmpty(c.Date, e.Date)
+	return e
+}
+
 // bouts splits a fight card into one event per fight, each with its own
 // status and start, so every fight is a game. The main event comes first.
 func (e espnEvent) bouts() []espnEvent {
@@ -440,7 +455,25 @@ func (e espnEvent) game(league string) Game {
 		return g
 	}
 	comp := e.Competitions[0]
-	g.Venue = comp.Venue.FullName
+	g.Venue = firstNonEmpty(comp.Venue.FullName, e.Circuit.FullName)
+	if l := LeagueByID(league); l != nil && l.Sport == "racing" {
+		for _, c := range comp.Competitors {
+			if c.Athlete == nil {
+				continue
+			}
+			g.Race = append(g.Race, Driver{Place: c.Order, Name: c.Athlete.DisplayName, Short: firstNonEmpty(c.Athlete.ShortName, c.Athlete.DisplayName),
+				Number: c.Vehicle.Number, Winner: c.Winner})
+		}
+		sort.SliceStable(g.Race, func(i, j int) bool { return g.Race[i].Place < g.Race[j].Place })
+		switch {
+		case g.State == "pre":
+			g.Race = nil // the entry list, in no order that means anything yet
+		case len(g.Race) > 10:
+			g.Race = g.Race[:10]
+		}
+		g.addBroadcasts(comp)
+		return g
+	}
 	for i, c := range comp.Competitors {
 		s := Side{Team: c.Team.team(league), Home: c.HomeAway == "home", Score: c.Score, Winner: c.Winner}
 		if c.Athlete != nil {
@@ -472,6 +505,11 @@ func (e espnEvent) game(league string) Game {
 			g.Away = s
 		}
 	}
+	g.addBroadcasts(comp)
+	return g
+}
+
+func (g *Game) addBroadcasts(comp espnCompetition) {
 	seen := map[string]bool{}
 	for _, b := range comp.Broadcasts {
 		for _, n := range b.Names {
@@ -481,7 +519,6 @@ func (e espnEvent) game(league string) Game {
 			}
 		}
 	}
-	return g
 }
 
 func firstNonEmpty(v ...string) string {
@@ -528,6 +565,8 @@ func (c *Client) Scoreboard(ctx context.Context, league, day string) ([]Game, er
 	for _, e := range body.Events {
 		if l.Sport == "mma" {
 			events = append(events, e.bouts()...)
+		} else if l.Sport == "racing" {
+			events = append(events, e.race())
 		} else {
 			events = append(events, e)
 		}
