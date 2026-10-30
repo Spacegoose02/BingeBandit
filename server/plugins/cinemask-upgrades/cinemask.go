@@ -267,11 +267,41 @@ func (c *Cinemask) SetProfile(ctx context.Context, id, profileID int64) error {
 	return c.do(ctx, "PATCH", "/api/monitored/"+strconv.FormatInt(id, 10), map[string]int64{"profileId": profileID}, nil)
 }
 
-// Monitor starts following a title, without searching yet.
-func (c *Cinemask) Monitor(ctx context.Context, kind string, tmdbID, profileID int64, search bool) (*Monitored, error) {
+// RootFolder is one of Cinemask's library folders: the main Movies and TV
+// ones ("default") and extras such as Kids Movies.
+type RootFolder struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+func (c *Cinemask) RootFolders(ctx context.Context) ([]RootFolder, error) {
+	var out struct {
+		Roots []RootFolder `json:"roots"`
+	}
+	return out.Roots, c.do(ctx, "GET", "/api/root-folders", nil, &out)
+}
+
+// rootFor is the id of the folder of this kind named like a BingeBandit
+// library, or "" for Cinemask's choice.
+func rootFor(roots []RootFolder, kind, library string) string {
+	for _, r := range roots {
+		if r.Kind == kind && strings.EqualFold(strings.TrimSpace(r.Name), strings.TrimSpace(library)) {
+			return r.ID
+		}
+	}
+	return ""
+}
+
+// Monitor starts following a title, without searching yet, in root folder
+// rootID ("" for the main one).
+func (c *Cinemask) Monitor(ctx context.Context, kind string, tmdbID, profileID int64, rootID string, search bool) (*Monitored, error) {
 	body := map[string]any{"kind": kind, "tmdbId": tmdbID, "search": search}
 	if profileID > 0 {
 		body["profileId"] = profileID
+	}
+	if rootID != "" {
+		body["rootId"] = rootID
 	}
 	var out Monitored
 	if err := c.do(ctx, "POST", "/api/monitored", body, &out); err != nil {

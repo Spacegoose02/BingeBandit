@@ -184,7 +184,7 @@ func (a *app) monitor(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	m, err := c.Monitor(r.Context(), t.Kind, t.TMDBID, t.ProfileID, false)
+	m, err := c.Monitor(r.Context(), t.Kind, t.TMDBID, t.ProfileID, "", false)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

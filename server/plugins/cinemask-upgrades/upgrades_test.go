@@ -75,6 +75,8 @@ func (f *fakeCinemask) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/api/auth/me":
 		io.WriteString(w, `{"user":{"username":"michael","role":"admin"}}`)
+	case r.URL.Path == "/api/root-folders":
+		io.WriteString(w, `{"roots":[{"id":"default","name":"Movies","kind":"movie"},{"id":"kids-tv","name":"Kids Movies","kind":"show"},{"id":"kids-movies","name":"Kids Movies","kind":"movie"}]}`)
 	case r.URL.Path == "/api/profiles":
 		io.WriteString(w, `[{"id":1,"name":"HD-720p","cutoff":"Bluray-720p","upgradesAllowed":true},{"id":2,"name":"HD-1080p","cutoff":"Bluray-1080p","upgradesAllowed":true}]`)
 	case r.URL.Path == "/api/monitored/lookup/movie/949":

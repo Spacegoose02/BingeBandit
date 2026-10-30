@@ -4,6 +4,12 @@ Snapshot of where BingeBandit stands, written so the next person (or AI session)
 
 _Last updated: 2026-10-27, the third feature board (player options, alerts, Cinemask collections, score bug), the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
 
+## Cinemask folders follow BingeBandit libraries (2026-10-30, no migration)
+
+- Michael adds kids titles in Cinemask and they always landed in Movies, so he moved them to Kids Movies here afterwards. Cinemask already asks which root folder when it has more than one; the fix is mostly in Cinemask (its own PR): **Add BingeBandit libraries** in Settings → Media management reads `/api/libraries` (paths need an admin key) and finds each folder on Cinemask's side, and a title whose folder was moved here (`moveItem`) is found again in its new root after library sync and before an import.
+- Here: plugin API `/collections/{id}/missing` also returns the collection's `library` name, and Cinemask Upgrades 1.2.0 monitors a collection's missing titles in the Cinemask folder of that name (`RootFolders`, `rootFor`).
+- Not tried against a real Cinemask.
+
 ## Admin files for Cinemask (2026-10-28, no migration)
 
 - `GET /api/admin/files` is the plugin API's `/files` (`pluginFiles`, `Store.FileSummaries`) for an admin's key, so Cinemask's library sync gets every movie and episode file's quality in a few requests instead of opening each title. Tested in `adminfiles_test.go`.
