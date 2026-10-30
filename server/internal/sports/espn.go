@@ -345,8 +345,8 @@ type espnCompetition struct {
 }
 
 type espnAthlete struct {
-	DisplayName string `json:"displayName"`
-	ShortName   string `json:"shortName"`
+	DisplayName string       `json:"displayName"`
+	ShortName   string       `json:"shortName"`
 	Position    espnPosition `json:"position"`
 }
 
