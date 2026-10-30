@@ -5,6 +5,12 @@ Where BingeBandit stands, written so the next person (or AI session) can pick it
 _Last updated: 2026-10-30. Latest release v0.36.0, 50 schema migrations._
 
 
+
+## Sports Hub fixes: NHL scoreboard, Multi-View freezes (2026-10-30, no migration)
+
+- **NHL "Couldn't reach ESPN":** the NHL's probable goalies come with `athlete.position` as a plain string ("G") where every other feed sends `{abbreviation}`, so decoding failed and the whole NHL scoreboard was dropped. `espnPosition` reads either (checked against ESPN's live NHL scoreboard; `TestPositionAsString`).
+- **Multi-View secondary screens freezing:** screens played at the live edge with no recovery. Each screen now plays the server's buffer behind live (`liveBuffer`, as the full-screen player does), reports a stall past the server's stall time (so the server can move the channel to its next stream), and rejoins when buffering or a standing-still picture lasts that long, or after an error (backing off up to 30 s). Still not tried on a device; a box with fewer hardware video decoders than screens can still struggle.
+
 ## Start here
 
 ### What this is

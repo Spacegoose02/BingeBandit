@@ -347,9 +347,30 @@ type espnCompetition struct {
 type espnAthlete struct {
 	DisplayName string `json:"displayName"`
 	ShortName   string `json:"shortName"`
-	Position    struct {
+	Position    espnPosition `json:"position"`
+}
+
+// espnPosition is a player's position. ESPN mostly sends an object
+// ({"abbreviation": "RW"}) but a plain string for some, such as the NHL's
+// probable goalies ("G"); either is read, and anything else is ignored
+// rather than failing the whole scoreboard.
+type espnPosition struct {
+	Abbreviation string
+}
+
+func (p *espnPosition) UnmarshalJSON(b []byte) error {
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		p.Abbreviation = s
+		return nil
+	}
+	var o struct {
 		Abbreviation string `json:"abbreviation"`
-	} `json:"position"`
+	}
+	if json.Unmarshal(b, &o) == nil {
+		p.Abbreviation = o.Abbreviation
+	}
+	return nil
 }
 
 // espnLeaders is one category ("Passing Yards") and its leaders.
