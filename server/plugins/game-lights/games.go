@@ -55,6 +55,56 @@ type game struct {
 	// measure how far their TV runs behind.
 	lastAt   time.Time
 	lastText string
+	// score is each side's score at the last event, by team id; nil until
+	// the first. Basketball also keeps who's ahead and who's on a run.
+	score map[string]int
+	court court
+}
+
+// court follows a basketball game's lead and scoring runs from its score.
+type court struct {
+	leader string // the team last ahead; a tie keeps it
+	run    string // the team on the current run
+	runPts int
+	// what the last score change did, for hoops to light
+	tookLead, reachedRun string
+}
+
+// runPoints is how many unanswered points make a run worth lighting up.
+const runPoints = 10
+
+// add takes a new score and what each side scored since the last one.
+func (c *court) add(score, d map[string]int) {
+	c.tookLead, c.reachedRun = "", ""
+	switch len(d) {
+	case 1:
+		for id, n := range d {
+			if id != c.run {
+				c.run, c.runPts = id, 0
+			}
+			if c.runPts < runPoints && c.runPts+n >= runPoints {
+				c.reachedRun = id
+			}
+			c.runPts += n
+		}
+	case 2: // both scored between looks: no run
+		c.run, c.runPts = "", 0
+	}
+	ahead, most, tied := "", -1, false
+	for id, n := range score {
+		switch {
+		case n > most:
+			ahead, most, tied = id, n, false
+		case n == most:
+			tied = true
+		}
+	}
+	if !tied && ahead != c.leader {
+		if c.leader != "" {
+			c.tookLead = ahead
+		}
+		c.leader = ahead
+	}
 }
 
 // fan is someone the plugin follows a team for.
@@ -74,7 +124,9 @@ func (g *game) teams() []string {
 }
 
 // Follower keeps the games of followed teams that are on, reading plays
-// for football and score changes for everything else.
+// for football and score changes for everything else: goals in hockey and
+// soccer, runs and home runs in baseball, lead changes and runs in
+// basketball.
 type Follower struct {
 	a *app
 	// every is how often a football game's plays are read.
@@ -131,19 +183,31 @@ func (f *Follower) onEvent(ctx context.Context, name string, data json.RawMessag
 	g, playsOK := f.follow(ev, fans)
 	switch name {
 	case "sports.score":
-		if g.sport == "football" && playsOK || ev.Scorer == "" {
+		d, now := f.points(g, ev)
+		if g.sport == "football" && playsOK || len(d) == 0 {
 			return
 		}
 		label := fmt.Sprintf("%s %s–%s", ev.Game.Short, ev.Game.Away.Score, ev.Game.Home.Score)
 		f.seen(g, label)
-		kind := map[string]string{"hockey": "goal", "soccer": "goal", "baseball": "run", "football": "score"}[g.sport]
-		if kind == "" {
-			return // basketball scores too often to flash for each basket
+		switch g.sport {
+		case "basketball":
+			f.hoops(g, label)
+		case "baseball":
+			go f.runs(g, ev.Game.Home.ID, now, d, label)
+		default:
+			kind := map[string]string{"hockey": "goal", "soccer": "goal"}[g.sport]
+			if kind == "" {
+				kind = "score"
+			}
+			for scorer := range d {
+				f.fireAll(g, func(team string) (Event, bool) {
+					mine := scorer == team
+					return Event{Kind: kind, Mine: mine, Good: mine}, true
+				}, label)
+			}
 		}
-		f.fireAll(g, func(team string) (Event, bool) {
-			mine := ev.Scorer == team
-			return Event{Kind: kind, Mine: mine, Good: mine}, true
-		}, label)
+	case "sports.game.start", "sports.game.live":
+		f.points(g, ev)
 	case "sports.game.end":
 		f.drop(g.id)
 		winner := ""
@@ -225,6 +289,81 @@ func (f *Follower) sweep() {
 	f.mu.Unlock()
 	for _, id := range stale {
 		f.drop(id)
+	}
+}
+
+// points notes the game's new score and says how much each side scored
+// since the last event. Joining on a score change, it trusts the scorer
+// ESPN's scoreboard named.
+func (f *Follower) points(g *game, ev sportsEvent) (d, now map[string]int) {
+	now = map[string]int{ev.Game.Home.ID: score(ev.Game.Home.Score), ev.Game.Away.ID: score(ev.Game.Away.Score)}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	prev := g.score
+	g.score = now
+	d = map[string]int{}
+	switch {
+	case prev != nil:
+		for id, n := range now {
+			if n > prev[id] {
+				d[id] = n - prev[id]
+			}
+		}
+	case ev.Scorer != "":
+		d[ev.Scorer] = 1
+	}
+	if g.sport == "basketball" {
+		g.court.add(now, d)
+	}
+	return d, now
+}
+
+func score(s string) int {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			break
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n
+}
+
+// hoops lights a basketball score change: a 10–0 run, or else a lead
+// change. Single baskets come too often to flash for.
+func (f *Follower) hoops(g *game, label string) {
+	f.mu.Lock()
+	run, lead := g.court.reachedRun, g.court.tookLead
+	f.mu.Unlock()
+	kind, by := "scoring_run", run
+	if run == "" {
+		kind, by = "lead", lead
+	}
+	if by == "" {
+		return
+	}
+	f.fireAll(g, func(team string) (Event, bool) {
+		mine := by == team
+		return Event{Kind: kind, Mine: mine, Good: mine}, true
+	}, label)
+}
+
+// runs lights a baseball score change, as a home run when ESPN's plays say
+// one brought the runs in, and as runs otherwise (or if the plays can't be read).
+func (f *Follower) runs(g *game, homeID string, now, d map[string]int, label string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	plays, _ := fetchPlays(ctx, "baseball", g.league, g.id)
+	homers := homeRuns(plays, homeID, now, d)
+	for scorer := range d {
+		kind, text := "run", label
+		if h, ok := homers[scorer]; ok {
+			kind, text = "home_run", truncate(h, 70)
+		}
+		f.fireAll(g, func(team string) (Event, bool) {
+			mine := scorer == team
+			return Event{Kind: kind, Mine: mine, Good: mine}, true
+		}, text)
 	}
 }
 
@@ -326,7 +465,7 @@ func (f *Follower) readPlays(ctx context.Context, g *game) {
 	seen := map[string]bool{}
 	first := true
 	for ctx.Err() == nil {
-		plays, err := fetchPlays(ctx, g.league, g.id)
+		plays, err := fetchPlays(ctx, "football", g.league, g.id)
 		f.mu.Lock()
 		if err != nil {
 			g.failures++

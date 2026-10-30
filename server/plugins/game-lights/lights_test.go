@@ -53,6 +53,12 @@ func TestClassify(t *testing.T) {
 		{Kind: "run", Mine: true}:               "field_goal",
 		{Kind: "run"}:                           "opp_score",
 		{Kind: "win", Good: true}:               "win",
+		{Kind: "home_run", Mine: true}:          "touchdown",
+		{Kind: "home_run"}:                      "opp_score",
+		{Kind: "lead", Mine: true}:              "take_lead",
+		{Kind: "lead"}:                          "opp_score",
+		{Kind: "scoring_run", Mine: true}:       "scoring_run",
+		{Kind: "scoring_run"}:                   "opp_score",
 		{Kind: "fumble_lost", Good: false}:      "turnover_against",
 		{Kind: "turnover_on_downs", Good: true}: "takeaway",
 	} {
@@ -253,6 +259,141 @@ func TestFollowsScores(t *testing.T) {
 	wait(t, func() bool { return logged(a, "Lights: Hokies won") })
 	a.runner.Reset()
 	wait(t, func() bool { return a.runner.Idle() })
+}
+
+func TestCourt(t *testing.T) {
+	var c court
+	step := func(home, away int, d map[string]int) string {
+		c.add(map[string]int{"h": home, "a": away}, d)
+		return c.tookLead + "/" + c.reachedRun
+	}
+	for i, tc := range []struct {
+		home, away int
+		d          map[string]int
+		want       string
+	}{
+		{0, 0, nil, "/"},                            // tipoff: nobody ahead yet
+		{2, 0, map[string]int{"h": 2}, "/"},         // the first lead isn't a change
+		{2, 3, map[string]int{"a": 3}, "a/"},        // away takes the lead
+		{4, 5, map[string]int{"h": 2, "a": 2}, "/"}, // both scored: no run
+		{7, 5, map[string]int{"h": 3}, "h/"},        // home back ahead, 3–0 run
+		{7, 7, map[string]int{"a": 2}, "/"},         // a tie changes nothing
+		{9, 7, map[string]int{"h": 2}, "/"},         // home was ahead before the tie, so no change
+		{14, 7, map[string]int{"h": 5}, "/"},
+		{17, 7, map[string]int{"h": 3}, "/h"}, // 10–0 since away's last basket
+		{19, 7, map[string]int{"h": 2}, "/"},  // the run keeps going; lit once
+		{19, 9, map[string]int{"a": 2}, "/"},
+	} {
+		if got := step(tc.home, tc.away, tc.d); got != tc.want {
+			t.Errorf("step %d (%d–%d): %q, want %q", i, tc.home, tc.away, got, tc.want)
+		}
+	}
+}
+
+func TestHomeRuns(t *testing.T) {
+	var plays []Play
+	json.Unmarshal([]byte(`[
+		{"id":"1","scoringPlay":true,"text":"Judge homered to right (402 feet).","homeScore":0,"awayScore":1},
+		{"id":"2","text":"Soto struck out swinging.","homeScore":0,"awayScore":1},
+		{"id":"3","scoringPlay":true,"text":"Betts singled to center, Ohtani scored.","homeScore":1,"awayScore":1},
+		{"id":"4","scoringPlay":true,"type":{"text":"Home Run"},"text":"Freeman homered to left (390 feet), Betts scored.","homeScore":3,"awayScore":1}
+	]`), &plays)
+	// Home just went from 0 to 3: the single and the home run brought them in.
+	got := homeRuns(plays, "h", map[string]int{"h": 3, "a": 1}, map[string]int{"h": 3})
+	if !strings.Contains(got["h"], "Freeman") || len(got) != 1 {
+		t.Errorf("home run: %v", got)
+	}
+	// Home went from 1 to 3: the home run counts, the single before it doesn't.
+	if got := homeRuns(plays, "h", map[string]int{"h": 3, "a": 1}, map[string]int{"h": 2}); got["a"] != "" || got["h"] == "" {
+		t.Errorf("only the newest runs count: %v", got)
+	}
+	// Home's single alone: no home run.
+	if got := homeRuns(plays[:3], "h", map[string]int{"h": 1, "a": 1}, map[string]int{"h": 1}); len(got) != 0 {
+		t.Errorf("a single isn't a home run: %v", got)
+	}
+	// Plays without scores (a feed shaped otherwise) find nothing, so it's runs.
+	if got := homeRuns([]Play{{ScoringPlay: true, Text: "Judge homered"}}, "h", map[string]int{"a": 1}, map[string]int{"a": 1}); len(got) != 0 {
+		t.Errorf("no scores: %v", got)
+	}
+}
+
+// lightsFor counts the effects logged so far whose label has text.
+func lightsFor(a *app, text string) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	n := 0
+	for _, l := range a.log {
+		if strings.HasPrefix(l.Text, "Lights: ") && strings.Contains(l.Text, text) {
+			n++
+		}
+	}
+	return n
+}
+
+func TestOtherSports(t *testing.T) {
+	ctx := context.Background()
+	t.Run("hockey goals by both sides between looks", func(t *testing.T) {
+		a, _ := testApp(t)
+		a.follower.onEvent(ctx, "sports.game.live", sportsData("in", "", "1", "1", false, "hockey", "nhl"))
+		// ESPN names no scorer when both scores went up; each goal still lights.
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "", "2", "2", false, "hockey", "nhl"))
+		wait(t, func() bool { return lightsFor(a, "MIA @ VT 2–2") == 2 })
+		a.runner.Reset()
+		wait(t, func() bool { return a.runner.Idle() })
+	})
+	t.Run("soccer", func(t *testing.T) {
+		a, _ := testApp(t)
+		a.follower.onEvent(ctx, "sports.game.live", sportsData("in", "", "0", "0", false, "soccer", "mls"))
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "2390", "0", "1", false, "soccer", "mls"))
+		wait(t, func() bool { return lightsFor(a, "MIA @ VT 1–0") == 1 })
+		a.runner.Reset()
+		wait(t, func() bool { return a.runner.Idle() })
+	})
+	t.Run("basketball lights lead changes, not baskets", func(t *testing.T) {
+		a, _ := testApp(t)
+		a.follower.onEvent(ctx, "sports.game.live", sportsData("in", "", "10", "12", false, "basketball", "nba"))
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "259", "12", "12", false, "basketball", "nba"))
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "259", "15", "12", false, "basketball", "nba"))
+		wait(t, func() bool { return lightsFor(a, "MIA @ VT 12–15") == 1 })
+		a.runner.Reset()
+		wait(t, func() bool { return a.runner.Idle() })
+		if n := lightsFor(a, "MIA @ VT 12–12"); n != 0 {
+			t.Errorf("a tying basket lit %d times", n)
+		}
+	})
+	t.Run("baseball home runs and runs", func(t *testing.T) {
+		var mu sync.Mutex
+		plays := `{"id":"1","scoringPlay":true,"text":"Smith homered to left (380 feet).","homeScore":1,"awayScore":0}`
+		espn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			defer mu.Unlock()
+			if !strings.HasSuffix(r.URL.Path, "/baseball/leagues/college-baseball/events/401/competitions/401/plays") {
+				http.NotFound(w, r)
+				return
+			}
+			fmt.Fprintf(w, `{"items":[%s]}`, plays)
+		}))
+		defer espn.Close()
+		oldCore, oldSite := espnCore, espnSite
+		espnCore, espnSite = espn.URL, espn.URL
+		defer func() { espnCore, espnSite = oldCore, oldSite }()
+
+		a, _ := testApp(t)
+		a.follower.onEvent(ctx, "sports.game.live", sportsData("in", "", "0", "0", false, "baseball", "college-baseball"))
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "259", "1", "0", false, "baseball", "college-baseball"))
+		wait(t, func() bool { return lightsFor(a, "Smith homered") == 1 })
+		mu.Lock()
+		plays += `,{"id":"2","scoringPlay":true,"text":"Jones doubled to right, Lee scored.","homeScore":2,"awayScore":0}`
+		mu.Unlock()
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "259", "2", "0", false, "baseball", "college-baseball"))
+		wait(t, func() bool { return lightsFor(a, "MIA @ VT 0–2") == 1 })
+		// ESPN's plays gone: a run is still a run.
+		espnCore, espnSite = "http://127.0.0.1:1", "http://127.0.0.1:1"
+		a.follower.onEvent(ctx, "sports.score", sportsData("in", "259", "3", "0", false, "baseball", "college-baseball"))
+		wait(t, func() bool { return lightsFor(a, "MIA @ VT 0–3") == 1 })
+		a.runner.Reset()
+		wait(t, func() bool { return a.runner.Idle() })
+	})
 }
 
 func logged(a *app, text string) bool {

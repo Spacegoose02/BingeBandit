@@ -63,6 +63,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Game Lights beyond football (2026-10-30, no migration)
+
+- **Plugin** (`game-lights/games.go`, `plays.go`, `effects.go`): score changes now light every team sport. `Follower.points` keeps each game's score and works out what each side scored, so goals by both sides between two looks both light (before, ESPN naming no scorer lit nothing).
+  - Hockey and soccer (NHL, college hockey, MLS): each goal, ours or theirs.
+  - Baseball: each run; on a score change `Follower.runs` reads ESPN's plays (`fetchPlays` now takes the sport) and `homeRuns` picks a home run whose score after lands in the new runs, which lights like a touchdown. If the plays can't be read or have no scores, it's a run.
+  - Basketball: no baskets; `court` tracks the lead and runs, lighting a lead change (new effect `take_lead`) or a 10–0 run (`scoring_run`); the other team's are `opp_score`.
+  - UFC and NASCAR: nothing, since the Sports page can't follow fighters or drivers (`Client.Teams` returns none). Following them is the hub's job first.
+- **Tested:** `go test -race ./plugins/game-lights/` (`TestCourt`, `TestHomeRuns`, `TestOtherSports`). ESPN's baseball play shape (`homeScore`/`awayScore`, "homered") is from memory, not checked against live ESPN. Not tried on real lights.
+
 ## Game Lights per TV (2026-10-30, no migration)
 
 - Game Lights now works like Hue Sync: the profile switch (web Account or TV Settings) allows it, and each TV turns it on for itself and picks its own room. TV Settings → This TV has "Game Lights on this TV" (off until turned on) and "Game Lights room"; with the TV's own Hue hub paired, the hub's room is used and the TV plays the cues itself.
