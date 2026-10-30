@@ -5,6 +5,7 @@ interface Updater {
   versionName: string
   versionCode: number
   selfUpdate?: boolean
+  setupServers?: string
   canInstall(): Promise<boolean>
   openInstallSettings(): Promise<boolean>
   downloadAndInstall(url: string): Promise<boolean>
@@ -16,6 +17,20 @@ const AppUpdater: Updater | undefined = NativeModules.AppUpdater
 export const installed = {
   name: AppUpdater?.versionName ?? 'dev',
   code: AppUpdater?.versionCode ?? 0,
+}
+
+/**
+ * The addresses of the server this app was downloaded from, when it came from
+ * that server's /tv link (the server writes them into the APK). Empty for an
+ * APK from GitHub or the Play Store.
+ */
+export function setupServers(): string[] {
+  try {
+    const list = JSON.parse(AppUpdater?.setupServers || '{}').servers
+    return Array.isArray(list) ? list.filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u)) : []
+  } catch {
+    return []
+  }
 }
 
 /** False in the Google Play build: Play updates it, so there's no in-app updater. */

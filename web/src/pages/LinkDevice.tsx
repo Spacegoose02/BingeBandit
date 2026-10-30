@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../auth'
 import { useApi, useDocumentTitle } from '../hooks'
@@ -112,9 +112,10 @@ export default function LinkDevice() {
         <div className="panel">
           <h3>Setting up a TV in another home?</h3>
           <p className="muted">
-            Install the BingeBandit app on the TV. If it doesn't find this server by itself, choose <strong>Type an address</strong> and enter{' '}
-            <strong className="mono">{host}</strong>. The TV then shows a code to enter above.
+            On the TV, open the Downloader app and enter <strong className="mono">{info?.serverUrl.startsWith('https://') ? info.serverUrl : host}/tv</strong>. That
+            installs BingeBandit already set up for this server, and the TV shows a code to enter above.
           </p>
+          <Link to="/tv-setup" className="btn">Printable step-by-step instructions</Link>
         </div>
       )}
     </div>

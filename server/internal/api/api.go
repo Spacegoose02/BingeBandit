@@ -57,6 +57,7 @@ type Server struct {
 	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
 
 	updates     appUpdates
+	tvApp       tvApp
 	limiter     *loginLimiter
 	linkLimiter *loginLimiter
 	links       *linkManager
@@ -447,6 +448,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			})
 		})
 	})
+	// Short address for the Downloader app on a TV: the app, set up for this server.
+	r.Get("/tv", s.tvAppDownload)
+	r.Get("/tv.apk", s.tvAppDownload)
 	r.Handle("/*", web.Handler())
 	return r
 }

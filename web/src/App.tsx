@@ -18,6 +18,7 @@ import LiveGuide from './pages/LiveGuide'
 import RecordingsPage from './pages/Recordings'
 import Search from './pages/Search'
 import Account from './pages/Account'
+import TVSetupSheet from './pages/TVSetupSheet'
 import LinkDevice from './pages/LinkDevice'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminLibraries from './pages/admin/Libraries'
@@ -75,6 +76,7 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="/tv-setup" element={<TVSetupSheet />} />
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="/live" element={<LiveGuide />} />

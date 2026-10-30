@@ -1,6 +1,6 @@
 # Putting BingeBandit on someone else's TV
 
-This guide is for setting up a friend's or family member's TV so it watches from your server. You do steps 1 and 2 once, on your server. Steps 3 to 5 happen at their TV and take about ten minutes. Nobody types a password on the TV.
+This guide is for setting up a friend's or family member's TV so it watches from your server. You do steps 1 and 2 once, on your server. Steps 3 to 5 happen at their TV and take about ten minutes; you can send them a printable sheet for those (see step 3). Nobody types a password on the TV.
 
 ## What you need
 
@@ -32,7 +32,9 @@ Also check that **Allow connections from outside the home network** is on (it is
 
 ## 3. Install the app on their TV
 
-The app isn't in the app stores. You install it with the free **Downloader** app.
+The app isn't in the app stores yet. You install it with the free **Downloader** app, from a short address on your own server: `<your address>/tv`. The copy your server hands out already knows your server's address, so the TV skips the "choose your server" screen and goes straight to the sign-in code.
+
+**Doing this over the phone, or not there yourself?** Open **Link a device** (`/link`) on your server and choose **Printable step-by-step instructions**. It's a one-page, large-print sheet for Fire TV or Google TV with your address and your name filled in, to print or send as a PDF.
 
 1. **Install Downloader:**
    - Fire TV: search the Appstore for "Downloader" (by AFTVnews).
@@ -40,12 +42,18 @@ The app isn't in the app stores. You install it with the free **Downloader** app
 2. **Allow it to install apps:**
    - **Fire TV:** go to **Settings → My Fire TV → About** and click the device name 7 times until it says you're a developer. Then go to **Settings → My Fire TV → Developer options → Install unknown apps** and turn on **Downloader**.
    - **Google TV:** go to **Settings → System → About** and click **Android TV OS build** 7 times. Then go to **Settings → Apps → Security & restrictions → Unknown sources** and turn on **Downloader**.
-3. **Download BingeBandit:** open Downloader, enter `github.com/Spacegoose02/BingeBandit/releases/latest`, scroll to **Assets** and open `BingeBandit-TV-<version>.apk`. Choose **Install**, then **Done** (or **Open**).
+3. **Download BingeBandit:** open Downloader and enter your address from step 1 followed by `/tv`, such as `https://tv.example.com/tv` or `203.0.113.7:8484/tv`. Downloader assumes `http://`, so write `https://` out when your address uses it. Choose **Install**, then **Open**.
 4. You can delete the downloaded file when Downloader offers to. Later updates appear in BingeBandit under **Settings**, so you never need Downloader again.
+
+**Shorter still:** Downloader can turn a long address into a number. Make a code for your `/tv` link with the [AFTVnews URL shortener](https://go.aftvnews.com/) and they type that number into Downloader instead.
+
+The plain APK is also on [GitHub Releases](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. It works the same, but asks for the server's address the first time it opens (step 4).
 
 ## 4. Point the app at your server
 
-Open BingeBandit on the TV. It looks for servers on the local network first, which won't find yours from their house.
+**Installed from `/tv`?** Skip this step: the app connects to the address it was downloaded from by itself.
+
+Otherwise, open BingeBandit on the TV. It looks for servers on the local network first, which won't find yours from their house.
 
 Choose **Type an address** and enter your address from step 1. You don't need `https://` or a port:
 
