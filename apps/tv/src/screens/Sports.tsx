@@ -22,7 +22,7 @@ export default function Sports() {
   const [error, setError] = useState('')
   const [picking, setPicking] = useState(false)
   // The Game Lights button only shows once this profile turned Game Lights
-  // on (Account on the web), with the plugin running.
+  // on (Settings here, or Account on the web), with the plugin running.
   const [lightsPlugin, setLightsPlugin] = useState(false)
   const [lights, setLights] = useState(false)
   useEffect(() => {

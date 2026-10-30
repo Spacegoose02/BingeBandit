@@ -150,7 +150,7 @@ function GameLightsSwitch() {
       {p.enabled && p.off && <p className="muted small">Stopped from the TV app for now. Start it again there, or turn it off and on here.</p>}
       <p className="muted small">
         Off until you turn it on, for each profile. Your teams come from <Link to="/sports">Sports</Link>; the room, delay and colours are on{' '}
-        <a href={`${base}`} target="_blank" rel="noreferrer">My Game Lights</a>. The TV app shows Game Lights once it's on here.
+        <a href={`${base}`} target="_blank" rel="noreferrer">My Game Lights</a>. You can also turn it on in the TV app's Settings, and pick the room there.
       </p>
     </div>
   )

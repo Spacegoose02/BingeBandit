@@ -6,7 +6,7 @@ import { absolute, api, authHeaders } from '../api'
 import { Button, Center } from '../components'
 import { clock, episodeLabel, joinChannel, leaveChannel } from '../live'
 import { FocusMemoryContext, useNav, useScreen, type FocusTarget } from '../nav'
-import { colors, font, gutter, isPhone, px, scaled, units } from '../theme'
+import { colors, font, gutter, isPhone, px, scaled, units, quietPress } from '../theme'
 import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 import { lastChannel } from './LivePlayer'
 import { NO_LIVE_BADGE } from './Player'
@@ -287,7 +287,7 @@ export default function LiveGuide() {
           {!!p?.subtitle && <Text style={st.subtitle} numberOfLines={1}>{p.subtitle}</Text>}
           <Text style={st.desc} numberOfLines={wide ? 1 : isPhone ? 2 : 3}>{p ? p.description ?? '' : 'No guide information for this time.'}</Text>
         </View>
-        <Pressable style={[st.preview, wide && st.previewWide]} focusable={false} onPress={tuned ? () => watch(tuned) : undefined}>
+        <Pressable android_disableSound={quietPress} style={[st.preview, wide && st.previewWide]} focusable={false} onPress={tuned ? () => watch(tuned) : undefined}>
           {preview ? (
             // The video surface would swallow taps meant for the preview (tap to watch).
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -454,7 +454,7 @@ function GuideMenu({
     )
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={st.scrim} onPress={onClose}>
+      <Pressable android_disableSound={quietPress} style={st.scrim} onPress={onClose}>
         <View style={st.holdMenu}>
           <Text style={st.holdTitle} numberOfLines={1}>{p?.title ?? channel.name}</Text>
           <Text style={st.meta} numberOfLines={1}>
@@ -541,7 +541,7 @@ const ChannelRow = memo(function Row({
 function FilterChip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
   const [focused, setFocused] = useState(false)
   return (
-    <Pressable
+    <Pressable android_disableSound={quietPress}
       onPress={onPress}
       onFocus={() => setFocused(!isPhone)}
       onBlur={() => setFocused(false)}
@@ -616,7 +616,7 @@ function Cell({
   const inset = Math.max(0, Math.min(width - 60, (viewStart - seg.start) * perSec))
   const startedEarlier = seg.program && seg.program.start < seg.start
   return (
-    <Pressable
+    <Pressable android_disableSound={quietPress}
       ref={ref}
       onFocus={() => {
         setFocused(true)

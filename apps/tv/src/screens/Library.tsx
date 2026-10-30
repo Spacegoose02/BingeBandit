@@ -4,7 +4,7 @@ import { api, cached } from '../api'
 import { Icon } from '../icons'
 import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, Row } from '../components'
 import { useNav } from '../nav'
-import { scaled, colors, font, gutter, isPhone, px, units } from '../theme'
+import { scaled, colors, font, gutter, isPhone, px, units, quietPress } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
 
 type Section = 'recommended' | 'library' | 'collections'
@@ -333,7 +333,7 @@ function LetterBar({ letters, current, onPick }: { letters: Letter[]; current?: 
 function LetterButton({ letter, active, onPick }: { letter: Letter; active: boolean; onPick: (l: Letter) => void }) {
   const [focused, setFocused] = useState(false)
   return (
-    <Pressable
+    <Pressable android_disableSound={quietPress}
       onPress={() => onPick(letter)}
       onFocus={() => setFocused(!isPhone)}
       onBlur={() => setFocused(false)}

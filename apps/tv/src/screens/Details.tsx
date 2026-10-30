@@ -3,7 +3,7 @@ import { ActivityIndicator, ImageBackground, Pressable, ScrollView, StyleSheet, 
 import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { ItemMenuContext, useNav, useScreen } from '../nav'
-import { scaled, colors, font, gutter, isPhone } from '../theme'
+import { scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import type { Credit, Item, ItemDetail } from '../types'
 
 function fmtDuration(min?: number) {
@@ -51,7 +51,7 @@ export default function Details({ id }: { id: number }) {
     <ImageBackground source={bg ?? {}} style={st.screen} imageStyle={st.bgImg}>
       <ScrollView contentContainerStyle={st.body}>
         {isPhone && (
-          <Pressable onPress={nav.back} hitSlop={20} style={st.back}>
+          <Pressable android_disableSound={quietPress} onPress={nav.back} hitSlop={20} style={st.back}>
             <Text style={st.backText}>‹ Back</Text>
           </Pressable>
         )}
