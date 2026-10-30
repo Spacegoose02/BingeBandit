@@ -30,10 +30,22 @@ type playerEvent struct {
 	Lights *bool `json:"lights"`
 	// Area is the Hue room or zone the device picked; "" for every chosen light.
 	Area string `json:"lightsArea"`
+	// Mode is the device's own type, sync or theater; "" follows the profile's.
+	Mode string `json:"lightsMode"`
 }
 
 // lightsOff reports a device whose user turned Hue Sync off in the app.
 func (p playerEvent) lightsOff() bool { return p.Lights != nil && !*p.Lights }
+
+// deviceMode is how this device's lights should go, given the profile's mode:
+// off while the profile hasn't turned Hue Sync on, else the device's own
+// choice when it made one.
+func (p playerEvent) deviceMode(profile string) string {
+	if profile != ModeOff && (p.Mode == ModeSync || p.Mode == ModeTheater) {
+		return p.Mode
+	}
+	return profile
+}
 
 // session is one player and the lights that follow it. Players in different
 // rooms each drive their own lights at the same time.
@@ -118,7 +130,7 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 		}
 		return
 	}
-	mode := e.a.conf.get().mode(p.UserID)
+	mode := p.deviceMode(e.a.conf.get().mode(p.UserID))
 	if mode == ModeOff {
 		// The person hasn't turned Hue Sync on for themselves (or just turned it off).
 		if cur != nil {
@@ -174,14 +186,16 @@ func (e *Engine) onEvent(ctx context.Context, ev bbplugin.Event) {
 	}
 }
 
-// setMode applies a person's new mode to whatever they're playing now.
-func (e *Engine) setMode(ctx context.Context, userID int64, mode string) {
+// setMode applies a person's new mode to whatever they're playing now;
+// devices that picked their own type keep it unless the mode is off.
+func (e *Engine) setMode(ctx context.Context, userID int64, profile string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, s := range e.sessions {
 		if s.ev.UserID != userID {
 			continue
 		}
+		mode := s.ev.deviceMode(profile)
 		if mode == ModeOff {
 			e.endLocked(ctx, s, "turned off by "+s.ev.User)
 		} else if s.mode != mode {
