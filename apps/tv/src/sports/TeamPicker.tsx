@@ -4,6 +4,7 @@ import { api } from '../api'
 import { Button, Focusable } from '../components'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { SportsLeague, SportsTeam } from '../types'
+import { hasTeams } from './hub'
 import { Logo } from './parts'
 
 /**
@@ -12,7 +13,7 @@ import { Logo } from './parts'
  * a star across the Sports Hub and their own rows under My Teams.
  */
 export default function TeamPicker({ leagues, chosen, onDone }: { leagues: SportsLeague[]; chosen: SportsTeam[]; onDone: (teams: SportsTeam[] | null) => void }) {
-  const pickable = useMemo(() => leagues.filter((l) => l.sport !== 'mma'), [leagues])
+  const pickable = useMemo(() => leagues.filter((l) => hasTeams(l.sport)), [leagues])
   const [league, setLeague] = useState(chosen[0]?.league ?? pickable[0].id)
   const [teams, setTeams] = useState<SportsTeam[] | null>(null)
   const [picked, setPicked] = useState(chosen)

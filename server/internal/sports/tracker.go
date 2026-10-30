@@ -45,6 +45,9 @@ func (t *Tracker) Look(ctx context.Context) time.Duration {
 	now := t.Client.Now()
 	var games []Game
 	for league, teams := range follows {
+		if LeagueByID(league) == nil {
+			continue // a league the hub has since dropped
+		}
 		all, err := t.Client.Games(ctx, league, 1, 7)
 		if err != nil {
 			if ctx.Err() == nil {

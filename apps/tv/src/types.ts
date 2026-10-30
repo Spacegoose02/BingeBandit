@@ -202,6 +202,8 @@ export interface SportsLeader {
 export interface SportsGame {
   id: string
   league: string
+  /** "Miami Dolphins at Minnesota Vikings", or a race's name. */
+  name?: string
   start: string
   state: 'pre' | 'in' | 'post'
   detail: string
@@ -209,6 +211,8 @@ export interface SportsGame {
   away: SportsSide
   period?: number
   venue?: string
+  /** A race's running order (NASCAR), leader first; races have empty home and away. */
+  race?: { place: number; name: string; shortName: string; number?: string; winner?: boolean }[]
   broadcasts?: string[]
   mine?: string[]
   /** Live TV channels whose guide shows it. */

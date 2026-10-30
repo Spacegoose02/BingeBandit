@@ -288,7 +288,7 @@ export interface Prefs {
 export interface SportsLeague {
   id: string
   name: string
-  sport: 'football' | 'basketball' | 'baseball' | 'hockey' | 'soccer'
+  sport: 'football' | 'basketball' | 'baseball' | 'hockey' | 'soccer' | 'mma' | 'racing'
 }
 
 export interface SportsTeam {
@@ -323,6 +323,8 @@ export interface SportsGame {
   away: SportsSide
   broadcasts?: string[]
   venue?: string
+  /** A NASCAR race's running order, leader first; races have empty home and away. */
+  race?: { place: number; name: string; shortName: string; number?: string; winner?: boolean }[]
   /** The person's teams playing in it. */
   mine?: string[]
   /** Live TV channels whose guide shows it. */

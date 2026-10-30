@@ -20,6 +20,18 @@ export function leaderText(l?: SportsLeader, long?: boolean): string {
   return [who, l.value].filter(Boolean).join(long ? '  ·  ' : ' ')
 }
 
+/** "Bills at Jets", or a race's name. */
+export function matchup(g: SportsGame): string {
+  if (!g.away.id && !g.home.id) return g.name ?? ''
+  return `${g.away.shortName || g.away.name} at ${g.home.shortName || g.home.name}`
+}
+
+/** The score as one line ("BUF 21 · NYJ 17 · 3rd 4:12"), or a race's leader. */
+export function scoreLine(g: SportsGame): string {
+  if (!g.away.id && !g.home.id) return [g.race?.[0] && `P1 ${g.race[0].shortName}`, g.detail].filter(Boolean).join(' · ')
+  return `${g.away.abbr} ${g.away.score} · ${g.home.abbr} ${g.home.score} · ${g.detail}`
+}
+
 /** "LIVE", the start time, or the final word, as the card's corner says it. */
 export function gameStatus(g: SportsGame): string {
   if (g.state === 'pre') return startLabel(g.start)
@@ -78,8 +90,25 @@ export function GameCard({
         <View style={st.flex} />
         {live ? <Text style={st.live}>● LIVE</Text> : <Text style={st.status} numberOfLines={1}>{gameStatus(g)}</Text>}
       </View>
-      {side(g.away)}
-      {side(g.home)}
+      {sport === 'racing' ? (
+        <>
+          <Text style={[st.team, st.teamStrong, st.raceName]} numberOfLines={1}>
+            {g.name}
+          </Text>
+          <Text style={st.team} numberOfLines={1}>
+            {g.state === 'pre'
+              ? g.venue ?? ' '
+              : shown
+                ? (g.race ?? []).slice(0, 3).map((d) => `${d.place}. ${d.shortName}`).join('   ')
+                : 'Running order hidden'}
+          </Text>
+        </>
+      ) : (
+        <>
+          {side(g.away)}
+          {side(g.home)}
+        </>
+      )}
       <Text style={st.leaders} numberOfLines={1}>
         {live ? `${g.detail}${leaders ? '  ·  ' : ''}${leaders}` : leaders || g.venue || ' '}
       </Text>
@@ -119,7 +148,7 @@ export function ChannelCard({
         </Text>
       </View>
       <Text style={st.leaders} numberOfLines={2}>
-        {game ? `${game.away.shortName || game.away.name} at ${game.home.shortName || game.home.name}${game.state === 'in' ? ' · LIVE' : ` · ${gameStatus(game)}`}` : c.now?.title ?? ''}
+        {game ? `${matchup(game)}${game.state === 'in' ? ' · LIVE' : ` · ${gameStatus(game)}`}` : c.now?.title ?? ''}
       </Text>
     </Focusable>
   )
@@ -140,6 +169,7 @@ const st = StyleSheet.create(scaled({
   side: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   team: { flex: 1, color: colors.muted, fontSize: 22, marginLeft: 14 },
   teamStrong: { color: colors.text, fontWeight: '700' },
+  raceName: { marginBottom: 10 },
   record: { color: colors.muted, fontSize: 18, fontWeight: '400' },
   score: { color: colors.muted, fontSize: 26, fontWeight: '800', marginLeft: 10, minWidth: 40, textAlign: 'right' },
   scoreStrong: { color: colors.text },

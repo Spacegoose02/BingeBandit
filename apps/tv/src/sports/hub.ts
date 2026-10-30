@@ -9,12 +9,8 @@ export const sportColors: Record<string, string> = {
   baseball: '#f87171',
   hockey: '#60a5fa',
   soccer: '#4ade80',
-  rugby: '#a78bfa',
-  cricket: '#facc15',
-  'australian-football': '#fb7185',
-  volleyball: '#f472b6',
-  lacrosse: '#2dd4bf',
   mma: '#e5e7eb',
+  racing: '#facc15',
 }
 
 export const sportNames: Record<string, string> = {
@@ -23,12 +19,8 @@ export const sportNames: Record<string, string> = {
   baseball: 'Baseball',
   hockey: 'Hockey',
   soccer: 'Soccer',
-  rugby: 'Rugby',
-  cricket: 'Cricket',
-  'australian-football': 'Aussie rules',
-  volleyball: 'Volleyball',
-  lacrosse: 'Lacrosse',
   mma: 'UFC',
+  racing: 'NASCAR',
 }
 
 /** A day as the server takes it (YYYYMMDD), `offset` days from today. */
@@ -64,6 +56,11 @@ export function byState(a: SportsGame, b: SportsGame): number {
   if (rank[a.state] !== rank[b.state]) return rank[a.state] - rank[b.state]
   const d = new Date(a.start).getTime() - new Date(b.start).getTime()
   return a.state === 'post' ? -d : d
+}
+
+/** UFC and NASCAR have fighters and drivers, not teams to follow or box scores. */
+export function hasTeams(sport?: string): boolean {
+  return sport !== 'mma' && sport !== 'racing'
 }
 
 // Spoiler-free mode (the spoilerFree preference) hides scores until someone

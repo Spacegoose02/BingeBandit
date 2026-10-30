@@ -289,7 +289,7 @@ export default function Sports() {
               </Text>
             )}
           </Pressable>
-          {featured ? <Featured game={featured} league={leagueOf(featured.league)?.name ?? ''} /> : <View style={st.featured} />}
+          {featured ? <Featured game={featured} league={leagueOf(featured.league)?.name ?? ''} sport={leagueOf(featured.league)?.sport} /> : <View style={st.featured} />}
         </View>
 
         {!!error && <Text style={st.error}>{error}</Text>}
@@ -462,8 +462,35 @@ function Chip({ label, on, color, onPress }: { label: string; on: boolean; color
 }
 
 /** The focused (or previewing) game, large: line score, where it's on and the standouts. */
-function Featured({ game: g, league }: { game: SportsGame; league: string }) {
+function Featured({ game: g, league, sport }: { game: SportsGame; league: string; sport?: string }) {
   const shown = scoreShown(g)
+  const meta = (
+    <Text style={st.fMeta} numberOfLines={1}>
+      {[league, g.state === 'pre' ? new Date(g.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.detail, g.broadcasts?.[0]].filter(Boolean).join('  ·  ')}
+    </Text>
+  )
+  if (sport === 'racing') {
+    return (
+      <View style={st.featured}>
+        <Text style={st.fRace} numberOfLines={1}>
+          {g.name}
+        </Text>
+        {!!g.venue && <Text style={st.fLeader}>{g.venue}</Text>}
+        {meta}
+        {g.state !== 'pre' &&
+          (shown ? (
+            (g.race ?? []).slice(0, 5).map((d) => (
+              <Text key={d.place} style={st.fLeader} numberOfLines={1}>
+                {d.place}.  {d.name}
+                {d.number ? `  #${d.number}` : ''}
+              </Text>
+            ))
+          ) : (
+            <Text style={st.fLeader}>Spoiler-free: hold OK on the race to show the running order.</Text>
+          ))}
+      </View>
+    )
+  }
   const periods = Math.max(g.away.lines?.length ?? 0, g.home.lines?.length ?? 0)
   const cols = Array.from({ length: Math.min(periods, 9) }, (_, i) => i)
   const sideRow = (s: SportsSide) => (
@@ -497,9 +524,7 @@ function Featured({ game: g, league }: { game: SportsGame; league: string }) {
       )}
       {sideRow(g.away)}
       {sideRow(g.home)}
-      <Text style={st.fMeta} numberOfLines={1}>
-        {[league, g.state === 'pre' ? new Date(g.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.detail, g.broadcasts?.[0]].filter(Boolean).join('  ·  ')}
-      </Text>
+      {meta}
       {(shown || g.state === 'pre') &&
         [g.away, g.home].map(
           (s) =>
@@ -676,6 +701,7 @@ const st = StyleSheet.create(scaled({
   previewTag: { position: 'absolute', left: 14, bottom: 12, color: colors.text, fontSize: 18, fontWeight: '700', backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, overflow: 'hidden' },
   featured: { flex: 1, minHeight: 300, backgroundColor: colors.surface, borderRadius: 18, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 32, paddingVertical: 24, justifyContent: 'center' },
   fRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  fRace: { color: colors.text, fontSize: font.body, fontWeight: '700' },
   fName: { flex: 1, color: colors.text, fontSize: font.body, fontWeight: '700', marginLeft: 16 },
   fRecord: { color: colors.muted, fontSize: font.small, fontWeight: '400' },
   fCell: { width: 44, color: colors.text, fontSize: font.small, textAlign: 'center' },

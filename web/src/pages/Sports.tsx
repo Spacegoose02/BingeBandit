@@ -130,8 +130,20 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
           <span className="muted small">{g.state === 'pre' ? startLabel(g.start) : g.detail}</span>
         )}
       </div>
-      {side(g.away)}
-      {side(g.home)}
+      {g.race || (!g.home.id && !g.away.id) ? (
+        // A NASCAR race: its name and the top three.
+        <>
+          <div className="sports-side">
+            <span className="sports-name">{g.name}</span>
+          </div>
+          {g.state !== 'pre' && <div className="muted small">{(g.race ?? []).slice(0, 3).map((d) => `${d.place}. ${d.shortName}`).join('   ')}</div>}
+        </>
+      ) : (
+        <>
+          {side(g.away)}
+          {side(g.home)}
+        </>
+      )}
       {(g.broadcasts?.length || g.venue) && (
         <div className="muted small sports-where">{[g.broadcasts?.join(', '), g.state !== 'post' ? g.venue : ''].filter(Boolean).join(' · ')}</div>
       )}
@@ -231,7 +243,7 @@ function TeamPicker({ leagues, chosen, onClose, onSaved }: { leagues: SportsLeag
           </div>
         )}
         <div className="tabs sports-tabs">
-          {leagues.map((l) => (
+          {leagues.filter((l) => l.sport !== 'mma' && l.sport !== 'racing').map((l) => ( // fighters and drivers, no teams
             <button key={l.id} type="button" className={l.id === league ? 'active' : ''} onClick={() => setLeague(l.id)}>
               {l.name}
             </button>
