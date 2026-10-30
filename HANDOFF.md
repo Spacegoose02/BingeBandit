@@ -2,15 +2,8 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-30. Latest release v0.35.0, 50 schema migrations._
+_Last updated: 2026-10-30. Latest release v0.36.0, 50 schema migrations._
 
-
-
-## Sports Hub trimmed, NASCAR, Multi-View plays every screen (2026-10-30, no migration)
-
-- Leagues cut from 43 to 15 (football, basketball, baseball, hockey, MLS, UFC) plus **NASCAR Cup** (`racing/nascar-premier`): a race is a game with empty sides and `Race`, its top ten, from the weekend's Race session (practice and qualifying are skipped). Races find Live TV channels whose guide names NASCAR. Teams saved in a dropped league stay in the database but are left out (`myTeams`, and the tracker skips unknown leagues).
-- Multi-View passes `disableFocus` to react-native-video: each player took Android's audio focus as it started, and losing focus pauses a player, so only the newest screen played.
-- NASCAR's ESPN shape (competition `type.abbreviation`, competitor `order`, `vehicle.number`) is from memory, not checked against live ESPN.
 
 ## Start here
 
@@ -58,7 +51,7 @@ Several of these are being worked on in parallel; check open pull requests befor
 
 Most outside services and all hardware were only tested against fakes. These are the ones most likely to need fixes the first time they meet the real thing:
 
-- **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN and Multi-View with four streams.
+- **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN (NASCAR's fields especially), Multi-View with four streams (each now ignores Android audio focus) and Game Lights rooms per TV.
 - **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
@@ -66,9 +59,22 @@ Most outside services and all hardware were only tested against fakes. These are
 
 ### Keeping this file useful
 
-Add a dated `##` section at the top of the log for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
+Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Game Lights per TV (2026-10-30, no migration)
+
+- Game Lights now works like Hue Sync: the profile switch (web Account or TV Settings) allows it, and each TV turns it on for itself and picks its own room. TV Settings → This TV has "Game Lights on this TV" (off until turned on) and "Game Lights room"; with the TV's own Hue hub paired, the hub's room is used and the TV plays the cues itself.
+- **Plugin** (`game-lights/config.go`, `me.go`): `Person.Devices`, keyed by an id each app makes for itself (`bb.deviceId`, `devicePrefs.ts`), set with `PUT /me/devices/{id}`. Once any TV has set one, effects play only where a TV is on: in that TV's room on the server's bridge, or as cues for that TV (`/me/cues?device=`) when it has its own hub. People with no TVs set keep the profile's room. `PUT /me/settings` (web My Game Lights, the Sports Hub panel) keeps the TVs; Test plays wherever the person's TVs are on.
+- The Sports Hub's Game Lights panel still starts and stops with the profile flag; its room row points to TV Settings once TVs have rooms.
+- **Tested:** `go test ./plugins/game-lights/` (`TestDevices`), `tsc` and `eslint` for apps/tv. **Not tried on a device.**
+
+## Sports Hub trimmed, NASCAR, Multi-View plays every screen (2026-10-30, no migration)
+
+- Leagues cut from 43 to 15 (football, basketball, baseball, hockey, MLS, UFC) plus **NASCAR Cup** (`racing/nascar-premier`): a race is a game with empty sides and `Race`, its top ten, from the weekend's Race session (practice and qualifying are skipped). Races find Live TV channels whose guide names NASCAR. Teams saved in a dropped league stay in the database but are left out (`myTeams`, and the tracker skips unknown leagues).
+- Multi-View passes `disableFocus` to react-native-video: each player took Android's audio focus as it started, and losing focus pauses a player, so only the newest screen played.
+- **Tested:** `go test ./internal/...` (`TestRace`, the dropped-league case in `TestSports`), `tsc` and `eslint` for apps/tv, `tsc` for web. NASCAR's ESPN shape (competition `type.abbreviation`, competitor `order`, `vehicle.number`) is from memory, not checked against live ESPN. Nothing ran on a device.
 
 ## Sports Hub on the TV (2026-10-30, no migration)
 
