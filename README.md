@@ -36,7 +36,7 @@
 **Running it**
 - A single binary with the web app built in, for Windows, Linux, macOS and Docker/Unraid
 - Admin dashboard with Now Playing, statistics, scheduled tasks, backups (optionally to S3), logs and Plex/Tautulli/Trakt import
-- [Plugins](docs/PLUGINS.md) that run as their own processes: Watchlist RSS, Hue Sync, Game Lights and Cinemask Upgrades are bundled
+- [Plugins](docs/PLUGINS.md) that run as their own processes: Watchlist RSS, Hue Sync, Game Lights, Cinemask Upgrades and YouTube Live are bundled
 - An [HTTP API](docs/API.md) for scripts and your own apps
 
 ## Screenshots
@@ -83,6 +83,8 @@ To put the TV app on a friend's or family member's TV in another home, see [docs
 | `-data`     | `BB_DATA_DIR` | `%AppData%\BingeBandit` / `~/.config/BingeBandit` |
 | `-ffmpeg`   | `BB_FFMPEG`   | `ffmpeg` (from PATH)            |
 | `-ffprobe`  | `BB_FFPROBE`  | `ffprobe` (from PATH)           |
+| `-plugins`  | `BB_PLUGINS_DIR` | `plugins` next to the binary |
+| `-update-repo` | `BB_UPDATE_REPO` | `Spacegoose02/BingeBandit` (where the TV app finds updates; empty turns it off) |
 
 Everything else (TMDB key, hardware encoder, transcode folder, scan interval…) is under **Settings** in the web UI.
 
@@ -116,11 +118,27 @@ To try importing, run the fake Plex + Tautulli + Trakt server and use Server →
 cd server; go run ./cmd/fakeplex
 ```
 
-Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand. The HTTP API for scripts and apps is described in [docs/API.md](docs/API.md).
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has the full set: every fake service, the checks CI runs, the rules of the code base and how releases work. Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before making big changes, and [HANDOFF.md](HANDOFF.md) for where things stand.
+
+## Documentation
+
+| Document | For |
+| --- | --- |
+| [User guide](docs/GUIDE.md) | Installing, libraries, Live TV, profiles, kid mode, the apps |
+| [Unraid](docs/UNRAID.md) | The Unraid template, paths and hardware transcoding |
+| [TV setup](docs/TV-SETUP.md) | Putting the app on a TV in someone else's home |
+| [HTTP API](docs/API.md) | Scripts and your own apps |
+| [Plugins](docs/PLUGINS.md) | The bundled plugins and writing your own |
+| [Architecture](docs/ARCHITECTURE.md) | How the server works inside |
+| [Development](docs/DEVELOPMENT.md) | Building, testing, code rules and releasing |
+| [Roadmap](docs/ROADMAP.md) | What's done and what's planned |
+| [Handoff](HANDOFF.md) | Where the work stands, what was tested and what's open |
+| [Android TV app](apps/tv/README.md), [Roku](apps/roku/README.md) | Building and installing the apps |
+| [Google Play](docs/GOOGLE_PLAY.md), [Privacy](docs/PRIVACY.md) | Publishing the Android app |
 
 ## Releasing
 
-Push a tag such as `v0.1.0`. GitHub Actions then builds binaries for Windows, Linux and macOS, attaches them to a GitHub Release, and publishes a multi-arch Docker image to `ghcr.io/<owner>/bingebandit`.
+Push a tag such as `v0.35.0`. GitHub Actions then builds binaries for Windows, Linux and macOS with the bundled plugins, the plugin catalogue, the Android TV APK (and Google Play bundle), and the Roku zip, attaches them to a GitHub Release, and publishes a multi-arch Docker image to `ghcr.io/<owner>/bingebandit`. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#releasing).
 
 ## License
 

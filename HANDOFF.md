@@ -1,8 +1,73 @@
 # Handoff
 
-Snapshot of where BingeBandit stands, written so the next person (or AI session) can pick it up cold.
+Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-27, the third feature board (player options, alerts, Cinemask collections, score bug), the Roku channel, after the second feature board (TV side menu, long-press options, tabbed TV settings, Watch Together on TV, per-person Game Lights, Live TV "database is locked"), after the sports tracker (team picks, game alerts) and the Game Lights plugin, after chart lists and Kometa collection import and the feature board work (Hue rooms per device, trailers, board fixes)._
+_Last updated: 2026-10-30. Latest release v0.34.0, 50 schema migrations._
+
+## Start here
+
+### What this is
+
+BingeBandit is a self-hosted media server meant to replace Plex, Jellyfin, Dispatcharr and ErsatzTV in one app: libraries, live TV with a guide and DVR, custom channels, and apps for browsers, Android TV / Fire TV / phones and Roku. It's pre-1.0 and runs at home and on family members' TVs. Michael (GitHub `Spacegoose02`) owns it and makes the product calls; when this log says "Michael chose", that's a decision to keep unless he changes it.
+
+### Where things are
+
+| Need | Look in |
+| --- | --- |
+| What it does, for people running it | [docs/GUIDE.md](docs/GUIDE.md) |
+| How the server works, package by package | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Build, run, fakes, checks, code rules, releasing | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| HTTP API and plugin protocol | [docs/API.md](docs/API.md), [docs/PLUGINS.md](docs/PLUGINS.md) |
+| Every board card and whether it's done | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| The apps | [apps/tv/README.md](apps/tv/README.md), [apps/roku/README.md](apps/roku/README.md) |
+| Why Go, SQLite, React and HLS | **Decisions made**, near the end of this file |
+
+### The five-minute version
+
+```sh
+./build.sh && ./dist/bingebandit          # or .\build.ps1 on Windows; http://localhost:8484
+cd server && go vet ./... && go test ./... # what CI runs, plus gofmt -l . and the web build
+cd server && go run ./cmd/fakeiptv         # a fake IPTV provider; more fakes in DEVELOPMENT.md
+```
+
+Before changing code, know these:
+
+- **Migrations are append-only and hashed.** Add a new one at the end of `store/schema.go`; `migrate_test.go` fails if a shipped one changes (v0.22.0 broke upgrades that way). Prefer prefs or settings rows when they'll do.
+- **Every user-facing item query goes through `store.visible`** (library access, profiles and kid mode). Hidden things answer 404.
+- **Three clients share the API:** web (`web/src/types.ts`), TV app (`apps/tv/src/types.ts`) and Roku. Older installed apps don't send new fields, so the server must keep stored values when a field is missing.
+- **The TV app is mostly tested by typechecking.** Most TV work since the phone layouts was never run on a device; say so in the log when that's the case, and say what you did try.
+- **Plugins are separate binaries** under `server/plugins/`, listed in `build.sh`, `build.ps1`, the Dockerfile and `release.yml`. A new bundled plugin goes in all four.
+
+### Open work (task board, 2026-10-30)
+
+Several of these are being worked on in parallel; check open pull requests before starting one.
+
+- **Profiles and the TV app's settings**
+  - Hue Sync and Game Lights should be switched on per profile from the web, and Hue Sync shouldn't show for an account or profile that hasn't turned it on.
+  - Hue Sync room and mode (sync with the picture or theater) as per-device settings in the Android TV app, with an on/off switch.
+  - Game Lights off by default in the TV app's settings; the person turns it on and pairs the hub to their profile in device settings.
+  - Passcode protection settings in the app's settings. (The TV app already has Settings → Profiles & PINs with the settings passcode; check what's missing before building.)
+  - An admin switch for recommendations on the web. (`recommendations_enabled` already exists, from the third feature board; check what's missing.)
+- **Sports hub on TV:** scores and schedules for many more leagues (42: college sports, Premier League, Champions League, cricket, rugby, AFL…), My Teams rows and a star everywhere, box scores, player stats, leaders and standings, a game preview in the corner, spoiler-free mode, and Multi-View (up to four games with saved layouts). Then fit Game Lights into it from the TV app's settings. Today `internal/sports` covers 8 ESPN leagues.
+- **Bugs and security:** a review pass is in progress.
+- **Remote's select button sounds like it clicks twice** in the TV app.
+- **Getting the app onto an older, non-technical person's TV** without adb or typed addresses. [docs/TV-SETUP.md](docs/TV-SETUP.md) is today's process.
+
+### Never tried for real
+
+Most outside services and all hardware were only tested against fakes. These are the ones most likely to need fixes the first time they meet the real thing:
+
+- **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged.
+- **Hue:** Hue Sync and Game Lights on a real bridge, Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
+- **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
+- **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
+- **Media:** intro and credits detection on real seasons (thresholds may need tuning), image subtitle burn-in from a Blu-ray rip, Dolby Vision and Atmos detection, Quick Sync on Intel and NVENC session limits with adaptive streaming.
+
+### Keeping this file useful
+
+Add a dated `##` section at the top of the log for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
+
+# Log
 
 ## Cinemask folders follow BingeBandit libraries (2026-10-30, no migration)
 
@@ -629,7 +694,7 @@ _Last updated: 2026-10-27, the third feature board (player options, alerts, Cine
 
 ## Known gaps and next steps
 
-_Refreshed 2026-10-24. The full backlog is in `docs/ROADMAP.md`._
+_Refreshed 2026-10-24 and kept for history; the current lists are **Open work** and **Never tried for real** at the top. The full backlog is in `docs/ROADMAP.md`._
 
 Needs real hardware or real media (can't be checked with generated test files):
 
