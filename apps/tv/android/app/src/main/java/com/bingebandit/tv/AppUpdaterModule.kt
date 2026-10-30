@@ -31,6 +31,8 @@ class AppUpdaterModule(private val ctx: ReactApplicationContext) : ReactContextB
       "versionCode" to code.toDouble(),
       // False in the Google Play build, which Play keeps up to date.
       "selfUpdate" to BuildConfig.SELF_UPDATE,
+      // JSON with the addresses of the server this APK was downloaded from (at /tv), or "".
+      "setupServers" to (ApkStamp.read(File(ctx.applicationInfo.sourceDir)) ?: ""),
     )
   }
 

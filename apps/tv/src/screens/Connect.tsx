@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Button, Focusable } from '../components'
-import { addressCandidates, probeTyped, scan } from '../discovery'
+import { addressCandidates, probe, probeTyped, scan } from '../discovery'
 import { scaled, colors, font, gutter } from '../theme'
 import type { ServerInfo } from '../types'
+import { setupServers } from '../updates'
+
+// Only jump ahead once per launch, so Back from sign-in still lands here.
+let autoChosen = false
 
 /** First screen: find the server on the home network, or type its address. */
 export default function Connect({ onChosen }: { onChosen: (s: ServerInfo) => void }) {
@@ -14,12 +18,35 @@ export default function Connect({ onChosen }: { onChosen: (s: ServerInfo) => voi
   const [error, setError] = useState('')
   const [checking, setChecking] = useState(false)
 
+  const add = (s: ServerInfo) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s]))
   const runScan = () => {
     setScanning(true)
     setFound([])
-    scan((s) => setFound((list) => (list.some((x) => x.url === s.url) ? list : [...list, s]))).finally(() => setScanning(false))
+    scan(add).finally(() => setScanning(false))
   }
-  useEffect(runScan, [])
+  useEffect(() => {
+    // An app downloaded from a server's /tv link knows that server: go
+    // straight to its sign-in code instead of asking for an address.
+    const stamped = setupServers()
+    if (!stamped.length) return runScan()
+    setScanning(true)
+    ;(async () => {
+      for (const url of stamped) {
+        const s = await probe(url, 5000)
+        if (s) {
+          if (!autoChosen) {
+            autoChosen = true
+            return onChosen(s)
+          }
+          add(s)
+          break
+        }
+      }
+      runScan()
+    })()
+    // Once, on opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const tryAddress = async () => {
     if (!address.trim()) return

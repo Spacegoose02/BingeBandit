@@ -213,7 +213,7 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 ### Android TV, Google TV, Fire TV and Android phones
 
-The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. Download `BingeBandit-TV-<version>.apk` from the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) (on a TV, the free **Downloader** app makes this easy). The app updates itself after that. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
+The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
 
 ### Roku
 
