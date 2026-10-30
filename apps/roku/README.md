@@ -9,7 +9,8 @@ A Roku channel written in BrightScript and SceneGraph, Roku's own app framework.
 - **Finding the server:** scans the Roku's home network on port 8484, or you type an address (a bare name like `tv.example.com` tries https first, an IP tries :8484).
 - **Signing in:** shows a pairing code to enter at `/link` on a phone or computer that's signed in, the same as the Android TV app. Nobody types a password on the remote.
 - **Who's watching?** with 4 to 8 digit PINs. It's skipped when the TV was linked straight to a profile, when there's only one person, or when the account opens as someone without a PIN.
-- **Home:** Continue Watching and the server's rows. The menu on the left has Search, each library, Approved Movies and Approved Shows for kid profiles, Live TV (when it's on for the account), Switch profile and Sign out.
+- **Home:** Continue Watching and the server's rows. The menu on the left has Search, each library, Approved Movies and Approved Shows for kid profiles, Live TV (when it's on for the account), Settings, Switch profile and Sign out.
+- **Settings:** the settings passcode, the same one as the web and the Android TV app: turn it on, change it, turn it off, or lock now. A new code is typed twice. In a household it's each person's PIN instead, and the account owner can add, change or remove its profiles' PINs. A change made while settings are locked asks for the passcode first, then goes through.
 - **Libraries** as a poster grid with collections mixed in by title, and collections open as their own grid.
 - **Details** for movies, shows, seasons and episodes: Play / Resume / Start over, Mark watched, watchlist, and a row of seasons or episodes.
 - **Playback:** direct play when the Roku says it can decode the file (MP4 or MKV with H.264, HEVC, VP9 or AV1 and a supported audio track, checked with `roDeviceInfo.CanDecodeVideo/Audio`); otherwise the server converts it to HLS. Direct play that fails or stalls for 12 seconds falls back to converting. HDR files on a TV without HDR10, and files taller than the TV's output, are converted. Progress is reported every 10 seconds and on exit, so Continue Watching and resume work across devices. Episodes offer the next one with a 10 second countdown.
@@ -17,7 +18,7 @@ A Roku channel written in BrightScript and SceneGraph, Roku's own app framework.
 - **Live TV:** every channel with what's on now and next. Up/Down change channel. Long buffering is reported so the server can move a channel to its backup stream.
 - **Kid profiles:** the server already filters what a kid can see; the channel just shows what it's given, plus the Approved tabs.
 
-Not there yet: audio track and subtitle choice (the default audio track plays, no subtitles), trailers, the cable-box guide grid, Watch Together, Sports, and settings. Channel logos that are SVG files don't show (Roku can't draw SVG); PNG and JPEG logos do.
+Not there yet: audio track and subtitle choice (the default audio track plays, no subtitles), trailers, the cable-box guide grid, Watch Together, Sports, and settings beyond the passcode and PINs. Channel logos that are SVG files don't show (Roku can't draw SVG); PNG and JPEG logos do.
 
 ## Server side
 

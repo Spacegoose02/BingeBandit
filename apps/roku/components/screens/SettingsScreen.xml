@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings: the settings passcode, or in a household each person's PIN, like the Android TV app's Profiles & PINs. -->
+<component name="SettingsScreen" extends="BaseScreen">
+  <children>
+    <Group id="page">
+      <Poster uri="pkg:/images/logo.png" width="260" height="66" translation="[160, 90]" />
+      <Label text="Settings" width="1600" translation="[160, 200]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="64" />
+      </Label>
+      <Label id="state" width="1600" translation="[160, 310]" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="36" />
+      </Label>
+      <Label id="hint" width="1500" translation="[160, 365]" wrap="true" maxLines="3" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+      </Label>
+      <LabelList id="options" translation="[160, 480]" itemSize="[800, 76]" itemSpacing="[0, 12]" numRows="6" vertFocusAnimationStyle="floatingFocus" color="0xF2F4F7FF" focusedColor="0xF2F4F7FF" focusBitmapUri="pkg:/images/focus.9.png" focusFootprintBitmapUri="pkg:/images/tile.9.png">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+        <Font role="focusedFont" uri="pkg:/fonts/Inter-Bold.otf" size="32" />
+      </LabelList>
+      <Label id="msg" width="1600" translation="[160, 980]" color="0x2DD4BFFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+      </Label>
+    </Group>
+    <PinEntry id="pinPad" visible="false" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/SettingsScreen.brs" />
+</component>

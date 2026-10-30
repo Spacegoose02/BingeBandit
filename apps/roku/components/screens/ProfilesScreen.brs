@@ -2,27 +2,19 @@ sub init()
     m.grid = m.top.findNode("grid")
     m.picker = m.top.findNode("picker")
     m.pinPad = m.top.findNode("pinPad")
-    m.keys = m.top.findNode("keys")
-    m.dots = m.top.findNode("dots")
-    m.pinError = m.top.findNode("pinError")
     m.error = m.top.findNode("error")
     m.members = []
     m.asking = invalid
-    m.digits = ""
     m.grid.observeField("itemSelected", "onMember")
-    m.keys.observeField("itemSelected", "onKey")
-    keys = CreateObject("roSGNode", "ContentNode")
-    for each k in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Del", "0", "OK"]
-        keys.createChild("ContentNode").title = k
-    end for
-    m.keys.content = keys
+    m.pinPad.observeField("pin", "onPin")
+    m.pinPad.observeField("cancel", "closePin")
     m.top.observeField("params", "onParams")
     m.top.observeField("focusedChild", "onFocusChanged")
 end sub
 
 sub onFocusChanged()
     if not m.top.hasFocus() then return
-    if m.asking <> invalid then m.keys.setFocus(true) else m.grid.setFocus(true)
+    if m.asking <> invalid then m.pinPad.setFocus(true) else m.grid.setFocus(true)
 end sub
 
 sub onParams()
@@ -94,27 +86,24 @@ sub onSwitched(event as object)
         return
     end if
     if m.asking <> invalid and type(res.data) = "roAssociativeArray" and isTrue(res.data.needsPin)
-        m.digits = ""
-        m.dots.text = ""
-        m.pinError.text = "Wrong PIN, try again"
+        m.pinPad.error = "Wrong PIN, try again"
         return
     end if
     closePin()
     m.error.text = res.error
 end sub
 
-' --- PIN pad (PINs are 4 to 8 digits, so the built-in 4-digit dialog won't do) ---
-
 sub askPin(mem as object)
     m.asking = mem
-    m.digits = ""
-    m.dots.text = ""
-    m.pinError.text = ""
-    m.top.findNode("pinTitle").text = "Enter " + mem.name + "'s PIN"
+    m.pinPad.title = "Enter " + mem.name + "'s PIN"
+    m.pinPad.reset = true
     m.picker.visible = false
     m.pinPad.visible = true
-    m.keys.jumpToItem = 0
-    m.keys.setFocus(true)
+    m.pinPad.setFocus(true)
+end sub
+
+sub onPin()
+    if m.asking <> invalid then choose(m.asking, m.pinPad.pin)
 end sub
 
 sub closePin()
@@ -123,28 +112,3 @@ sub closePin()
     m.picker.visible = true
     m.grid.setFocus(true)
 end sub
-
-sub onKey()
-    k = m.keys.content.getChild(m.keys.itemSelected).title
-    if k = "Del"
-        if Len(m.digits) > 0 then m.digits = Left(m.digits, Len(m.digits) - 1)
-    else if k = "OK"
-        if Len(m.digits) >= 4 then choose(m.asking, m.digits)
-        return
-    else if Len(m.digits) < 8
-        m.digits = m.digits + k
-    end if
-    m.pinError.text = ""
-    m.dots.text = String(Len(m.digits), "*")
-end sub
-
-function onKeyEvent(key as string, press as boolean) as boolean
-    if not press then return false
-    if key = "back"
-        if m.asking <> invalid
-            closePin()
-            return true
-        end if
-    end if
-    return false
-end function
