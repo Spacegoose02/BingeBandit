@@ -8,6 +8,7 @@ export type Route =
   | { name: 'player'; id: number; start?: number; together?: string } // together: a Watch Together room to join
   | { name: 'live'; channelId: number }
   | { name: 'trailer'; url: string; title: string }
+  | { name: 'multiview'; channels: number[] } // Sports Multi-View: up to four channels at once
 
 export interface Nav {
   push: (r: Route) => void

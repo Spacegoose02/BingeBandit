@@ -278,6 +278,8 @@ export interface Prefs {
   notifyTogether: boolean
   /** Your teams' live scores in a corner of the player. */
   scoreBug: boolean
+  spoilerFree?: boolean // the TV Sports Hub hides scores, the score bug too
+  multiViewLayouts?: { name: string; channels: number[] }[] | null
   liveFollows: string[] | null
   liveAlertMinutes: number
   quietWhilePlaying: boolean

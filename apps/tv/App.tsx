@@ -9,6 +9,7 @@ import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
+import MultiView from './src/screens/MultiView'
 import Player, { TrailerScreen } from './src/screens/Player'
 import Profiles, { needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
@@ -177,8 +178,8 @@ export default function App() {
       ))
   }
 
-  const playing = top.name === 'player' || top.name === 'live' || top.name === 'trailer'
-  const fullScreen = !isPhone || top.name === 'player' || top.name === 'live' || top.name === 'trailer'
+  const playing = top.name === 'player' || top.name === 'live' || top.name === 'trailer' || top.name === 'multiview'
+  const fullScreen = !isPhone || top.name === 'player' || top.name === 'live' || top.name === 'trailer' || top.name === 'multiview'
   return (
     <SafeAreaProvider>
       <NavContext.Provider value={nav}>
@@ -188,7 +189,7 @@ export default function App() {
         </ItemMenuHost>
         {phase.name === 'app' && <Toasts playing={playing} />}
         {phase.name === 'app' && <TogetherInvites playing={playing} />}
-        {phase.name === 'app' && <ScoreBug playing={playing && top.name !== 'trailer'} channelId={top.name === 'live' ? top.channelId : undefined} />}
+        {phase.name === 'app' && <ScoreBug playing={playing && top.name !== 'trailer' && top.name !== 'multiview'} channelId={top.name === 'live' ? top.channelId : undefined} />}
         {exitHint && (
           <View style={styles.exitHint} pointerEvents="none">
             <Text style={styles.exitHintText}>Press Back again to exit</Text>
@@ -213,6 +214,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <LivePlayer channelId={r.channelId} />
     case 'trailer':
       return <TrailerScreen url={r.url} title={r.title} />
+    case 'multiview':
+      return <MultiView channels={r.channels} />
   }
 }
 

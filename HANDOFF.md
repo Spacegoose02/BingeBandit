@@ -4,6 +4,13 @@ Where BingeBandit stands, written so the next person (or AI session) can pick it
 
 _Last updated: 2026-10-30. Latest release v0.34.0, 50 schema migrations._
 
+
+## Sports Hub on the TV (2026-10-30, no migration)
+
+- **Server** (`internal/sports`): 43 leagues (was 8), including WNBA, the big European soccer leagues and cups, rugby, AFL, cricket (IPL, Big Bash), lacrosse and UFC (each fight on a card is a game, the fighters its sides; `Teams` is empty for UFC). Scoreboard games now carry each side's `lines` (score by period) and `leader` (or probable starter). `Client.Summary` reads ESPN's game summary into box score, team stats, player tables, leaders and standings (cached 15 s live, 10 min otherwise). New routes `GET /api/sports/scores` (every league's day, 8 ESPN requests at a time) and `GET /api/sports/{league}/games/{id}`. Prefs `spoilerFree` and `multiViewLayouts`. The new league paths, the cricket/rugby ids and the leaders/probables fields weren't checked against live ESPN (no network here); a league ESPN rejects just shows in the hub's error line.
+- **TV** (`src/screens/Sports.tsx`, `src/sports/*`, `src/screens/MultiView.tsx`): Scores / My Teams / Channels tabs, a day picker, a corner preview (OK previews a game on your channels, OK again is full screen), the focused game's line score beside it, sport chips and "With a channel", Live now, Your teams and a row per league. Holding OK opens box score, stats, leaders and standings with Follow buttons. PLAY adds a game's channel to Multi-View (route `multiview`): 1 to 4 screens, OK moves the sound, hold OK for options, a toolbar with layouts, saved layouts (profile prefs) and one press for the next game of your teams. Spoiler-free hides scores, stats and the score bug (web too) until "Show the score". The gear has spoiler-free, score bug, favorite teams and Game Lights: the same On/Off switch as Settings → This TV (`person.enabled`), Running/Stopped (`person.off`) and the Game Lights panel. **Typechecked and linted only; not tried on a device. Four streams at once depend on the box's decoders and the provider's connection limits.**
+- Not done: the web's Sports settings page from the screenshots (Sports rows, Sports channels, Multi-View, favorite teams by division).
+
 ## Start here
 
 ### What this is

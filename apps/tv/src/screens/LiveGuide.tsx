@@ -83,7 +83,7 @@ function segments(c: LiveChannel, progs: GuideProgram[] | undefined, from: numbe
 }
 
 /** Joins a channel's stream for the preview; leaves on change. */
-function usePreview(channelId?: number): string | null {
+export function usePreview(channelId?: number): string | null {
   const [src, setSrc] = useState<string | null>(null)
   useEffect(() => {
     setSrc(null)
