@@ -2,14 +2,8 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-30. Latest release v0.34.0, 50 schema migrations._
+_Last updated: 2026-10-30. Latest release v0.35.0, 50 schema migrations._
 
-
-## Sports Hub on the TV (2026-10-30, no migration)
-
-- **Server** (`internal/sports`): 43 leagues (was 8), including WNBA, the big European soccer leagues and cups, rugby, AFL, cricket (IPL, Big Bash), lacrosse and UFC (each fight on a card is a game, the fighters its sides; `Teams` is empty for UFC). Scoreboard games now carry each side's `lines` (score by period) and `leader` (or probable starter). `Client.Summary` reads ESPN's game summary into box score, team stats, player tables, leaders and standings (cached 15 s live, 10 min otherwise). New routes `GET /api/sports/scores` (every league's day, 8 ESPN requests at a time) and `GET /api/sports/{league}/games/{id}`. Prefs `spoilerFree` and `multiViewLayouts`. The new league paths, the cricket/rugby ids and the leaders/probables fields weren't checked against live ESPN (no network here); a league ESPN rejects just shows in the hub's error line.
-- **TV** (`src/screens/Sports.tsx`, `src/sports/*`, `src/screens/MultiView.tsx`): Scores / My Teams / Channels tabs, a day picker, a corner preview (OK previews a game on your channels, OK again is full screen), the focused game's line score beside it, sport chips and "With a channel", Live now, Your teams and a row per league. Holding OK opens box score, stats, leaders and standings with Follow buttons. PLAY adds a game's channel to Multi-View (route `multiview`): 1 to 4 screens, OK moves the sound, hold OK for options, a toolbar with layouts, saved layouts (profile prefs) and one press for the next game of your teams. Spoiler-free hides scores, stats and the score bug (web too) until "Show the score". The gear has spoiler-free, score bug, favorite teams and Game Lights: the same On/Off switch as Settings → This TV (`person.enabled`), Running/Stopped (`person.off`) and the Game Lights panel. **Typechecked and linted only; not tried on a device. Four streams at once depend on the box's decoders and the provider's connection limits.**
-- Not done: the web's Sports settings page from the screenshots (Sports rows, Sports channels, Multi-View, favorite teams by division).
 
 ## Start here
 
@@ -47,25 +41,18 @@ Before changing code, know these:
 
 ### Open work (task board, 2026-10-30)
 
-Several of these are being worked on in parallel; check open pull requests before starting one.
+Several of these are being worked on in parallel; check open pull requests before starting one. Done in v0.35.0 and now in the log: Hue Sync and Game Lights per profile and per device on the TV, a profile's own Hue hub, the Sports Hub, the single OK click, the Roku settings passcode and the /tv install link.
 
-- **Profiles and the TV app's settings**
-  - Hue Sync and Game Lights should be switched on per profile from the web, and Hue Sync shouldn't show for an account or profile that hasn't turned it on.
-  - Hue Sync room and mode (sync with the picture or theater) as per-device settings in the Android TV app, with an on/off switch.
-  - Game Lights off by default in the TV app's settings; the person turns it on and pairs the hub to their profile in device settings.
-  - Passcode protection settings in the app's settings. (The TV app already has Settings → Profiles & PINs with the settings passcode; check what's missing before building.)
-  - An admin switch for recommendations on the web. (`recommendations_enabled` already exists, from the third feature board; check what's missing.)
-- **Sports hub on TV:** scores and schedules for many more leagues (42: college sports, Premier League, Champions League, cricket, rugby, AFL…), My Teams rows and a star everywhere, box scores, player stats, leaders and standings, a game preview in the corner, spoiler-free mode, and Multi-View (up to four games with saved layouts). Then fit Game Lights into it from the TV app's settings. Today `internal/sports` covers 8 ESPN leagues.
+- **Sports settings on the web** from the board's screenshots: Sports rows, Sports channels, Multi-View, favorite teams by division.
+- **An admin switch for recommendations on the web.** (`recommendations_enabled` already exists in admin Settings, from the third feature board; check what the card still wants.)
 - **Bugs and security:** a review pass is in progress.
-- **Remote's select button sounds like it clicks twice** in the TV app.
-- **Getting the app onto an older, non-technical person's TV** without adb or typed addresses. [docs/TV-SETUP.md](docs/TV-SETUP.md) is today's process.
 
 ### Never tried for real
 
 Most outside services and all hardware were only tested against fakes. These are the ones most likely to need fixes the first time they meet the real thing:
 
-- **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged.
-- **Hue:** Hue Sync and Game Lights on a real bridge, Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
+- **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN and Multi-View with four streams.
+- **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
 - **Media:** intro and credits detection on real seasons (thresholds may need tuning), image subtitle burn-in from a Blu-ray rip, Dolby Vision and Atmos detection, Quick Sync on Intel and NVENC session limits with adaptive streaming.
@@ -75,6 +62,34 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Sports Hub on the TV (2026-10-30, no migration)
+
+- **Server** (`internal/sports`): 43 leagues (was 8), including WNBA, the big European soccer leagues and cups, rugby, AFL, cricket (IPL, Big Bash), lacrosse and UFC (each fight on a card is a game, the fighters its sides; `Teams` is empty for UFC). Scoreboard games now carry each side's `lines` (score by period) and `leader` (or probable starter). `Client.Summary` reads ESPN's game summary into box score, team stats, player tables, leaders and standings (cached 15 s live, 10 min otherwise). New routes `GET /api/sports/scores` (every league's day, 8 ESPN requests at a time) and `GET /api/sports/{league}/games/{id}`. Prefs `spoilerFree` and `multiViewLayouts`. The new league paths, the cricket/rugby ids and the leaders/probables fields weren't checked against live ESPN (no network here); a league ESPN rejects just shows in the hub's error line.
+- **TV** (`src/screens/Sports.tsx`, `src/sports/*`, `src/screens/MultiView.tsx`): Scores / My Teams / Channels tabs, a day picker, a corner preview (OK previews a game on your channels, OK again is full screen), the focused game's line score beside it, sport chips and "With a channel", Live now, Your teams and a row per league. Holding OK opens box score, stats, leaders and standings with Follow buttons. PLAY adds a game's channel to Multi-View (route `multiview`): 1 to 4 screens, OK moves the sound, hold OK for options, a toolbar with layouts, saved layouts (profile prefs) and one press for the next game of your teams. Spoiler-free hides scores, stats and the score bug (web too) until "Show the score". The gear has spoiler-free, score bug, favorite teams and Game Lights: the same On/Off switch as Settings → This TV (`person.enabled`), Running/Stopped (`person.off`) and the Game Lights panel. **Typechecked and linted only; not tried on a device. Four streams at once depend on the box's decoders and the provider's connection limits.**
+- Not done: the web's Sports settings page from the screenshots (Sports rows, Sports channels, Multi-View, favorite teams by division).
+
+## Easy TV install with a /tv link (2026-10-30, no migration)
+
+- **Server** (`api/tvapp.go`, `tvAppDownload`): `GET /tv` fetches the newest `BingeBandit-TV-*.apk` release (cached under `<data>/cache/tv-app`) and serves it with the server's address written into the APK Signing Block as an extra ID-value pair (`apkStampID`, "BBsv"). Signature schemes v2/v3 don't cover that block, so the signature still checks out; apksigner's padding shrinks to make room, so the file keeps its size. The address typed to get there goes first, the public URL second. If stamping fails, `/tv` redirects to the plain GitHub APK.
+- **TV** (`ApkStamp.kt`, `AppUpdaterModule.kt`, `src/updates.ts`, `screens/Connect.tsx`): on first launch the app reads the stamp from its installed APK, checks the server answers and goes straight to the sign-in code; anything wrong falls back to "choose your server".
+- **Web:** `/tv-setup` (`pages/TVSetupSheet.tsx`) is a one-page, large-print setup sheet for Fire TV or Google TV with the address and the helper's name filled in, linked from Link a device. TV-SETUP.md and GUIDE.md follow the new steps.
+- **Tested:** `go test ./internal/api` (stamping, re-stamping, padding, unsigned zips rejected); a local `/tv` download of the real v0.34.0 APK kept its size, passed `unzip -t` and verified as v2 with apksigtool, and a Java port of the reader got the address back. The Kotlin was only compiled by the TV Android CI build. **Not tried on a real TV.** APKs before v0.35.0 have no reader, so auto-connect starts with v0.35.0.
+
+## Hue per device and a profile's own hub (2026-10-30, no migration)
+
+- **Sync or Theater per device:** the TV keeps its own type (`bb.hueType`, `devicePrefs.ts`) and sends it as `lightsMode` with progress reports (`api/playback.go`, `stream/activity.go`); the Hue Sync plugin uses it over the profile's mode (`playerEvent.deviceMode`), unless the profile has Hue Sync off. Settings → This TV has "Hue Sync for <profile>" (the same flag as Account on the web, off by default), then this TV's on/off, type and room. The player's Options change this device and report at once. The web and older apps send no type and keep the profile's mode.
+- **A profile pairs its own hub from the TV** (`apps/tv/src/hue.ts`): the Hue local API only answers on the hub's own network, so households elsewhere couldn't use Hue. Settings → This TV → "Hue hub for this profile" (shown once Hue Sync or Game Lights is on) finds the hub through Philips' discovery service or a typed address, waits up to 30 s for its button and keeps the pairing on this device for the profile, then a "Hue room" row picks the room or zone; OK twice forgets it. While paired, the server-side room rows are hidden.
+  - Theater dims the room while playing and restores it on pause and stop.
+  - Sync: `GET /api/plugins/hue-sync/me/colours?fileId=&from=&seconds=` (`hue-sync/colours.go`) reads up to 60 s of zone colours with ffmpeg (4 at once at most); the TV fetches 30 s chunks ahead of the playhead and reports `lights: false` so the server's bridge leaves the device alone.
+  - Game Lights: pairing sets `Person.local`; the plugin queues effects (`GET /api/plugins/game-lights/me/cues?after=`, `game-lights/cues.go`) instead of flashing its bridge, and the TV polls every 3 s from Home and plays each cue after the person's delay.
+- **Tested:** `go test` for hue-sync (`TestDeviceMode`, `TestColoursForTV`), game-lights (`TestLocalCues`) and internal/api; `tsc` and `eslint` for apps/tv. **Not tried on a device or against a real hub.**
+
+## TV app: one click per OK, Game Lights in Settings (2026-10-30, no migration)
+
+- **Double click:** on Android TV a focusable Pressable gets a native `OnClickListener`, so Android already plays the click, and Pressability played `SoundManager.playTouchSound()` on top. Every Pressable now passes `android_disableSound={quietPress}` (`!isPhone`, `theme.ts`): TVs get Android's one click, phones keep React Native's.
+- **Game Lights:** Settings → This TV has "Game Lights for <profile>" (off until turned on, the same flag as Account on the web) and, once on, the room its lights flash in.
+- **Tested:** `tsc` and `eslint` for apps/tv. **Not tried on a device.**
 
 ## Roku settings passcode (2026-10-30, no migration)
 
