@@ -47,10 +47,22 @@ export function saveGameLights(person: GameLightsPerson): Promise<unknown> {
   return api.put('/api/plugins/game-lights/me/settings', person)
 }
 
+/** One TV's Game Lights: its own switch and room (off until turned on in its Settings). */
+export interface GameLightsDevice {
+  name?: string
+  on?: boolean
+  area?: string // a room on the server's bridge; '' for the lights the admin ticked
+  local?: boolean // played on this TV's own hub instead
+}
+
+export function saveGameLightsDevice(id: string, d: GameLightsDevice): Promise<unknown> {
+  return api.put(`/api/plugins/game-lights/me/devices/${encodeURIComponent(id)}`, d)
+}
+
 /** What Settings needs to show Game Lights; null when the plugin isn't running. */
 export interface GameLightsSetup {
   paired: boolean
-  person: GameLightsPerson & { area?: string }
+  person: GameLightsPerson & { area?: string; devices?: Record<string, GameLightsDevice> }
   areas: { id: string; name: string; type: string }[]
 }
 

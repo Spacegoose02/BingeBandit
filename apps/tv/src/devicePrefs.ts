@@ -86,3 +86,19 @@ export function setMenuPosition(p: MenuPosition) {
   menuPos = p
   AsyncStorage.setItem(MENU_KEY, p).catch(() => undefined)
 }
+
+// This device's own id, made the first time it's needed, so the server can
+// keep settings per TV (Game Lights' switch and room).
+const DEVICE_KEY = 'bb.deviceId'
+const deviceIdLoaded = AsyncStorage.getItem(DEVICE_KEY).then(
+  (v) => v,
+  () => null,
+)
+let devId = ''
+
+export async function deviceId(): Promise<string> {
+  if (devId) return devId
+  devId = (await deviceIdLoaded) || Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+  AsyncStorage.setItem(DEVICE_KEY, devId).catch(() => undefined)
+  return devId
+}

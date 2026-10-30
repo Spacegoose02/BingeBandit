@@ -288,16 +288,18 @@ func (f *Follower) fire(g *game, team string, e Event, label string) {
 			}
 		}
 		delay := p.delay(def)
-		if p.Local {
-			f.a.fireLocal(fn.userID, k, pal, label, time.Duration(delay)*time.Second)
-			continue
+		for _, s := range p.spots(fn.userID) {
+			if s.local {
+				f.a.fireLocal(s.box, k, pal, label, time.Duration(delay)*time.Second)
+				continue
+			}
+			once := fmt.Sprintf("%s|%d|%s|%v", s.area, delay, k, pal.Hex)
+			if done[once] {
+				continue
+			}
+			done[once] = true
+			f.a.runnerFor(s.area).Fire(k, pal, label, time.Duration(delay)*time.Second)
 		}
-		once := fmt.Sprintf("%s|%d|%s|%v", p.Area, delay, k, pal.Hex)
-		if done[once] {
-			continue
-		}
-		done[once] = true
-		f.a.runnerFor(p.Area).Fire(k, pal, label, time.Duration(delay)*time.Second)
 	}
 }
 

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { api, current } from './api'
+import { deviceId } from './devicePrefs'
 
 // A Hue hub this device pairs with itself, for the profile signed in. The
 // server can only reach a hub on its own network, so a TV in another home
@@ -263,7 +264,7 @@ interface Cue {
  * Plays the Game Lights effects the server queues for this profile on this
  * device's hub, after the delay it gives, one at a time. Returns a stop.
  */
-export function followGameLights(h: Hub): () => void {
+export function followGameLights(h: Hub, device: string): () => void {
   let after: number | null = null
   let stopped = false
   let queue = Promise.resolve()
@@ -281,7 +282,7 @@ export function followGameLights(h: Hub): () => void {
     })
   }
   const poll = () =>
-    api.get<{ cues: Cue[]; last: number }>(`/api/plugins/game-lights/me/cues?after=${after ?? ''}`).then(
+    api.get<{ cues: Cue[]; last: number }>(`/api/plugins/game-lights/me/cues?after=${after ?? ''}&device=${encodeURIComponent(device)}`).then(
       (r) => {
         if (stopped) return
         if (after !== null) for (const c of r.cues) setTimeout(() => play(c), Math.max(0, c.inMs))
@@ -305,12 +306,14 @@ let following: { key: string; stop: () => void } | null = null
  */
 export async function refreshGameLights() {
   const h = await loadHub()
-  const person = await api.get<{ person?: { enabled?: boolean; local?: boolean } }>('/api/plugins/game-lights/me/state').then(
+  const id = await deviceId()
+  const person = await api.get<{ person?: { enabled?: boolean; devices?: Record<string, { on?: boolean; local?: boolean }> } }>('/api/plugins/game-lights/me/state').then(
     (s) => s.person,
     () => undefined,
   )
-  const want = h && person?.enabled && person.local ? `${key()}|${h.bridge}|${h.username}` : ''
+  const here = person?.devices?.[id]
+  const want = h && person?.enabled && here?.on && here.local ? `${key()}|${h.bridge}|${h.username}` : ''
   if ((following?.key ?? '') === want) return
   following?.stop()
-  following = h && want ? { key: want, stop: followGameLights(h) } : null
+  following = h && want ? { key: want, stop: followGameLights(h, id) } : null
 }
