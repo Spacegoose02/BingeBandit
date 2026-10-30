@@ -365,9 +365,17 @@ func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 		title = name
 	}
 	key := fmt.Sprintf("movie:%s:%d", normKey(title), year)
-	// A folder merged into another copy of the same movie adds its file there.
-	if id, _, ok := s.st.ItemAlias(lib.ID, key); ok {
-		return id, nil
+	// A folder merged into another copy of the same movie adds its file there,
+	// unless the copy's folder names another year: that was a remake merged
+	// by a wrong match (The Lion King 2019 into 1994), so it gets its own
+	// movie back and is matched again.
+	if id, itemKey, ok := s.st.ItemAlias(lib.ID, key); ok {
+		if store.SameYear(year, store.KeyYear(itemKey)) {
+			return id, nil
+		}
+		if err := s.st.DropAlias(lib.ID, key); err != nil {
+			return 0, err
+		}
 	}
 	return s.st.UpsertItem(&store.Item{
 		LibraryID: lib.ID, Kind: "movie", Title: title, Year: year, TMDBID: tmdb, IMDbID: imdb, MatchKey: key,

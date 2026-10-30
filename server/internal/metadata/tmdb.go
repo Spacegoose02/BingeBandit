@@ -248,12 +248,16 @@ func (t *TMDB) SearchShow(ctx context.Context, title string, year int) (int64, e
 	return t.search(ctx, "/search/tv", "first_air_date_year", title, year)
 }
 
-// search tries with the year first, then without, and takes the top hit.
+// search tries with the year first, then without. With a year it takes the
+// first hit that first came out that year (or a year either side), since
+// TMDB's year filter also counts re-releases: a search for The Lion King in
+// 2019 lists the 1994 film first, as it was back in cinemas then.
 func (t *TMDB) search(ctx context.Context, path, yearParam, title string, year int) (int64, error) {
 	attempts := []int{year}
 	if year != 0 {
 		attempts = append(attempts, 0)
 	}
+	var first int64 // the top hit of the first search that had any
 	for _, y := range attempts {
 		q := url.Values{"query": {title}, "include_adult": {"false"}}
 		if y != 0 {
@@ -263,11 +267,37 @@ func (t *TMDB) search(ctx context.Context, path, yearParam, title string, year i
 		if err := t.get(ctx, path, q, &res); err != nil {
 			return 0, err
 		}
-		if len(res.Results) > 0 {
-			return res.Results[0].ID, nil
+		if id := pickHit(res, year); id > 0 {
+			return id, nil
+		}
+		if first == 0 && len(res.Results) > 0 {
+			first = res.Results[0].ID
 		}
 	}
-	return 0, nil
+	return first, nil
+}
+
+// pickHit is the first result released in year, else within a year of it.
+// With year 0 it is the first result. 0 means none fits.
+func pickHit(res tmdbSearch, year int) int64 {
+	if len(res.Results) == 0 {
+		return 0
+	}
+	if year != 0 {
+		for _, near := range []int{0, 1} {
+			for _, r := range res.Results {
+				date := r.ReleaseDate
+				if date == "" {
+					date = r.FirstAirDate
+				}
+				if d := yearOf(date, 0) - year; d >= -near && d <= near && yearOf(date, 0) != 0 {
+					return r.ID
+				}
+			}
+		}
+		return 0
+	}
+	return res.Results[0].ID
 }
 
 // Find looks a title up by another source's id: source is "imdb_id" or
