@@ -76,6 +76,12 @@ Add a dated `##` section at the top of the log for each piece of work: what chan
 
 # Log
 
+## Roku settings passcode (2026-10-30, no migration)
+
+- The Roku menu has **Settings** (`SettingsScreen`), which matches the Android TV app's Profiles & PINs. On its own, the account gets the settings passcode (turn on, change, turn off, lock now). In a household it's "Your PIN", and the owner also adds, changes or removes each profile's PIN (`PUT /api/household/{id}/pin`). A new code is typed twice. A change that gets 423 opens the passcode pad, `POST /api/me/passcode/unlock`, then sends the change again; a wrong code shows the server's "That didn't match".
+- The 4 to 8 digit pad moved out of `ProfilesScreen` into `components/common/PinEntry` (fields `title`, `error`, `reset`, `pin`, `cancel`). It can't be called `PinPad`: that's a built-in SceneGraph node and silently wins.
+- Tested in the brs-engine simulator against a local server: turn on, lock, change while locked (wrong code then right one), add a profile PIN while locked, Who's watching? wrong PIN and Back. Never run on a real Roku.
+
 ## Cinemask folders follow BingeBandit libraries (2026-10-30, no migration)
 
 - Michael adds kids titles in Cinemask and they always landed in Movies, so he moved them to Kids Movies here afterwards. Cinemask already asks which root folder when it has more than one; the fix is mostly in Cinemask (its own PR): **Add BingeBandit libraries** in Settings → Media management reads `/api/libraries` (paths need an admin key) and finds each folder on Cinemask's side, and a title whose folder was moved here (`moveItem`) is found again in its new root after library sync and before an import.

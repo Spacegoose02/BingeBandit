@@ -59,6 +59,7 @@ sub buildMenu(user as object, libs as object)
         entries.Push({ id: "lib:" + lib.id.ToStr(), label: lib.name, library: lib })
     end for
     if getOr(user, "liveTV", true) <> false then entries.Push({ id: "live", label: "Live TV" })
+    entries.Push({ id: "settings", label: "Settings" })
     entries.Push({ id: "profiles", label: "Switch profile" })
     entries.Push({ id: "signout", label: "Sign out" })
     m.entries = entries
@@ -80,12 +81,14 @@ end sub
 
 sub showFocusedEntry()
     e = m.entries[m.menu.itemFocused]
-    if e <> invalid and e.id <> "profiles" and e.id <> "signout" then showEntry(e)
+    if e <> invalid and e.id <> "settings" and e.id <> "profiles" and e.id <> "signout" then showEntry(e)
 end sub
 
 sub onMenuSelected()
     e = m.entries[m.menu.itemSelected]
-    if e.id = "profiles"
+    if e.id = "settings"
+        m.top.navigate = { screen: "SettingsScreen" }
+    else if e.id = "profiles"
         m.top.navigate = { action: "profiles" }
     else if e.id = "signout"
         confirmSignOut()

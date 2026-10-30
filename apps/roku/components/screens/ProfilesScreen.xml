@@ -8,21 +8,7 @@
       </Label>
       <MarkupGrid id="grid" itemComponentName="MemberItem" itemSize="[260, 340]" itemSpacing="[40, 40]" numColumns="5" numRows="2" translation="[0, 380]" drawFocusFeedback="true" focusBitmapUri="pkg:/images/focus.9.png" vertFocusAnimationStyle="fixedFocusWrap" />
     </Group>
-    <Group id="pinPad" visible="false">
-      <Label id="pinTitle" width="1920" translation="[0, 120]" horizAlign="center" color="0xF2F4F7FF">
-        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="56" />
-      </Label>
-      <Label id="dots" width="1920" translation="[0, 220]" horizAlign="center" color="0xF2F4F7FF">
-        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="64" />
-      </Label>
-      <Label id="pinError" width="1920" translation="[0, 310]" horizAlign="center" color="0xF87171FF">
-        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
-      </Label>
-      <MarkupGrid id="keys" vertFocusAnimationStyle="floatingFocus" itemComponentName="KeyItem" itemSize="[150, 100]" itemSpacing="[24, 24]" numColumns="3" numRows="4" translation="[715, 390]" drawFocusFeedback="true" focusBitmapUri="pkg:/images/focus.9.png" />
-      <Label text="Back to cancel" width="1920" translation="[0, 920]" horizAlign="center" color="0x98A1ADFF">
-        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
-      </Label>
-    </Group>
+    <PinEntry id="pinPad" visible="false" />
     <Label id="error" width="1600" translation="[160, 940]" horizAlign="center" wrap="true" color="0xF87171FF">
       <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
     </Label>
