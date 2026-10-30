@@ -277,6 +277,8 @@ type progressReq struct {
 	Lights *bool `json:"lights"`
 	// LightsArea is the Hue room or zone this device's lights are in ("" = all of them).
 	LightsArea string `json:"lightsArea"`
+	// LightsMode is the device's own Hue Sync type ("sync" or "theater"); "" uses the profile's.
+	LightsMode string `json:"lightsMode"`
 }
 
 // progress saves the resume point and keeps the admin "Now Playing" list current.
@@ -358,7 +360,7 @@ func (s *Server) playerExpired(np stream.NowPlaying) {
 
 func (s *Server) playerEvent(np stream.NowPlaying, it *store.Item) map[string]any {
 	ev := s.playbackEvent(np, it)
-	ev["sessionId"], ev["fileId"], ev["paused"], ev["lights"], ev["lightsArea"] = np.ID, np.FileID, np.Paused, np.Lights, np.LightsArea
+	ev["sessionId"], ev["fileId"], ev["paused"], ev["lights"], ev["lightsArea"], ev["lightsMode"] = np.ID, np.FileID, np.Paused, np.Lights, np.LightsArea, np.LightsMode
 	return ev
 }
 
@@ -415,7 +417,7 @@ func (s *Server) nowPlaying(u *store.User, it *store.Item, req progressReq, ip s
 		ID: req.PlaySessionID, UserID: u.ID, Username: u.Username, Name: memberName(u), ItemID: it.ID, Title: it.Title, Poster: it.Poster,
 		FileID: req.FileID, Mode: req.Mode, Position: req.Position, Duration: req.Duration, Paused: req.Paused,
 		IP: ip, Local: s.isLocal(ip), Client: req.Client, TranscodeID: req.TranscodeID, Watched: req.Played,
-		Lights: req.Lights == nil || *req.Lights, LightsArea: req.LightsArea,
+		Lights: req.Lights == nil || *req.Lights, LightsArea: req.LightsArea, LightsMode: req.LightsMode,
 	}
 	if it.Kind == "episode" && it.SeasonNumber != nil && it.EpisodeNumber != nil {
 		np.Title = it.ShowTitle

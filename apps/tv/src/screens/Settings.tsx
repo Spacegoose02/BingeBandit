@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { ApiError, api, current, saveSession } from '../api'
 import { Button, Focusable } from '../components'
-import { hueArea, hueSyncOn, setHueArea, setHueSync, type MenuPosition } from '../devicePrefs'
-import { fetchGameLightsSetup, fetchHueMode, hueModeNames, nextHueMode, saveGameLights, saveHueMode, type GameLightsSetup, type HueMode } from '../lights'
+import { hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
+import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveHueMode, type GameLightsSetup, type HueMode } from '../lights'
+import { discoverHubs, hubAreas, LinkButton, loadHub, pairHub, refreshGameLights, saveHub, type Hub, type HubArea } from '../hue'
 import { Icon } from '../icons'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
 import type { Library, Member } from '../types'
@@ -106,24 +107,28 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   useEffect(() => {
     fetchHousehold().then((m) => setHasProfiles(m.length > 1), () => undefined)
   }, [])
-  // Hue Sync only shows once this profile picked Sync or Theater (Account
-  // on the web), and only when the server runs the plugin.
+  // Hue Sync is off for each profile until it's turned on, here or in
+  // Account on the web (only when the server runs the plugin). Then this
+  // device has its own switch, type and room.
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
   const hue = hueMode !== null && hueMode !== 'off'
   const [hueOn, setHueOn] = useState(hueSyncOn)
-  // Once shown, the mode row stays while this screen is open, so cycling past Off doesn't make it vanish.
-  const [hueSeen, setHueSeen] = useState(false)
   useEffect(() => {
-    fetchHueMode().then((m) => {
-      setHueMode(m)
-      setHueSeen(m !== null && m !== 'off')
-    })
+    fetchHueMode().then(setHueMode)
   }, [])
-  const cycleHueMode = () => {
+  const toggleProfileHue = () => {
     if (!hueMode) return
-    const m = nextHueMode(hueMode)
+    const m: HueMode = hue ? 'off' : 'sync'
     setHueMode(m)
     saveHueMode(m).catch(() => setHueMode(hueMode))
+  }
+  // This device's type; until picked it follows the profile's (Sync unless the web set Theater).
+  const [type, setTypeState] = useState(hueType)
+  const hereType = type || (hueMode === 'theater' ? 'theater' : 'sync')
+  const toggleType = () => {
+    const t = hereType === 'sync' ? 'theater' : 'sync'
+    setHueType(t)
+    setTypeState(t)
   }
   const toggleHue = () => {
     setHueSync(!hueOn)
@@ -162,7 +167,19 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   const saveLights = (person: GameLightsSetup['person']) => {
     if (!lights) return
     setLights({ ...lights, person })
-    saveGameLights(person).catch(() => setLights(lights))
+    saveGameLights(person).then(refreshGameLights, () => setLights(lights))
+  }
+  // The profile's own Hue hub on this device, when it paired one: the TV
+  // drives those lights itself, so the server's rooms don't apply.
+  const [hub, setHub] = useState<Hub | null>(null)
+  useEffect(() => {
+    loadHub().then(setHub)
+  }, [])
+  const hubChanged = (h: Hub | null) => {
+    setHub(h)
+    // Game Lights cues come to this TV while it has a hub, else the server flashes its own.
+    if (lights && !!lights.person.local !== !!h) saveLights({ ...lights.person, local: !!h })
+    else refreshGameLights()
   }
   const lightsAreas = [{ id: '', name: "The house's game lights" }, ...(lights?.areas ?? []).map((a) => ({ id: a.id, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))]
   const lightsArea = lights?.person.area ?? ''
@@ -249,16 +266,14 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           </Text>
         </Focusable>
       )}
-      {hueMode !== null && hueSeen && (
-        <Focusable onPress={cycleHueMode} style={st.option}>
-          <Text style={st.value}>Hue Sync: {hueModeNames[hueMode]}</Text>
+      {hueMode !== null && (
+        <Focusable onPress={toggleProfileHue} style={st.option}>
+          <Text style={st.value}>Hue Sync for {s?.user.profileName ?? s?.user.username}: {hue ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
-            {hueMode === 'sync'
-              ? 'The lights follow the colours on screen.'
-              : hueMode === 'theater'
-                ? 'The lights dim while something plays.'
-                : 'Off for this profile. Turn it back on here now, or later in Account on the web.'}{' '}
-            {isPhone ? 'Tap' : 'Press OK'} for the next one.
+            {hue
+              ? 'Your Hue lights can follow what you watch. Each device picks its own room and type below.'
+              : 'Let the Hue lights follow what you watch. Off until you turn it on, here or in Account on the web.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to turn it {hue ? 'off' : 'on'}.
           </Text>
         </Focusable>
       )}
@@ -270,7 +285,16 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           </Text>
         </Focusable>
       )}
-      {hue && hueOn && areas.length > 0 && (
+      {hue && hueOn && (
+        <Focusable onPress={toggleType} style={st.option}>
+          <Text style={st.value}>Hue Sync type on this {isPhone ? 'phone' : 'TV'}: {hereType === 'sync' ? 'Sync with the picture' : 'Theater'}</Text>
+          <Text style={st.hint}>
+            {hereType === 'sync' ? 'The lights follow the colours on screen.' : 'The lights dim while something plays and come back up when you pause or stop.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to switch.
+          </Text>
+        </Focusable>
+      )}
+      {hue && hueOn && !hub && areas.length > 0 && (
         <Focusable onPress={nextArea} style={st.option}>
           <Text style={st.value}>Hue lights: {areaName}</Text>
           <Text style={st.hint}>
@@ -287,15 +311,16 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
               : 'Flash the Hue lights when the teams you follow in Sports score. Off until you turn it on.'}{' '}
             {isPhone ? 'Tap' : 'Press OK'} to turn it {lights.person.enabled ? 'off' : 'on'}.
           </Text>
-          {!!lights.person.enabled && !lights.paired && <Text style={st.error}>An admin still needs to pair the Hue bridge on the Game Lights setup page.</Text>}
+          {!!lights.person.enabled && !lights.paired && !hub && <Text style={st.error}>Pair this home's Hue hub below, or ask an admin to pair one on the Game Lights setup page.</Text>}
         </Focusable>
       )}
-      {lights?.person.enabled && lights.paired && (
+      {lights?.person.enabled && lights.paired && !hub && (
         <Focusable onPress={nextLightsArea} style={st.option}>
           <Text style={st.value}>Game Lights room: {lightsAreaName}</Text>
           <Text style={st.hint}>The room you watch games in; its lights flash for your profile. {isPhone ? 'Tap' : 'Press OK'} for the next one.</Text>
         </Focusable>
       )}
+      {(hue || !!lights?.person.enabled) && <HueHub hub={hub} onChange={hubChanged} />}
       {recs && recs.enabled !== false && (
         <Focusable onPress={toggleRecs} style={st.option}>
           <Text style={st.value}>Recommendations to me: {recs.accept ? 'On' : 'Off'}</Text>
@@ -312,6 +337,121 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
         <Button label="Sign out" onPress={onSignOut} />
       </View>
       <Text style={st.hint}>Signing out also lets you pick a different server or sign in as someone else.</Text>
+    </>
+  )
+}
+
+/**
+ * The Hue hub in this home, paired by this device for the profile signed
+ * in: Hue Sync and Game Lights then run from the TV, which works in any
+ * home, not just one on the server's network. OK finds the hub and waits
+ * for its button; once paired, OK steps through its rooms.
+ */
+function HueHub({ hub, onChange }: { hub: Hub | null; onChange: (h: Hub | null) => void }) {
+  const ok = isPhone ? 'Tap' : 'Press OK'
+  const here = isPhone ? 'phone' : 'TV'
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [typing, setTyping] = useState(false)
+  const [address, setAddress] = useState('')
+  const [forget, setForget] = useState(false)
+  const [areas, setAreas] = useState<HubArea[]>([])
+  useEffect(() => {
+    if (hub) hubAreas(hub).then(setAreas, (e) => setMsg((e as Error).message))
+  }, [hub])
+
+  // Asks the hub every two seconds for half a minute, while someone presses its button.
+  const pair = async (addr: string) => {
+    setBusy(true)
+    setMsg(`Found the hub at ${addr}. Press the round button on top of it now.`)
+    const until = Date.now() + 30000
+    try {
+      for (;;) {
+        try {
+          const h = await pairHub(addr)
+          await saveHub(h)
+          setTyping(false)
+          setMsg('Paired. Pick the room this ' + here + ' is in.')
+          onChange(h)
+          return
+        } catch (e) {
+          if (!(e instanceof LinkButton) || Date.now() > until) throw e
+          await new Promise<void>((r) => setTimeout(r, 2000))
+        }
+      }
+    } catch (e) {
+      setMsg((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const find = async () => {
+    if (busy) return
+    setMsg('Looking for the Hue hub on this network…')
+    setBusy(true)
+    const found = await discoverHubs()
+    setBusy(false)
+    if (found.length > 0) return pair(found[0])
+    setMsg("Couldn't find it. Type the hub's address (in the Hue app: Settings, My hue system, the i next to the hub).")
+    setTyping(true)
+  }
+  const unpair = async () => {
+    if (!forget) {
+      setForget(true)
+      setMsg(`${ok} again to forget this hub.`)
+      return
+    }
+    setForget(false)
+    setMsg('')
+    await saveHub(null)
+    onChange(null)
+  }
+  const options = [{ id: '', name: 'Every light' }, ...areas.map((a) => ({ id: a.id, name: `${a.name} (${a.type === 'Zone' ? 'zone' : 'room'})` }))]
+  const nextRoom = async () => {
+    if (!hub) return
+    const i = options.findIndex((a) => a.id === hub.area)
+    const h = { ...hub, area: options[(i + 1) % options.length].id }
+    await saveHub(h)
+    onChange(h)
+  }
+
+  return (
+    <>
+      <Focusable onPress={hub ? unpair : find} style={st.option}>
+        <Text style={st.value}>Hue hub for this profile: {hub ? `Paired (${hub.bridge})` : 'Not paired'}</Text>
+        <Text style={st.hint}>
+          {hub
+            ? `This ${here} drives the lights in this home itself for Hue Sync and Game Lights. ${ok} twice to forget it.`
+            : `Pair the Hue hub in this home so its lights follow this ${here}, wherever the server is. ${ok} to find it.`}
+        </Text>
+        {!!msg && <Text style={st.msg}>{msg}</Text>}
+      </Focusable>
+      {typing && !hub && (
+        <View style={st.option}>
+          <TextInput
+            style={st.input}
+            value={address}
+            onChangeText={setAddress}
+            placeholder="192.168.1.20"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            onSubmitEditing={() => address.trim() && pair(address.trim())}
+          />
+          <View style={st.buttons}>
+            <Button label="Pair" onPress={() => address.trim() && !busy && pair(address.trim())} />
+          </View>
+        </View>
+      )}
+      {hub && (
+        <Focusable onPress={nextRoom} style={st.option}>
+          <Text style={st.value}>Hue room: {options.find((a) => a.id === hub.area)?.name ?? 'Every light'}</Text>
+          <Text style={st.hint}>
+            The room or zone this {here} is in: its lights follow the picture and flash for your teams. {ok} for the next one.
+          </Text>
+        </Focusable>
+      )}
     </>
   )
 }
@@ -641,6 +781,7 @@ const st = StyleSheet.create(scaled({
   value: { color: colors.text, fontSize: font.heading, fontWeight: '700', marginTop: 4 },
   update: { backgroundColor: colors.surface2, borderRadius: 22, padding: 30, maxWidth: 1100, marginTop: 24, borderWidth: 2, borderColor: colors.accent },
   option: { backgroundColor: colors.surface, borderRadius: 22, padding: 30, maxWidth: 1100, marginTop: 24 },
+  input: { backgroundColor: colors.surface2, color: colors.text, fontSize: font.heading, borderRadius: 16, paddingHorizontal: 28, paddingVertical: 20, borderWidth: 2, borderColor: colors.border },
   buttons: { flexDirection: 'row', marginTop: 28 },
   signOut: { flexDirection: 'row', marginTop: 48 },
   gap: { marginRight: 24 },

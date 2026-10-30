@@ -331,3 +331,50 @@ func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
 	}
 	send("player.stop", "phone", "", 1)
 }
+
+func TestDeviceMode(t *testing.T) {
+	for _, c := range []struct{ device, profile, want string }{
+		{"", ModeSync, ModeSync},
+		{"", ModeTheater, ModeTheater},
+		{ModeTheater, ModeSync, ModeTheater}, // the TV picked its own type
+		{ModeSync, ModeTheater, ModeSync},
+		{ModeTheater, ModeOff, ModeOff}, // the profile hasn't turned Hue Sync on
+		{"bogus", ModeSync, ModeSync},
+	} {
+		if got := (playerEvent{Mode: c.device}).deviceMode(c.profile); got != c.want {
+			t.Errorf("device %q, profile %q: got %q, want %q", c.device, c.profile, got, c.want)
+		}
+	}
+}
+
+// A TV that drives its own hub reads the picture's colours a stretch at a time.
+func TestColoursForTV(t *testing.T) {
+	video := testVideo(t)
+	a := &app{ffmpeg: "ffmpeg", p: &bbplugin.Plugin{Manifest: manifest}}
+	a.conf = &configStore{dir: t.TempDir}
+	a.fileURL = func(int64) (string, string) { return video, "" }
+	get := func(q string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/me/colours?"+q, nil)
+		req.Header.Set("X-BingeBandit-User-Id", "5")
+		rec := httptest.NewRecorder()
+		a.routes().ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := get("fileId=3"); rec.Code != http.StatusBadRequest {
+		t.Errorf("missing from and seconds: %d", rec.Code)
+	}
+	rec := get("fileId=3&from=4.2&seconds=1")
+	var out struct {
+		FPS    float64                 `json:"fps"`
+		Frames []map[string][3]float64 `json:"frames"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != 200 {
+		t.Fatalf("colours: %d %s", rec.Code, rec.Body)
+	}
+	if len(out.Frames) < 3 || len(out.Frames) > 5 || out.FPS != sampleFPS {
+		t.Fatalf("got %d frames at %g fps, want about one second's worth", len(out.Frames), out.FPS)
+	}
+	if c := out.Frames[0]["all"]; !near(Colour{X: c[0], Y: c[1]}, blueXY[0], blueXY[1]) {
+		t.Errorf("4.2s in is blue, got %v", c)
+	}
+}

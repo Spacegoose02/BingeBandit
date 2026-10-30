@@ -3,9 +3,10 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TVFocusGuid
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
-import { hueArea, hueSyncOn } from '../devicePrefs'
+import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
 import { Button, Focusable } from '../components'
-import { fetchHueMode, hueModeNames, saveHueMode, type HueMode } from '../lights'
+import { LocalSync, loadHub, type Hub } from '../hue'
+import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
 import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
@@ -245,6 +246,16 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     }
   }, [file, sub])
 
+  // A Hue hub this device paired for the profile (Settings): the TV drives it itself.
+  const localHub = useRef<Hub | null>(null)
+  const [hub, setHub] = useState<Hub | null>(null)
+  useEffect(() => {
+    loadHub().then((h) => {
+      localHub.current = h
+      setHub(h)
+    })
+  }, [])
+
   const report = useCallback(
     (stopped = false, done = false) => {
       if (!item || !file) return
@@ -261,8 +272,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           mode,
           transcodeId: transcodeId.current,
           client: isPhone ? 'Android' : 'Android TV',
-          lights: hueSyncOn(),
+          lights: hueSyncOn() && !localHub.current, // this device's own hub: the server's lights stay out of it
           lightsArea: hueArea(),
+          lightsMode: hueType(),
           played: Math.round(played.current),
         })
         .catch(() => undefined)
@@ -460,25 +472,38 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const [roomId, setRoomId] = useState<string | null>(together ?? null)
   const [togetherOpen, setTogetherOpen] = useState(false)
   const [summary, setSummary] = useState(false)
-  // Hue Sync's quick switch in Options: only once this profile turned it on.
+  // Hue Sync's quick switch in Options, for this device: only once this
+  // profile turned Hue Sync on (Settings, or Account on the web).
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
-  const [hueSeen, setHueSeen] = useState(false)
   useEffect(() => {
-    fetchHueMode().then((m) => {
-      setHueMode(m)
-      setHueSeen(m !== null && m !== 'off')
-    })
+    fetchHueMode().then(setHueMode)
   }, [])
+  const hereMode: HueMode = !hueSyncOn() ? 'off' : hueType() || (hueMode === 'theater' ? 'theater' : 'sync')
+  const [hueTick, redraw] = useState(0)
+  const hueHere = hub && hueMode !== null && hueMode !== 'off' && hereMode !== 'off' ? hereMode : null
+  const localSync = useRef<LocalSync | null>(null)
+  useEffect(() => {
+    if (!hub || !file || !hueHere) return
+    const s = new LocalSync(hub, file.id, hueHere, () => posRef.current)
+    s.setPaused(pausedRef.current)
+    localSync.current = s
+    return () => {
+      s.stop()
+      localSync.current = null
+    }
+  }, [hub, file, hueHere, hueTick])
+  useEffect(() => {
+    localSync.current?.setPaused(paused)
+  }, [paused, hueHere])
   const pickHue = (m: HueMode) => {
-    const was = hueMode
-    setHueMode(m)
-    saveHueMode(m).then(
-      () => say(m === 'off' ? 'Hue Sync off' : `Hue Sync: ${hueModeNames[m]}`),
-      (e) => {
-        setHueMode(was)
-        say(e.message)
-      },
-    )
+    if (m === 'off') setHueSync(false)
+    else {
+      setHueSync(true)
+      setHueType(m)
+    }
+    redraw((n) => n + 1)
+    report() // so the lights change now, not at the next ping
+    say(m === 'off' ? 'Hue Sync off on this TV' : `Hue Sync: ${hueModeNames[m]}`)
   }
   // Scrubbing on the focused progress bar (TV): ◀ / ▶ move a marker, faster
   // the more they're pressed in a row; it seeks once they stop, or on OK.
@@ -830,12 +855,12 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               }}
             />
           </ScrollView>
-          {hueMode !== null && hueSeen && (
+          {hueMode !== null && hueMode !== 'off' && (
             <>
               <Text style={st.menuTitle}>Hue Sync</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
                 {(['sync', 'theater', 'off'] as HueMode[]).map((m) => (
-                  <Button key={m} small primary={hueMode === m} label={hueModeNames[m]} onPress={() => pickHue(m)} />
+                  <Button key={m} small primary={hereMode === m} label={hueModeNames[m]} onPress={() => pickHue(m)} />
                 ))}
               </ScrollView>
             </>
