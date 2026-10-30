@@ -104,6 +104,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
 | GET | `/discover` | Discover rows: `[{id, name, videos: [{id, title, description, publishedAt}]}]`, newest first. `id` is the YouTube video id (thumbnail `https://i.ytimg.com/vi/{id}/mqdefault.jpg`). |
+| GET | `/discover/videos/{id}` | Plays a Discover video through the server (TV app): yt-dlp finds its stream and the answer is `{url, type}`, an HLS playlist (`/discover/videos/{id}/index.m3u8`, its parts at `…/s/{n}`; `type` `m3u8`) or an MP4 file (`…/video.mp4`, with Range; `type` `mp4`). Only videos on Discover; 502 with the reason when YouTube won't give one. |
 | GET / POST / DELETE | `/watchlist`, `/watchlist/{id}` | Your watchlist. |
 | GET / POST / PUT / DELETE | `/playlists`, `/playlists/{id}`, `/playlists/{id}/items`, `/playlists/{id}/order` | Playlists. |
 | GET | `/profiles`, `/profiles/{username}` | Public profiles and stats. |

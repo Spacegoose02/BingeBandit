@@ -131,3 +131,10 @@ func (s *Store) DiscoverVideos(id int64, limit int) ([]DiscoverVideo, error) {
 	}
 	return out, rows.Err()
 }
+
+// HasDiscoverVideo says whether a YouTube video is on the Discover page.
+func (s *Store) HasDiscoverVideo(videoID string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM discover_videos WHERE video_id = ?`, videoID).Scan(&n)
+	return n > 0, err
+}

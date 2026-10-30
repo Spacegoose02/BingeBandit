@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
@@ -115,16 +115,66 @@ export function TrailerScreen({ url, title }: { url: string; title: string }) {
   return <IntroVideo uri={absolute(url)} label={`Trailer · ${title}`} onDone={nav.back} doneLabel="Close" />
 }
 
+/**
+ * A Discover video, played here rather than in the YouTube app: the server
+ * finds its stream with yt-dlp and passes it on. When it can't, the YouTube
+ * app is offered instead. Back or the end returns to Discover.
+ */
+export function YouTubeScreen({ id, title }: { id: string; title: string }) {
+  const nav = useNav()
+  const [src, setSrc] = useState<{ url: string; type: string } | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    api.get<{ url: string; type: string }>(`/api/discover/videos/${id}`).then(setSrc, (e) => setError(e.message))
+  }, [id])
+  const openYouTube = () =>
+    Linking.openURL(`https://www.youtube.com/watch?v=${id}`).then(nav.back, () => setError("Couldn't open YouTube on this device."))
+
+  if (error) {
+    return (
+      <View style={[st.screen, st.ytError]}>
+        <Text style={st.ytErrorTitle}>{title}</Text>
+        <Text style={st.ytErrorText}>{error}</Text>
+        <View style={st.ytErrorButtons}>
+          <Button label="Open in YouTube" primary preferFocus onPress={openYouTube} />
+          <Button label="Close" onPress={nav.back} />
+        </View>
+      </View>
+    )
+  }
+  if (!src) {
+    return (
+      <View style={st.screen}>
+        <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />
+      </View>
+    )
+  }
+  return (
+    <IntroVideo
+      uri={absolute(src.url)}
+      type={src.type}
+      label={title}
+      onDone={nav.back}
+      onError={() => setError("This video wouldn't play here.")}
+      doneLabel="Close"
+    />
+  )
+}
+
 function IntroVideo({
   uri,
+  type,
   label,
   onDone,
+  onError,
   onSkipAll,
   doneLabel,
 }: {
   uri: string
+  type?: string
   label?: string
   onDone: () => void
+  onError?: () => void
   onSkipAll?: () => void
   doneLabel?: string
 }) {
@@ -132,11 +182,11 @@ function IntroVideo({
   return (
     <View style={st.screen}>
       <Video
-        source={{ uri, headers: authHeaders() }}
+        source={{ uri, type, headers: authHeaders() }}
         style={StyleSheet.absoluteFill}
         resizeMode="contain"
         onEnd={onDone}
-        onError={onDone}
+        onError={onError ?? onDone}
       />
       {!!label && <Text style={st.introLabel}>{label}</Text>}
       <View style={st.introSkip}>
@@ -964,6 +1014,10 @@ function SeekBar({ pct, duration, onSeek }: { pct: number; duration: number; onS
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   introSkip: { position: 'absolute', right: 60, bottom: 40, flexDirection: 'row' },
+  ytError: { justifyContent: 'center', paddingHorizontal: gutter },
+  ytErrorTitle: { color: colors.text, fontSize: font.heading, fontWeight: '700' },
+  ytErrorText: { color: colors.muted, fontSize: font.body, marginTop: 12, marginBottom: 30, maxWidth: 1300 },
+  ytErrorButtons: { flexDirection: 'row', flexWrap: 'wrap' },
   introLabel: { position: 'absolute', left: 60, bottom: 52, color: colors.text, fontSize: font.small, opacity: 0.85 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { paddingRight: 24 },

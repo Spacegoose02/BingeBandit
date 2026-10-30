@@ -241,3 +241,34 @@ func TestYouTubeSeparateAudio(t *testing.T) {
 		t.Fatalf("media playlist: %+v", got)
 	}
 }
+
+// A trailer plays from its HLS with sound and picture together, or else
+// from its whole MP4 file.
+func TestResolveYouTubeVideo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as yt-dlp")
+	}
+	bin := filepath.Join(t.TempDir(), "yt-dlp")
+	write := func(formats string) {
+		script := "#!/bin/sh\necho '{\"id\":\"OQpgz8u7YCA\",\"formats\":" + formats + "}'\n"
+		if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := YTDLP
+	YTDLP = bin
+	defer func() { YTDLP = old }()
+
+	write(`[{"url":"18","protocol":"https","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":360},{"url":"hls720","protocol":"m3u8_native","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":720}]`)
+	if got, err := ResolveYouTubeVideo(t.Context(), "OQpgz8u7YCA"); err != nil || got != (YouTubeVideo{URL: "hls720", HLS: true}) {
+		t.Fatalf("got %+v %v", got, err)
+	}
+	write(`[{"url":"dash","protocol":"https","ext":"mp4","vcodec":"avc1","acodec":"none","height":1080},{"url":"18","protocol":"https","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":360}]`)
+	if got, err := ResolveYouTubeVideo(t.Context(), "OQpgz8u7YCA"); err != nil || got != (YouTubeVideo{URL: "18"}) {
+		t.Fatalf("got %+v %v", got, err)
+	}
+	write(`[{"url":"dash","protocol":"https","ext":"webm","vcodec":"vp9","acodec":"none","height":1080}]`)
+	if _, err := ResolveYouTubeVideo(t.Context(), "OQpgz8u7YCA"); err == nil {
+		t.Fatal("no error without a stream that has sound")
+	}
+}
