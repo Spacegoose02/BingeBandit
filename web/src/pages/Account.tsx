@@ -60,8 +60,8 @@ function PluginPages() {
 
 /**
  * Hue Sync for this profile (off until picked, saved by the plugin), then
- * this browser's own switch and room. The TV app shows Hue Sync only once a
- * mode is picked here.
+ * this browser's own switch and room. The TV app shows its own switch, type
+ * and room once Hue Sync is on for the profile (here or in its Settings).
  */
 function HueSync() {
   const { mode, setMode } = useHueMode()
@@ -90,8 +90,8 @@ function HueSync() {
           ))}
         </select>
         <span className="muted small">
-          Sync: the lights follow the colours on screen. Theater: they dim while something plays and come back up when you pause or stop. You can switch from the
-          player's options too.
+          Sync: the lights follow the colours on screen. Theater: they dim while something plays and come back up when you pause or stop. Each TV can pick its own
+          type, room and on / off in the TV app's Settings; it can turn Hue Sync on for the profile there too.
         </span>
       </label>
       {mode && mode !== 'off' && (

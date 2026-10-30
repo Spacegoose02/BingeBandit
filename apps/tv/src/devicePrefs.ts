@@ -5,8 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const HUE_KEY = 'bb.hueSync'
 const HUE_AREA_KEY = 'bb.hueArea'
+const HUE_TYPE_KEY = 'bb.hueType'
 let hueSync = true
 let area = ''
+let type: HueType = ''
 
 AsyncStorage.getItem(HUE_KEY).then(
   (v) => {
@@ -17,6 +19,12 @@ AsyncStorage.getItem(HUE_KEY).then(
 AsyncStorage.getItem(HUE_AREA_KEY).then(
   (v) => {
     area = v ?? ''
+  },
+  () => undefined,
+)
+AsyncStorage.getItem(HUE_TYPE_KEY).then(
+  (v) => {
+    if (v === 'sync' || v === 'theater') type = v
   },
   () => undefined,
 )
@@ -39,6 +47,18 @@ export function hueArea(): string {
 export function setHueArea(id: string) {
   area = id
   AsyncStorage.setItem(HUE_AREA_KEY, id).catch(() => undefined)
+}
+
+/** Sync with the picture or Theater on this device; '' until picked, which uses the profile's. */
+export type HueType = '' | 'sync' | 'theater'
+
+export function hueType(): HueType {
+  return type
+}
+
+export function setHueType(t: HueType) {
+  type = t
+  AsyncStorage.setItem(HUE_TYPE_KEY, t).catch(() => undefined)
 }
 
 // Where the TV menu sits: down the left side, collapsed to icons until
