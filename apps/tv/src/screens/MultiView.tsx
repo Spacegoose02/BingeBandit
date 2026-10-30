@@ -307,6 +307,9 @@ function Screen({
             style={StyleSheet.absoluteFill}
             resizeMode="contain"
             muted={!audio}
+            // Each player would take Android's audio focus as it starts, and
+            // losing it pauses the others, so only the newest screen played.
+            disableFocus
             controlsStyles={NO_LIVE_BADGE}
             focusable={false}
           />
