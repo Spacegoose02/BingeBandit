@@ -43,18 +43,35 @@ test('plays, reports time, ends and quits', { skip: !(has('mpv', '--version') &&
   await new Promise((r) => server.listen(0, '127.0.0.1', r))
   const url = `http://127.0.0.1:${server.address().port}/api/files/1/direct`
 
+  let p
   t.after(() => {
+    if (p && !p.closed) p.proc.kill()
+    server.closeAllConnections()
     server.close()
     fs.rmSync(dir, { recursive: true, force: true })
   })
   const events = []
-  const p = new Mpv('mpv', { url, title: 'Test', start: 1, audio: 'auto', sub: 'no', subUrl: undefined }, {
+  // Waits for one event; mpv quitting or failing first fails the test at once.
+  const next = (type) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`no ${type} in 10 s: ${JSON.stringify(events)}`)), 10000)
+      p.on('event', (e) => {
+        if (e.type === type) {
+          clearTimeout(timer)
+          resolve(e)
+        } else if (e.type === 'error' || e.type === 'closed') {
+          clearTimeout(timer)
+          reject(new Error(`mpv ${e.type} before ${type}: ${JSON.stringify(e)}`))
+        }
+      })
+    })
+  p = new Mpv('mpv', { url, title: 'Test', start: 1, audio: 'auto', sub: 'no', subUrl: undefined }, {
     headers: ['Authorization: Bearer t0k'],
     configDir: dir,
     fullscreen: false,
   })
   p.on('event', (e) => events.push(e))
-  await new Promise((resolve) => p.on('event', (e) => e.type === 'end' && resolve()))
+  await next('end')
   const times = events.filter((e) => e.type === 'time')
   assert.ok(times.length > 0, 'time events')
   assert.ok(times[0].position >= 0.9, `started at the resume point (${times[0].position})`)
@@ -64,11 +81,11 @@ test('plays, reports time, ends and quits', { skip: !(has('mpv', '--version') &&
   // The next episode plays in the same mpv, with a sidecar subtitle file.
   events.length = 0
   await p.load({ url, title: 'Next', start: 0, audio: 'auto', sub: 'no', subUrl: { url: url.replace('direct', 'subtitles/2.vtt'), title: 'English', lang: 'en' } })
-  await new Promise((resolve) => p.on('event', (e) => e.type === 'end' && resolve()))
+  await next('end')
   assert.ok(events.some((e) => e.type === 'time' && e.position < 1), 'next file from the start')
   assert.ok(paths.some((u) => u.endsWith('/subtitles/2.vtt')), 'subtitle file loaded')
 
   // Idle after the end; quitting reports closed.
   p.quit()
-  await new Promise((resolve) => p.on('event', (e) => e.type === 'closed' && resolve()))
+  await next('closed')
 })

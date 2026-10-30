@@ -44,6 +44,7 @@ jobs:
 
   desktop-app:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,7 +57,10 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
         run: |
-          sudo apt-get install -y --no-install-recommends mpv ffmpeg
+          # Skip man-db's index rebuild, which can take minutes on the runners.
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends mpv ffmpeg
           npm ci && npm test
 
   roku-app:
