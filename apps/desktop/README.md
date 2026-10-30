@@ -6,6 +6,7 @@ What it does:
 
 - **Finds the server:** the first start looks for servers on this PC and the home network, or you type the address. Ctrl+Shift+S comes back to that screen later.
 - **Full screen** from the start; F11 switches. Sign-in, profiles, kid mode and everything else are the web app's.
+- **TV mode:** the web app is driven with a remote or the arrow keys (`web/src/tvNav.ts`). Arrows move to the nearest item that way: along a row, between rows, and across to the sidebar at the row's end. OK opens it, Back (or Escape, or Backspace) goes back and lands on the item you came from, and the menu key (or M) opens a card's menu. The page is drawn bigger so it reads from the sofa: about 1536 pixels wide whatever the screen. Ctrl+= and Ctrl+- change that, and Ctrl+0 goes back to automatic. To try TV mode in a browser, open any page with `?tv=1` (and `?tv=0` to turn it off).
 - **Plays in mpv**, full screen over the app:
   - starts where you left off and reports progress, so Continue Watching, watched state, Trakt and Hue Sync work as in the other apps;
   - picks audio and subtitles from your preferences, including sidecar subtitle files;

@@ -1,5 +1,5 @@
 // @ts-check
-const { app, BrowserWindow, Menu, ipcMain, session, shell } = require('electron')
+const { app, BrowserWindow, Menu, ipcMain, screen, session, shell } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
 const { Mpv, findMpv } = require('./mpv')
@@ -8,16 +8,16 @@ const discovery = require('./discovery')
 // BingeBandit for Windows: the server's own web app in a full-screen window,
 // with videos handed to mpv, which plays every format without converting.
 
-/** @typedef {{ server: string, fullscreen: boolean, mpvPath: string }} Settings */
+/** @typedef {{ server: string, fullscreen: boolean, mpvPath: string, zoom: number }} Settings */
 
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 
 /** @returns {Settings} */
 function loadSettings() {
   try {
-    return { server: '', fullscreen: true, mpvPath: '', ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
+    return { server: '', fullscreen: true, mpvPath: '', zoom: 0, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) }
   } catch {
-    return { server: '', fullscreen: true, mpvPath: '' }
+    return { server: '', fullscreen: true, mpvPath: '', zoom: 0 }
   }
 }
 
@@ -28,7 +28,7 @@ function saveSettings(patch) {
   fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2))
 }
 
-let settings = /** @type {Settings} */ ({ server: '', fullscreen: true, mpvPath: '' })
+let settings = /** @type {Settings} */ ({ server: '', fullscreen: true, mpvPath: '', zoom: 0 })
 /** @type {BrowserWindow | null} */
 let win = null
 /** @type {Mpv | null} */
@@ -79,6 +79,21 @@ function showServer() {
   win?.loadURL(settings.server)
 }
 
+/**
+ * How big the page is drawn. Automatic (zoom 0) makes the page about 1536
+ * pixels wide, so it reads from the sofa on a TV of any resolution; Ctrl+=
+ * and Ctrl+- change it and Ctrl+0 goes back to automatic.
+ */
+function zoomFactor() {
+  if (settings.zoom) return settings.zoom
+  const width = win ? screen.getDisplayMatching(win.getBounds()).size.width : 1536
+  return Math.min(2, Math.max(1, width / 1536))
+}
+
+function applyZoom() {
+  win?.webContents.setZoomFactor(zoomFactor())
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1600,
@@ -97,6 +112,7 @@ function createWindow() {
     if (/^https?:/i.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
+  win.webContents.on('did-finish-load', applyZoom)
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     // -3 is a navigation the page cancelled itself.
     if (isMainFrame && code !== -3 && !url.startsWith('file:')) showSetup(`Couldn't reach ${settings.server} (${desc}).`)
@@ -111,16 +127,19 @@ function createWindow() {
     } else if (input.key === 'S' && input.control && input.shift) {
       e.preventDefault()
       showSetup()
-    } else if (input.key === 'BrowserBack') {
+    } else if (input.control && (input.key === '=' || input.key === '+' || input.key === '-')) {
       e.preventDefault()
-      win?.webContents.navigationHistory.goBack()
+      const step = input.key === '-' ? -0.1 : 0.1
+      saveSettings({ zoom: Math.round(Math.min(3, Math.max(0.5, zoomFactor() + step)) * 10) / 10 })
+      applyZoom()
+    } else if (input.control && input.key === '0') {
+      e.preventDefault()
+      saveSettings({ zoom: 0 })
+      applyZoom()
     } else if (input.key === 'F5') {
       e.preventDefault()
       win?.webContents.reload()
     }
-  })
-  win.on('app-command', (_e, cmd) => {
-    if (cmd === 'browser-backward') win?.webContents.navigationHistory.goBack()
   })
   win.on('closed', () => {
     win = null

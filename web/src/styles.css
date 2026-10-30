@@ -1287,3 +1287,12 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .desktop-player-card p { margin: 0; color: var(--muted); font-size: 18px; }
 .desktop-player-card .desktop-player-error { color: var(--danger); }
 .desktop-player-actions { display: flex; gap: 12px; }
+
+/* TV mode (tvNav.ts): driven from the couch with a remote, so the focused item has to be obvious. */
+html.tv :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+html.tv .poster-link:focus-visible, html.tv .wide-frame:focus-visible, html.tv a.episode-still:focus-visible { outline: none; }
+html.tv .poster-link:focus-visible .poster-frame, html.tv .wide-frame:focus-visible, html.tv a.episode-still:focus-visible {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 3px var(--accent), 0 16px 34px rgba(0, 0, 0, 0.6);
+}
+html.tv .poster-link:focus-visible .card-title { color: var(--accent); }
