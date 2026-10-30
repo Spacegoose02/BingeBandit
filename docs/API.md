@@ -166,10 +166,12 @@ Scores and schedules come from ESPN's public (unofficial) site API, cached on th
 | GET | `/sports` | `{leagues, teams, games, error?}`: the leagues, the teams you follow, and their games from two days ago to a week ahead (live first, then upcoming, then results). Each game has `mine` (your team ids in it) and, with Live TV, `channels` whose guide shows it. |
 | GET | `/sports/live` | `{games}`: just your teams' games on now (today's and yesterday's scoreboards), with `channels`, for the player's score bug. |
 | PUT | `/sports/teams` | `[{league, id}]` replaces your teams (at most 40); names, logos and colours come from ESPN. |
-| GET | `/sports/{league}/teams` | Every team in a league: `nfl`, `college-football`, `nba`, `mens-college-basketball`, `womens-college-basketball`, `mlb`, `nhl`, `mls`. |
+| GET | `/sports/scores?date=YYYYMMDD&leagues=` | The Sports Hub: `{date, leagues, teams, games, error?}` with every league's games on the day (today by default), or only the comma-separated `leagues`. Games carry `mine` and, with Live TV, `channels`; `error` names leagues ESPN didn't answer for. |
+| GET | `/sports/{league}/games/{id}` | One game: `{game, stats, players, leaders, standings}`. `game` has each side's `lines` (score by period); `stats` are team stats side by side (`{label, away, home}`); `players` are per-team tables (`{team, title, labels, rows}`); `leaders` are per category (`{title, away, home}`); `standings` are the teams' groups (`{title, labels, rows}`). |
+| GET | `/sports/{league}/teams` | Every team in a league. `GET /sports` lists the 43 leagues (`id`, `name`, `sport`): US leagues and college sports, the big European soccer leagues and cups, rugby, AFL, cricket, lacrosse and UFC. UFC fights are games whose sides are the fighters; there are no UFC teams to follow. |
 | GET | `/sports/{league}/scores?date=YYYYMMDD` | The league's games on an ESPN (US Eastern) day, today by default. |
 
-Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences. `scoreBug` (default on) shows live scores in a corner of the players.
+Game alerts are notifications of kind `sports`, set by the `gameAlertMinutes` (0 for none) and `notifyGameScores` preferences. `scoreBug` (default on) shows live scores in a corner of the players. `spoilerFree` has the TV Sports Hub hide scores until asked, and turns the score bug off. `multiViewLayouts` (`[{name, channels}]`, at most 12, 1 to 4 channel ids each) are saved Sports Multi-View layouts.
 
 ### Passkeys
 

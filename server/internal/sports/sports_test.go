@@ -2,6 +2,7 @@ package sports
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -149,5 +150,104 @@ func TestTrackerChanges(t *testing.T) {
 	tr2.Look(context.Background())
 	if len(got) != 0 {
 		t.Errorf("first look announced %+v", got)
+	}
+}
+
+func TestSummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/baseball/mlb/summary" || r.URL.Query().Get("event") != "77" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `{
+		"header":{"id":"77","competitions":[{"date":"2026-09-20T17:10Z",
+			"status":{"period":8,"displayClock":"0:00","type":{"state":"in","detail":"Top 8th","shortDetail":"Top 8th"}},
+			"competitors":[
+				{"homeAway":"home","score":"5","team":{"id":"6","displayName":"Detroit Tigers","abbreviation":"DET","logos":[{"href":"det.png"}]},
+				 "record":[{"summary":"80-70"}],"linescores":[{"displayValue":"0"},{"displayValue":"0"},{"displayValue":"4"}]},
+				{"homeAway":"away","score":"1","team":{"id":"27","displayName":"Colorado Rockies","abbreviation":"COL"},
+				 "linescores":[{"displayValue":"0"},{"displayValue":"1"},{"displayValue":"0"}]}]}]},
+		"boxscore":{
+			"teams":[
+				{"team":{"id":"27"},"homeAway":"away","statistics":[{"name":"batting","stats":[{"label":"Hits","displayValue":"4"}]}]},
+				{"team":{"id":"6"},"homeAway":"home","statistics":[{"name":"batting","stats":[{"label":"Hits","displayValue":"9"}]}]}],
+			"players":[
+				{"team":{"id":"6"},"statistics":[{"name":"batting","labels":["H-AB","RBI"],"athletes":[
+					{"athlete":{"displayName":"Riley Greene","shortName":"R. Greene","position":{"abbreviation":"LF"}},"stats":["2-4","3"]},
+					{"athlete":{"displayName":"Bench Guy"},"stats":[]}]}]},
+				{"team":{"id":"27"},"statistics":[{"name":"batting","labels":["H-AB","RBI"],"athletes":[
+					{"athlete":{"displayName":"Ezequiel Tovar","shortName":"E. Tovar"},"stats":["1-4","1"]}]}]}]},
+		"leaders":[
+			{"team":{"id":"6"},"leaders":[{"name":"homeRuns","displayName":"Home Runs","leaders":[{"displayValue":"2","athlete":{"displayName":"Riley Greene","shortName":"R. Greene"}}]}]},
+			{"team":{"id":"27"},"leaders":[{"name":"homeRuns","displayName":"Home Runs","leaders":[{"displayValue":"1","athlete":{"displayName":"Ezequiel Tovar"}}]}]}],
+		"standings":{"groups":[{"header":"AL Central","standings":{"entries":[
+			{"team":"Detroit Tigers","id":"6","logo":[{"href":"det.png"}],"stats":[{"abbreviation":"W","displayValue":"80"},{"abbreviation":"L","displayValue":"70"},{"abbreviation":"XYZ","displayValue":"?"},{"abbreviation":"GB","displayValue":"-"}]}]}}]}
+		}`)
+	}))
+	defer srv.Close()
+	old := BaseURL
+	BaseURL = srv.URL
+	defer func() { BaseURL = old }()
+	c := NewClient()
+	s, err := c.Summary(context.Background(), "mlb", "77")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := s.Game
+	if g.State != "in" || g.Detail != "Top 8th" || g.Home.Score != "5" || g.Home.Record != "80-70" || strings.Join(g.Home.Lines, ",") != "0,0,4" || g.Away.Abbr != "COL" || g.Short != "COL @ DET" {
+		t.Errorf("game = %+v", g)
+	}
+	if len(s.Stats) != 1 || s.Stats[0] != (StatLine{"Hits", "4", "9"}) {
+		t.Errorf("stats = %+v", s.Stats)
+	}
+	if len(s.Players) != 2 || s.Players[0].Team != "27" || s.Players[1].Title != "Batting" || len(s.Players[1].Rows) != 1 || s.Players[1].Rows[0].Position != "LF" {
+		t.Errorf("players = %+v", s.Players)
+	}
+	if len(s.Leaders) != 1 || s.Leaders[0].Home.Short != "R. Greene" || s.Leaders[0].Away.Short != "Ezequiel Tovar" {
+		t.Errorf("leaders = %+v", s.Leaders)
+	}
+	if len(s.Standings) != 1 || strings.Join(s.Standings[0].Labels, ",") != "W,L,GB" || strings.Join(s.Standings[0].Rows[0].Stats, ",") != "80,70,-" {
+		t.Errorf("standings = %+v", s.Standings)
+	}
+	if _, err := c.Summary(context.Background(), "curling", "1"); err != ErrUnknownLeague {
+		t.Errorf("unknown league: %v", err)
+	}
+}
+
+func TestLinesAndLeaders(t *testing.T) {
+	var e espnEvent
+	if err := json.Unmarshal([]byte(`{"id":"9","date":"2026-10-25T17:00Z","status":{"type":{"state":"in"}},"competitions":[{
+		"competitors":[
+			{"homeAway":"home","score":"6","team":{"id":"16"},"linescores":[{"value":3},{"value":3}]},
+			{"homeAway":"away","score":"0","team":{"id":"15"},"linescores":[{"value":0},{"value":0}]}],
+		"leaders":[{"name":"passingYards","leaders":[{"displayValue":"7/13, 55 YDS","team":{"id":"16"},"athlete":{"displayName":"Kyler Murray","shortName":"K. Murray","position":{"abbreviation":"QB"}}}]},
+			{"name":"receivingYards","leaders":[{"displayValue":"1 REC, 16 YDS","team":{"id":"15"},"athlete":{"displayName":"Malik Washington","shortName":"M. Washington","position":{"abbreviation":"WR"}}}]}]}]}`), &e); err != nil {
+		t.Fatal(err)
+	}
+	g := e.game("nfl")
+	if strings.Join(g.Home.Lines, ",") != "3,3" || g.Home.Leader.Short != "K. Murray" || g.Away.Leader.Value != "1 REC, 16 YDS" || g.Away.Leader.Position != "WR" {
+		t.Errorf("game = %+v / %+v", g.Home, g.Away)
+	}
+}
+
+func TestUFCBouts(t *testing.T) {
+	var e espnEvent
+	if err := json.Unmarshal([]byte(`{"id":"600","date":"2026-11-01T01:00Z","name":"UFC 320","status":{"type":{"state":"in"}},"competitions":[
+		{"id":"1","date":"2026-10-31T23:00Z","status":{"type":{"state":"post","detail":"Final"}},"competitors":[
+			{"winner":true,"athlete":{"id":"11","displayName":"Ann Early","shortName":"A. Early"}},{"athlete":{"id":"12","displayName":"Bea Prelim"}}]},
+		{"id":"2","date":"2026-11-01T03:00Z","status":{"type":{"state":"pre"}},"competitors":[
+			{"athlete":{"id":"21","displayName":"Cy Main","flag":{"href":"us.png"}}},{"athlete":{"id":"22","displayName":"Di Event"}}]}]}`), &e); err != nil {
+		t.Fatal(err)
+	}
+	b := e.bouts()
+	if len(b) != 2 {
+		t.Fatalf("bouts = %d", len(b))
+	}
+	main, early := b[0].game("ufc"), b[1].game("ufc")
+	if main.ID != "600-2" || main.State != "pre" || main.Home.Name != "Cy Main" || main.Home.Logo != "us.png" || main.Away.ID != "22" {
+		t.Errorf("main event = %+v", main)
+	}
+	if early.State != "post" || !early.Home.Winner || early.Home.Short != "A. Early" {
+		t.Errorf("early fight = %+v", early)
 	}
 }

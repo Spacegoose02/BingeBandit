@@ -8,7 +8,7 @@ import type { SportsGame, SportsSide } from './types'
  * While something plays, the score of each of your teams' games that's on
  * sits in the top left corner, like a broadcast's score bug. Not on the
  * channel showing that game, which has its own, and not when turned off
- * under Settings → Alerts.
+ * under Settings → Alerts, or while the Sports Hub is spoiler-free.
  */
 /** Has the score bug read its switch again at once (Live TV's Options changes it). */
 export const refreshScoreBug = { current: () => undefined as void }
@@ -34,8 +34,8 @@ export function ScoreBug({ playing, channelId: screenChannel }: { playing: boole
     let on = true
     const look = async () => {
       try {
-        const p = await api.get<{ scoreBug?: boolean }>('/api/me/prefs')
-        if (p.scoreBug === false) {
+        const p = await api.get<{ scoreBug?: boolean; spoilerFree?: boolean }>('/api/me/prefs')
+        if (p.scoreBug === false || p.spoilerFree) { // spoiler-free keeps scores off the screen
           if (on) setGames([])
           return
         }

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,22 +26,61 @@ var BaseURL = "https://site.api.espn.com/apis/site/v2/sports"
 type League struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
-	Sport string `json:"sport"` // football | basketball | baseball | hockey | soccer
+	Sport string `json:"sport"` // football | basketball | baseball | hockey | soccer | rugby | cricket | ...
 	path  string
 	// groups asks for every game: college scoreboards otherwise only list
 	// a featured few (80 is FBS football, 50 is Division I basketball).
 	groups string
 }
 
+// Leagues are every league the Sports Hub shows, in the order its rows
+// appear. Only two-sided games fit (no golf, tennis or racing). The soccer,
+// rugby and cricket ids are ESPN's own.
 var Leagues = []League{
 	{ID: "nfl", Name: "NFL", Sport: "football", path: "football/nfl"},
 	{ID: "college-football", Name: "College football", Sport: "football", path: "football/college-football", groups: "80"},
+	{ID: "ufl", Name: "UFL", Sport: "football", path: "football/ufl"},
+	{ID: "cfl", Name: "CFL", Sport: "football", path: "football/cfl"},
 	{ID: "nba", Name: "NBA", Sport: "basketball", path: "basketball/nba"},
+	{ID: "wnba", Name: "WNBA", Sport: "basketball", path: "basketball/wnba"},
 	{ID: "mens-college-basketball", Name: "Men's college basketball", Sport: "basketball", path: "basketball/mens-college-basketball", groups: "50"},
 	{ID: "womens-college-basketball", Name: "Women's college basketball", Sport: "basketball", path: "basketball/womens-college-basketball", groups: "50"},
 	{ID: "mlb", Name: "MLB", Sport: "baseball", path: "baseball/mlb"},
+	{ID: "college-baseball", Name: "College baseball", Sport: "baseball", path: "baseball/college-baseball"},
 	{ID: "nhl", Name: "NHL", Sport: "hockey", path: "hockey/nhl"},
+	{ID: "mens-college-hockey", Name: "Men's college hockey", Sport: "hockey", path: "hockey/mens-college-hockey"},
 	{ID: "mls", Name: "MLS", Sport: "soccer", path: "soccer/usa.1"},
+	{ID: "nwsl", Name: "NWSL", Sport: "soccer", path: "soccer/usa.nwsl"},
+	{ID: "premier-league", Name: "Premier League", Sport: "soccer", path: "soccer/eng.1"},
+	{ID: "champions-league", Name: "Champions League", Sport: "soccer", path: "soccer/uefa.champions"},
+	{ID: "europa-league", Name: "Europa League", Sport: "soccer", path: "soccer/uefa.europa"},
+	{ID: "conference-league", Name: "Conference League", Sport: "soccer", path: "soccer/uefa.europa.conf"},
+	{ID: "la-liga", Name: "LaLiga", Sport: "soccer", path: "soccer/esp.1"},
+	{ID: "bundesliga", Name: "Bundesliga", Sport: "soccer", path: "soccer/ger.1"},
+	{ID: "serie-a", Name: "Serie A", Sport: "soccer", path: "soccer/ita.1"},
+	{ID: "ligue-1", Name: "Ligue 1", Sport: "soccer", path: "soccer/fra.1"},
+	{ID: "efl-championship", Name: "EFL Championship", Sport: "soccer", path: "soccer/eng.2"},
+	{ID: "fa-cup", Name: "FA Cup", Sport: "soccer", path: "soccer/eng.fa"},
+	{ID: "league-cup", Name: "Carabao Cup", Sport: "soccer", path: "soccer/eng.league_cup"},
+	{ID: "eredivisie", Name: "Eredivisie", Sport: "soccer", path: "soccer/ned.1"},
+	{ID: "primeira-liga", Name: "Primeira Liga", Sport: "soccer", path: "soccer/por.1"},
+	{ID: "scottish-premiership", Name: "Scottish Premiership", Sport: "soccer", path: "soccer/sco.1"},
+	{ID: "liga-mx", Name: "Liga MX", Sport: "soccer", path: "soccer/mex.1"},
+	{ID: "concacaf-champions", Name: "CONCACAF Champions Cup", Sport: "soccer", path: "soccer/concacaf.champions"},
+	{ID: "premiership-rugby", Name: "Premiership Rugby", Sport: "rugby", path: "rugby/267979"},
+	{ID: "urc", Name: "United Rugby Championship", Sport: "rugby", path: "rugby/270557"},
+	{ID: "top-14", Name: "Top 14", Sport: "rugby", path: "rugby/270559"},
+	{ID: "super-rugby", Name: "Super Rugby", Sport: "rugby", path: "rugby/242041"},
+	{ID: "six-nations", Name: "Six Nations", Sport: "rugby", path: "rugby/180659"},
+	{ID: "nrl", Name: "NRL", Sport: "rugby", path: "rugby-league/3"},
+	{ID: "afl", Name: "AFL", Sport: "australian-football", path: "australian-football/afl"},
+	{ID: "ipl", Name: "IPL", Sport: "cricket", path: "cricket/8048"},
+	{ID: "big-bash", Name: "Big Bash League", Sport: "cricket", path: "cricket/8044"},
+	{ID: "college-volleyball", Name: "Women's college volleyball", Sport: "volleyball", path: "volleyball/womens-college-volleyball"},
+	{ID: "pll", Name: "Premier Lacrosse League", Sport: "lacrosse", path: "lacrosse/pll"},
+	{ID: "college-lacrosse", Name: "Men's college lacrosse", Sport: "lacrosse", path: "lacrosse/mens-college-lacrosse"},
+	// UFC: each fight on a card is a game, the fighters its two sides.
+	{ID: "ufc", Name: "UFC", Sport: "mma", path: "mma/ufc"},
 }
 
 // LeagueByID finds a league, or nil.
@@ -72,6 +112,19 @@ type Side struct {
 	Score  string `json:"score,omitempty"`
 	Winner bool   `json:"winner,omitempty"`
 	Record string `json:"record,omitempty"`
+	// Lines are the side's score in each period (quarter, inning, half).
+	Lines []string `json:"lines,omitempty"`
+	// Leader is the side's standout player so far, or before a game its
+	// probable starter.
+	Leader *Leader `json:"leader,omitempty"`
+}
+
+// Leader is a player and what they've done ("1 REC, 16 YDS").
+type Leader struct {
+	Name     string `json:"name"`      // Malik Washington
+	Short    string `json:"shortName"` // M. Washington
+	Position string `json:"position,omitempty"`
+	Value    string `json:"value,omitempty"`
 }
 
 // Game is one game on a scoreboard.
@@ -111,6 +164,8 @@ type Client struct {
 	mu     sync.Mutex
 	teams  map[string]cached[[]Team]
 	boards map[string]cached[[]Game]
+	// summaries are game summaries by league/id.
+	summaries map[string]cached[*Summary]
 }
 
 type cached[T any] struct {
@@ -120,7 +175,7 @@ type cached[T any] struct {
 
 func NewClient() *Client {
 	return &Client{HTTP: &http.Client{Timeout: 15 * time.Second}, Now: time.Now,
-		teams: map[string]cached[[]Team]{}, boards: map[string]cached[[]Game]{}}
+		teams: map[string]cached[[]Team]{}, boards: map[string]cached[[]Game]{}, summaries: map[string]cached[*Summary]{}}
 }
 
 var eastern, _ = time.LoadLocation("America/New_York")
@@ -174,6 +229,9 @@ func (c *Client) Teams(ctx context.Context, league string) ([]Team, error) {
 	l := LeagueByID(league)
 	if l == nil {
 		return nil, ErrUnknownLeague
+	}
+	if l.Sport == "mma" {
+		return []Team{}, nil // fighters, not teams, so nothing to follow
 	}
 	c.mu.Lock()
 	if e, ok := c.teams[league]; ok && c.Now().Before(e.exp) {
@@ -229,36 +287,136 @@ func (c *Client) Team(ctx context.Context, league, id string) (Team, error) {
 }
 
 type espnEvent struct {
-	ID           string `json:"id"`
-	Date         string `json:"date"`
-	Name         string `json:"name"`
-	ShortName    string `json:"shortName"`
-	Competitions []struct {
-		Venue struct {
-			FullName string `json:"fullName"`
-		} `json:"venue"`
-		Competitors []struct {
-			HomeAway string   `json:"homeAway"`
-			Winner   bool     `json:"winner"`
-			Score    string   `json:"score"`
-			Team     espnTeam `json:"team"`
-			Records  []struct {
-				Summary string `json:"summary"`
-			} `json:"records"`
-		} `json:"competitors"`
-		Broadcasts []struct {
-			Names []string `json:"names"`
-		} `json:"broadcasts"`
-	} `json:"competitions"`
-	Status struct {
-		DisplayClock string `json:"displayClock"`
-		Period       int    `json:"period"`
-		Type         struct {
-			State       string `json:"state"`
-			Detail      string `json:"detail"`
-			ShortDetail string `json:"shortDetail"`
-		} `json:"type"`
-	} `json:"status"`
+	ID           string            `json:"id"`
+	Date         string            `json:"date"`
+	Name         string            `json:"name"`
+	ShortName    string            `json:"shortName"`
+	Competitions []espnCompetition `json:"competitions"`
+	Status       espnStatus        `json:"status"`
+}
+
+type espnStatus struct {
+	DisplayClock string `json:"displayClock"`
+	Period       int    `json:"period"`
+	Type         struct {
+		State       string `json:"state"`
+		Detail      string `json:"detail"`
+		ShortDetail string `json:"shortDetail"`
+	} `json:"type"`
+}
+
+type espnCompetition struct {
+	ID     string      `json:"id"`
+	Date   string      `json:"date"`
+	Status *espnStatus `json:"status"` // the game summary's header has it here
+	Venue  struct {
+		FullName string `json:"fullName"`
+	} `json:"venue"`
+	Competitors []struct {
+		HomeAway string   `json:"homeAway"`
+		Winner   bool     `json:"winner"`
+		Score    string   `json:"score"`
+		Team     espnTeam `json:"team"`
+		// Fighters, in MMA, instead of a team.
+		Athlete *struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"displayName"`
+			ShortName   string `json:"shortName"`
+			Flag        struct {
+				Href string `json:"href"`
+			} `json:"flag"`
+		} `json:"athlete"`
+		Records []struct {
+			Summary string `json:"summary"`
+		} `json:"records"`
+		Record []struct { // the game summary's spelling
+			Summary string `json:"summary"`
+		} `json:"record"`
+		Linescores []struct {
+			Value        *float64 `json:"value"`
+			DisplayValue string   `json:"displayValue"`
+		} `json:"linescores"`
+		Leaders   []espnLeaders `json:"leaders"`
+		Probables []struct {
+			Athlete espnAthlete `json:"athlete"`
+			Record  string      `json:"record"`
+		} `json:"probables"`
+	} `json:"competitors"`
+	// Football puts the game's leaders here, each naming their team.
+	Leaders    []espnLeaders `json:"leaders"`
+	Broadcasts []struct {
+		Names []string `json:"names"`
+	} `json:"broadcasts"`
+}
+
+type espnAthlete struct {
+	DisplayName string `json:"displayName"`
+	ShortName   string `json:"shortName"`
+	Position    struct {
+		Abbreviation string `json:"abbreviation"`
+	} `json:"position"`
+}
+
+// espnLeaders is one category ("Passing Yards") and its leaders.
+type espnLeaders struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Leaders     []struct {
+		DisplayValue string      `json:"displayValue"`
+		Athlete      espnAthlete `json:"athlete"`
+		Team         struct {
+			ID string `json:"id"`
+		} `json:"team"`
+	} `json:"leaders"`
+}
+
+func (a espnAthlete) leader(value string) *Leader {
+	if a.DisplayName == "" && a.ShortName == "" {
+		return nil
+	}
+	return &Leader{Name: firstNonEmpty(a.DisplayName, a.ShortName), Short: firstNonEmpty(a.ShortName, a.DisplayName), Position: a.Position.Abbreviation, Value: value}
+}
+
+// firstLeader is the top player of the first category with one, from
+// teamID's side when teamID is set.
+func firstLeader(cats []espnLeaders, teamID string) *Leader {
+	for _, c := range cats {
+		for _, l := range c.Leaders {
+			if teamID != "" && l.Team.ID != teamID {
+				continue
+			}
+			if ld := l.Athlete.leader(l.DisplayValue); ld != nil {
+				return ld
+			}
+		}
+	}
+	return nil
+}
+
+func lineScore(v *float64, display string) string {
+	if display != "" {
+		return display
+	}
+	if v == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*v, 'f', -1, 64)
+}
+
+// bouts splits a fight card into one event per fight, each with its own
+// status and start, so every fight is a game. The main event comes first.
+func (e espnEvent) bouts() []espnEvent {
+	out := make([]espnEvent, 0, len(e.Competitions))
+	for i := len(e.Competitions) - 1; i >= 0; i-- {
+		c := e.Competitions[i]
+		b := espnEvent{ID: e.ID + "-" + firstNonEmpty(c.ID, strconv.Itoa(i)), Date: firstNonEmpty(c.Date, e.Date), Name: e.Name, ShortName: e.ShortName,
+			Competitions: []espnCompetition{c}, Status: e.Status}
+		if c.Status != nil {
+			b.Status = *c.Status
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 // parseTime reads ESPN's dates, which drop the seconds ("2026-10-25T23:30Z").
@@ -283,13 +441,30 @@ func (e espnEvent) game(league string) Game {
 	}
 	comp := e.Competitions[0]
 	g.Venue = comp.Venue.FullName
-	for _, c := range comp.Competitors {
+	for i, c := range comp.Competitors {
 		s := Side{Team: c.Team.team(league), Home: c.HomeAway == "home", Score: c.Score, Winner: c.Winner}
+		if c.Athlete != nil {
+			s.Team = Team{League: league, ID: c.Athlete.ID, Name: c.Athlete.DisplayName, Short: c.Athlete.ShortName, Logo: c.Athlete.Flag.Href}
+			s.Home = i == 0 // the first named is billed first; shown second, like a home side
+		}
 		if len(c.Records) > 0 {
 			s.Record = c.Records[0].Summary
+		} else if len(c.Record) > 0 {
+			s.Record = c.Record[0].Summary
 		}
 		if g.State == "pre" {
 			s.Score = ""
+			if len(c.Probables) > 0 {
+				s.Leader = c.Probables[0].Athlete.leader(c.Probables[0].Record)
+			}
+		} else {
+			for _, l := range c.Linescores {
+				s.Lines = append(s.Lines, lineScore(l.Value, l.DisplayValue))
+			}
+			s.Leader = firstLeader(c.Leaders, "")
+			if s.Leader == nil {
+				s.Leader = firstLeader(comp.Leaders, s.ID)
+			}
 		}
 		if s.Home {
 			g.Home = s
@@ -349,7 +524,15 @@ func (c *Client) Scoreboard(ctx context.Context, league, day string) ([]Game, er
 	if day >= Day(now.Add(-36*time.Hour)) && day <= Day(now.Add(48*time.Hour)) {
 		ttl = 5 * time.Minute
 	}
+	var events []espnEvent
 	for _, e := range body.Events {
+		if l.Sport == "mma" {
+			events = append(events, e.bouts()...)
+		} else {
+			events = append(events, e)
+		}
+	}
+	for _, e := range events {
 		g := e.game(league)
 		if g.State == "in" || (g.State == "pre" && g.Start.Sub(now) < 20*time.Minute && now.Sub(g.Start) < 6*time.Hour) {
 			ttl = 20 * time.Second

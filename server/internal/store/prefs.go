@@ -52,7 +52,21 @@ type Prefs struct {
 	// PinnedTabs are app menu tabs that stay under More until pinned
 	// (OptInTabs), so turning one on never surprises anyone's saved menu.
 	PinnedTabs []string `json:"pinnedTabs"`
+	// SpoilerFree hides scores in the Sports Hub (and the score bug) until
+	// the person asks to see a game's.
+	SpoilerFree bool `json:"spoilerFree"`
+	// MultiViewLayouts are Sports Multi-View screens saved by name: up to
+	// four Live TV channels each.
+	MultiViewLayouts []MultiViewLayout `json:"multiViewLayouts"`
 }
+
+// MultiViewLayout is a saved Multi-View: its channels in screen order.
+type MultiViewLayout struct {
+	Name     string  `json:"name"`
+	Channels []int64 `json:"channels"`
+}
+
+const MaxMultiViewLayouts = 12
 
 // OptInTabs are the app menu tabs PinnedTabs may name.
 var OptInTabs = []string{"discover", "favorites"}
@@ -113,6 +127,17 @@ func (p *Prefs) Validate() error {
 	for _, t := range p.LiveFollows {
 		if len(t) == 0 || len(t) > 200 {
 			return fmt.Errorf("followed show titles are 1 to 200 characters")
+		}
+	}
+	if len(p.MultiViewLayouts) > MaxMultiViewLayouts {
+		return fmt.Errorf("save at most %d Multi-View layouts", MaxMultiViewLayouts)
+	}
+	for _, l := range p.MultiViewLayouts {
+		if l.Name == "" || len(l.Name) > 60 {
+			return fmt.Errorf("names of Multi-View layouts are 1 to 60 characters")
+		}
+		if len(l.Channels) == 0 || len(l.Channels) > 4 {
+			return fmt.Errorf("a Multi-View layout has 1 to 4 channels")
 		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {

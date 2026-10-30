@@ -40,6 +40,9 @@ func TestSports(t *testing.T) {
 				start.UTC().Format("2006-01-02T15:04Z"), home, state == "post", vt, away, mia, state)
 		case strings.HasSuffix(r.URL.Path, "/scoreboard"):
 			fmt.Fprint(w, `{"events":[]}`)
+		case strings.HasSuffix(r.URL.Path, "/college-football/summary") && r.URL.Query().Get("event") == "401":
+			fmt.Fprintf(w, `{"header":{"id":"401","competitions":[{"date":%q,"status":{"type":{"state":"pre"}},"competitors":[
+				{"homeAway":"home","team":%s},{"homeAway":"away","team":%s}]}]}}`, start.UTC().Format("2006-01-02T15:04Z"), vt, mia)
 		default:
 			http.NotFound(w, r)
 		}
@@ -104,6 +107,27 @@ func TestSports(t *testing.T) {
 	var day []sports.Game
 	if code := call("dana", "GET", "/api/sports/college-football/scores?date="+sports.Day(start), "", &day); code != 200 || len(day) != 1 {
 		t.Fatalf("scores: %d %+v", code, day)
+	}
+
+	// The Sports Hub: every league's day, Dana's team marked.
+	var hub struct {
+		Leagues []sports.League `json:"leagues"`
+		Games   []sportsGame    `json:"games"`
+		Error   string          `json:"error"`
+	}
+	if code := call("dana", "GET", "/api/sports/scores?date="+sports.Day(start), "", &hub); code != 200 || len(hub.Leagues) != len(sports.Leagues) ||
+		len(hub.Games) != 1 || hub.Games[0].Mine[0] != "259" || hub.Error != "" {
+		t.Fatalf("hub: %d %+v", code, hub)
+	}
+	if code := call("dana", "GET", "/api/sports/scores?leagues=nba,nhl&date="+sports.Day(start), "", &hub); code != 200 || len(hub.Leagues) != 2 || len(hub.Games) != 0 {
+		t.Fatalf("hub for two leagues: %d %+v", code, hub)
+	}
+	if code := call("dana", "GET", "/api/sports/scores?date=tomorrow", "", nil); code != 400 {
+		t.Errorf("bad date: %d", code)
+	}
+	var sum sports.Summary
+	if code := call("dana", "GET", "/api/sports/college-football/games/401", "", &sum); code != 200 || sum.Game.Home.ID != "259" {
+		t.Fatalf("summary: %d %+v", code, sum)
 	}
 
 	// The score bug's list: only games that are on.

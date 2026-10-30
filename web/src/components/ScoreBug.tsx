@@ -12,7 +12,7 @@ export function ScoreBug({ channelId }: { channelId?: number }) {
     const look = async () => {
       try {
         const p = await api.get<Prefs>('/api/me/prefs')
-        const g = p.scoreBug === false ? [] : (await api.get<{ games: SportsGame[] }>(`/api/sports/live${channelId ? `?channel=${channelId}` : ''}`)).games
+        const g = p.scoreBug === false || p.spoilerFree ? [] : (await api.get<{ games: SportsGame[] }>(`/api/sports/live${channelId ? `?channel=${channelId}` : ''}`)).games
         if (on) setGames(g)
       } catch {
         // No sports, or offline: just no bug.
