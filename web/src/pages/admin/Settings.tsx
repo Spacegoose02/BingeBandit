@@ -26,6 +26,18 @@ const tonemapAlgorithms: [string, string][] = [
   ['linear', 'Linear (darkest, no curve)'],
 ]
 
+/** The remote quality limit's choices, in kbit/s. */
+const remoteQualities: [string, string][] = [
+  ['0', 'No limit'],
+  ['40000', '40 Mbps (4K)'],
+  ['20000', '20 Mbps (4K, lighter)'],
+  ['12000', '12 Mbps (1440p)'],
+  ['8000', '8 Mbps (1080p)'],
+  ['4000', '4 Mbps (720p)'],
+  ['2000', '2 Mbps (480p)'],
+  ['1000', '1 Mbps (480p, low)'],
+]
+
 export default function AdminSettings() {
   useDocumentTitle('Settings')
   const { refresh } = useAuth()
@@ -405,6 +417,25 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.remote_access !== 'false'} onChange={set('remote_access')} />
             Allow connections from outside the home network
           </label>
+          {s.remote_access !== 'false' && (
+            <div className="field-grid">
+              <label>
+                Streams at once from outside, per account
+                <input type="number" min={0} max={50} value={s.remote_max_streams ?? '0'} onChange={set('remote_max_streams')} />
+                <span className="muted small">0 = no limit. An account and its profiles share it, live TV included. Admin accounts have no limit.</span>
+              </label>
+              <label>
+                Quality limit outside the home network
+                <select value={s.remote_max_kbps ?? '0'} onChange={set('remote_max_kbps')}>
+                  {remoteQualities.map(([v, label]) => (
+                    <option key={v} value={v}>{label}</option>
+                  ))}
+                  {!remoteQualities.some(([v]) => v === (s.remote_max_kbps ?? '0')) && <option value={s.remote_max_kbps}>{s.remote_max_kbps} kbps</option>}
+                </select>
+                <span className="muted small">Videos above it are converted down for viewers away from home. Live TV isn't limited.</span>
+              </label>
+            </div>
+          )}
           <label>
             Extra local networks
             <input className="mono" value={s.lan_networks ?? ''} onChange={set('lan_networks')} placeholder="e.g. 100.64.0.0/10 for Tailscale" spellCheck={false} />

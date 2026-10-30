@@ -46,6 +46,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Restore a database backup from Admin → Tasks (the current database is backed up first) |
 | ✅ | Backups also uploaded to S3-compatible storage (Amazon S3, Backblaze B2, Wasabi, R2, MinIO) with the same retention, a connection test, and restore straight from the bucket |
 | ✅ | Download a backup, and restore from an uploaded file: in Admin → Tasks, or on a new server's first screen instead of creating an admin |
+| ✅ | Limits for streaming away from home: streams at once per account (with its profiles, live TV included) and a quality limit that converts bigger files down, in admin Settings → Network, enforced by the server for every app |
 | ✅ | True adaptive bitrate: an admin setting converts up to three qualities at once (master playlist), and the web and TV players switch between them |
 | ✅ | ThePosterDB search in Change poster (reads their pages; no public API) |
 | ✅ | Metadata provider choice per show: TMDB or TheTVDB (aired, DVD or absolute episode order), from Fix match; a per-library switch for intro and credits detection |

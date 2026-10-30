@@ -63,6 +63,13 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Limits for streaming away from home (2026-10-30, no migration)
+
+- Two admin settings (Settings → Network, shown while remote access is on): `remote_max_streams`, streams at once from outside per account (0 = no limit, up to 50), and `remote_max_kbps`, a video bitrate cap for viewers outside (0 = none; the web offers 1–40 Mbps). Both default to off. "Outside" is `Server.isLocal`, so LAN networks and trusted proxies count as they already did.
+- **Stream limit** (`api/remotelimits.go`, `streamLimitHit`): counts the whole account (owner and profiles) away from home: players pinging `/progress` (not local), remote transcodes that no player has reported yet, and live TV viewers (`livetv.Manager.ViewerIPs`, DVR left out). The same file from the same address is the same stream (seeking, quality changes, direct play falling back to converting). Checked at `/files/{id}/direct` (not downloads), new `/files/{id}/transcode` (not `replace`), a play session's first `/progress` (catches two players starting together) and both live joins (`watch`, `stream.ts`); over it answers 429 with a message. Admin accounts are exempt, which was my call; easy to drop.
+- **Quality cap**: `/files/{id}/direct` answers 403 for a remote viewer when `stream.FileKbps` is over the cap (unknown bitrate is let through); the web, TV and Roku players already fall back to converting on a direct play error, so older installed apps work unchanged. Transcodes get `Options.CapKbps` (server-set, `json:"-"`): over the cap, video is never copied, the height drops to `stream.HeightForKbps` (one whose usual rate is at most twice the cap: 8 Mbps → 1080p, 4 → 720p, 2 → 480p) and every rung's maxrate is held under the cap. Live TV isn't capped: its HLS is shared by every viewer of a channel. Audio isn't counted in the cap.
+- **Tested:** `go test ./...` (`TestRemoteStreamLimits`, `TestBuildArgsCap`), `tsc` and the web build. Not tried with real remote players; the 429 messages show in the web and TV players' error text, and on Roku as its generic playback error.
+
 ## Game Lights beyond football (2026-10-30, no migration)
 
 - **Plugin** (`game-lights/games.go`, `plays.go`, `effects.go`): score changes now light every team sport. `Follower.points` keeps each game's score and works out what each side scored, so goals by both sides between two looks both light (before, ESPN naming no scorer lit nothing).
