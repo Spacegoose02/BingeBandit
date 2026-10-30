@@ -3,6 +3,7 @@ import { ActivityIndicator, DeviceEventEmitter, Image, Modal, Pressable, ScrollV
 import { api, cached, current, image, saveSession, writesDone } from '../api'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
+import { refreshGameLights } from '../hue'
 import { Icon, type IconName } from '../icons'
 import { favoritesChanged, homeBack, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
@@ -61,6 +62,10 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   // that came late gave focus back to the tab just left, which switched to it
   // again, back and forth.
   const [initialTab] = useState(lastTab)
+  // Game Lights on this device's own Hue hub, when the profile paired one.
+  useEffect(() => {
+    refreshGameLights()
+  }, [])
   useEffect(() => {
     showLiveGuide.current = () => setTab('live')
     return () => {

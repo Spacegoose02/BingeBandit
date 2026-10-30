@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -459,5 +460,54 @@ func TestConfigVersion2(t *testing.T) {
 	c := s.get()
 	if !c.People["1"].Enabled || !c.People["2"].Enabled || !c.People["2"].Off || c.Version != 2 {
 		t.Errorf("after upgrade: %+v", c)
+	}
+}
+
+// Someone whose TV drives their own hub gets cues to poll, and the
+// server's bridge stays still.
+func TestLocalCues(t *testing.T) {
+	a, fb := testApp(t)
+	a.conf.update(func(c *Config) {
+		c.People = map[string]Person{"1": {Enabled: true, Local: true}}
+	})
+	a.settings["delay_seconds"] = "0"
+	get := func(after string) (out struct {
+		Cues []struct {
+			ID    int64     `json:"id"`
+			InMs  int64     `json:"inMs"`
+			Steps []cueStep `json:"steps"`
+		} `json:"cues"`
+		Last int64 `json:"last"`
+	}) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/me/cues?after="+after, nil)
+		req.Header.Set("X-BingeBandit-User-Id", "1")
+		a.routes().ServeHTTP(rec, req)
+		json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+	if s := get(""); len(s.Cues) != 0 || s.Last != 0 {
+		t.Fatalf("first poll = %+v, want only where to start", s)
+	}
+	b, _ := json.Marshal(map[string]any{
+		"sport": "hockey", "scorer": "259",
+		"game": map[string]any{"id": "401", "league": "nhl", "shortName": "MIA @ VT", "state": "in",
+			"home": map[string]any{"id": "259", "shortName": "Hokies", "abbr": "VT", "color": "630031", "altColor": "cf4420", "score": "1"},
+			"away": map[string]any{"id": "2390", "shortName": "Hurricanes", "abbr": "MIA", "color": "005030", "altColor": "f47321", "score": "0"}},
+		"fans": []map[string]any{{"userId": 1, "user": "michael", "teamId": "259"}},
+	})
+	a.follower.onEvent(context.Background(), "sports.score", b)
+	s := get("0")
+	if len(s.Cues) != 1 || len(s.Cues[0].Steps) == 0 || s.Last != s.Cues[0].ID {
+		t.Fatalf("cues = %+v", s)
+	}
+	if again := get(strconv.FormatInt(s.Last, 10)); len(again.Cues) != 0 {
+		t.Errorf("a cue came twice: %+v", again)
+	}
+	time.Sleep(200 * time.Millisecond)
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if len(fb.sets) != 0 {
+		t.Errorf("the server's bridge changed lights for a TV-driven person: %v", fb.sets)
 	}
 }

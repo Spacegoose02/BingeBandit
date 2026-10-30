@@ -38,6 +38,7 @@ func (a *app) meRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /me/settings", signedIn(a.saveMine))
 	mux.HandleFunc("POST /me/test", signedIn(a.testMine))
 	mux.HandleFunc("POST /me/calibrate", signedIn(a.calibrate))
+	mux.HandleFunc("GET /me/cues", signedIn(a.myCues))
 }
 
 func (a *app) myState(w http.ResponseWriter, r *http.Request, uid string) {
@@ -137,13 +138,18 @@ func (a *app) testMine(w http.ResponseWriter, r *http.Request, uid string) {
 	}
 	conf := a.conf.get()
 	p := conf.People[uid]
-	if conf.Username == "" || (p.Area == "" && len(conf.Lights) == 0) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an admin needs to pair the Hue bridge first"})
-		return
-	}
 	t := req.Team
 	if t.ID == "" {
 		t = a.sampleTeam("")
+	}
+	if p.Local {
+		a.fireLocal(uid, req.Effect, conf.paletteFor(t, p), "Test: "+req.Effect+" ("+t.Short+")", 0)
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+	if conf.Username == "" || (p.Area == "" && len(conf.Lights) == 0) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an admin needs to pair the Hue bridge first"})
+		return
 	}
 	a.runnerFor(p.Area).Fire(req.Effect, conf.paletteFor(t, p), "Test for "+bbUser(r)+": "+req.Effect+" ("+t.Short+")", 0)
 	w.WriteHeader(http.StatusAccepted)

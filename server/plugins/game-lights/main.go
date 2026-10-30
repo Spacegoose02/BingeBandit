@@ -40,6 +40,7 @@ type app struct {
 	conf     *configStore
 	runner   *Runner
 	follower *Follower
+	cues     cueBox // effects for people whose own TV drives their lights
 
 	mu       sync.Mutex
 	settings map[string]string

@@ -288,6 +288,10 @@ func (f *Follower) fire(g *game, team string, e Event, label string) {
 			}
 		}
 		delay := p.delay(def)
+		if p.Local {
+			f.a.fireLocal(fn.userID, k, pal, label, time.Duration(delay)*time.Second)
+			continue
+		}
 		once := fmt.Sprintf("%s|%d|%s|%v", p.Area, delay, k, pal.Hex)
 		if done[once] {
 			continue

@@ -54,6 +54,10 @@ type Person struct {
 	Delays   map[string]int       `json:"delays,omitempty"`
 	Opponent string               `json:"opponent,omitempty"` // other team scores: "red" (default), "colour" (dim, in their colours) or "off"
 	Colours  map[string][2]string `json:"colours,omitempty"`  // team key → two hex colours, over the admin's
+	// Local means the person's TV paired its own Hue hub and plays their
+	// effects there (the server's bridge may be in another home), so the
+	// server queues cues for it instead of flashing its own lights.
+	Local bool `json:"local,omitempty"`
 }
 
 // lightsFor reports whether this person's lights flash for a team.

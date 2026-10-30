@@ -31,6 +31,7 @@ export function fetchGameLightsOn(): Promise<boolean> {
 export interface GameLightsPerson {
   enabled?: boolean
   off?: boolean
+  local?: boolean // this device's own hub plays the effects (Settings)
   [key: string]: unknown
 }
 

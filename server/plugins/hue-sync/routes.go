@@ -54,6 +54,8 @@ func (a *app) routes() http.Handler {
 	// Anyone signed in: their own mode (off, sync or theater).
 	mux.HandleFunc("GET /me", a.myMode)
 	mux.HandleFunc("PUT /me", a.setMyMode)
+	// Anyone signed in: the picture's colours, for a TV that drives its own hub.
+	mux.HandleFunc("GET /me/colours", a.colours)
 	return mux
 }
 

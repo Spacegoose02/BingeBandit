@@ -5,6 +5,7 @@ import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
 import { Button, Focusable } from '../components'
+import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
 import { backInterceptor, useNav } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -245,6 +246,16 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     }
   }, [file, sub])
 
+  // A Hue hub this device paired for the profile (Settings): the TV drives it itself.
+  const localHub = useRef<Hub | null>(null)
+  const [hub, setHub] = useState<Hub | null>(null)
+  useEffect(() => {
+    loadHub().then((h) => {
+      localHub.current = h
+      setHub(h)
+    })
+  }, [])
+
   const report = useCallback(
     (stopped = false, done = false) => {
       if (!item || !file) return
@@ -261,7 +272,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           mode,
           transcodeId: transcodeId.current,
           client: isPhone ? 'Android' : 'Android TV',
-          lights: hueSyncOn(),
+          lights: hueSyncOn() && !localHub.current, // this device's own hub: the server's lights stay out of it
           lightsArea: hueArea(),
           lightsMode: hueType(),
           played: Math.round(played.current),
@@ -468,7 +479,22 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     fetchHueMode().then(setHueMode)
   }, [])
   const hereMode: HueMode = !hueSyncOn() ? 'off' : hueType() || (hueMode === 'theater' ? 'theater' : 'sync')
-  const [, redraw] = useState(0)
+  const [hueTick, redraw] = useState(0)
+  const hueHere = hub && hueMode !== null && hueMode !== 'off' && hereMode !== 'off' ? hereMode : null
+  const localSync = useRef<LocalSync | null>(null)
+  useEffect(() => {
+    if (!hub || !file || !hueHere) return
+    const s = new LocalSync(hub, file.id, hueHere, () => posRef.current)
+    s.setPaused(pausedRef.current)
+    localSync.current = s
+    return () => {
+      s.stop()
+      localSync.current = null
+    }
+  }, [hub, file, hueHere, hueTick])
+  useEffect(() => {
+    localSync.current?.setPaused(paused)
+  }, [paused, hueHere])
   const pickHue = (m: HueMode) => {
     if (m === 'off') setHueSync(false)
     else {
