@@ -124,6 +124,14 @@ class Mpv extends EventEmitter {
       this.send(['observe_property', 1, 'time-pos'])
       this.send(['observe_property', 2, 'pause'])
       this.send(['observe_property', 3, 'duration'])
+      // The file may already be playing (its first playback-restart came
+      // before this connection): then it's past the resume seek.
+      this.send(['get_property', 'seeking']).then((r) => {
+        if (r?.error === 'success' && r.data === false && !this.ready) {
+          this.ready = true
+          this.sendTime()
+        }
+      })
     })
     sock.once('error', () => {
       sock.destroy()
