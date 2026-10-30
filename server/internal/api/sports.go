@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -324,6 +325,100 @@ func (s *Server) sportsScores(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, games)
+}
+
+// sportsHub is every league's games on a day (today by default) for the
+// Sports Hub: `leagues=` narrows it to some (comma separated), your teams'
+// games are marked, live and upcoming ones get their Live TV channels, and
+// leagues ESPN didn't answer for are named in error.
+func (s *Server) sportsHub(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	day := q.Get("date")
+	if day == "" {
+		day = sports.Day(time.Now())
+	}
+	if !reDay.MatchString(day) {
+		writeErr(w, http.StatusBadRequest, "date must be YYYYMMDD")
+		return
+	}
+	var leagues []sports.League
+	if want := q.Get("leagues"); want != "" {
+		for _, id := range strings.Split(want, ",") {
+			if l := sports.LeagueByID(strings.TrimSpace(id)); l != nil {
+				leagues = append(leagues, *l)
+			}
+		}
+	} else {
+		leagues = sports.Leagues
+	}
+	u := currentUser(r)
+	teams, err := s.Store.SportsTeams(u.ID)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	mine := map[string]bool{}
+	for _, t := range teams {
+		mine[t.League+"/"+t.ID] = true
+	}
+	type result struct {
+		games []sports.Game
+		err   error
+	}
+	results := make([]result, len(leagues))
+	var wg sync.WaitGroup
+	limit := make(chan struct{}, 8) // ESPN is asked a few leagues at a time
+	for i, l := range leagues {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			limit <- struct{}{}
+			defer func() { <-limit }()
+			games, err := s.sportsClient().Scoreboard(r.Context(), l.ID, day)
+			results[i] = result{games, err}
+		}()
+	}
+	wg.Wait()
+	games := []sportsGame{}
+	var problems []string
+	for i, res := range results {
+		if res.err != nil {
+			problems = append(problems, leagues[i].Name)
+			continue
+		}
+		for _, g := range res.games {
+			sg := sportsGame{Game: g}
+			for _, id := range []string{g.Home.ID, g.Away.ID} {
+				if mine[g.League+"/"+id] {
+					sg.Mine = append(sg.Mine, id)
+				}
+			}
+			games = append(games, sg)
+		}
+	}
+	if u.LiveTV {
+		s.findChannels(u.ID, games)
+	}
+	resp := map[string]any{"date": day, "leagues": leagues, "teams": teams, "games": games}
+	if len(problems) > 0 {
+		resp["error"] = "Couldn't reach ESPN for " + strings.Join(problems, ", ")
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// sportsGameSummary is one game's box score, team and player stats,
+// leaders and standings.
+func (s *Server) sportsGameSummary(w http.ResponseWriter, r *http.Request) {
+	sum, err := s.sportsClient().Summary(r.Context(), chi.URLParam(r, "league"), chi.URLParam(r, "id"))
+	if errors.Is(err, sports.ErrUnknownLeague) {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, sum)
 }
 
 // setSportsTeams replaces the user's teams. Each is looked up on ESPN, so
