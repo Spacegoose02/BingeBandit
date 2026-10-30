@@ -17,7 +17,7 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "cinemask-upgrades",
 	Name:        "Cinemask Upgrades",
-	Version:     "1.1.0",
+	Version:     "1.2.0",
 	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies.",
 	Author:      "BingeBandit",
 	Homepage:    "https://github.com/Spacegoose02/cinemask",
@@ -39,8 +39,9 @@ type app struct {
 	p *bbplugin.Plugin
 	// files lists the library's files (tests replace it).
 	files func(ctx context.Context) ([]file, error)
-	// missing lists a collection's titles no library has (tests replace it).
-	missing func(ctx context.Context, id int64) ([]wanted, error)
+	// missing lists a collection's titles no library has, and the name of
+	// the collection's library (tests replace it).
+	missing func(ctx context.Context, id int64) ([]wanted, string, error)
 	cols    *colStore
 	// kick runs a collection at once after its switches change.
 	kick func(id int64)

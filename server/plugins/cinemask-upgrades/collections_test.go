@@ -17,8 +17,8 @@ func TestCollectionsAddMissing(t *testing.T) {
 	dir := t.TempDir()
 	a := &app{p: &bbplugin.Plugin{Manifest: manifest}, cols: &colStore{dir: func() string { return dir }}}
 	a.settings = map[string]string{"url": cs.URL, "api_key": "cmk_test", "collections": "false"}
-	a.missing = func(context.Context, int64) ([]wanted, error) {
-		return []wanted{{Kind: "movie", TMDBID: 949, Title: "Heat"}, {Kind: "movie", TMDBID: 329865, Title: "Arrival"}}, nil
+	a.missing = func(context.Context, int64) ([]wanted, string, error) {
+		return []wanted{{Kind: "movie", TMDBID: 949, Title: "Heat"}, {Kind: "movie", TMDBID: 329865, Title: "Arrival"}}, "kids movies", nil
 	}
 	h := a.routes()
 	do := func(method, path, body string) (int, string) {
@@ -41,8 +41,9 @@ func TestCollectionsAddMissing(t *testing.T) {
 	a.cols.update(7, func(c *colConfig) *colConfig { c.Monitor = true; return c })
 	a.runCollection(context.Background(), 7)
 	calls := strings.Join(cm.calls, "\n")
-	if !strings.Contains(calls, `POST /api/monitored {"kind":"movie","search":false,"tmdbId":329865}`) {
-		t.Fatalf("Arrival wasn't monitored: %s", calls)
+	// In the Cinemask folder named like the collection's library.
+	if !strings.Contains(calls, `POST /api/monitored {"kind":"movie","rootId":"kids-movies","search":false,"tmdbId":329865}`) {
+		t.Fatalf("Arrival wasn't monitored in Kids Movies: %s", calls)
 	}
 	if strings.Contains(calls, "/search") || strings.Count(calls, "POST /api/monitored ") != 1 {
 		t.Fatalf("Heat is already monitored and Search is off: %s", calls)

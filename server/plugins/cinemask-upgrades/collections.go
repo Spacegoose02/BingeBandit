@@ -96,12 +96,13 @@ func (s *colStore) get(id int64) colConfig {
 
 func (a *app) collectionsOn(ctx context.Context) bool { return a.conf(ctx)["collections"] == "true" }
 
-func (a *app) collectionMissing(ctx context.Context, id int64) ([]wanted, error) {
+func (a *app) collectionMissing(ctx context.Context, id int64) ([]wanted, string, error) {
 	var out struct {
 		Missing []wanted `json:"missing"`
+		Library string   `json:"library"`
 	}
 	err := a.p.Call(ctx, "GET", "/collections/"+strconv.FormatInt(id, 10)+"/missing", nil, &out)
-	return out.Missing, err
+	return out.Missing, out.Library, err
 }
 
 func pathID(r *http.Request) (int64, bool) {
@@ -232,11 +233,17 @@ func (a *app) addMissing(ctx context.Context, id int64) (addResult, error) {
 	if err != nil {
 		return res, err
 	}
-	missing, err := a.missing(ctx, id)
+	missing, library, err := a.missing(ctx, id)
 	if err != nil {
 		return res, err
 	}
 	res.missing = len(missing)
+	// Titles go in the Cinemask folder named like the collection's library
+	// (Kids Movies), so they show up in that library; otherwise Cinemask's main one.
+	var roots []RootFolder
+	if library != "" {
+		roots, _ = cm.RootFolders(ctx)
+	}
 	done := map[string]bool{}
 	for _, k := range conf.Added {
 		done[k] = true
@@ -249,7 +256,7 @@ func (a *app) addMissing(ctx context.Context, id int64) (addResult, error) {
 		}
 		have, err := cm.Lookup(ctx, m.Kind, m.TMDBID)
 		if err == nil && have == nil {
-			_, err = cm.Monitor(ctx, m.Kind, m.TMDBID, 0, conf.Search)
+			_, err = cm.Monitor(ctx, m.Kind, m.TMDBID, 0, rootFor(roots, m.Kind, library), conf.Search)
 		} else if err == nil && conf.Search {
 			// Already monitored but still not in a library: look now.
 			_, err = cm.Search(ctx, have.ID, Scope{})

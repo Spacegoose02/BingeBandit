@@ -233,7 +233,12 @@ func (s *Server) pluginCollectionMissing(w http.ResponseWriter, r *http.Request)
 	if missing == nil {
 		missing = []importer.Wanted{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"missing": missing, "unknown": unknown})
+	// The library's name lets Cinemask put what it adds in the matching folder (Kids Movies).
+	library := ""
+	if l, err := s.Store.Library(c.LibraryID); err == nil {
+		library = l.Name
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"missing": missing, "unknown": unknown, "library": library})
 }
 
 func (s *Server) pluginUsers(w http.ResponseWriter, r *http.Request) {
