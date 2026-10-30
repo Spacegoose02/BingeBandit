@@ -5,8 +5,38 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+// KeyYear is the year in a movie's match key ("movie:thelionking:2019"),
+// taken from its folder or file name, or 0 when the name had none.
+func KeyYear(matchKey string) int {
+	k := matchKey
+	if i := strings.Index(k, "|"); i >= 0 {
+		k = k[:i]
+	}
+	i := strings.LastIndex(k, ":")
+	if i < 0 {
+		return 0
+	}
+	y, _ := strconv.Atoi(k[i+1:])
+	return y
+}
+
+// SameYear says whether two years named on folders can be one movie. A year
+// out either way allows for a release that came out around New Year; an
+// unknown year matches any.
+func SameYear(a, b int) bool {
+	return a == 0 || b == 0 || a-b <= 1 && b-a <= 1
+}
+
+// DropAlias forgets that a folder's match key was merged into another movie,
+// so the next scan gives it its own again.
+func (s *Store) DropAlias(libraryID int64, matchKey string) error {
+	_, err := s.db.Exec(`DELETE FROM item_aliases WHERE library_id = ? AND match_key = ?`, libraryID, matchKey)
+	return err
+}
 
 // ItemAlias returns the movie a folder's match key was merged into, with that
 // movie's own match key, or ok false when the key isn't an alias.
@@ -49,8 +79,10 @@ func (c *mergeCandidate) ids() map[string]string {
 
 // MergeDuplicates folds movies of a library that are the same title into
 // one, as Plex does. Two movies are the same when they share a TMDB or IMDb
-// id, none of their ids disagree and they are the same edition. Unmatched
-// movies have no ids and are never merged. The other copy's files become
+// id, none of their ids disagree, they are the same edition and their folders
+// don't name years more than one apart: The Lion King (1994) and (2019)
+// stay two movies even when one was matched to the other wrongly, so either
+// can be fixed with Match. Unmatched movies have no ids and are never merged. The other copy's files become
 // versions of the kept movie (the one with the most files), and watch state,
 // watchlists, collections and playlists follow.
 //
@@ -90,8 +122,11 @@ func (s *Store) MergeDuplicates(libraryID int64) ([]Merged, error) {
 	// agree for every source both know.
 	parent := make([]int, len(cands))
 	known := make([]map[string]string, len(cands))
+	years := make([][2]int, len(cands)) // the lowest and highest folder year a group has, 0 for none
 	for i, c := range cands {
 		parent[i], known[i] = i, c.ids()
+		y := KeyYear(c.key)
+		years[i] = [2]int{y, y}
 	}
 	var find func(int) int
 	find = func(i int) int {
@@ -124,9 +159,12 @@ func (s *Store) MergeDuplicates(libraryID int64) ([]Merged, error) {
 					agree = false
 				}
 			}
-			if !agree {
+			ya, yb := years[a], years[b]
+			lo, hi := minYear(ya[0], yb[0]), max(ya[1], yb[1])
+			if !agree || !SameYear(lo, hi) {
 				continue
 			}
+			years[b] = [2]int{lo, hi}
 			parent[a] = b
 			for src, v := range known[a] {
 				known[b][src] = v
@@ -163,6 +201,14 @@ func (s *Store) MergeDuplicates(libraryID int64) ([]Merged, error) {
 		}
 	}
 	return merged, tx.Commit()
+}
+
+// minYear is the lower of two years, ignoring an unknown (0) one.
+func minYear(a, b int) int {
+	if a == 0 || b != 0 && b < a {
+		return b
+	}
+	return a
 }
 
 // aliasTo makes a merged folder's match key (and keys already merged into

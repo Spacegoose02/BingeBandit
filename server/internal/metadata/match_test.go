@@ -132,3 +132,25 @@ func TestMatchAcrossSources(t *testing.T) {
 		t.Errorf("left unmatched: %+v", h)
 	}
 }
+
+// TMDB's year filter counts re-releases, so the 1994 Lion King can top a 2019
+// search; the hit that first came out that year wins.
+func TestPickHitPrefersReleaseYear(t *testing.T) {
+	var res tmdbSearch
+	json.Unmarshal([]byte(`{"results":[{"id":8587,"release_date":"1994-06-15"},{"id":420818,"release_date":"2019-07-12"}]}`), &res)
+	if id := pickHit(res, 2019); id != 420818 {
+		t.Errorf("2019 → %d", id)
+	}
+	if id := pickHit(res, 1994); id != 8587 {
+		t.Errorf("1994 → %d", id)
+	}
+	if id := pickHit(res, 2020); id != 420818 {
+		t.Errorf("2020 → %d, want the year-out 2019", id)
+	}
+	if id := pickHit(res, 2005); id != 0 {
+		t.Errorf("2005 → %d, want none", id)
+	}
+	if id := pickHit(res, 0); id != 8587 {
+		t.Errorf("no year → %d, want the first", id)
+	}
+}

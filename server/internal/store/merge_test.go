@@ -92,3 +92,55 @@ func TestMergeDuplicatesAcrossSources(t *testing.T) {
 		t.Errorf("alias b → %d %v", id, ok)
 	}
 }
+
+// A remake matched to the original (The Lion King 2019 to 1994) stays its own
+// movie: folders naming years more than one apart never merge. A year out
+// still does, for releases around New Year.
+func TestMergeKeepsRemakesApart(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	if err := s.CreateLibrary(lib); err != nil {
+		t.Fatal(err)
+	}
+	add := func(key string, tmdb int64) {
+		id, err := s.UpsertItem(&Item{LibraryID: lib.ID, Kind: "movie", Title: key, MatchKey: key})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.Exec(`UPDATE items SET tmdb_id = ?, metadata_at = 1 WHERE id = ?`, tmdb, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.UpsertFile(&MediaFile{ItemID: id, Path: "/m/" + key}, 1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add("movie:thelionking:1994", 8587)
+	add("movie:thelionking:2019", 8587)
+	add("movie:thelionking:0", 8587) // no year: could be either, so it joins one
+	add("movie:dune:2021", 438631)
+	add("movie:dune:2022", 438631)
+	merged, err := s.MergeDuplicates(lib.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, m := range merged {
+		titles = append(titles, m.Title)
+	}
+	if len(merged) != 2 {
+		t.Fatalf("merged %v, want the yearless Lion King and Dune 2022", titles)
+	}
+	n := 0
+	s.db.QueryRow(`SELECT COUNT(*) FROM items WHERE library_id = ? AND match_key LIKE 'movie:thelionking:%'`, lib.ID).Scan(&n)
+	if n != 2 {
+		t.Errorf("%d Lion Kings left, want 1994 and 2019", n)
+	}
+}
+
+func TestKeyYear(t *testing.T) {
+	for key, want := range map[string]int{"movie:thelionking:2019": 2019, "movie:x:0": 0, "a": 0, "show:bluey:2018|Bluey+": 2018} {
+		if got := KeyYear(key); got != want {
+			t.Errorf("KeyYear(%q) = %d, want %d", key, got, want)
+		}
+	}
+}
