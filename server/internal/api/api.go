@@ -71,7 +71,9 @@ type Server struct {
 	// ratingFetches holds items whose external ratings are being looked up.
 	ratingFetches sync.Map
 	overlays      overlayState
-	ctx           context.Context // server lifetime, for work that outlives a request
+	// discoverStreams holds Discover videos resolved for the TV app.
+	discoverStreams discoverStreams
+	ctx             context.Context // server lifetime, for work that outlives a request
 	// Sports reads ESPN for the Sports page and the game alerts.
 	Sports     *sports.Client
 	sportsOnce sync.Once
@@ -207,6 +209,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.HandleFunc("/plugins/{id}/*", s.pluginProxy)
 
 			r.Get("/discover", s.discoverRows)
+			r.Get("/discover/videos/{vid}", s.discoverVideo)
+			r.Get("/discover/videos/{vid}/index.m3u8", s.discoverVideoPlaylist)
+			r.Get("/discover/videos/{vid}/s/{n}", s.discoverVideoSegment)
+			r.Get("/discover/videos/{vid}/video.mp4", s.discoverVideoFile)
 			r.Get("/watchlist", s.watchlist)
 			r.Get("/kids/titles", s.kidTitles)
 			r.Get("/items/{id}/kids", s.itemKids)

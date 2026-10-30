@@ -92,6 +92,7 @@ type ytdlpFormat struct {
 	URL         string  `json:"url"`
 	ManifestURL string  `json:"manifest_url"`
 	Protocol    string  `json:"protocol"`
+	Ext         string  `json:"ext"`
 	VCodec      string  `json:"vcodec"`
 	ACodec      string  `json:"acodec"`
 	Height      int     `json:"height"`
@@ -99,9 +100,31 @@ type ytdlpFormat struct {
 }
 
 func ytdlpHLS(ctx context.Context, link string) (string, error) {
+	info, stderr, err := ytdlpJSON(ctx, link)
+	if err != nil {
+		return "", err
+	}
+	if hls := pickHLS(info.Formats); hls != "" {
+		return hls, nil
+	}
+	for _, f := range info.Formats {
+		if f.ManifestURL != "" && isHLSManifest(f.ManifestURL) {
+			return f.ManifestURL, nil // pickVariant chooses the variant
+		}
+	}
+	msg := "found no stream with sound and picture; the channel may not be live"
+	if w := ytdlpMessage(stderr, nil); w != "" {
+		msg += " (" + w + ")"
+	}
+	return "", errors.New("yt-dlp " + msg)
+}
+
+// ytdlpJSON runs yt-dlp on a link and reads its JSON. The stderr it returns
+// holds yt-dlp's warnings, which say why formats are missing.
+func ytdlpJSON(ctx context.Context, link string) (ytdlpInfo, string, error) {
 	path, err := exec.LookPath(YTDLP)
 	if err != nil {
-		return "", errors.New("yt-dlp isn't installed (the Docker image has it)")
+		return ytdlpInfo{}, "", errors.New("yt-dlp isn't installed (the Docker image has it)")
 	}
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
@@ -119,21 +142,9 @@ func ytdlpHLS(ctx context.Context, link string) (string, error) {
 		runErr = json.Unmarshal(out.Bytes(), &info)
 	}
 	if runErr != nil {
-		return "", fmt.Errorf("yt-dlp: %s", ytdlpMessage(stderr.String(), runErr))
+		return ytdlpInfo{}, "", fmt.Errorf("yt-dlp: %s", ytdlpMessage(stderr.String(), runErr))
 	}
-	if hls := pickHLS(info.Formats); hls != "" {
-		return hls, nil
-	}
-	for _, f := range info.Formats {
-		if f.ManifestURL != "" && isHLSManifest(f.ManifestURL) {
-			return f.ManifestURL, nil // pickVariant chooses the variant
-		}
-	}
-	msg := "found no stream with sound and picture; the channel may not be live"
-	if w := ytdlpMessage(stderr.String(), nil); w != "" {
-		msg += " (" + w + ")"
-	}
-	return "", errors.New("yt-dlp " + msg)
+	return info, stderr.String(), nil
 }
 
 // pickHLS takes the tallest HLS format up to 1080p that has sound and

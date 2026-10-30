@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { Image, Linking, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached } from '../api'
 import { Center, Focusable } from '../components'
+import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 
 interface DiscoverVideo {
@@ -26,16 +27,16 @@ const ago = (t: number) => {
 
 /**
  * Discover: the newest videos from the YouTube playlists and channels an
- * admin picked on the web. OK opens one in the YouTube app.
+ * admin picked on the web. OK plays one here, through the server.
  */
 export default function Discover() {
   const [rows, setRows] = useState<DiscoverRow[] | null>(() => cached<DiscoverRow[]>('/api/discover') ?? null)
   const [error, setError] = useState('')
+  const nav = useNav()
   useEffect(() => {
     api.get<DiscoverRow[]>('/api/discover').then(setRows, (e) => setError(e.message))
   }, [])
-  const open = (v: DiscoverVideo) =>
-    Linking.openURL(`https://www.youtube.com/watch?v=${v.id}`).catch(() => setError("Couldn't open YouTube on this device."))
+  const open = (v: DiscoverVideo) => nav.push({ name: 'youtube', id: v.id, title: v.title })
 
   if (!rows) return <Center><Text style={st.muted}>{error || 'Loading…'}</Text></Center>
   return (

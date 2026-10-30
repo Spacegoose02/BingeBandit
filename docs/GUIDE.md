@@ -102,7 +102,7 @@ Shows list their seasons, and each season lists its episodes with a ✓ on the o
 - **Search** looks across every library you can see.
 - **Watchlist** keeps titles you want to get to. Movies leave it once you finish them.
 - **Playlists** are your own lists, and can be shared with others on the server.
-- **Discover** shows new trailers and videos from YouTube playlists and channels an admin picks.
+- **Discover** shows new trailers and videos from YouTube playlists and channels an admin picks. On the TV and phone app they play in the app's own player (the server reads them with yt-dlp, which the Docker image includes); if a video won't play that way, the app offers to open it in YouTube.
 
 ## 5. Watch
 
