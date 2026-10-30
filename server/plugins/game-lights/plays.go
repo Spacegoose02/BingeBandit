@@ -54,6 +54,9 @@ type Play struct {
 		Team *teamRef `json:"team"`
 	} `json:"start"`
 	StatYardage float64 `json:"statYardage"`
+	// The score after the play.
+	HomeScore int `json:"homeScore"`
+	AwayScore int `json:"awayScore"`
 }
 
 func getJSON(ctx context.Context, url string, out any) error {
@@ -73,12 +76,12 @@ func getJSON(ctx context.Context, url string, out any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(out)
 }
 
-// fetchPlays reads a football game's plays, oldest first.
-func fetchPlays(ctx context.Context, league, eventID string) ([]Play, error) {
+// fetchPlays reads a game's plays, oldest first.
+func fetchPlays(ctx context.Context, sport, league, eventID string) ([]Play, error) {
 	var core struct {
 		Items []Play `json:"items"`
 	}
-	err := getJSON(ctx, fmt.Sprintf("%s/football/leagues/%s/events/%s/competitions/%s/plays?limit=1000", espnCore, league, eventID, eventID), &core)
+	err := getJSON(ctx, fmt.Sprintf("%s/%s/leagues/%s/events/%s/competitions/%s/plays?limit=1000", espnCore, sport, league, eventID, eventID), &core)
 	if err == nil && len(core.Items) > 0 {
 		return core.Items, nil
 	}
@@ -93,7 +96,7 @@ func fetchPlays(ctx context.Context, league, eventID string) ([]Play, error) {
 		} `json:"drives"`
 		Plays []Play `json:"plays"`
 	}
-	if err := getJSON(ctx, fmt.Sprintf("%s/football/%s/summary?event=%s", espnSite, league, eventID), &sum); err != nil {
+	if err := getJSON(ctx, fmt.Sprintf("%s/%s/%s/summary?event=%s", espnSite, sport, league, eventID), &sum); err != nil {
 		return nil, err
 	}
 	var out []Play
@@ -169,4 +172,31 @@ func classify(p Play, team string) (Event, bool) {
 		return Event{Kind: "big_play", Good: true}, true
 	}
 	return Event{}, false
+}
+
+var reHomer = regexp.MustCompile(`homered|home run|grand slam`)
+
+// homeRuns finds the home runs that brought in a baseball game's newest
+// runs, by team id, with the play's text: d is what each team just scored,
+// bringing it to now. A play counts when it moved that team's score into
+// the new runs; older plays' scores fall below them.
+func homeRuns(plays []Play, homeID string, now, d map[string]int) map[string]string {
+	out := map[string]string{}
+	var prev [2]int // home, away after the play before
+	for _, p := range plays {
+		cur := [2]int{p.HomeScore, p.AwayScore}
+		if p.ScoringPlay && reHomer.MatchString(strings.ToLower(p.Type.Text+" "+p.Text)) {
+			for id, n := range d {
+				i := 1
+				if id == homeID {
+					i = 0
+				}
+				if cur[i] > prev[i] && cur[i] > now[id]-n && cur[i] <= now[id] {
+					out[id] = p.Text
+				}
+			}
+		}
+		prev = cur
+	}
+	return out
 }

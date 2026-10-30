@@ -174,20 +174,22 @@ func alternate(a, b Colour, n int, hold time.Duration) []Step {
 
 // Effects are the light effects, by the key the setup page turns them on and off with.
 var Effects = []struct{ Key, Label string }{
-	{"touchdown", "We score a touchdown or a goal: team colours alternate"},
+	{"touchdown", "We score a touchdown, a goal or a home run: team colours alternate"},
 	{"field_goal", "We kick a field goal or score a run: team colour pulses"},
+	{"take_lead", "We take the lead in basketball: team colours alternate briefly"},
+	{"scoring_run", "We go on a 10–0 run in basketball: team colours alternate"},
 	{"takeaway", "We intercept, recover a fumble, stop them on downs or score a safety: green flash"},
 	{"sack_for", "We sack the opponent: team colours alternate for 4 seconds"},
 	{"big_play", "We gain 20 yards or more: second team colour flashes"},
 	{"turnover_against", "We turn it over: red and white strobe"},
 	{"sack_against", "We get sacked: amber pulse"},
-	{"opp_score", "The other team scores: dim red pulse"},
+	{"opp_score", "The other team scores (or, in basketball, takes the lead or goes on a run): dim red pulse"},
 	{"win", "We win: a long celebration in team colours"},
 }
 
 // Event is something that happened for the followed team.
 type Event struct {
-	Kind string // touchdown, field_goal, safety, score, goal, run, interception, fumble_lost, turnover_on_downs, sack, big_play, win
+	Kind string // touchdown, field_goal, safety, score, goal, run, home_run, lead, scoring_run, interception, fumble_lost, turnover_on_downs, sack, big_play, win
 	Good bool   // good for the followed team
 	Mine bool   // a score by the followed team
 }
@@ -195,7 +197,7 @@ type Event struct {
 // effectKey says which effect an event fires, or "".
 func effectKey(e Event) string {
 	switch e.Kind {
-	case "touchdown", "goal", "score":
+	case "touchdown", "goal", "home_run", "score":
 		if e.Mine {
 			return "touchdown"
 		}
@@ -203,6 +205,16 @@ func effectKey(e Event) string {
 	case "field_goal", "run":
 		if e.Mine {
 			return "field_goal"
+		}
+		return "opp_score"
+	case "lead":
+		if e.Mine {
+			return "take_lead"
+		}
+		return "opp_score"
+	case "scoring_run":
+		if e.Mine {
+			return "scoring_run"
 		}
 		return "opp_score"
 	case "safety":
@@ -247,6 +259,10 @@ func effectSteps(key string, p Palette, reduced bool) []Step {
 		return append(alternate(P, S, n(20, 6), hold), Step{P, 800 * time.Millisecond})
 	case "field_goal":
 		return alternate(P, dim(P, 20), 6, hold)
+	case "take_lead":
+		return alternate(P, S, n(6, 4), hold)
+	case "scoring_run":
+		return append(alternate(P, S, n(12, 6), hold), Step{P, 800 * time.Millisecond})
 	case "takeaway":
 		return alternate(green, dim(green, 30), n(12, 4), hold)
 	case "sack_for":
