@@ -331,3 +331,18 @@ func TestRoomsFollowTheirOwnPlayers(t *testing.T) {
 	}
 	send("player.stop", "phone", "", 1)
 }
+
+func TestDeviceMode(t *testing.T) {
+	for _, c := range []struct{ device, profile, want string }{
+		{"", ModeSync, ModeSync},
+		{"", ModeTheater, ModeTheater},
+		{ModeTheater, ModeSync, ModeTheater}, // the TV picked its own type
+		{ModeSync, ModeTheater, ModeSync},
+		{ModeTheater, ModeOff, ModeOff}, // the profile hasn't turned Hue Sync on
+		{"bogus", ModeSync, ModeSync},
+	} {
+		if got := (playerEvent{Mode: c.device}).deviceMode(c.profile); got != c.want {
+			t.Errorf("device %q, profile %q: got %q, want %q", c.device, c.profile, got, c.want)
+		}
+	}
+}

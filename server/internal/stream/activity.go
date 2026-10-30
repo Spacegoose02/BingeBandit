@@ -36,6 +36,8 @@ type NowPlaying struct {
 	Lights bool `json:"-"`
 	// LightsArea is the Hue room or zone the device picked for those lights.
 	LightsArea string `json:"-"`
+	// LightsMode is the device's own Hue Sync type; "" for the profile's.
+	LightsMode string `json:"-"`
 	// PlayID is the play-history row, once the session is long enough to record.
 	PlayID int64 `json:"-"`
 }

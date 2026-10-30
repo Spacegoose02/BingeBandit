@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { ApiError, api, current, saveSession } from '../api'
 import { Button, Focusable } from '../components'
-import { hueArea, hueSyncOn, setHueArea, setHueSync, type MenuPosition } from '../devicePrefs'
-import { fetchGameLightsSetup, fetchHueMode, hueModeNames, nextHueMode, saveGameLights, saveHueMode, type GameLightsSetup, type HueMode } from '../lights'
+import { hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
+import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveHueMode, type GameLightsSetup, type HueMode } from '../lights'
 import { Icon } from '../icons'
 import { scaled, colors, font, gutter, isPhone, px } from '../theme'
 import type { Library, Member } from '../types'
@@ -106,24 +106,28 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   useEffect(() => {
     fetchHousehold().then((m) => setHasProfiles(m.length > 1), () => undefined)
   }, [])
-  // Hue Sync only shows once this profile picked Sync or Theater (Account
-  // on the web), and only when the server runs the plugin.
+  // Hue Sync is off for each profile until it's turned on, here or in
+  // Account on the web (only when the server runs the plugin). Then this
+  // device has its own switch, type and room.
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
   const hue = hueMode !== null && hueMode !== 'off'
   const [hueOn, setHueOn] = useState(hueSyncOn)
-  // Once shown, the mode row stays while this screen is open, so cycling past Off doesn't make it vanish.
-  const [hueSeen, setHueSeen] = useState(false)
   useEffect(() => {
-    fetchHueMode().then((m) => {
-      setHueMode(m)
-      setHueSeen(m !== null && m !== 'off')
-    })
+    fetchHueMode().then(setHueMode)
   }, [])
-  const cycleHueMode = () => {
+  const toggleProfileHue = () => {
     if (!hueMode) return
-    const m = nextHueMode(hueMode)
+    const m: HueMode = hue ? 'off' : 'sync'
     setHueMode(m)
     saveHueMode(m).catch(() => setHueMode(hueMode))
+  }
+  // This device's type; until picked it follows the profile's (Sync unless the web set Theater).
+  const [type, setTypeState] = useState(hueType)
+  const hereType = type || (hueMode === 'theater' ? 'theater' : 'sync')
+  const toggleType = () => {
+    const t = hereType === 'sync' ? 'theater' : 'sync'
+    setHueType(t)
+    setTypeState(t)
   }
   const toggleHue = () => {
     setHueSync(!hueOn)
@@ -249,16 +253,14 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           </Text>
         </Focusable>
       )}
-      {hueMode !== null && hueSeen && (
-        <Focusable onPress={cycleHueMode} style={st.option}>
-          <Text style={st.value}>Hue Sync: {hueModeNames[hueMode]}</Text>
+      {hueMode !== null && (
+        <Focusable onPress={toggleProfileHue} style={st.option}>
+          <Text style={st.value}>Hue Sync for {s?.user.profileName ?? s?.user.username}: {hue ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
-            {hueMode === 'sync'
-              ? 'The lights follow the colours on screen.'
-              : hueMode === 'theater'
-                ? 'The lights dim while something plays.'
-                : 'Off for this profile. Turn it back on here now, or later in Account on the web.'}{' '}
-            {isPhone ? 'Tap' : 'Press OK'} for the next one.
+            {hue
+              ? 'Your Hue lights can follow what you watch. Each device picks its own room and type below.'
+              : 'Let the Hue lights follow what you watch. Off until you turn it on, here or in Account on the web.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to turn it {hue ? 'off' : 'on'}.
           </Text>
         </Focusable>
       )}
@@ -267,6 +269,15 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           <Text style={st.value}>Hue Sync on this {isPhone ? 'phone' : 'TV'}: {hueOn ? 'On' : 'Off'}</Text>
           <Text style={st.hint}>
             {hueOn ? 'The Hue lights follow what plays on this device.' : 'The Hue lights leave this device alone.'} {isPhone ? 'Tap' : 'Press OK'} to turn it {hueOn ? 'off' : 'on'}.
+          </Text>
+        </Focusable>
+      )}
+      {hue && hueOn && (
+        <Focusable onPress={toggleType} style={st.option}>
+          <Text style={st.value}>Hue Sync type on this {isPhone ? 'phone' : 'TV'}: {hereType === 'sync' ? 'Sync with the picture' : 'Theater'}</Text>
+          <Text style={st.hint}>
+            {hereType === 'sync' ? 'The lights follow the colours on screen.' : 'The lights dim while something plays and come back up when you pause or stop.'}{' '}
+            {isPhone ? 'Tap' : 'Press OK'} to switch.
           </Text>
         </Focusable>
       )}
