@@ -5,7 +5,7 @@ import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../com
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { Icon, type IconName } from '../icons'
 import { favoritesChanged, homeBack, showLiveGuide, useNav, useScreen } from '../nav'
-import { scaled, colors, font, gutter, isPhone, px } from '../theme'
+import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
 import type { HomeData, Item, Library, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
@@ -269,7 +269,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
         </Focusable>
       )
     return isPhone ? (
-      <Pressable key={t} onPress={() => setTab(t)} onLongPress={hold} style={[st.tab, order.length > 5 && st.tabScroll, tab === t && st.tabActive]}>
+      <Pressable android_disableSound={quietPress} key={t} onPress={() => setTab(t)} onLongPress={hold} style={[st.tab, order.length > 5 && st.tabScroll, tab === t && st.tabActive]}>
         {label}
       </Pressable>
     ) : (
@@ -476,7 +476,7 @@ function More({
 function PinMenu({ target, onToggle, onClose }: { target: Pinnable; onToggle: () => void; onClose: () => void }) {
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={st.scrim} onPress={onClose}>
+      <Pressable android_disableSound={quietPress} style={st.scrim} onPress={onClose}>
         <View style={st.pinMenu}>
           <Text style={st.dropdownText} numberOfLines={1}>{target.name}</Text>
           <Text style={st.hint}>{target.pinned ? 'Pinned to the menu.' : 'Not pinned, so only under More.'}</Text>
@@ -499,7 +499,7 @@ function AccountMenu({ onClose, onSettings, onSwitchProfile, onSignOut }: { onCl
   }, [])
   return (
     <Modal transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={[st.scrim, st.scrimTopLeft]} onPress={onClose}>
+      <Pressable android_disableSound={quietPress} style={[st.scrim, st.scrimTopLeft]} onPress={onClose}>
         <View style={st.accountMenu}>
           <Text style={st.dropdownText} numberOfLines={1}>{s?.user.profileName ?? s?.user.username}</Text>
           <Text style={st.hint} numberOfLines={1}>{s?.server.replace(/^https?:\/\//, '')}</Text>

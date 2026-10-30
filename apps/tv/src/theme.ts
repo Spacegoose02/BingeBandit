@@ -3,6 +3,13 @@ import { Dimensions, Platform } from 'react-native'
 /** The same APK runs on phones; layouts check this to switch to touch. */
 export const isPhone = !Platform.isTV
 
+/**
+ * Pressable's android_disableSound. A focused view on Android TV already
+ * clicks when OK is pressed, so React Native's own click made every press
+ * sound doubled; phones only get React Native's.
+ */
+export const quietPress = !isPhone
+
 // Layouts are designed on a 1920×1080 canvas. Android TV reports a 1080p
 // screen as ~960×540 density pixels (and 720p boxes differently), so every
 // size goes through px() to land the same on any TV. Phones size from their

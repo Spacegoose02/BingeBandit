@@ -4,7 +4,7 @@ import { ApiError, api } from './api'
 import { Button } from './components'
 import { useNav } from './nav'
 import { quietNow } from './quiet'
-import { colors, font, scaled } from './theme'
+import { colors, font, scaled, quietPress } from './theme'
 
 // Watch Together on the TV app: the same rooms as the web player. React
 // Native has no EventSource, so the room is read every second and a half,
@@ -202,7 +202,7 @@ export function TogetherInvites({ playing }: { playing: boolean }) {
   }
   return (
     <Modal transparent animationType="fade" onRequestClose={() => close(false)}>
-      <Pressable style={st.scrim} onPress={() => close(false)}>
+      <Pressable android_disableSound={quietPress} style={st.scrim} onPress={() => close(false)}>
         <View style={st.invite}>
           <Text style={st.title}>{invite.from} wants to watch together</Text>
           <Text style={st.hint}>{invite.title}</Text>

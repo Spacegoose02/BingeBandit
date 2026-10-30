@@ -2,7 +2,7 @@ import React, { memo, useCallback, useContext, useRef, useState } from 'react'
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type ImageProps, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
 import { FocusMemoryContext, ItemMenuContext } from './nav'
-import { scaled, colors, font, gutter, isPhone } from './theme'
+import { scaled, colors, font, gutter, isPhone, quietPress } from './theme'
 import type { Collection, Item } from './types'
 
 /** A remote-friendly button: grows and lights up when focused. */
@@ -25,7 +25,7 @@ export function Button({
   const ref = useRef<View>(null)
   const remember = useContext(FocusMemoryContext)
   return (
-    <Pressable
+    <Pressable android_disableSound={quietPress}
       ref={ref}
       onPress={onPress}
       onFocus={() => {
@@ -59,7 +59,7 @@ export function Focusable({
   const ref = useRef<View>(null)
   const remember = useContext(FocusMemoryContext)
   return (
-    <Pressable
+    <Pressable android_disableSound={quietPress}
       {...props}
       ref={(v) => {
         ref.current = v

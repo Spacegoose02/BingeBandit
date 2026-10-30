@@ -10,7 +10,7 @@ import { useLock } from '../lock'
 import { refreshScoreBug, scoreBugChannel } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav } from '../nav'
 import { useLandscape } from '../screen'
-import { px, scaled, colors, font, gutter, isPhone } from '../theme'
+import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import type { LiveChannel } from '../types'
 import { NO_LIVE_BADGE } from './Player'
 
@@ -430,7 +430,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         />
       ) : (
         // Something must hold focus or Android never hands the remote's keys to the app.
-        <Pressable style={StyleSheet.absoluteFill} hasTVPreferredFocus={!controls && !menu} focusable={!controls && !menu} />
+        <Pressable android_disableSound={quietPress} style={StyleSheet.absoluteFill} hasTVPreferredFocus={!controls && !menu} focusable={!controls && !menu} />
       )}
       {(buffering || reconnecting || id !== tuned) && !error && !paused && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {!!error && id === tuned && (

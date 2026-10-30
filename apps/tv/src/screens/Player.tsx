@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
 import { useLandscape } from '../screen'
 import { roomPosition, TogetherPanel, useTogether } from '../together'
-import { px, scaled, colors, font, gutter, isPhone } from '../theme'
+import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
 
@@ -688,7 +688,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       )}
       {/* TV: something must hold focus or Android never hands the remote's keys to the app.
           Phone: tapping the picture shows or hides the controls. */}
-      <Pressable
+      <Pressable android_disableSound={quietPress}
         style={StyleSheet.absoluteFill}
         hasTVPreferredFocus={!menu && !togetherOpen && !summary && controls !== 'full'}
         focusable={!menu && !togetherOpen && !summary && controls !== 'full'}
@@ -707,10 +707,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
         </View>
       )}
       {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !lock.locked && (
-        <Pressable style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
+        <Pressable android_disableSound={quietPress} style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
-              <Pressable onPress={nav.back} hitSlop={24} style={st.backBtn}>
+              <Pressable android_disableSound={quietPress} onPress={nav.back} hitSlop={24} style={st.backBtn}>
                 <Text style={st.backText}>‹</Text>
               </Pressable>
             )}

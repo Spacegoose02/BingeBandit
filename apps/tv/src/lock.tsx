@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { colors, font, scaled } from './theme'
+import { colors, font, scaled, quietPress } from './theme'
 
 const PIN_LENGTH = 2
 
@@ -32,7 +32,7 @@ export function useLock() {
   const layer = (
     <>
       {locked && badge && !prompt && (
-        <Pressable style={st.badge} onPress={() => setPrompt('unlock')} hitSlop={20}>
+        <Pressable android_disableSound={quietPress} style={st.badge} onPress={() => setPrompt('unlock')} hitSlop={20}>
           <Text style={st.badgeText}>Locked · tap here to unlock</Text>
         </Pressable>
       )}
@@ -82,7 +82,7 @@ function Keypad({ title, check, onDone, onCancel }: { title: string; check?: (pi
   }
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫']
   return (
-    <Pressable style={st.shade} onPress={() => undefined}>
+    <Pressable android_disableSound={quietPress} style={st.shade} onPress={() => undefined}>
       <View style={st.pad}>
         <Text style={st.title}>{title}</Text>
         <View style={st.dots}>
@@ -94,7 +94,7 @@ function Keypad({ title, check, onDone, onCancel }: { title: string; check?: (pi
         <View style={st.grid}>
           {keys.map((k, i) =>
             k ? (
-              <Pressable
+              <Pressable android_disableSound={quietPress}
                 key={i}
                 style={({ pressed }) => [st.key, pressed && st.keyPressed]}
                 onPress={() => (k === '⌫' ? setDigits(digits.slice(0, -1)) : press(k))}
@@ -106,7 +106,7 @@ function Keypad({ title, check, onDone, onCancel }: { title: string; check?: (pi
             ),
           )}
         </View>
-        <Pressable onPress={onCancel} hitSlop={16}>
+        <Pressable android_disableSound={quietPress} onPress={onCancel} hitSlop={16}>
           <Text style={st.cancel}>Cancel</Text>
         </Pressable>
       </View>

@@ -3,7 +3,7 @@ import { DeviceEventEmitter, Modal, Pressable, ScrollView, StyleSheet, Text, Tex
 import { api, current } from './api'
 import { Button } from './components'
 import { favoritesChanged, ItemMenuContext, useNav } from './nav'
-import { colors, font, scaled } from './theme'
+import { colors, font, scaled, quietPress } from './theme'
 import type { Item, ItemDetail } from './types'
 
 type Page = 'main' | 'playlists' | 'recommend' | 'collections' | 'manage'
@@ -209,7 +209,7 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
           box (once a Pressable) grabbed it first and the D-pad couldn't
           reach the options inside. The focus guide hands focus to the first
           option, and keeps it in the menu. */}
-      <Pressable style={st.scrim} onPress={onClose} focusable={false}>
+      <Pressable android_disableSound={quietPress} style={st.scrim} onPress={onClose} focusable={false}>
         <View style={st.box} onStartShouldSetResponder={() => true}>
           <Text style={st.title} numberOfLines={1}>{title}</Text>
           {it.kind === 'episode' && <Text style={st.hint} numberOfLines={1}>{it.title}</Text>}

@@ -45,3 +45,17 @@ export function fetchGameLights(): Promise<GameLightsPerson | null> {
 export function saveGameLights(person: GameLightsPerson): Promise<unknown> {
   return api.put('/api/plugins/game-lights/me/settings', person)
 }
+
+/** What Settings needs to show Game Lights; null when the plugin isn't running. */
+export interface GameLightsSetup {
+  paired: boolean
+  person: GameLightsPerson & { area?: string }
+  areas: { id: string; name: string; type: string }[]
+}
+
+export function fetchGameLightsSetup(): Promise<GameLightsSetup | null> {
+  return api.get<GameLightsSetup>('/api/plugins/game-lights/me/state').then(
+    (s) => ({ ...s, person: s.person ?? {}, areas: s.areas ?? [] }),
+    () => null,
+  )
+}
