@@ -159,11 +159,12 @@ export default function Details({ id }: { id: number }) {
   )
 }
 
-// An actor's photo, name and character. Focusable so the D-pad can scroll the row.
+// An actor's photo, name and character. OK opens everything else they're in.
 function PersonCard({ person }: { person: Credit }) {
+  const nav = useNav()
   const src = image(person.photo, 'w185')
   return (
-    <Focusable focusable onPress={() => undefined} style={st.person}>
+    <Focusable onPress={() => nav.push({ name: 'person', person: person.name })} style={st.person}>
       {src ? (
         <ImageBackground source={src} style={st.personImg} imageStyle={st.thumbImg} resizeMethod="resize" />
       ) : (

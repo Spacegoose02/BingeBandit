@@ -194,6 +194,8 @@ func (s *Server) pluginAPI(r chi.Router) {
 	r.Get("/files", s.pluginFiles)
 	r.Get("/files/{id}/direct", s.directPlay)
 	r.Get("/collections/{id}/missing", s.pluginCollectionMissing)
+	r.Get("/requests", s.pluginRequests)
+	r.Put("/requests/{id}", s.pluginUpdateRequest)
 	r.Put("/live/channels", s.pluginLiveChannels)
 	r.Get("/images/tmdb/{file}", s.tmdbImage)
 	r.Get("/images/local/{file}", s.localImage)

@@ -39,6 +39,8 @@ sub execute()
             content = detailsContent(res.data)
         else if build = "guide"
             content = guideContent(res, getOr(req, "filter", "all"))
+        else if build = "person"
+            content = personContent(res.data)
         end if
         m.top.content = content
     end if
@@ -431,7 +433,7 @@ function loadLibrary(req as object) as object
     cols = []
     total = -1
     while total < 0 or items.Count() < total
-        res = httpRequest({ path: req.path + "?sort=title&offset=" + items.Count().ToStr() + "&limit=500" })
+        res = httpRequest({ path: req.path + "?sort=title" + getOr(req, "query", "") + "&offset=" + items.Count().ToStr() + "&limit=500" })
         if not res.ok then return res
         page = getOr(res.data, "items", [])
         if items.Count() = 0 then cols = getOr(res.data, "collections", [])
@@ -457,16 +459,53 @@ function loadLibrary(req as object) as object
     return { ok: true, status: 200, data: { total: total } }
 end function
 
-' The children under an item as one RowList row: a show's seasons
-' (posters) or a season's episodes (stills).
+' The RowList rows under an item: a show's seasons (posters) or a season's
+' episodes (stills), then the cast (a season or episode shows its show's).
 function detailsContent(data as object) as object
     root = CreateObject("roSGNode", "ContentNode")
     kids = getOr(data, "children", [])
-    if kids.Count() = 0 then return root
-    row = root.createChild("ContentNode")
-    if getOr(data.item, "kind", "") = "show" then row.title = "Seasons" else row.title = "Episodes"
-    for each it in kids
-        row.appendChild(itemNode(it, getOr(it, "kind", "") = "episode", true))
+    if kids.Count() > 0
+        row = root.createChild("ContentNode")
+        if getOr(data.item, "kind", "") = "show" then row.title = "Seasons" else row.title = "Episodes"
+        for each it in kids
+            row.appendChild(itemNode(it, getOr(it, "kind", "") = "episode", true))
+        end for
+    end if
+    credits = getOr(data.item, "credits", invalid)
+    kind = getOr(data.item, "kind", "")
+    if (kind = "season" or kind = "episode") and getOr(data, "show", invalid) <> invalid then credits = getOr(data.show, "credits", invalid)
+    if type(credits) <> "roArray" then return root
+    row = invalid
+    for each c in credits
+        if getOr(c, "kind", "") = "cast" and (row = invalid or row.getChildCount() < 30)
+            if row = invalid
+                row = root.createChild("ContentNode")
+                row.title = "Cast"
+            end if
+            row.appendChild(personNode(c))
+        end if
+    end for
+    return root
+end function
+
+' Someone in a Cast row; selecting them opens their titles.
+function personNode(c as object) as object
+    n = CreateObject("roSGNode", "ContentNode")
+    n.addFields({ itemId: 0, kind: "person", subtitle: getOr(c, "role", ""), poster: imageUrl(getOr(c, "photo", ""), "w185"), wide: false, progress: 0.0, watched: false, unwatched: 0, backdrop: "" })
+    n.title = getOr(c, "name", "")
+    return n
+end function
+
+' A cast or crew member's titles, each with the part they played.
+function personContent(data as dynamic) as object
+    root = CreateObject("roSGNode", "ContentNode")
+    if type(data) <> "roAssociativeArray" then return root
+    for each t in getOr(data, "titles", [])
+        n = itemNode(t.item, false)
+        role = getOr(t, "role", "")
+        if role <> "" and getOr(t, "kind", "") = "cast" then n.subtitle = "as " + role
+        if role <> "" and getOr(t, "kind", "") <> "cast" then n.subtitle = role
+        root.appendChild(n)
     end for
     return root
 end function

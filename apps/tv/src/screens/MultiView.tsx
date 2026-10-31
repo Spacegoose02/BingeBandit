@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native'
 import Video from 'react-native-video'
 import { api, authHeaders } from '../api'
@@ -9,7 +9,7 @@ import { scaled, colors, font, isPhone } from '../theme'
 import type { LiveChannel, SportsDay, SportsGame, SportsHome } from '../types'
 import { MAX_SCREENS, byState, dayKey, isSportsChannel, loadSportsPrefs, multiViewPicks, patchPrefs, scoreShown, type MultiViewLayout } from '../sports/hub'
 import { ChannelCard, matchup, scoreLine } from '../sports/parts'
-import { usePreview } from './LiveGuide'
+import { joinChannel, leaveChannel, liveBuffer, reportBuffering } from '../live'
 import { NO_LIVE_BADGE } from './Player'
 
 type Tile = number | null // a channel id, or an empty screen
@@ -262,6 +262,84 @@ export default function MultiView({ channels: initial }: { channels: number[] })
 }
 
 /** One screen: its channel's stream, muted unless it has the sound, labelled with the channel and the game on it. */
+/**
+ * One screen's stream, kept going the way the full-screen player keeps a
+ * channel going: it plays the server's buffer behind live (so a slow
+ * segment eats into the cushion instead of freezing the picture), tells the
+ * server when it has been stuck long enough to move to the channel's next
+ * stream, and rejoins after an error or when the picture stops moving.
+ */
+function useTileStream(channelId: Tile) {
+  const [stream, setStream] = useState<{ src: string; buffer: number } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const viewer = useRef('')
+  const stall = useRef(12)
+  useEffect(() => {
+    setStream(null)
+    if (!channelId) return
+    let cancelled = false
+    let retry: ReturnType<typeof setTimeout> | undefined
+    joinChannel(channelId).then(
+      (r) => {
+        viewer.current = r.viewerId
+        stall.current = r.stallSecs
+        if (cancelled) leaveChannel(r.viewerId)
+        else setStream({ src: r.playlist, buffer: r.bufferSecs })
+      },
+      () => {
+        if (!cancelled) retry = setTimeout(() => setAttempt((a) => a + 1), 5000)
+      },
+    )
+    return () => {
+      cancelled = true
+      if (retry) clearTimeout(retry)
+      leaveChannel(viewer.current)
+      viewer.current = ''
+    }
+  }, [channelId, attempt])
+  const rejoin = useCallback(() => setAttempt((a) => a + 1), [])
+
+  // Stuck: buffering, or "playing" with the position standing still (a
+  // decoder that gave up). Past the server's stall time, report it, and
+  // rejoin unless the server moved the channel to another stream.
+  const since = useRef(0)
+  const lastPos = useRef(-1)
+  const check = useCallback(
+    (stuck: boolean) => {
+      const now = Date.now()
+      if (!stuck) {
+        since.current = 0
+        return
+      }
+      if (!since.current) since.current = now
+      const secs = (now - since.current) / 1000
+      if (secs >= stall.current) {
+        since.current = now
+        reportBuffering(viewer.current, secs).then((switched) => {
+          if (!switched) rejoin()
+        })
+      }
+    },
+    [rejoin],
+  )
+  useEffect(() => {
+    since.current = 0
+    lastPos.current = -1
+  }, [stream])
+  return {
+    src: stream?.src ?? null,
+    key: `${stream?.src}#${attempt}`,
+    bufferConfig: liveBuffer(stream?.buffer ?? 10),
+    onBuffer: (e: { isBuffering: boolean }) => check(e.isBuffering),
+    onProgress: (e: { currentTime: number }) => {
+      check(Math.abs(e.currentTime - lastPos.current) < 0.1)
+      lastPos.current = e.currentTime
+    },
+    // Waits longer after each failure, so a box out of video decoders isn't hammered.
+    onError: () => setTimeout(rejoin, Math.min(30000, 2000 * (attempt + 1))),
+  }
+}
+
 function Screen({
   channelId,
   channel,
@@ -284,7 +362,8 @@ function Screen({
   onPress: () => void
   onLongPress: () => void
 }) {
-  const src = usePreview(channelId ?? undefined)
+  const stream = useTileStream(channelId)
+  const src = stream.src
   const [focused, setFocused] = useState(false)
   const score = game && scoreShown(game) ? scoreLine(game) : ''
   return (
@@ -302,9 +381,13 @@ function Screen({
       {channelId && src ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Video
-            key={src}
-            source={{ uri: src, type: 'm3u8', headers: authHeaders() }}
+            key={stream.key}
+            source={{ uri: src, type: 'm3u8', headers: authHeaders(), bufferConfig: stream.bufferConfig }}
             style={StyleSheet.absoluteFill}
+            onBuffer={stream.onBuffer}
+            onProgress={stream.onProgress}
+            progressUpdateInterval={1000}
+            onError={stream.onError}
             resizeMode="contain"
             muted={!audio}
             // Each player would take Android's audio focus as it starts, and

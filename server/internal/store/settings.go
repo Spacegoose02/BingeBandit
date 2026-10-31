@@ -28,6 +28,7 @@ const (
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
+	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
 	SettingContinueDays      = "continue_watching_days"  // titles not played for this long leave Continue Watching; 0 = never
 	SettingRecentDays        = "recently_added_days"     // Recently Added only shows titles added this many days back; 0 = any
@@ -56,6 +57,8 @@ const (
 	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
 	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
 	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
+	SettingRemoteMaxStreams  = "remote_max_streams" // streams each account (with its profiles) may watch at once from outside; 0 = any number
+	SettingRemoteMaxKbps     = "remote_max_kbps"    // most video sent outside the home network, kbit/s; 0 = no cap
 	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
 	SettingTraktSecret       = "trakt_client_secret"
 	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
@@ -101,6 +104,7 @@ var SettingDefaults = map[string]string{
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
 	SettingRecommendations:   "true",
+	SettingRequests:          "true",
 	SettingWatchedPercent:    "90",
 	SettingContinueDays:      "0",
 	SettingRecentDays:        "90",
@@ -128,6 +132,8 @@ var SettingDefaults = map[string]string{
 	SettingTrustedProxies:    "",
 	SettingLANNetworks:       "",
 	SettingRemoteAccess:      "true",
+	SettingRemoteMaxStreams:  "0",
+	SettingRemoteMaxKbps:     "0",
 	SettingTraktClientID:     "",
 	SettingTraktSecret:       "",
 	SettingLiveTimeshift:     "15",

@@ -5,6 +5,12 @@ Where BingeBandit stands, written so the next person (or AI session) can pick it
 _Last updated: 2026-10-31. Latest release v0.36.0, 50 schema migrations._
 
 
+
+## Sports Hub fixes: NHL scoreboard, Multi-View freezes (2026-10-30, no migration)
+
+- **NHL "Couldn't reach ESPN":** the NHL's probable goalies come with `athlete.position` as a plain string ("G") where every other feed sends `{abbreviation}`, so decoding failed and the whole NHL scoreboard was dropped. `espnPosition` reads either (checked against ESPN's live NHL scoreboard; `TestPositionAsString`).
+- **Multi-View secondary screens freezing:** screens played at the live edge with no recovery. Each screen now plays the server's buffer behind live (`liveBuffer`, as the full-screen player does), reports a stall past the server's stall time (so the server can move the channel to its next stream), and rejoins when buffering or a standing-still picture lasts that long, or after an error (backing off up to 30 s). Still not tried on a device; a box with fewer hardware video decoders than screens can still struggle.
+
 ## Start here
 
 ### What this is
@@ -70,6 +76,27 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 - **Details:** a Trailer button when the movie has trailer files.
 - **Fix:** `asString` didn't handle `roInteger`, so channel numbers showed blank in the Live TV player's overlay.
 - **Tested:** BrighterScript clean; in the brs-engine simulator against a local server with fakeiptv and a test MKV (two audio, two subtitle tracks, manual markers): the guide (grid, header, filters, favourite, follow, record, watch and back to the right channel), the player's Options lists, subtitles fetched and drawn, Skip intro shown. The simulator can't decode video, so nothing about playback itself ran, and the preview never played. **Never run on a real Roku.**
+
+## Title requests (2026-10-31, migration 51)
+
+- **Server** (`store/requests.go`, `api/requests.go`): Overseerr-style requests. Migration 51 adds `title_requests` (one per kind + TMDB id) and `title_request_people` (everyone who asked). Viewers search TMDB at `GET /api/requests/search` (results say whether the title is on the server or already asked for), ask with `POST /api/requests` (a second asker joins the first request) and withdraw until it's approved. Admins approve or decline (`/api/admin/requests/{id}/…`); an admin's own request is approved at once. Kids can't request, and setting `requests_enabled` turns it off. Admins are notified of new requests, askers of declines and, from the notifications loop (`markArrivedRequests`, every 5 min), of the title arriving in a library. Events `request.created/approved/declined/available` go to webhooks and plugins. Plugin API `GET /requests?status=` and `PUT /requests/{id}` (sent/failed, with Cinemask's link). `plugins.Host.Handlers` lists the running plugins that name an event, so the Requests page can warn when nothing fetches approved requests.
+- **Cinemask Upgrades 1.3.0** (`requests.go`): on `request.approved`, after settings change and every 15 minutes it monitors each approved request in Cinemask with `search: true` (or searches one Cinemask already monitors) in Cinemask's main folder, and reports sent or failed. Not set up yet: requests stay approved. New setting `requests` (on).
+- **Web:** `/requests` (sidebar, not for kids): search and request with a note, your requests; admins get All requests with Approve / Decline / Try again, TMDB or Cinemask links. Search links to it; Settings → Library has the switch. **TV app:** Search lists titles the server doesn't have under the results; OK requests one.
+- **Tested:** `go test ./internal/api` (`TestTitleRequests`: asking, joining, kids and the switch, approval, the plugin's report, arrival notifications, declining, withdrawing), `go test ./plugins/cinemask-upgrades` (`TestSendRequests` against the fake Cinemask), web `tsc` and build, TV `tsc` and `eslint`. The TMDB search wasn't run against real TMDB (no key here), Cinemask's `POST /api/monitored` with `search: true` is the same call collections use, and the TV part never ran on a device. Migration 51 may clash with other branches adding one; renumber on merge.
+
+## Library filters and cast pages (2026-10-31, no migration)
+
+- **Server** (`store/filters.go`, `api/browse.go`): `/libraries/{id}/items` takes `genre`, `yearFrom`, `yearTo`, `unwatched=1` and `minRating` (`LibraryFilter`, used by `FilteredLibraryItems` and `FilteredLibraryLetters`; the old `LibraryItems`/`LibraryLetters` call them with no filter). A filtered page sends no collections and folds no titles into them. `/libraries/{id}/filters` lists genres and decades. `/people?name=` (`PersonByName`) lists the visible movies and shows whose credits name someone; credits have no person ids, so it's by exact name.
+- **Web:** a filter bar on the Library tab (kept in the address, so Back returns to it), and Cast & Crew cards link to `/person?name=` (`pages/Person.tsx`).
+- **TV app:** Genre, Year, Rating and Unwatched chips above the Library grid (`FilterBar`, `ChoiceList` in `screens/Library.tsx`), kept per library while the app runs; OK on someone in a title's Cast row opens `screens/Person.tsx`.
+- **Roku:** `*` on a library grid opens filter dialogs (`GridView.brs`); Details gets a Cast row whose people open a grid of their titles (`personNode`, `personContent` in `ApiTask.brs`).
+- **Tested:** `go test ./internal/store/` (`TestLibraryFilters`), the web library filter and person page in Chromium against a local server with made-up titles, `tsc`/`eslint` for apps/tv, the BrighterScript check for Roku. **Not tried on an Android TV or a Roku**; the Roku Details layout with two rows (seasons or episodes, then cast) is the likeliest to need a fix.
+## Limits for streaming away from home (2026-10-30, no migration)
+
+- Two admin settings (Settings → Network, shown while remote access is on): `remote_max_streams`, streams at once from outside per account (0 = no limit, up to 50), and `remote_max_kbps`, a video bitrate cap for viewers outside (0 = none; the web offers 1–40 Mbps). Both default to off. "Outside" is `Server.isLocal`, so LAN networks and trusted proxies count as they already did.
+- **Stream limit** (`api/remotelimits.go`, `streamLimitHit`): counts the whole account (owner and profiles) away from home: players pinging `/progress` (not local), remote transcodes that no player has reported yet, and live TV viewers (`livetv.Manager.ViewerIPs`, DVR left out). The same file from the same address is the same stream (seeking, quality changes, direct play falling back to converting). Checked at `/files/{id}/direct` (not downloads), new `/files/{id}/transcode` (not `replace`), a play session's first `/progress` (catches two players starting together) and both live joins (`watch`, `stream.ts`); over it answers 429 with a message. Admin accounts are exempt, which was my call; easy to drop.
+- **Quality cap**: `/files/{id}/direct` answers 403 for a remote viewer when `stream.FileKbps` is over the cap (unknown bitrate is let through); the web, TV and Roku players already fall back to converting on a direct play error, so older installed apps work unchanged. Transcodes get `Options.CapKbps` (server-set, `json:"-"`): over the cap, video is never copied, the height drops to `stream.HeightForKbps` (one whose usual rate is at most twice the cap: 8 Mbps → 1080p, 4 → 720p, 2 → 480p) and every rung's maxrate is held under the cap. Live TV isn't capped: its HLS is shared by every viewer of a channel. Audio isn't counted in the cap.
+- **Tested:** `go test ./...` (`TestRemoteStreamLimits`, `TestBuildArgsCap`), `tsc` and the web build. Not tried with real remote players; the 429 messages show in the web and TV players' error text, and on Roku as its generic playback error.
 
 ## Game Lights beyond football (2026-10-30, no migration)
 

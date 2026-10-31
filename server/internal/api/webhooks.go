@@ -23,7 +23,8 @@ import (
 var WebhookEvents = []string{"playback.start", "playback.stop", "playback.finished",
 	"player.play", "player.pause", "player.resume", "player.stop",
 	"recording.started", "recording.completed", "recording.failed",
-	"sports.game.start", "sports.score", "sports.game.end"}
+	"sports.game.start", "sports.score", "sports.game.end",
+	"request.created", "request.approved", "request.declined", "request.available"}
 
 var webhookClient = &http.Client{Timeout: 10 * time.Second}
 

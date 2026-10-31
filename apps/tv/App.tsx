@@ -7,6 +7,7 @@ import { backInterceptor, FocusMemoryContext, homeBack, NavContext, ScreenContex
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
+import PersonScreen from './src/screens/Person'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import MultiView from './src/screens/MultiView'
@@ -208,6 +209,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <Details id={r.id} />
     case 'collection':
       return <CollectionScreen id={r.id} />
+    case 'person':
+      return <PersonScreen name={r.person} />
     case 'player':
       return <Player id={r.id} start={r.start} together={r.together} />
     case 'live':

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { api, cached } from '../api'
 import { Icon } from '../icons'
 import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, Row } from '../components'
@@ -25,6 +25,28 @@ const BAR_W = isPhone ? 56 : 78
 
 // Remembered per library so Back from details lands on the same section.
 const lastSection: Record<number, Section> = {}
+
+/** The Library section's filters; the server's items query takes them as is. */
+interface Filters {
+  genre?: string
+  decade?: number
+  minRating?: number
+  unwatched?: boolean
+}
+
+// Kept per library while the app runs, like the section.
+const lastFilters: Record<number, Filters> = {}
+
+function filterQuery(f: Filters): string {
+  let q = ''
+  if (f.genre) q += `&genre=${encodeURIComponent(f.genre)}`
+  if (f.decade) q += `&yearFrom=${f.decade}&yearTo=${f.decade + 9}`
+  if (f.minRating) q += `&minRating=${f.minRating}`
+  if (f.unwatched) q += '&unwatched=1'
+  return q
+}
+
+const RATINGS = [6, 7, 8]
 
 /** Opening a library from the menu starts on Recommended again, like Plex. */
 export function forgetSection(libraryId: number) {
@@ -179,6 +201,12 @@ function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, footer, listRef
 
 function AllTitles({ library }: { library: Library }) {
   const nav = useNav()
+  const [filters, setFiltersState] = useState<Filters>(lastFilters[library.id] ?? {})
+  const setFilters = (f: Filters) => {
+    lastFilters[library.id] = f
+    setFiltersState(f)
+  }
+  const query = filterQuery(filters)
   const [items, setItems] = useState<Item[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [letters, setLetters] = useState<Letter[]>([])
@@ -198,7 +226,7 @@ function AllTitles({ library }: { library: Library }) {
       if (offset > 0 && busyRef.current) return
       busyRef.current = true
       setBusy(true)
-      api.get<{ items: Item[]; total: number; collections?: Collection[]; letters?: Letter[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${offset}&limit=${PAGE}`).then(
+      api.get<{ items: Item[]; total: number; collections?: Collection[]; letters?: Letter[] }>(`/api/libraries/${library.id}/items?sort=title${query}&offset=${offset}&limit=${PAGE}`).then(
         (p) => {
           setItems((cur) => {
             if (offset === 0) return p.items
@@ -221,7 +249,7 @@ function AllTitles({ library }: { library: Library }) {
         },
       )
     },
-    [library.id],
+    [library.id, query],
   )
   useEffect(() => more(0), [more])
 
@@ -239,7 +267,7 @@ function AllTitles({ library }: { library: Library }) {
       setBusy(true)
       try {
         while (loaded.length <= l.offset && loaded.length < total) {
-          const p = await api.get<{ items: Item[] }>(`/api/libraries/${library.id}/items?sort=title&offset=${loaded.length}&limit=500`)
+          const p = await api.get<{ items: Item[] }>(`/api/libraries/${library.id}/items?sort=title${query}&offset=${loaded.length}&limit=500`)
           if (!p.items.length) break
           const have = new Set(loaded.map((it) => it.id))
           loaded = [...loaded, ...p.items.filter((it) => !have.has(it.id))]
@@ -273,41 +301,116 @@ function AllTitles({ library }: { library: Library }) {
   const lettersRef = useRef(letters)
   lettersRef.current = letters
 
+  const bar = <FilterBar library={library} filters={filters} onChange={setFilters} />
   if (error) return <Problem error={error} retry={() => { setError(''); more(items.length) }} />
   if (total < 0) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
-  if (total === 0 && collections.length === 0) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
+  if (total === 0 && collections.length === 0) {
+    if (!query) return <Center><Text style={st.muted}>This library is empty.</Text></Center>
+    return (
+      <View style={st.flex}>
+        {bar}
+        <Center><Text style={st.muted}>Nothing here matches these filters.</Text></Center>
+      </View>
+    )
+  }
   return (
-    <View style={st.titles}>
-      <Grid
-        listRef={list}
-        rows={rows}
-        keyOf={(t) => ('item' in t ? String(t.item.id) : `c${t.collection.id}`)}
-        busy={busy && items.length > 0}
-        onEnd={() => items.length < total && more(items.length)}
-        renderTile={(t) =>
-          'collection' in t ? (
-            <CollectionCard collection={t.collection} onPress={() => nav.push({ name: 'collection', id: t.collection.id })} />
-          ) : (
-            <View>
-              <PosterCard
-                item={t.item}
-                preferFocus={t.index === target}
-                onPress={() => nav.push({ name: 'details', id: t.item.id })}
-                onFocus={() => {
-                  setCurrent(lettersRef.current.filter((l) => l.offset <= t.index).pop()?.letter)
-                  // Landed: stop preferring it, or scrolling back to its row later would pull focus there again.
-                  if (t.index === target) setTarget(-1)
-                  // Reaching the last rows loads the next page.
-                  if (items.length < total && t.index >= items.length - cols * 3) more(items.length)
-                }}
-              />
-              <Text style={st.gridTitle} numberOfLines={1}>{t.item.title}</Text>
-            </View>
-          )
-        }
-      />
-      {letters.length > 1 && <LetterBar letters={letters} current={current ?? letters.filter((l) => l.offset <= 0).pop()?.letter} onPick={jump} />}
+    <View style={st.flex}>
+      {bar}
+      <View style={st.titles}>
+        <Grid
+          listRef={list}
+          rows={rows}
+          keyOf={(t) => ('item' in t ? String(t.item.id) : `c${t.collection.id}`)}
+          busy={busy && items.length > 0}
+          onEnd={() => items.length < total && more(items.length)}
+          renderTile={(t) =>
+            'collection' in t ? (
+              <CollectionCard collection={t.collection} onPress={() => nav.push({ name: 'collection', id: t.collection.id })} />
+            ) : (
+              <View>
+                <PosterCard
+                  item={t.item}
+                  preferFocus={t.index === target}
+                  onPress={() => nav.push({ name: 'details', id: t.item.id })}
+                  onFocus={() => {
+                    setCurrent(lettersRef.current.filter((l) => l.offset <= t.index).pop()?.letter)
+                    // Landed: stop preferring it, or scrolling back to its row later would pull focus there again.
+                    if (t.index === target) setTarget(-1)
+                    // Reaching the last rows loads the next page.
+                    if (items.length < total && t.index >= items.length - cols * 3) more(items.length)
+                  }}
+                />
+                <Text style={st.gridTitle} numberOfLines={1}>{t.item.title}</Text>
+              </View>
+            )
+          }
+        />
+        {letters.length > 1 && <LetterBar letters={letters} current={current ?? letters.filter((l) => l.offset <= 0).pop()?.letter} onPick={jump} />}
+      </View>
     </View>
+  )
+}
+
+interface Choice<T> {
+  label: string
+  value: T
+}
+
+/**
+ * Genre, decade, rating and unwatched, above the grid. Each of the first
+ * three opens a list to pick from; Unwatched turns on and off.
+ */
+function FilterBar({ library, filters, onChange }: { library: Library; filters: Filters; onChange: (f: Filters) => void }) {
+  const { data } = useLoad<{ genres: string[]; decades: number[] }>(`/api/libraries/${library.id}/filters`)
+  const [picking, setPicking] = useState<'genre' | 'decade' | 'rating' | null>(null)
+  const genres: Choice<string | undefined>[] = [{ label: 'All genres', value: undefined }, ...(data?.genres ?? []).map((g) => ({ label: g, value: g }))]
+  const decades: Choice<number | undefined>[] = [{ label: 'Any year', value: undefined }, ...(data?.decades ?? []).map((d) => ({ label: `${d}s`, value: d }))]
+  const ratings: Choice<number | undefined>[] = [{ label: 'Any rating', value: undefined }, ...RATINGS.map((r) => ({ label: `Rated ${r}+`, value: r }))]
+  const any = !!filterQuery(filters)
+  const chip = (label: string, on: boolean, onPress: () => void) => (
+    <Focusable onPress={onPress} style={on ? { ...st.chip, ...st.chipActive } : st.chip}>
+      <Text style={[st.chipText, on && st.chipTextActive]}>{label}</Text>
+    </Focusable>
+  )
+  return (
+    <View style={st.filters}>
+      {chip(filters.genre ?? 'Genre', !!filters.genre, () => setPicking('genre'))}
+      {chip(filters.decade ? `${filters.decade}s` : 'Year', !!filters.decade, () => setPicking('decade'))}
+      {chip(filters.minRating ? `Rated ${filters.minRating}+` : 'Rating', !!filters.minRating, () => setPicking('rating'))}
+      {chip(filters.unwatched ? '✓ Unwatched' : 'Unwatched', !!filters.unwatched, () => onChange({ ...filters, unwatched: !filters.unwatched }))}
+      {any && chip('Clear', false, () => onChange({}))}
+      {picking === 'genre' && <ChoiceList title="Genre" choices={genres} current={filters.genre} onPick={(genre) => onChange({ ...filters, genre })} onClose={() => setPicking(null)} />}
+      {picking === 'decade' && <ChoiceList title="Year" choices={decades} current={filters.decade} onPick={(decade) => onChange({ ...filters, decade })} onClose={() => setPicking(null)} />}
+      {picking === 'rating' && <ChoiceList title="Rating" choices={ratings} current={filters.minRating} onPick={(minRating) => onChange({ ...filters, minRating })} onClose={() => setPicking(null)} />}
+    </View>
+  )
+}
+
+/** A list to pick one from, over the screen. Back closes it without a change. */
+function ChoiceList<T>({ title, choices, current, onPick, onClose }: { title: string; choices: Choice<T>[]; current: T; onPick: (v: T) => void; onClose: () => void }) {
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <View style={st.scrim}>
+        <View style={st.choiceBox}>
+          <Text style={st.choiceTitle}>{title}</Text>
+          <ScrollView contentContainerStyle={st.choiceBody}>
+            {choices.map((c) => (
+              <Focusable
+                key={c.label}
+                hasTVPreferredFocus={c.value === current}
+                onPress={() => {
+                  onPick(c.value)
+                  onClose()
+                }}
+                style={st.choice}
+              >
+                <Text style={[st.choiceText, c.value === current && st.choiceCurrent]}>{c.label}</Text>
+              </Focusable>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   )
 }
 
@@ -448,6 +551,14 @@ const st = StyleSheet.create(scaled({
   chipText: { color: colors.muted, fontSize: font.body, fontWeight: '700' },
   chipTextActive: { color: colors.text },
   rows: { paddingBottom: 60, paddingTop: 10 },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12, paddingHorizontal: gutter, paddingBottom: 4 },
+  scrim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
+  choiceBox: { backgroundColor: colors.surface, borderRadius: 24, padding: 40, width: isPhone ? '90%' : 700, maxHeight: '85%' },
+  choiceTitle: { color: colors.text, fontSize: font.heading, fontWeight: '800', marginBottom: 20 },
+  choiceBody: { paddingBottom: 10 },
+  choice: { paddingVertical: 14, paddingHorizontal: 20, marginBottom: 6 },
+  choiceText: { color: colors.text, fontSize: font.body },
+  choiceCurrent: { color: colors.accent, fontWeight: '800' },
   grid: { paddingHorizontal: gutter, paddingTop: 20, paddingBottom: 60 },
   gridRow: { flexDirection: 'row', height: ROW_H },
   footer: { marginVertical: 20 },
