@@ -221,6 +221,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 			r.Get("/discover", s.discoverRows)
 			r.Get("/discover/videos/{vid}", s.discoverVideo)
+			r.Post("/discover/videos/{vid}/prepare", s.discoverPrepare)
 			r.Get("/discover/videos/{vid}/index.m3u8", s.discoverVideoPlaylist)
 			r.Get("/discover/videos/{vid}/s/{n}", s.discoverVideoSegment)
 			r.Get("/discover/videos/{vid}/video.mp4", s.discoverVideoFile)

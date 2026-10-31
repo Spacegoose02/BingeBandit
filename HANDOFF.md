@@ -78,6 +78,16 @@ The #161 fixes were tested on the onn 4K box over adb (test builds 0.38.1–0.38
 - **Watch Together can't invite your own other devices** (invites skip yourself); not changed.
 - The box now runs test build 0.38.3, so the next release must be newer than that (v0.38.4 or v0.39.0) for the in-app update to offer it.
 
+## Server bug fixes: empty mount points, paused conversions, EXT-X-START, stuck shares (2026-10-31, no migration)
+
+From a read-through bug check of the server (report in the project's `bug-check/server-bug-check.md`).
+
+- **An unplugged drive could empty a library:** a drive that goes away usually leaves its mount point behind, empty, and a scan treated that as "every file deleted", pruning the items and (by cascade) their watch state, edits and collections. `Scanner.unmounted` (`library/scanner.go`) now skips pruning for a library folder that is empty while the library still has files under it (full scans and folder rescans). New `store.HasFilesUnder`. An empty *new* library still scans normally.
+- **Pausing a conversion for 90 s killed it:** once a player's buffer is full it stops fetching, so the janitor stopped the session and the TV app showed "Playback failed" on resume. `/api/progress` now calls `Session.Touch` for the reporting user's own `transcodeId` (all three apps keep reporting while paused).
+- **Converted playback could start late on Android:** a conversion's EVENT playlist only got `EXT-X-START:TIME-OFFSET=0` for `?token=&fromStart=1` (Roku), so ExoPlayer joined it near its live edge. `transcodeFile` now adds it to every transcode media playlist; the web player already started at 0, and Roku still works the same.
+- **Health page hung on a stuck network share:** folder checks now give up after 10 s (`checkWithTimeout`, `health.go`), report the folder as not responding (offline, so the alert fires) and don't start another check on a path whose last one is still blocked. `checkFolders` checks folders in parallel now.
+- **Tested:** new `TestScanKeepsLibraryOnEmptyMountPoint` (fails without the fix), `TestProgressKeepsPausedTranscodeAlive` (real ffmpeg, also checks EXT-X-START on a header-authenticated playlist), `TestRewritePlaylistWithoutToken`, `TestStuckFolderCheck` (with `-race`); full `go vet`, `go test ./...` and `gofmt`. Not tried on a device: ExoPlayer honouring EXT-X-START on the onn box, and a real unmounted drive or stuck SMB share.
+
 ## TV app bug pass: players, sign-out, Multi-View (2026-10-31, no migration)
 
 From a code review of `apps/tv` (findings in the project thread "Bug check the Android TV app").
@@ -121,7 +131,7 @@ From a code review of `apps/tv` (findings in the project thread "Bug check the A
 
 ## Discover videos play in the TV app (2026-10-30, no migration)
 
-- **Server** (`api/discoverplay.go`, `livetv/ytvideo.go`): `GET /api/discover/videos/{id}` runs yt-dlp (the `-J` call the YouTube Live relay uses, now shared as `ytdlpJSON`) and picks the best stream with sound and picture up to 1080p, answering `{url, type}`. HLS: `…/index.m3u8` with parts renumbered and passed on through `…/s/{n}`; otherwise MP4 through `…/video.mp4` with the player's Range. It goes through the server because YouTube ties its addresses to the IP that asked. Only videos currently on Discover are served (not a general YouTube proxy); streams are cached an hour and a 403/410 drops the cache. `?token=` is carried onto parts.
+- **Server** (`api/discoverplay.go`, `livetv/ytvideo.go`): `GET /api/discover/videos/{id}` runs yt-dlp (the `-J` call the YouTube Live relay uses, now shared as `ytdlpJSON`) and picks the best stream with sound and picture up to 1080p, answering `{url, type}`. HLS: `…/index.m3u8` with parts renumbered and passed on through `…/s/{n}`; otherwise MP4 through `…/video.mp4` with the player's Range. It goes through the server because YouTube ties its addresses to the IP that asked. Only videos currently on Discover are served (not a general YouTube proxy); streams are cached an hour and a 403/410 drops the cache. `?token=` is carried onto parts. The lookup runs apart from the request (shared by everyone asking for that video, up to 90s), so a TV that stops waiting doesn't throw it away; the TV app waits up to 100s and shows "Finding the video…", and asks `POST …/prepare` when a tile stays highlighted for 0.7s. Before this, the TV's 15s request limit cut off yt-dlp on most videos, so only quick ones ever played.
 - **TV** (`youtube` route, `YouTubeScreen`): a spinner while resolving, then the intro/trailer player; on failure, the reason with Open in YouTube and Close. Web already embeds YouTube; Roku has no Discover.
 - **Tested:** `go test ./internal/api ./internal/livetv ./internal/store` (playlist rewrite, parts, MP4 Range, token, refusing videos not on Discover, format picking with a fake yt-dlp); `tsc` and eslint for the TV app. **Not tested against real YouTube** (blocked in the build environment) or on a device.
 

@@ -122,6 +122,43 @@ func (f *storageFolder) check(lowPercent int) {
 	}
 }
 
+// folderCheckTimeout is how long a folder check may take. A stuck network
+// share (NFS or SMB whose server went away) can block file calls for good;
+// without a limit the Health page would never load and the offline alert
+// would never be sent.
+var folderCheckTimeout = 10 * time.Second
+
+// folderCheck is storageFolder.check, replaceable in tests.
+var folderCheck = (*storageFolder).check
+
+// stuckChecks holds the paths whose last check never returned, so a stuck
+// share doesn't collect another blocked goroutine every few minutes.
+var stuckChecks sync.Map
+
+const notResponding = "isn't responding, so its drive or network share may be stuck"
+
+// checkWithTimeout is check, giving up after folderCheckTimeout.
+func (f *storageFolder) checkWithTimeout(lowPercent int) {
+	if _, stuck := stuckChecks.Load(f.Path); stuck {
+		f.Error = notResponding
+		return
+	}
+	res := *f
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		folderCheck(&res, lowPercent)
+	}()
+	select {
+	case <-done:
+		*f = res
+	case <-time.After(folderCheckTimeout):
+		f.Online, f.Error = false, notResponding
+		stuckChecks.Store(f.Path, true)
+		go func(path string) { <-done; stuckChecks.Delete(path) }(f.Path)
+	}
+}
+
 func plainPathErr(err error) string {
 	switch {
 	case os.IsNotExist(err):
@@ -149,9 +186,12 @@ func (s *Server) diskLowPercent() int {
 func (s *Server) checkFolders() []*storageFolder {
 	folders := s.storageFolders()
 	pct := s.diskLowPercent()
+	var wg sync.WaitGroup
 	for _, f := range folders {
-		f.check(pct)
+		wg.Add(1)
+		go func() { defer wg.Done(); f.checkWithTimeout(pct) }()
 	}
+	wg.Wait()
 
 	h := &s.health
 	h.mu.Lock()
@@ -392,7 +432,7 @@ func (s *Server) adminHealth(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for _, f := range folders {
 		wg.Add(1)
-		go func() { defer wg.Done(); f.check(pct) }()
+		go func() { defer wg.Done(); f.checkWithTimeout(pct) }()
 	}
 	var rel *serverRelease
 	var relErr error

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -41,9 +43,27 @@ type discoverStream struct {
 }
 
 type discoverStreams struct {
-	mu sync.Mutex
-	m  map[string]*discoverStream
+	mu       sync.Mutex
+	m        map[string]*discoverStream
+	inflight map[string]*discoverResolve
 }
+
+// discoverResolve is a lookup under way. Everyone who asks for the same
+// video while it runs waits on the one lookup.
+type discoverResolve struct {
+	done chan struct{}
+	st   *discoverStream
+	err  error
+	code int // the HTTP status for err
+}
+
+// discoverResolveTimeout bounds one lookup. yt-dlp alone may take 45s (it
+// solves YouTube's JavaScript challenge first), then the playlist is read.
+const discoverResolveTimeout = 90 * time.Second
+
+// discoverPrepareMax caps lookups started ahead of a press (a highlighted
+// tile), so scrolling along a row doesn't start a yt-dlp for every video.
+const discoverPrepareMax = 2
 
 func (d *discoverStreams) get(id string) *discoverStream {
 	d.mu.Lock()
@@ -57,6 +77,10 @@ func (d *discoverStreams) get(id string) *discoverStream {
 func (d *discoverStreams) put(id string, st *discoverStream) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.putLocked(id, st)
+}
+
+func (d *discoverStreams) putLocked(id string, st *discoverStream) {
 	if d.m == nil {
 		d.m = map[string]*discoverStream{}
 	}
@@ -72,6 +96,62 @@ func (d *discoverStreams) drop(id string) {
 	d.mu.Lock()
 	delete(d.m, id)
 	d.mu.Unlock()
+}
+
+// resolve returns the lookup for a video: one already under way, or a new
+// one. The lookup runs on its own, apart from the request that started it:
+// a TV that stops waiting (or a person pressing again) doesn't throw the
+// work away, and the next press finds the stream ready. With ahead set
+// (a highlighted tile, not a press), nothing new starts once
+// discoverPrepareMax lookups are running; it returns nil then.
+func (d *discoverStreams) resolve(id string, ahead bool) *discoverResolve {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if c := d.inflight[id]; c != nil {
+		return c
+	}
+	if ahead && len(d.inflight) >= discoverPrepareMax {
+		return nil
+	}
+	if d.inflight == nil {
+		d.inflight = map[string]*discoverResolve{}
+	}
+	c := &discoverResolve{done: make(chan struct{})}
+	d.inflight[id] = c
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), discoverResolveTimeout)
+		defer cancel()
+		c.st, c.code, c.err = lookUpDiscoverStream(ctx, id)
+		d.mu.Lock()
+		if c.err == nil {
+			d.putLocked(id, c.st)
+		}
+		delete(d.inflight, id)
+		d.mu.Unlock()
+		close(c.done)
+	}()
+	return c
+}
+
+// lookUpDiscoverStream asks yt-dlp for a video's stream and, for HLS, reads
+// its playlist.
+func lookUpDiscoverStream(ctx context.Context, id string) (*discoverStream, int, error) {
+	v, err := resolveYouTubeVideo(ctx, id)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, http.StatusGatewayTimeout, errors.New("Finding this video took too long. Try again in a moment.")
+		}
+		return nil, http.StatusBadGateway, errors.New("Couldn't play this video here: " + err.Error())
+	}
+	st := &discoverStream{video: v, at: time.Now()}
+	if v.HLS {
+		body, err := youtubePlaylist(ctx, v.URL)
+		if err != nil {
+			return nil, http.StatusBadGateway, errors.New("Couldn't read the video's playlist: " + err.Error())
+		}
+		st.playlist, st.segs = numberPlaylist(v.URL, body)
+	}
+	return st, 0, nil
 }
 
 // discoverVideoID reads the video id and checks it's on the Discover page,
@@ -95,27 +175,36 @@ func (s *Server) discoverVideoID(w http.ResponseWriter, r *http.Request) (string
 }
 
 // discoverStream resolves a video (or reuses one resolved lately) and, for
-// HLS, reads its playlist.
+// HLS, reads its playlist. If the caller goes away first, the lookup carries
+// on and is kept for next time.
 func (s *Server) discoverStream(w http.ResponseWriter, r *http.Request, id string) (*discoverStream, bool) {
 	if st := s.discoverStreams.get(id); st != nil {
 		return st, true
 	}
-	v, err := resolveYouTubeVideo(r.Context(), id)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "Couldn't play this video here: "+err.Error())
+	c := s.discoverStreams.resolve(id, false)
+	select {
+	case <-c.done:
+	case <-r.Context().Done():
 		return nil, false
 	}
-	st := &discoverStream{video: v, at: time.Now()}
-	if v.HLS {
-		body, err := youtubePlaylist(r.Context(), v.URL)
-		if err != nil {
-			writeErr(w, http.StatusBadGateway, "Couldn't read the video's playlist: "+err.Error())
-			return nil, false
-		}
-		st.playlist, st.segs = numberPlaylist(v.URL, body)
+	if c.err != nil {
+		writeErr(w, c.code, c.err.Error())
+		return nil, false
 	}
-	s.discoverStreams.put(id, st)
-	return st, true
+	return c.st, true
+}
+
+// discoverPrepare starts finding a video's stream before it's pressed (the
+// TV app asks when a tile is highlighted), so it starts at once when it is.
+func (s *Server) discoverPrepare(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.discoverVideoID(w, r)
+	if !ok {
+		return
+	}
+	if s.discoverStreams.get(id) == nil {
+		s.discoverStreams.resolve(id, true)
+	}
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // numberPlaylist swaps each URI in a media playlist for s/<n>, relative to

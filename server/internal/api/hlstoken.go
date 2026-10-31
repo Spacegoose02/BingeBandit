@@ -27,14 +27,14 @@ func playlistQuery(r *http.Request) string {
 	return q.Encode()
 }
 
-// rewritePlaylist appends query to every URI in an HLS playlist (plain URI
-// lines and URI="..." attributes). With fromStart, a media playlist gets
+// rewritePlaylist appends query (if any) to every URI in an HLS playlist
+// (plain URI lines and URI="..." attributes). With fromStart, a media playlist gets
 // EXT-X-START at 0: a transcode's playlist is an EVENT playlist that grows
 // while it plays, and some players otherwise join it near the end like a
 // live stream, skipping what came before.
 func rewritePlaylist(b []byte, query string, fromStart bool) []byte {
 	add := func(uri string) string {
-		if uri == "" || strings.Contains(uri, "token=") {
+		if uri == "" || query == "" || strings.Contains(uri, "token=") {
 			return uri
 		}
 		if strings.Contains(uri, "?") {

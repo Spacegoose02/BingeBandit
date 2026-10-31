@@ -179,6 +179,15 @@ func (s *Store) TouchFile(id, itemID, gen int64) error {
 	return err
 }
 
+// HasFilesUnder reports whether the library has files below prefix (a folder
+// path ending in a path separator).
+func (s *Store) HasFilesUnder(libraryID int64, prefix string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM (SELECT 1 FROM media_files WHERE substr(path, 1, ?) = ?
+		AND item_id IN (SELECT id FROM items WHERE library_id = ?) LIMIT 1)`, utf8.RuneCountInString(prefix), prefix, libraryID).Scan(&n)
+	return n > 0, err
+}
+
 // PruneLibrary removes files not seen in scan generation gen, then any items
 // left without media. Only call it when every library root was reachable.
 func (s *Store) PruneLibrary(libraryID, gen int64) (int64, error) {
