@@ -56,6 +56,8 @@ const (
 	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
 	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
 	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
+	SettingRemoteMaxStreams  = "remote_max_streams" // streams each account (with its profiles) may watch at once from outside; 0 = any number
+	SettingRemoteMaxKbps     = "remote_max_kbps"    // most video sent outside the home network, kbit/s; 0 = no cap
 	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
 	SettingTraktSecret       = "trakt_client_secret"
 	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
@@ -128,6 +130,8 @@ var SettingDefaults = map[string]string{
 	SettingTrustedProxies:    "",
 	SettingLANNetworks:       "",
 	SettingRemoteAccess:      "true",
+	SettingRemoteMaxStreams:  "0",
+	SettingRemoteMaxKbps:     "0",
 	SettingTraktClientID:     "",
 	SettingTraktSecret:       "",
 	SettingLiveTimeshift:     "15",

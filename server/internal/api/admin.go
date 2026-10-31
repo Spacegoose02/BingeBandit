@@ -138,6 +138,8 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingContinueDays:      {0, 3650},
 		store.SettingRecentDays:        {0, 3650},
 		store.SettingDefaultMinimum:    {1, 1000},
+		store.SettingRemoteMaxStreams:  {0, 50},
+		store.SettingRemoteMaxKbps:     {0, 200000},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {
