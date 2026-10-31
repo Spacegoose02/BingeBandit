@@ -314,6 +314,10 @@ a.person-card:hover .card-title { color: var(--accent); }
 .notice { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; }
 .notice a { color: var(--accent); text-decoration: underline; }
 .notice.warn { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+.form-error-text { color: var(--danger); }
+.disk-bar { max-width: 420px; }
+.disk-bar > div.low { background: var(--warn); }
+.release-notes { white-space: pre-wrap; font: inherit; font-size: 0.85em; margin: 8px 0 0; max-height: 160px; overflow: auto; opacity: 0.85; }
 .section-title { margin: 34px 0 14px; display: flex; align-items: center; gap: 10px; }
 .section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 34px 0 14px; }
 .section-title-row .section-title { margin: 0; }

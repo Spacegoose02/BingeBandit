@@ -3,6 +3,7 @@ import { api, img } from '../../api'
 import { Icon } from '../../components/Icon'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
+import { UpdateNotice } from './Health'
 import type { Library, NowPlaying, ScanStatus, Stats, SystemInfo } from '../../types'
 
 export default function AdminDashboard() {
@@ -26,6 +27,7 @@ export default function AdminDashboard() {
         {system && <div className="muted small">BingeBandit {system.version} · {system.os}</div>}
       </header>
 
+      <UpdateNotice update={system?.update} />
       {system && !system.ffmpeg && (
         <div className="notice warn">FFmpeg was not found. Install it or set BB_FFMPEG, otherwise scanning and transcoding will not work.</div>
       )}

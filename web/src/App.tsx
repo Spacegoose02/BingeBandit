@@ -27,6 +27,7 @@ import AdminLibraries from './pages/admin/Libraries'
 import AdminUsers from './pages/admin/Users'
 import AdminSettings from './pages/admin/Settings'
 import AdminTasks from './pages/admin/Tasks'
+import AdminHealth from './pages/admin/Health'
 import AdminLogs from './pages/admin/Logs'
 import AdminImport from './pages/admin/Import'
 import AdminPlugins from './pages/admin/Plugins'
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="statistics" element={<AdminStatistics />} />
               <Route path="live" element={<AdminLiveTV />} />
               <Route path="tasks" element={<AdminTasks />} />
+              <Route path="health" element={<AdminHealth />} />
               <Route path="logs" element={<AdminLogs />} />
               <Route path="import" element={<AdminImport />} />
               <Route path="plugins" element={<AdminPlugins />} />

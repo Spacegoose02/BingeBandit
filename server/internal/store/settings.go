@@ -84,6 +84,25 @@ const (
 	SettingDefaultGenres  = "default_collections_genres"
 	SettingDefaultAwards  = "default_collections_awards"  // award winners, from Wikidata
 	SettingDefaultMinimum = "default_collections_minimum" // titles a studio, decade or genre needs for a collection
+
+	// Admin alerts: sent outside the app (and to admins' notifications) when
+	// something needs looking at.
+	SettingAlertEmailTo      = "alert_email_to" // addresses, comma-separated; empty = no email
+	SettingAlertSMTPHost     = "alert_smtp_host"
+	SettingAlertSMTPPort     = "alert_smtp_port" // 587 STARTTLS, 465 TLS, 25 plain
+	SettingAlertSMTPUser     = "alert_smtp_user"
+	SettingAlertSMTPPassword = "alert_smtp_password"
+	SettingAlertSMTPFrom     = "alert_smtp_from"   // empty = the SMTP user
+	SettingAlertDiscordURL   = "alert_discord_url" // a Discord channel webhook
+	SettingAlertNtfyURL      = "alert_ntfy_url"    // a topic, e.g. https://ntfy.sh/my-server
+	SettingAlertNtfyToken    = "alert_ntfy_token"  // access token, or user:password
+	SettingAlertUpdates      = "alert_updates"     // a new server version is out
+	SettingAlertBackups      = "alert_backups"     // a database backup failed
+	SettingAlertDrives       = "alert_drives"      // a library or storage folder went offline
+	SettingAlertRecordings   = "alert_recordings"  // a DVR recording failed
+	SettingAlertDiskSpace    = "alert_disk_space"  // a drive is nearly full
+	SettingDiskLowPercent    = "disk_low_percent"  // free space below this is "nearly full"
+	SettingUpdateCheck       = "update_check"      // look for new server versions once a day
 )
 
 var SettingDefaults = map[string]string{
@@ -159,6 +178,22 @@ var SettingDefaults = map[string]string{
 	SettingDefaultGenres:     "false",
 	SettingDefaultAwards:     "false",
 	SettingDefaultMinimum:    "5",
+	SettingAlertEmailTo:      "",
+	SettingAlertSMTPHost:     "",
+	SettingAlertSMTPPort:     "587",
+	SettingAlertSMTPUser:     "",
+	SettingAlertSMTPPassword: "",
+	SettingAlertSMTPFrom:     "",
+	SettingAlertDiscordURL:   "",
+	SettingAlertNtfyURL:      "",
+	SettingAlertNtfyToken:    "",
+	SettingAlertUpdates:      "true",
+	SettingAlertBackups:      "true",
+	SettingAlertDrives:       "true",
+	SettingAlertRecordings:   "true",
+	SettingAlertDiskSpace:    "true",
+	SettingDiskLowPercent:    "5",
+	SettingUpdateCheck:       "true",
 }
 
 func (s *Store) Setting(key string) string {

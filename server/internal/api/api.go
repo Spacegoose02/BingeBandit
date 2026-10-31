@@ -82,6 +82,8 @@ type Server struct {
 	Sports     *sports.Client
 	sportsOnce sync.Once
 	sportsWake chan struct{}
+	health     healthState
+	alerts     alertHistory
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -90,6 +92,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 	s.links = newLinkManager()
 	s.oidc = newOIDCFlows()
 	s.ctx = ctx
+	s.health.started = time.Now()
 	if s.Activity != nil {
 		s.Activity.OnExpire = s.playerExpired
 		go s.sweepPlayers(ctx)
@@ -318,6 +321,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/discover/{id}", s.renameDiscoverSource)
 				r.Delete("/discover/{id}", s.deleteDiscoverSource)
 				r.Get("/system", s.system)
+				r.Get("/health", s.adminHealth)
+				r.Post("/alerts/test", s.testAlerts)
 				r.Get("/stats", s.stats)
 				r.Get("/activity", s.activity)
 				r.Delete("/activity/{id}", s.killActivity)

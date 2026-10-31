@@ -265,6 +265,20 @@ The main sections under **Server → Settings**:
 - **Metadata:** TMDB, TheTVDB, MDBList and the ratings provider.
 - **Trakt** and **Webhooks:** sync watch history with Trakt, and notify other services (Home Assistant, Discord bots, n8n) when things happen.
 
+### Server health and admin alerts
+
+**Server → Health** shows every folder the server uses (the data folder, each library folder, and the recordings, backup and transcode folders when they're set elsewhere): whether it's online and how much space its drive has left. It also shows whether a newer BingeBandit is out (checked on GitHub once a day, or with **Check now**), tasks that failed the last time they ran, and the alerts sent lately. The Dashboard shows a notice too when a new version is out.
+
+Admins get an alert in their notifications when:
+
+- a new BingeBandit version is out (once per version),
+- the database backup fails,
+- a library or storage folder goes offline, and when it comes back (an empty library folder counts as offline, since that's what an unmounted drive usually looks like),
+- a drive drops below the "nearly full" level (5% free unless you change it),
+- a recording fails.
+
+To get them on your phone too, fill in any of **Discord** (a channel webhook URL), **ntfy** (a topic URL, plus a token for a private server) or **email** (an SMTP server; for Gmail use an app password) under **Server → Settings → Admin alerts**, and press **Send a test alert**. Each kind of alert can be turned off there. Folders are checked every five minutes; a folder that is already offline when the server starts is reported once it has been up for a minute.
+
 ### Scheduled tasks and backups
 
 **Server → Tasks** lists background jobs such as library scans, guide refreshes, metadata refreshes and database backups, with how often each runs and a **Run now** button. Backups are kept locally and can also be copied to S3-compatible cloud storage. **Restore a backup** is at the bottom of this page.
