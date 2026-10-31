@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
-import { absolute, api, authHeaders, current, trackWrite } from '../api'
+import { absolute, api, authHeaders, current, request, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
 import { Button, Focusable } from '../components'
@@ -22,6 +22,7 @@ const STALL_MS = 8000 // direct play with no progress this long falls back to th
 const FIRST_FRAME_MS = 20000 // the same before the first frame: a big remux over Wi-Fi can be slow to start
 const SEEK_SETTLE_MS = 600 // while converting, seeks wait for the presses to stop
 const LADDER = [2160, 1080, 720, 480]
+const DISCOVER_RESOLVE_MS = 100000 // longer than the server's own 90s limit on finding a Discover video
 
 // What ExoPlayer plays everywhere without extra decoders. Containers are the
 // file extension; the rest are ffprobe codec names.
@@ -128,7 +129,17 @@ export function YouTubeScreen({ id, title }: { id: string; title: string }) {
   const [src, setSrc] = useState<{ url: string; type: string } | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
-    api.get<{ url: string; type: string }>(`/api/discover/videos/${id}`).then(setSrc, (e) => setError(e.message))
+    // yt-dlp can take a while to find the stream (it solves YouTube's
+    // JavaScript challenge first), so this waits longer than other requests:
+    // the server gives up on its own after 90 seconds and says why.
+    let live = true
+    request<{ url: string; type: string }>('GET', `/api/discover/videos/${id}`, undefined, undefined, DISCOVER_RESOLVE_MS).then(
+      (r) => live && setSrc(r),
+      (e) => live && setError(e.message),
+    )
+    return () => {
+      live = false
+    }
   }, [id])
   const openYouTube = () =>
     Linking.openURL(`https://www.youtube.com/watch?v=${id}`).then(nav.back, () => setError("Couldn't open YouTube on this device."))
@@ -149,6 +160,7 @@ export function YouTubeScreen({ id, title }: { id: string; title: string }) {
     return (
       <View style={st.screen}>
         <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />
+        <Text style={st.ytFinding}>Finding the video…</Text>
       </View>
     )
   }
@@ -1140,6 +1152,7 @@ const st = StyleSheet.create(scaled({
   ytErrorTitle: { color: colors.text, fontSize: font.heading, fontWeight: '700' },
   ytErrorText: { color: colors.muted, fontSize: font.body, marginTop: 12, marginBottom: 30, maxWidth: 1300 },
   ytErrorButtons: { flexDirection: 'row', flexWrap: 'wrap' },
+  ytFinding: { position: 'absolute', top: '50%', left: 0, right: 0, marginTop: 40, textAlign: 'center', color: colors.muted, fontSize: font.body },
   introLabel: { position: 'absolute', left: 60, bottom: 52, color: colors.text, fontSize: font.small, opacity: 0.85 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { paddingRight: 24 },

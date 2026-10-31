@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -136,5 +138,93 @@ func TestDiscoverVideoPlays(t *testing.T) {
 	// Only videos on Discover are passed on.
 	if rec := get("/api/discover/videos/ccccccccccc", ""); rec.Code != http.StatusNotFound {
 		t.Fatalf("other video: %d", rec.Code)
+	}
+}
+
+// A lookup carries on when the TV stops waiting, presses that come while it
+// runs share it, and a highlighted tile starts one ahead of the press.
+func TestDiscoverLookupOutlivesRequest(t *testing.T) {
+	const slowID, aheadID = "ddddddddddd", "eeeeeeeeeee"
+	release := make(chan struct{})
+	var mu sync.Mutex
+	calls := map[string]int{}
+	oldResolve := resolveYouTubeVideo
+	resolveYouTubeVideo = func(ctx context.Context, id string) (livetv.YouTubeVideo, error) {
+		mu.Lock()
+		calls[id]++
+		mu.Unlock()
+		if id == slowID {
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return livetv.YouTubeVideo{}, ctx.Err()
+			}
+		}
+		return livetv.YouTubeVideo{URL: "https://example.invalid/" + id + ".mp4"}, nil
+	}
+	defer func() { resolveYouTubeVideo = oldResolve }()
+
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
+	sam, _ := st.CreateUser("sam", string(hash), false)
+	st.CreateSession("sam", sam.ID, "TV", "")
+	src := &store.DiscoverSource{Name: "Trailers", Kind: "playlist", YouTubeID: "PLx"}
+	if err := st.AddDiscoverSource(src); err != nil {
+		t.Fatal(err)
+	}
+	st.SaveDiscoverVideos(src.ID, []store.DiscoverVideo{{ID: slowID, Title: "Slow", PublishedAt: 2}, {ID: aheadID, Title: "Ahead", PublishedAt: 1}}, "")
+	srv := &Server{Store: st}
+	h := srv.Router(context.Background())
+	do := func(ctx context.Context, method, path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, nil).WithContext(ctx)
+		req.Header.Set("Authorization", "Bearer sam")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// The TV gives up while yt-dlp is still working.
+	ctx, cancel := context.WithCancel(context.Background())
+	gaveUp := make(chan struct{})
+	go func() { do(ctx, http.MethodGet, "/api/discover/videos/"+slowID); close(gaveUp) }()
+	for srv.discoverStreams.resolve(slowID, true) == nil {
+		time.Sleep(time.Millisecond)
+	}
+	cancel()
+	<-gaveUp
+
+	// Pressing again joins the same lookup, which finishes and is kept.
+	again := make(chan *httptest.ResponseRecorder)
+	go func() { again <- do(context.Background(), http.MethodGet, "/api/discover/videos/"+slowID) }()
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	if rec := <-again; rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "video.mp4") {
+		t.Fatalf("second press: %d %s", rec.Code, rec.Body)
+	}
+	if calls[slowID] != 1 {
+		t.Fatalf("looked up %d times", calls[slowID])
+	}
+
+	// A highlighted tile starts the lookup; the press then finds it ready.
+	if rec := do(context.Background(), http.MethodPost, "/api/discover/videos/"+aheadID+"/prepare"); rec.Code != http.StatusAccepted {
+		t.Fatalf("prepare: %d", rec.Code)
+	}
+	for srv.discoverStreams.get(aheadID) == nil {
+		time.Sleep(time.Millisecond)
+	}
+	if rec := do(context.Background(), http.MethodGet, "/api/discover/videos/"+aheadID); rec.Code != http.StatusOK {
+		t.Fatalf("press after prepare: %d %s", rec.Code, rec.Body)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if calls[aheadID] != 1 {
+		t.Fatalf("ahead looked up %d times", calls[aheadID])
+	}
+	if rec := do(context.Background(), http.MethodPost, "/api/discover/videos/ccccccccccc/prepare"); rec.Code != http.StatusNotFound {
+		t.Fatalf("prepare other video: %d", rec.Code)
 	}
 }
