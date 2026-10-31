@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useTV
 import Video, { SelectedTrackType, type AudioTrack, type OnProgressData, type TextTrack, type VideoRef } from 'react-native-video'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
-import { Button } from '../components'
+import { Button, useFocusOnce } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { fetchGameLights, saveGameLights, type GameLightsPerson } from '../lights'
 import { useLock } from '../lock'
@@ -389,6 +389,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     failures.current = 0
   }
 
+  // Once as the buttons come up: progress redraws this every second, and a
+  // lasting preference pulled focus back to Pause (see useFocusOnce).
+  const pauseFocus = useFocusOnce(controls && !menu)
+
   const ch = channels.find((c) => c.id === id)
   // The channel list's "now" goes stale as the evening goes on: once it ends, its "next" is on.
   const nowSecs = Date.now() / 1000
@@ -469,7 +473,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           {isPhone || controls ? (
             <View style={st.buttons}>
               <Button small label="⟲ 10s" onPress={() => seekBy(-10)} />
-              <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={togglePause} />
+              <Button small primary preferFocus={pauseFocus} label={paused ? '▶  Play' : '❚❚  Pause'} onPress={togglePause} />
               <Button small label="30s ⟳" onPress={() => seekBy(30)} />
               {/* Always there, so pressing it never leaves the remote's focus on nothing. */}
               <Button small label="Go live" onPress={goLive} />

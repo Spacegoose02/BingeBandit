@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
-import { Button, Focusable } from '../components'
+import { Button, Focusable, useFocusOnce } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
 import { backInterceptor, holdOnReturn, useNav, useScreen } from '../nav'
@@ -60,6 +61,18 @@ function clock(t: number) {
   const m = Math.floor((t % 3600) / 60)
   const s = String(t % 60).padStart(2, '0')
   return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
+// The subtitles picked in the player for a file, kept on this device so
+// reopening the title keeps them (Off included) instead of going back to
+// what the profile's subtitle setting would pick.
+const subChoiceKey = (fileId: number) => `bb.subs.${fileId}`
+
+async function savedSubChoice(fileId: number): Promise<'off' | number | null> {
+  const v = await AsyncStorage.getItem(subChoiceKey(fileId)).catch(() => null)
+  if (v === 'off') return 'off'
+  const n = v === null ? NaN : Number(v)
+  return Number.isInteger(n) ? n : null
 }
 
 function sessionId() {
@@ -264,16 +277,20 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       api.get<Prefs>('/api/me/prefs').catch(() => null),
       refreshAudioSupport(),
     ]).then(
-      ([d, prefs]) => {
+      async ([d, prefs]) => {
         setItem(d.item)
         const f = d.files?.[0]
         if (!f) {
           setError('This item has no playable file.')
           return
         }
+        const picked = pickTracks(f.streams ?? [], prefs)
+        // What was picked in the player last time wins over the profile's setting.
+        const saved = await savedSubChoice(f.id)
+        if (saved === 'off') picked.sub = undefined
+        else if (saved !== null) picked.sub = (f.streams ?? []).find((x) => x.type === 'subtitle' && x.index === saved) ?? picked.sub
         setFile(f)
         setSubLang(prefs?.subtitleLanguage)
-        const picked = pickTracks(f.streams ?? [], prefs)
         setAudio(picked.audio)
         audioRef.current = picked.audio
         if (picked.sub && IMAGE_SUBS.has(picked.sub.codec)) {
@@ -388,6 +405,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     async (at: number) => {
       if (!file) return
       if (seekTimer.current) clearTimeout(seekTimer.current)
+      seekTimer.current = undefined
       const req = ++transcodeReq.current
       setBuffering(true)
       setError('')
@@ -449,6 +467,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
       answeredReq.current = ++transcodeReq.current
       if (seekTimer.current) clearTimeout(seekTimer.current)
+      seekTimer.current = undefined
       transcodeId.current = ''
       offset.current = 0
       lastTime.current = 0
@@ -488,10 +507,13 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const chooseSub = (s?: MediaStream) => {
     setSub(s)
     setSubDelay(0) // another file, another timing
+    if (file) AsyncStorage.setItem(subChoiceKey(file.id), s ? String(s.index) : 'off').catch(() => undefined)
     const burn = s && IMAGE_SUBS.has(s.codec) ? s.index : -1
     if (burn !== burnRef.current) {
       burnRef.current = burn
-      transcode(posRef.current)
+      // Burned-in subtitles turned off: back to direct play when that's what was playing before.
+      if (burn < 0 && qualityRef.current < 0 && file && canDirectPlay(file, audioRef.current)) chooseQuality(-1)
+      else transcode(posRef.current)
     }
   }
 
@@ -540,6 +562,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   }, [report])
 
   const onProgress = (p: OnProgressData) => {
+    // A seek waiting for its conversion: the old stream still reports where
+    // it is, which mustn't move the target the presses are adding up.
+    if (seekTimer.current || transcodeReq.current !== answeredReq.current) return
     const step = p.currentTime - lastTime.current
     if (step > 0) {
       lastAdvance.current = Date.now()
@@ -583,7 +608,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     // The server converts from the new point, once the presses stop.
     setBuffering(true)
     if (seekTimer.current) clearTimeout(seekTimer.current)
-    seekTimer.current = setTimeout(() => transcode(posRef.current), SEEK_SETTLE_MS)
+    seekTimer.current = setTimeout(() => {
+      seekTimer.current = undefined
+      transcode(posRef.current)
+    }, SEEK_SETTLE_MS)
   }
 
   // Watch Together: everyone else's play, pause, seek and next episode
@@ -701,6 +729,11 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   useEffect(() => () => {
     if (hideTimer.current) clearTimeout(hideTimer.current)
   }, [])
+  // Pause takes focus as the buttons come up, once: progress redraws the
+  // player four times a second, and a lasting preference pulled focus back
+  // to Pause before OK could reach Options or the others.
+  const pauseFocus = useFocusOnce(controls === 'full' && !menu && !togetherOpen && !summary && !subSearch)
+  const menuFocus = useFocusOnce(menu) // the same for the Options menu's current choices
 
   // The next episode, for the Next button.
   const [next, setNext] = useState<Item | null>(null)
@@ -940,7 +973,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
             {controls === 'full' ? (
               <View style={st.controlRow}>
                 <Button small label="⟲ 10s" onPress={() => userSeek(posRef.current - 10)} />
-                <Button small primary preferFocus label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => userPause(!pausedRef.current)} />
+                <Button small primary preferFocus={pauseFocus} label={paused ? '▶  Play' : '❚❚  Pause'} onPress={() => userPause(!pausedRef.current)} />
                 <Button small label="30s ⟳" onPress={() => userSeek(posRef.current + 30)} />
                 {next && <Button small label="Next episode  ▶▶" onPress={() => playNext(next.id)} />}
                 {!!item?.overview && (
@@ -1021,7 +1054,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               <Text style={st.menuTitle}>Quality</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
                 {canDirectPlay(file, audioRef.current) && burnRef.current < 0 && (
-                  <Button small primary={mode === 'direct'} preferFocus={mode === 'direct'} label={`Original · Direct play`} onPress={() => chooseQuality(-1)} />
+                  <Button small primary={mode === 'direct'} preferFocus={menuFocus && mode === 'direct'} label={`Original · Direct play`} onPress={() => chooseQuality(-1)} />
                 )}
                 <Button
                   small
@@ -1048,13 +1081,13 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           )}
           <Text style={st.menuTitle}>Subtitles</Text>
           <ScrollView horizontal contentContainerStyle={st.menuRow}>
-            <Button small primary={!sub} preferFocus={!sub} label="Off" onPress={() => chooseSub(undefined)} />
+            <Button small primary={!sub} preferFocus={menuFocus && !sub} label="Off" onPress={() => chooseSub(undefined)} />
             {subs.map((s) => (
               <Button
                 key={s.index}
                 small
                 primary={sub?.index === s.index}
-                preferFocus={sub?.index === s.index}
+                preferFocus={menuFocus && sub?.index === s.index}
                 label={streamLabel(s) + (IMAGE_SUBS.has(s.codec) ? ' · burned in' : '')}
                 onPress={() => chooseSub(s)}
               />
