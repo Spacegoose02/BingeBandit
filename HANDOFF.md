@@ -76,6 +76,22 @@ From a read-through bug check of the server (report in the project's `bug-check/
 - **Converted playback could start late on Android:** a conversion's EVENT playlist only got `EXT-X-START:TIME-OFFSET=0` for `?token=&fromStart=1` (Roku), so ExoPlayer joined it near its live edge. `transcodeFile` now adds it to every transcode media playlist; the web player already started at 0, and Roku still works the same.
 - **Health page hung on a stuck network share:** folder checks now give up after 10 s (`checkWithTimeout`, `health.go`), report the folder as not responding (offline, so the alert fires) and don't start another check on a path whose last one is still blocked. `checkFolders` checks folders in parallel now.
 - **Tested:** new `TestScanKeepsLibraryOnEmptyMountPoint` (fails without the fix), `TestProgressKeepsPausedTranscodeAlive` (real ffmpeg, also checks EXT-X-START on a header-authenticated playlist), `TestRewritePlaylistWithoutToken`, `TestStuckFolderCheck` (with `-race`); full `go vet`, `go test ./...` and `gofmt`. Not tried on a device: ExoPlayer honouring EXT-X-START on the onn box, and a real unmounted drive or stuck SMB share.
+## TV app bug pass: players, sign-out, Multi-View (2026-10-31, no migration)
+
+From a code review of `apps/tv` (findings in the project thread "Bug check the Android TV app").
+
+- **Watch Together invite over a player** (`together.tsx`, `TogetherInvites`): Join now replaces a player on top instead of pushing a second one, which left the first playing (two soundtracks, remote driving both). `Player`, `IntroVideo` and `LivePlayer` also pause, ignore the remote and leave `backInterceptor` alone while `useScreen().active` is false.
+- **Joining a party started at 0:00** (`Player.tsx`): the first source and the first conversion start at `posRef` (where the room's first update put it) instead of `start`.
+- **Direct play switched to converting on its own** (`Player.tsx` watchdog): resets on returning to the app (Android pauses timers in the background), on seeks and on each new stall; 20 s before the first frame instead of 8 s.
+- **Seeking while converting** (`seekTo`): presses settle for 600 ms before one conversion request; an answer to a request a newer one replaced is dropped and its session deleted, also on leaving the player. A conversion still starting counts as converting.
+- **Paused movie and the screensaver** (`App.tsx`): a paused movie (`holdOnReturn` in `nav.tsx`) keeps its place for 4 hours away instead of 5 minutes.
+- **Signed out on the server** (`api.ts` `onSignedOut`, `App.tsx`): a 401 "not signed in" for the current token goes to sign-in on the same server.
+- **Who's watching PIN pad**: Back closes the pad (`Profiles.tsx`).
+- **Multi-View**: screens keep stable keys, so removing one doesn't restart the rest; a join that answers late is left instead of replacing the newer viewer (`useTileStream`).
+- **Live TV**: ▲ goes up the channel numbers like CH+ and a phone swipe up (it went the other way).
+- **Details**: an error clears once it loads, with Try again; resume from 15 s like Home and the server (also the hold menu); hour-long resume points read 1:35:12; Watchlist and Mark watched say when they fail.
+- **LAN scan** (`discovery.ts`): only lists servers that say `"product": "BingeBandit"`; a typed address still accepts pre-v0.27 servers.
+- **Tested:** `tsc` and eslint for apps/tv. Device testing over adb is next.
 
 ## Passcode fixes on the TV, and the Windows release build (2026-10-31, no migration)
 

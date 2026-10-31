@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ApiError, api, current, loadSession, saveSession, type Session } from './src/api'
+import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
-import { backInterceptor, FocusMemoryContext, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
+import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
@@ -41,6 +41,9 @@ const EXIT_WINDOW = 2500
 // Away from the app this long (the TV turned off for the night, say), it
 // opens on Home again instead of carrying on with what was playing.
 const FRESH_AFTER = 5 * 60 * 1000
+// A paused movie waits this long instead: the screensaver backgrounds the
+// app while someone steps away, and they should come back to the movie.
+const PAUSED_HOLD = 4 * 60 * 60 * 1000
 
 export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: 'loading' })
@@ -69,6 +72,17 @@ export default function App() {
     })
   }, [])
 
+  // The server signed this device out while the app was open: sign in again
+  // (to the same server) instead of every screen showing an error.
+  useEffect(() => {
+    onSignedOut((server) => {
+      if (!current()) return
+      saveSession(null).catch(() => undefined)
+      setStack(homeStack())
+      setPhase({ name: 'signin', server: { url: server, name: 'BingeBandit', version: '' } })
+    })
+  }, [])
+
   const nav: Nav = useMemo(
     () => ({
       push: (r) => setStack((st) => [...st, entry(r)]),
@@ -92,7 +106,8 @@ export default function App() {
       if (state !== 'active') return
       const away = leftAt ? Date.now() - leftAt : 0
       leftAt = 0
-      if (away >= FRESH_AFTER && phaseRef.current.name === 'app') setStack(homeStack())
+      const limit = holdOnReturn.current ? PAUSED_HOLD : FRESH_AFTER
+      if (away >= limit && phaseRef.current.name === 'app') setStack(homeStack())
     })
     return () => sub.remove()
   }, [])

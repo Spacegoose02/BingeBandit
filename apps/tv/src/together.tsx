@@ -213,7 +213,10 @@ export function TogetherInvites({ playing }: { playing: boolean }) {
               label="Join"
               onPress={() => {
                 close(false)
-                nav.push({ name: 'player', id: invite.itemId, start: 0, together: invite.room })
+                // Over a player, take its place: a player left underneath keeps playing.
+                const route = { name: 'player', id: invite.itemId, start: 0, together: invite.room } as const
+                if (playingRef.current) nav.replace(route)
+                else nav.push(route)
               }}
             />
             <Button label="Not now" onPress={() => close(true)} />
