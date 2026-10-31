@@ -258,6 +258,14 @@ export default function AdminSettings() {
             Let people recommend movies and shows to each other
           </label>
           <p className="muted small">Off hides the Recommend buttons, the opt-in under Account and the “Recommended for You” row on Home, on the web and in the TV app.</p>
+          <label className="check">
+            <input type="checkbox" checked={s.requests_enabled !== 'false'} onChange={set('requests_enabled')} />
+            Let people request movies and shows the server doesn’t have
+          </label>
+          <p className="muted small">
+            Requests wait for an admin on the <Link to="/requests">Requests</Link> page. Approved ones go to Cinemask through the Cinemask
+            Upgrades plugin. Kid profiles can’t request.
+          </p>
           <label>
             Count as watched after (% of the runtime)
             <input type="number" min={50} max={100} value={s.watched_percent ?? '90'} onChange={set('watched_percent')} />

@@ -144,6 +144,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/me/password", s.changePassword)
 			r.Put("/me/display-name", s.setDisplayName)
 			r.Get("/me/recommendations", s.getRecommendOptIn)
+			r.Get("/requests", s.myRequests)
+			r.Get("/requests/search", s.searchRequestable)
+			r.Post("/requests", s.createRequest)
+			r.Delete("/requests/{id}", s.deleteRequest)
 			r.Put("/me/recommendations", s.setRecommendOptIn)
 			r.Get("/items/{id}/recommend", s.recommendRecipients)
 			r.Post("/together", s.startTogether)
@@ -402,6 +406,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 				r.Post("/dvr/recordings/{id}/approve", s.approveRecording)
 				r.Post("/dvr/rules/{id}/approve", s.approveRule)
+				r.Post("/requests/{id}/approve", s.approveRequest)
+				r.Post("/requests/{id}/decline", s.declineRequest)
 
 				r.Get("/history", s.adminHistory)
 				r.Get("/statistics", s.adminStatistics)

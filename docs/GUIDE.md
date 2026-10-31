@@ -102,6 +102,7 @@ Shows list their seasons, and each season lists its episodes with a ✓ on the o
 - **Search** looks across every library you can see.
 - **Watchlist** keeps titles you want to get to. Movies leave it once you finish them.
 - **Playlists** are your own lists, and can be shared with others on the server.
+- **Requests** is where you ask for a movie or show the server doesn't have (Overseerr-style). Search TMDB, pick one, add a note if you like, and an admin approves or declines it. Approved requests go to [Cinemask](https://github.com/Spacegoose02/cinemask) through the Cinemask Upgrades plugin, which adds the title and searches for it at once; when it lands in a library, everyone who asked gets a notification. If someone already asked, you join their request. Admins see every request on the same page, and their own requests are approved straight away. On the TV app, Search lists titles the server doesn't have under its results; pick one to request it. Kid profiles can't request, and **Settings → Library** turns requests off for everyone. Requests need a TMDB key.
 - **Discover** shows new trailers and videos from YouTube playlists and channels an admin picks. On the TV and phone app they play in the app's own player (the server reads them with yt-dlp, which the Docker image includes); if a video won't play that way, the app offers to open it in YouTube.
 
 ## 5. Watch

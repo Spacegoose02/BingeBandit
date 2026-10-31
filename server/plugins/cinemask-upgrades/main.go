@@ -17,10 +17,11 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "cinemask-upgrades",
 	Name:        "Cinemask Upgrades",
-	Version:     "1.2.0",
-	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies.",
+	Version:     "1.3.0",
+	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies, and fetches approved title requests.",
 	Author:      "BingeBandit",
 	Homepage:    "https://github.com/Spacegoose02/cinemask",
+	Events:      []string{"request.approved"},
 	Settings: []bbplugin.Setting{
 		{Key: "url", Label: "Cinemask address", Type: "text", Help: "For example http://192.168.1.10:7979"},
 		{Key: "api_key", Label: "Cinemask API key", Type: "password",
@@ -31,6 +32,8 @@ var manifest = bbplugin.Manifest{
 		{Key: "want_hdr", Label: "Also list 4K files without HDR", Type: "bool", Default: "false"},
 		{Key: "collections", Label: "Let collections add their missing titles to Cinemask", Type: "bool", Default: "false",
 			Help: "Each collection then gets Monitor and Search switches in its editor, both off until you turn them on."},
+		{Key: "requests", Label: "Fetch title requests an admin approves", Type: "bool", Default: "true",
+			Help: "Approved requests (Requests in the sidebar) are added to Cinemask, which searches for them at once."},
 	},
 	Pages: []bbplugin.Page{{Title: "Upgrades", Path: "/", Admin: true}},
 }
@@ -43,6 +46,10 @@ type app struct {
 	// the collection's library (tests replace it).
 	missing func(ctx context.Context, id int64) ([]wanted, string, error)
 	cols    *colStore
+	// listRequests and setRequest read and answer the approved title
+	// requests (tests replace them).
+	listRequests func(ctx context.Context) ([]request, error)
+	setRequest   func(ctx context.Context, id int64, status, reason, link string) error
 	// kick runs a collection at once after its switches change.
 	kick func(id int64)
 
@@ -60,7 +67,12 @@ func main() {
 	a.files = a.libraryFiles
 	a.missing = a.collectionMissing
 	a.cols = &colStore{dir: func() string { return a.p.DataDir }}
-	a.p.Start = a.watchCollections
+	a.listRequests = a.approvedRequests
+	a.setRequest = a.reportRequest
+	a.p.Start = func(ctx context.Context) {
+		go a.watchRequests(ctx)
+		a.watchCollections(ctx)
+	}
 	a.kick = func(id int64) { go a.runCollection(context.Background(), id) }
 	log.SetFlags(0)
 	if err := a.p.Run(); err != nil {
@@ -69,6 +81,10 @@ func main() {
 }
 
 func (a *app) onEvent(_ context.Context, e bbplugin.Event) {
+	if e.Event == "request.approved" {
+		go a.sendRequests(context.Background())
+		return
+	}
 	if e.Event != "plugin.settings" {
 		return
 	}
@@ -78,6 +94,8 @@ func (a *app) onEvent(_ context.Context, e bbplugin.Event) {
 		a.settings = s
 		a.last = nil // the rules may have changed
 		a.mu.Unlock()
+		// Cinemask may have just been set up: send what's waiting.
+		go a.sendRequests(context.Background())
 	}
 }
 

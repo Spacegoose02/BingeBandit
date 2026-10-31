@@ -239,3 +239,30 @@ export interface SportsSummary {
   leaders: { title: string; away?: SportsLeader; home?: SportsLeader }[]
   standings: { title: string; labels: string[]; rows: { id: string; name: string; logo?: string; stats: string[] }[] }[]
 }
+
+/** A movie or show someone asked for (one per title; later askers join it). */
+export interface TitleRequest {
+  id: number
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  poster?: string
+  requestedBy: string
+  people: number
+  status: 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
+  mine: boolean
+}
+
+/** A TMDB search result the viewer can request. */
+export interface RequestableTitle {
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  overview?: string
+  poster?: string
+  itemId?: number
+  onServer?: boolean
+  request?: TitleRequest
+}

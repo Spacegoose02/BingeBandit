@@ -817,3 +817,38 @@ export interface DiscoverSource {
   fetchedAt: number
   error?: string
 }
+
+/** A movie or show someone asked for (one per title; later askers join it). */
+export interface TitleRequest {
+  id: number
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  poster?: string
+  overview?: string
+  userId: number
+  requestedBy: string
+  people: number
+  note?: string
+  /** approved: waiting for Cinemask; sent: Cinemask has it; available: in a library. */
+  status: 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
+  reason?: string
+  link?: string
+  createdAt: number
+  updatedAt: number
+  mine: boolean
+}
+
+/** A TMDB search result on the Requests page. */
+export interface RequestableTitle {
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  overview?: string
+  poster?: string
+  itemId?: number // in a library the viewer can see
+  onServer?: boolean
+  request?: TitleRequest
+}
