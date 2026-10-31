@@ -18,6 +18,7 @@ import AdminLiveTV from './pages/admin/LiveTV'
 import LiveGuide from './pages/LiveGuide'
 import RecordingsPage from './pages/Recordings'
 import Search from './pages/Search'
+import RequestsPage from './pages/Requests'
 import Account from './pages/Account'
 import TVSetupSheet from './pages/TVSetupSheet'
 import LinkDevice from './pages/LinkDevice'
@@ -97,6 +98,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/:username" element={<ProfilePage />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/requests" element={<RequestsPage />} />
           <Route path="/account" element={<PasscodeGate><Account /></PasscodeGate>} />
           <Route path="/link" element={<PasscodeGate><LinkDevice /></PasscodeGate>} />
           <Route path="/admin" element={<RequireAdmin />}>

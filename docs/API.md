@@ -105,6 +105,11 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
+| GET | `/requests` | Your title requests (admins: `?all=1` for everyone's) → `{requests, enabled, canRequest, reason}`; admins also get `handlers`, the plugins that fetch approved requests. A request is `{id, kind, tmdbId, title, year, poster, overview, requestedBy, people, note, status, reason, link, mine}`; `status` is `pending`, `approved` (waiting for the plugin), `sent`, `failed`, `declined` or `available`. |
+| GET | `/requests/search?q=&kind=` | TMDB movies and shows to request: `[{kind, tmdbId, title, year, overview, poster, itemId, onServer, request}]`. 403 for kids or when an admin turned requests off (setting `requests_enabled`); 503 without a TMDB key. |
+| POST | `/requests` | `{kind, tmdbId, title, year, poster, overview, note}` asks for a title (201), or joins an existing request for it (200). 409 when it's already in a library. An admin's request is approved at once. |
+| DELETE | `/requests/{id}` | Take your name off a request that isn't approved (or was declined, or is in); admins delete any with `?all=1`. |
+| POST | `/admin/requests/{id}/approve`, `/admin/requests/{id}/decline` | Admin. Decline takes `{reason}`, which the people who asked are told. Approving a failed request tries again. |
 | GET | `/discover` | Discover rows: `[{id, name, videos: [{id, title, description, publishedAt}]}]`, newest first. `id` is the YouTube video id (thumbnail `https://i.ytimg.com/vi/{id}/mqdefault.jpg`). |
 | GET | `/discover/videos/{id}` | Plays a Discover video through the server (TV app): yt-dlp finds its stream and the answer is `{url, type}`, an HLS playlist (`/discover/videos/{id}/index.m3u8`, its parts at `…/s/{n}`; `type` `m3u8`) or an MP4 file (`…/video.mp4`, with Range; `type` `mp4`). Only videos on Discover; 502 with the reason when YouTube won't give one. |
 | GET / POST / DELETE | `/watchlist`, `/watchlist/{id}` | Your watchlist. |
@@ -225,6 +230,7 @@ Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (
 | `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`, `lights` (false when Hue Sync is switched off on that device). |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `sports.game.start` / `sports.score` / `sports.game.end` | A game of a team someone follows on the Sports page started, someone scored, or it ended. `data` has the `game` (from ESPN), its `sport`, the `scorer` team id, and the `fans` who follow each team. |
+| `request.created` / `request.approved` / `request.declined` / `request.available` | Title requests: someone asked, an admin approved or declined, or the title arrived in a library. `data` is the request. |
 | `test` | The *Send test* button. |
 
 Playback events also carry `userId`, `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.

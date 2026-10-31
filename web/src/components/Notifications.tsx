@@ -7,7 +7,7 @@ import { Icon } from './Icon'
 
 type Notification = {
   id: number
-  kind: 'episodes' | 'recording' | 'sports' | 'live'
+  kind: 'episodes' | 'recording' | 'sports' | 'live' | 'request'
   title: string
   body?: string
   link?: string
