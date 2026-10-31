@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -314,5 +315,58 @@ func TestAlertSettings(t *testing.T) {
 		if err := validAlertSettings(map[string]string{in[0]: in[1]}); (err == nil) != ok {
 			t.Errorf("%s=%q: %v", in[0], in[1], err)
 		}
+	}
+}
+
+// A network share that stops answering blocks file calls for good. The check
+// gives up on it, reports it offline (with one alert), and doesn't pile up
+// another blocked check every few minutes.
+func TestStuckFolderCheck(t *testing.T) {
+	s, st := healthServer(t)
+	movies := filepath.Join(t.TempDir(), "movies")
+	os.MkdirAll(movies, 0o755)
+	if err := st.CreateLibrary(&store.Library{Name: "Movies", Kind: "movies", Paths: []string{movies}}); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	var calls atomic.Int32
+	oldCheck, oldTimeout := folderCheck, folderCheckTimeout
+	folderCheck = func(f *storageFolder, pct int) {
+		if f.Path == movies {
+			calls.Add(1)
+			<-release
+		}
+		oldCheck(f, pct)
+	}
+	folderCheckTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { folderCheck, folderCheckTimeout = oldCheck, oldTimeout })
+
+	for i := 0; i < 3; i++ {
+		start := time.Now()
+		folders := s.checkFolders()
+		if time.Since(start) > 2*time.Second {
+			t.Fatal("check waited on the stuck folder")
+		}
+		if folders[1].Online || folders[1].Error != notResponding || !folders[0].Online {
+			t.Fatalf("folders: %+v %+v", folders[0], folders[1])
+		}
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("stuck folder checked %d times while still stuck, want 1", n)
+	}
+	if notes := adminNotes(t, st); len(notes) != 1 || notes[0] != "A storage folder is offline" {
+		t.Fatalf("alerts: %v", notes)
+	}
+
+	// The share recovers.
+	close(release)
+	for i := 0; i < 100; i++ {
+		if _, stuck := stuckChecks.Load(movies); !stuck {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if folders := s.checkFolders(); !folders[1].Online {
+		t.Fatalf("after recovery: %+v", folders[1])
 	}
 }

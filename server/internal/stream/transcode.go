@@ -602,6 +602,14 @@ func (m *Manager) janitor() {
 	}
 }
 
+// Touch marks the session as in use. The player's progress reports call it,
+// so a paused player whose buffer is full (and that has stopped fetching
+// segments) doesn't lose its session to the idle timeout.
+func (s *Session) Touch() { s.lastAccess.Store(time.Now().Unix()) }
+
+// LastUsed is when the session was last fetched from or touched.
+func (s *Session) LastUsed() time.Time { return time.Unix(s.lastAccess.Load(), 0) }
+
 // AccessCheckDue reports whether the user's library access should be checked
 // again (at most once per every), and marks it checked when it is.
 func (s *Session) AccessCheckDue(every time.Duration) bool {

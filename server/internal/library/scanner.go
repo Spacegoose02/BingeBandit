@@ -185,6 +185,24 @@ func reachable(dir string) bool {
 	return err == nil && info.IsDir()
 }
 
+// unmounted reports a library folder that is empty although the library has
+// files in it: a drive that went away usually leaves its mount point behind,
+// empty, and scanning it as it is would delete the whole library (and the
+// watch history and edits with it).
+func (s *Scanner) unmounted(lib *store.Library, root string) bool {
+	d, err := os.Open(root)
+	if err != nil {
+		return false
+	}
+	names, _ := d.Readdirnames(1)
+	d.Close()
+	if len(names) > 0 {
+		return false
+	}
+	had, err := s.st.HasFilesUnder(lib.ID, strings.TrimSuffix(root, string(filepath.Separator))+string(filepath.Separator))
+	return err != nil || had
+}
+
 func (s *Scanner) scanFiles(ctx context.Context, lib *store.Library, st *Status) error {
 	gen := time.Now().UnixNano()
 	complete := true
@@ -194,6 +212,11 @@ func (s *Scanner) scanFiles(ctx context.Context, lib *store.Library, st *Status)
 		if !reachable(root) {
 			// An offline drive must not wipe the library, so skip pruning.
 			log.Printf("scan %q: folder %s is unavailable; keeping its items", lib.Name, root)
+			complete = false
+			continue
+		}
+		if s.unmounted(lib, root) {
+			log.Printf("scan %q: folder %s is empty, so its drive may not be mounted; keeping its items", lib.Name, root)
 			complete = false
 			continue
 		}
@@ -223,7 +246,7 @@ func (s *Scanner) scanFolders(ctx context.Context, lib *store.Library, st *Statu
 	for _, d := range dirs {
 		d = filepath.Clean(d)
 		root := rootFor(lib, d)
-		if root == "" || !reachable(root) {
+		if root == "" || !reachable(root) || s.unmounted(lib, root) {
 			continue
 		}
 		complete := true
