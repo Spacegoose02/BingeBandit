@@ -9,5 +9,6 @@
     <field id="response" type="assocarray" />
   </interface>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/common/tracks.brs" />
   <script type="text/brightscript" uri="pkg:/components/tasks/ApiTask.brs" />
 </component>

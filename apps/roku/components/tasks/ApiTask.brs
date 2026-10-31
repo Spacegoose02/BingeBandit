@@ -22,6 +22,10 @@ sub execute()
         m.top.response = { ok: true, status: 200 }
         return
     end if
+    if build = "vtt"
+        m.top.response = loadVtt(req)
+        return
+    end if
     res = httpRequest(req)
     if res.ok and build <> ""
         content = invalid
@@ -33,10 +37,10 @@ sub execute()
             content = gridContent(res.data, true)
         else if build = "details"
             content = detailsContent(res.data)
+        else if build = "guide"
+            content = guideContent(res, getOr(req, "filter", "all"))
         else if build = "person"
             content = personContent(res.data)
-        else if build = "channels"
-            content = channelContent(res.data)
         end if
         m.top.content = content
     end if
@@ -100,7 +104,11 @@ function httpRequest(req as object) as object
     end if
     body = msg.GetString()
     data = invalid
-    if body <> invalid and body <> "" then data = ParseJson(body)
+    if getOr(req, "raw", false) = true
+        data = body
+    else if body <> invalid and body <> ""
+        data = ParseJson(body)
+    end if
     res = { ok: code >= 200 and code < 300, status: code, data: data }
     if not res.ok
         msgText = "Server error " + code.ToStr()
@@ -502,26 +510,130 @@ function personContent(data as dynamic) as object
     return root
 end function
 
-function channelContent(data as dynamic) as object
-    root = CreateObject("roSGNode", "ContentNode")
-    if type(data) <> "roArray" then return root
-    for each c in data
-        n = root.createChild("ContentNode")
-        now = getOr(c, "now", invalid)
-        nxt = getOr(c, "next", invalid)
-        nowText = ""
-        if now <> invalid then nowText = getOr(now, "title", "")
-        nextText = ""
-        if nxt <> invalid then nextText = "Next " + wallClock(nxt.start) + "  " + getOr(nxt, "title", "")
-        logo = ""
-        if getOr(c, "logo", "") <> "" then logo = withToken(absoluteUrl(c.logo))
-        progress = 0.0
-        if now <> invalid and now.stop > now.start
-            nowSecs = CreateObject("roDateTime").AsSeconds()
-            progress = (nowSecs - now.start) / (now.stop - now.start)
+' Subtitle cues for the player, parsed here so a long film's file doesn't
+' stall the render thread. Embedded streams are pulled out of the video by
+' the server the first time, which can take a while.
+function loadVtt(req as object) as object
+    r = {}
+    r.Append(req)
+    r.raw = true
+    r.timeout = 90000
+    res = httpRequest(r)
+    if not res.ok then return res
+    return { ok: true, status: res.status, data: parseVtt(asString(res.data)) }
+end function
+
+' --- Live TV guide -------------------------------------------------------------
+
+' The guide's channel filters: all, favourites, the viewer's own categories
+' ("my:<id>") and the provider's groups.
+function guideFilters(data as object) as object
+    chans = getOr(data, "channels", [])
+    out = [{ key: "all", label: "All channels" }]
+    for each c in chans
+        if isTrue(c.favorite)
+            out.Push({ key: "fav", label: "Favourites" })
+            exit for
         end if
-        n.addFields({ channelId: c.id, number: asString(c.number), logo: logo, nowTitle: nowText, nextTitle: nextText, progress: progress, favorite: getOr(c, "favorite", false) })
-        n.title = getOr(c, "name", "")
     end for
+    for each cat in getOr(data, "categories", [])
+        out.Push({ key: "my:" + asString(cat.id), label: getOr(cat, "name", "") })
+    end for
+    seen = {}
+    for each c in chans
+        g = getOr(c, "group", "")
+        if g <> "" and not seen.DoesExist(g)
+            seen[g] = true
+            out.Push({ key: "group:" + g, label: g })
+        end if
+    end for
+    return out
+end function
+
+function filterChannels(data as object, filter as string) as object
+    chans = getOr(data, "channels", [])
+    if filter = "all" then return chans
+    out = []
+    if Left(filter, 3) = "my:"
+        ids = {}
+        for each cat in getOr(data, "categories", [])
+            if "my:" + asString(cat.id) = filter
+                for each id in getOr(cat, "channelIds", [])
+                    ids[asString(id)] = true
+                end for
+            end if
+        end for
+        for each c in chans
+            if ids.DoesExist(asString(c.id)) then out.Push(c)
+        end for
+        return out
+    end if
+    for each c in chans
+        if filter = "fav" and isTrue(c.favorite) then out.Push(c)
+        if Left(filter, 6) = "group:" and "group:" + getOr(c, "group", "") = filter then out.Push(c)
+    end for
+    return out
+end function
+
+' One TimeGrid row per channel, its programs between from and to with the
+' gaps filled ("No guide information"), so the grid's program indexes are
+' the same on every firmware. Adds `shown` (the channels in grid order) and
+' `filters` to the response.
+function guideContent(res as object, filter as string) as object
+    data = res.data
+    root = CreateObject("roSGNode", "ContentNode")
+    if type(data) <> "roAssociativeArray" then return root
+    filters = guideFilters(data)
+    known = false
+    for each f in filters
+        if f.key = filter then known = true
+    end for
+    ' A filter that went away (a deleted category, no favourites left) falls back to all.
+    if not known then filter = "all"
+    shown = filterChannels(data, filter)
+    from = getOr(data, "from", 0)
+    upto = getOr(data, "to", 0)
+    progs = getOr(data, "programs", {})
+    recs = getOr(data, "recordings", {})
+    if type(recs) <> "roAssociativeArray" then recs = {}
+    for each c in shown
+        row = root.createChild("ContentNode")
+        row.title = asString(c.number) + "   " + getOr(c, "name", "")
+        row.addFields({ channelId: c.id })
+        epg = getOr(c, "epgId", "")
+        list = invalid
+        if epg <> "" and type(progs) = "roAssociativeArray" then list = progs[epg]
+        if type(list) <> "roArray" then list = []
+        t = from
+        for each p in list
+            if p.stop > t and p.start < upto
+                if p.start - t >= 60 then guideGap(row, t, p.start)
+                start = p.start
+                if start < from then start = from
+                stopAt = p.stop
+                if stopAt > upto then stopAt = upto
+                n = row.createChild("ContentNode")
+                title = getOr(p, "title", "")
+                if recs.DoesExist(epg + ":" + asString(p.start)) then title = "REC  " + title
+                n.title = title
+                n.playStart = start
+                n.playDuration = stopAt - start
+                n.addFields({ program: p, gap: false })
+                t = p.stop
+            end if
+        end for
+        if upto - t >= 60 or row.getChildCount() = 0 then guideGap(row, t, upto)
+    end for
+    res.shown = shown
+    res.filters = filters
+    res.filter = filter
     return root
 end function
+
+sub guideGap(row as object, start as integer, stopAt as integer)
+    n = row.createChild("ContentNode")
+    n.title = "No guide information"
+    n.playStart = start
+    n.playDuration = stopAt - start
+    n.addFields({ program: {}, gap: true })
+end sub

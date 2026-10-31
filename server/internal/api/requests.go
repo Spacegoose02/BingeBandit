@@ -209,7 +209,7 @@ func (s *Server) createRequest(w http.ResponseWriter, r *http.Request) {
 		s.Emit("request.approved", t)
 	case created:
 		s.Emit("request.created", t)
-		s.notifyAdmins(t, u)
+		s.notifyAdminsOfRequest(t, u)
 	case u.IsAdmin && t.Status == store.RequestPending:
 		// An admin asking for something already asked for approves it.
 		if err := s.Store.SetRequestStatus(t.ID, store.RequestApproved, "", "", u.ID); err == nil {
@@ -225,8 +225,8 @@ func (s *Server) createRequest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, code, t)
 }
 
-// notifyAdmins tells the admins (not the one asking) about a new request.
-func (s *Server) notifyAdmins(t *store.TitleRequest, from *store.User) {
+// notifyAdminsOfRequest tells the admins (not the one asking) about a new request.
+func (s *Server) notifyAdminsOfRequest(t *store.TitleRequest, from *store.User) {
 	users, err := s.Store.ListUsers()
 	if err != nil {
 		return
