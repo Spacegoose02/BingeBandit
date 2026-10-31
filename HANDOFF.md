@@ -2,20 +2,14 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-31. Latest release v0.36.0, 50 schema migrations._
+_Last updated: 2026-10-31. Latest release v0.37.0, 51 schema migrations._
 
-
-
-## Sports Hub fixes: NHL scoreboard, Multi-View freezes (2026-10-30, no migration)
-
-- **NHL "Couldn't reach ESPN":** the NHL's probable goalies come with `athlete.position` as a plain string ("G") where every other feed sends `{abbreviation}`, so decoding failed and the whole NHL scoreboard was dropped. `espnPosition` reads either (checked against ESPN's live NHL scoreboard; `TestPositionAsString`).
-- **Multi-View secondary screens freezing:** screens played at the live edge with no recovery. Each screen now plays the server's buffer behind live (`liveBuffer`, as the full-screen player does), reports a stall past the server's stall time (so the server can move the channel to its next stream), and rejoins when buffering or a standing-still picture lasts that long, or after an error (backing off up to 30 s). Still not tried on a device; a box with fewer hardware video decoders than screens can still struggle.
 
 ## Start here
 
 ### What this is
 
-BingeBandit is a self-hosted media server meant to replace Plex, Jellyfin, Dispatcharr and ErsatzTV in one app: libraries, live TV with a guide and DVR, custom channels, and apps for browsers, Android TV / Fire TV / phones and Roku. It's pre-1.0 and runs at home and on family members' TVs. Michael (GitHub `Spacegoose02`) owns it and makes the product calls; when this log says "Michael chose", that's a decision to keep unless he changes it.
+BingeBandit is a self-hosted media server meant to replace Plex, Jellyfin, Dispatcharr and ErsatzTV in one app: libraries, live TV with a guide and DVR, custom channels, and apps for browsers, Windows, Android TV / Fire TV / phones and Roku. It's pre-1.0 and runs at home and on family members' TVs. Michael (GitHub `Spacegoose02`) owns it and makes the product calls; when this log says "Michael chose", that's a decision to keep unless he changes it.
 
 ### Where things are
 
@@ -26,7 +20,7 @@ BingeBandit is a self-hosted media server meant to replace Plex, Jellyfin, Dispa
 | Build, run, fakes, checks, code rules, releasing | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | HTTP API and plugin protocol | [docs/API.md](docs/API.md), [docs/PLUGINS.md](docs/PLUGINS.md) |
 | Every board card and whether it's done | [docs/ROADMAP.md](docs/ROADMAP.md) |
-| The apps | [apps/tv/README.md](apps/tv/README.md), [apps/roku/README.md](apps/roku/README.md) |
+| The apps | [apps/tv/README.md](apps/tv/README.md), [apps/roku/README.md](apps/roku/README.md), [apps/desktop/README.md](apps/desktop/README.md) |
 | Why Go, SQLite, React and HLS | **Decisions made**, near the end of this file |
 
 ### The five-minute version
@@ -41,15 +35,16 @@ Before changing code, know these:
 
 - **Migrations are append-only and hashed.** Add a new one at the end of `store/schema.go`; `migrate_test.go` fails if a shipped one changes (v0.22.0 broke upgrades that way). Prefer prefs or settings rows when they'll do.
 - **Every user-facing item query goes through `store.visible`** (library access, profiles and kid mode). Hidden things answer 404.
-- **Three clients share the API:** web (`web/src/types.ts`), TV app (`apps/tv/src/types.ts`) and Roku. Older installed apps don't send new fields, so the server must keep stored values when a field is missing.
+- **Three clients share the API:** web (`web/src/types.ts`, which the Windows app shows full screen), TV app (`apps/tv/src/types.ts`) and Roku. Older installed apps don't send new fields, so the server must keep stored values when a field is missing.
 - **The TV app is mostly tested by typechecking.** Most TV work since the phone layouts was never run on a device; say so in the log when that's the case, and say what you did try.
 - **Plugins are separate binaries** under `server/plugins/`, listed in `build.sh`, `build.ps1`, the Dockerfile and `release.yml`. A new bundled plugin goes in all four.
 
-### Open work (task board, 2026-10-30)
+### Open work (task board, 2026-10-31)
 
 Several of these are being worked on in parallel; check open pull requests before starting one. Done in v0.35.0 and now in the log: Hue Sync and Game Lights per profile and per device on the TV, a profile's own Hue hub, the Sports Hub, the single OK click, the Roku settings passcode and the /tv install link.
 
-- **Sports settings on the web** from the board's screenshots: Sports rows, Sports channels, Multi-View, favorite teams by division.
+- **Sports on the web:** Multi-View, Sports channels and spoiler-free are on the web now (#149, #155). Still missing: box scores and game details, Sports rows and favorite teams by division.
+- **Windows app:** BingeBandit's own controls over mpv, Live TV and Watch Together in mpv, code signing and in-app updates.
 - **An admin switch for recommendations on the web.** (`recommendations_enabled` already exists in admin Settings, from the third feature board; check what the card still wants.)
 - **Bugs and security:** a review pass is in progress.
 
@@ -59,6 +54,8 @@ Most outside services and all hardware were only tested against fakes. These are
 
 - **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback, the guide's preview, audio track switching, drawn subtitles over video and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN (NASCAR's fields especially), Multi-View with four streams (each now ignores Android audio focus) and Game Lights rooms per TV.
 - **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
+- **Windows app:** a real Windows PC (mpv's named pipe, the NSIS installer), `fetch-mpv` against the live GitHub API.
+- **Discover in the TV player:** yt-dlp against real YouTube (blocked where it was built); it falls back to offering the YouTube app.
 - **Subtitles:** OpenSubtitles search and download against the real API, Roku thumbnails from the BIF file.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
@@ -69,6 +66,29 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Windows app with mpv, TV mode, and Multi-View on the web (2026-10-31, no migration)
+
+- **`apps/desktop`** (Electron, for a living-room PC): shows the server's web app full screen and hands videos to mpv, so every file plays as it is (HEVC, AV1, HDR, DTS, TrueHD) with no transcoding. A setup screen finds servers on the PC and the LAN or takes an address; F11 toggles full screen, Ctrl+Shift+S changes server.
+  - `window.bbDesktop` is exposed only to the configured server's origin (the preload checks it, the main process checks the sender again). mpv gets the session token as a Bearer header and reports back over its JSON IPC pipe.
+  - `web/src/DesktopPlayer.tsx` takes over `/play/:id` in the app (not in watch parties): resume and progress (so Trakt and Hue Sync work), audio and subtitle choice mapped to mpv track ids (sidecar subtitles too), intro and credits skip, the next episode in the same window, Back returns. `pickTracks` moved to `web/src/tracks.ts`.
+  - `mpv.conf` and `input.conf` are copied to `%APPDATA%\BingeBandit\mpv` on first use and belong to the user after that.
+  - **Release:** `release.yml` job `windows-desktop` builds an installer and a portable exe with mpv bundled. **CI:** `desktop-app` runs the tests with a real mpv.
+- **TV mode** (`web/src/tvNav.ts`, on by default in the app, `?tv=1` in a browser): arrows move focus to the nearest item, OK opens, Back/Escape/Backspace goes back and returns focus, the menu key or M opens a card's menu. The page is drawn about 1536 px wide; Ctrl+= / Ctrl+- / Ctrl+0 adjust it.
+- **Multi-View on the web** (`/multiview?ch=…`, #149 and #155): up to four Live TV channels, sound on one screen (click or OK moves it), a ⋯ menu per screen (full screen, change channel, remove), 1–4 screen layouts, next game of my teams, saved layouts in the same `multiViewLayouts` pref as the TV. The picker groups your teams' games, games on now and sports channels, and searches every channel. Each screen holds a Live TV seat, pings it, rejoins on drops and gives it back (`web/src/liveStream.ts`).
+- **Sports page:** "+ Multi-View" on games on your channels, a Sports channels section, a Multi-View count button, and spoiler-free (same `spoilerFree` pref as the TV). Shared helpers in `web/src/sportsHub.ts`.
+- **Tested:** `npm test` in `apps/desktop` (unit tests plus a real mpv: authenticated HTTP, resume, time events, next file with a sidecar subtitle, quitting; CI caught a race where the first `playback-restart` came before the pipe connected, now fixed). End to end on Linux under Xvfb with the real server, the app driven by Playwright, mpv with `vo=null` and `fakeiptv`: playback, auto-play next, watched marks, TV mode navigation, Multi-View with two then three streams, moving the sound, saving a layout. `electron-builder --win --dir` packages. **Not tested:** a real Windows PC, `fetch-mpv` against live GitHub, the game cards' Multi-View button against real ESPN.
+
+## Sports Hub fixes: NHL scoreboard, Multi-View freezes (2026-10-30, no migration)
+
+- **NHL "Couldn't reach ESPN":** the NHL's probable goalies come with `athlete.position` as a plain string ("G") where every other feed sends `{abbreviation}`, so decoding failed and the whole NHL scoreboard was dropped. `espnPosition` reads either (checked against ESPN's live NHL scoreboard; `TestPositionAsString`).
+- **Multi-View secondary screens freezing:** screens played at the live edge with no recovery. Each screen now plays the server's buffer behind live (`liveBuffer`, as the full-screen player does), reports a stall past the server's stall time (so the server can move the channel to its next stream), and rejoins when buffering or a standing-still picture lasts that long, or after an error (backing off up to 30 s). Still not tried on a device; a box with fewer hardware video decoders than screens can still struggle.
+
+## Discover videos play in the TV app (2026-10-30, no migration)
+
+- **Server** (`api/discoverplay.go`, `livetv/ytvideo.go`): `GET /api/discover/videos/{id}` runs yt-dlp (the `-J` call the YouTube Live relay uses, now shared as `ytdlpJSON`) and picks the best stream with sound and picture up to 1080p, answering `{url, type}`. HLS: `…/index.m3u8` with parts renumbered and passed on through `…/s/{n}`; otherwise MP4 through `…/video.mp4` with the player's Range. It goes through the server because YouTube ties its addresses to the IP that asked. Only videos currently on Discover are served (not a general YouTube proxy); streams are cached an hour and a 403/410 drops the cache. `?token=` is carried onto parts.
+- **TV** (`youtube` route, `YouTubeScreen`): a spinner while resolving, then the intro/trailer player; on failure, the reason with Open in YouTube and Close. Web already embeds YouTube; Roku has no Discover.
+- **Tested:** `go test ./internal/api ./internal/livetv ./internal/store` (playlist rewrite, parts, MP4 Range, token, refusing videos not on Discover, format picking with a fake yt-dlp); `tsc` and eslint for the TV app. **Not tested against real YouTube** (blocked in the build environment) or on a device.
 
 ## Roku: audio and subtitles, skip intro, a guide grid, trailers (2026-10-31, no migration)
 
