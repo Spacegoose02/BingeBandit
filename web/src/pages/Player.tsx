@@ -1,15 +1,16 @@
 import Hls from 'hls.js'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
+import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
 import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { useApi, useDocumentTitle } from '../hooks'
-import { channelLabel, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
-import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs } from '../types'
+import { channelLabel, commonLanguages, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
+import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
 
 const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
@@ -236,7 +237,11 @@ function PlayerView({
   together: { roomId: string | null; announce: boolean; error?: string }
 }) {
   const { item, files = [] } = detail
-  const file = files.find((f) => f.id === fileId) ?? files[0]
+  const baseFile = files.find((f) => f.id === fileId) ?? files[0]
+  // Subtitles downloaded while playing add to the file's streams.
+  const [streams, setStreams] = useState<MediaStream[] | null>(null)
+  const file = useMemo(() => (baseFile && streams ? { ...baseFile, streams } : baseFile), [baseFile, streams])
+  const { user } = useAuth()
   const nav = useNavigate()
   const initial = useRef(file ? pickTracks(file, prefs) : { audio: -1 })
 
@@ -280,7 +285,14 @@ function PlayerView({
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
-  const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary'>(null)
+  const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch'>(null)
+  const menuRef = useRef(menu)
+  menuRef.current = menu
+  // Seconds the subtitles are moved: positive shows them later.
+  const [subDelay, setSubDelay] = useState(0)
+  const [thumbs, setThumbs] = useState<TrickplayInfo | null>(null)
+  const [hover, setHover] = useState<{ t: number; x: number; width: number } | null>(null)
+  const seekRef = useRef<HTMLDivElement>(null)
   // Hue Sync's quick switch, once this profile turned it on (Account).
   const hue = useHueMode()
   const [hueSeen, setHueSeen] = useState(false)
@@ -463,6 +475,32 @@ function PlayerView({
     }
   }, [subIndex, file])
 
+  // Scrub previews; missing ones are made by the server for next time.
+  const fileKey = file?.id
+  useEffect(() => {
+    setThumbs(null)
+    if (!fileKey) return
+    let stale = false
+    api.get<TrickplayInfo>(`/api/files/${fileKey}/trickplay`).then(
+      (t) => !stale && setThumbs(t),
+      () => undefined,
+    )
+    return () => {
+      stale = true
+    }
+  }, [fileKey])
+  const hoverAt = (clientX: number) => {
+    const r = seekRef.current?.getBoundingClientRect()
+    if (!r || !duration) return
+    const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width))
+    setHover({ t: f * duration, x: f * r.width, width: r.width })
+  }
+  const nudgeSubDelay = (d: number) => {
+    const next = Math.round((subDelay + d) * 10) / 10
+    setSubDelay(next)
+    setToast(`Subtitles: ${delayLabel(next)}`)
+  }
+
   const seekTo = (t: number) => {
     const video = videoRef.current
     if (!video) return
@@ -619,7 +657,8 @@ function PlayerView({
     setControls(true)
     window.clearTimeout(hideTimer.current)
     hideTimer.current = window.setTimeout(() => {
-      if (!videoRef.current?.paused) {
+      // The subtitle search stays open while it's being used.
+      if (!videoRef.current?.paused && menuRef.current !== 'subsearch') {
         setControls(false)
         setMenu(null)
       }
@@ -637,6 +676,9 @@ function PlayerView({
         j: () => seek(position() - 10),
         l: () => seek(position() + 30),
         f: toggleFullscreen,
+        // As in VLC: G shows subtitles earlier, H later.
+        g: () => nudgeSubDelay(-0.5),
+        h: () => nudgeSubDelay(0.5),
         m: () => setMuted((m) => !m),
         ArrowUp: () => setVolume((v) => Math.min(1, v + 0.1)),
         ArrowDown: () => setVolume((v) => Math.max(0, v - 0.1)),
@@ -738,7 +780,15 @@ function PlayerView({
       return
     }
     setSubIndex(s ? s.index : -1)
+    setSubDelay(0)
     if (choice.burn >= 0) apply({ ...choice, burn: -1 })
+  }
+  const subtitleDownloaded = (all: MediaStream[], index: number) => {
+    setStreams(all)
+    setMenu(null)
+    const s = all.find((x) => x.index === index)
+    if (s) changeSubtitle(s)
+    setToast('Subtitles added')
   }
 
   if (!file) return <div className="player"><div className="player-error">This item has no playable file.</div></div>
@@ -751,7 +801,7 @@ function PlayerView({
       : choice.quality
         ? `${resolutionLabel(choice.quality)} Converting`
         : 'Converting'
-  const activeCue = cues.find((c) => time >= c.start && time <= c.end)
+  const activeCue = cues.find((c) => time - subDelay >= c.start && time - subDelay <= c.end)
   const pct = duration ? (time / duration) * 100 : 0
   const title = item.kind === 'episode' ? item.showTitle : item.title
   const subtitle = item.kind === 'episode' ? `${episodeLabel(item)} · ${item.title}` : item.year ? String(item.year) : ''
@@ -854,7 +904,15 @@ function PlayerView({
       </div>
 
       <div className="player-bottom" onClick={(e) => e.stopPropagation()}>
-        <div className="seek">
+        <div
+          className="seek"
+          ref={seekRef}
+          onMouseMove={(e) => hoverAt(e.clientX)}
+          onMouseLeave={() => setHover(null)}
+          onTouchMove={(e) => hoverAt(e.touches[0].clientX)}
+          onTouchEnd={() => setHover(null)}
+        >
+          {hover && <ScrubPreview fileId={file.id} info={thumbs} {...hover} />}
           <input
             type="range"
             min={0}
@@ -975,7 +1033,7 @@ function PlayerView({
                       {streamLabel(s)}
                     </button>
                   ))}
-                {subStreams.length > 0 && <div className="menu-section">Subtitles</div>}
+                <div className="menu-section">Subtitles</div>
                 {subStreams.length > 0 && (
                   <button className={subIndex === -1 && choice.burn === -1 ? 'active' : ''} onClick={() => changeSubtitle(null)}>
                     Off
@@ -990,7 +1048,22 @@ function PlayerView({
                     {streamLabel(s)}
                   </button>
                 ))}
+                {!user?.kid && <button onClick={() => setMenu('subsearch')}>Find subtitles online…</button>}
+                {subIndex >= 0 && (
+                  <>
+                    <div className="menu-section">Subtitle timing</div>
+                    <div className="menu-stepper">
+                      <button onClick={() => nudgeSubDelay(-0.5)} aria-label="Show subtitles earlier" title="Earlier (G)">−0.5s</button>
+                      <span>{delayLabel(subDelay)}</span>
+                      <button onClick={() => nudgeSubDelay(0.5)} aria-label="Show subtitles later" title="Later (H)">+0.5s</button>
+                    </div>
+                    {subDelay !== 0 && <button onClick={() => setSubDelay(0)}>Reset timing</button>}
+                  </>
+                )}
               </div>
+            )}
+            {menu === 'subsearch' && (
+              <SubtitleSearch fileId={file.id} language={prefs.subtitleLanguage} onDone={subtitleDownloaded} />
             )}
           </div>
           <button className="icon-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
@@ -1021,6 +1094,107 @@ function PlayerView({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function delayLabel(d: number): string {
+  if (d === 0) return 'In sync'
+  return `${Math.abs(d).toFixed(1)}s ${d > 0 ? 'later' : 'earlier'}`
+}
+
+/** The thumbnail and time above the seek bar where the pointer is. */
+function ScrubPreview({ fileId, info, t, x, width }: { fileId: number; info: TrickplayInfo | null; t: number; x: number; width: number }) {
+  const w = 240
+  let thumb: React.CSSProperties | null = null
+  if (info) {
+    const scale = w / info.width
+    const per = info.columns * info.rows
+    const n = Math.min(info.count - 1, Math.floor(t / info.interval))
+    const at = n % per
+    thumb = {
+      width: w,
+      height: Math.round(info.height * scale),
+      backgroundImage: `url(/api/files/${fileId}/trickplay/${Math.floor(n / per)}.jpg)`,
+      backgroundSize: `${info.columns * w}px ${info.rows * info.height * scale}px`,
+      backgroundPosition: `-${(at % info.columns) * w}px -${Math.floor(at / info.columns) * info.height * scale}px`,
+    }
+  }
+  const boxW = thumb ? w : 80
+  return (
+    <div className="scrub-preview" style={{ left: Math.max(0, Math.min(width - boxW, x - boxW / 2)), width: boxW }}>
+      {thumb && <div className="scrub-thumb" style={thumb} />}
+      <div className="scrub-time">{formatClock(t)}</div>
+    </div>
+  )
+}
+
+/** Searches OpenSubtitles for the file and adds the one picked. */
+function SubtitleSearch({ fileId, language, onDone }: { fileId: number; language: string; onDone: (streams: MediaStream[], index: number) => void }) {
+  const [lang, setLang] = useState(normLang(language) || 'eng')
+  const [results, setResults] = useState<SubtitleResult[] | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState<number | null>(null)
+  useEffect(() => {
+    let stale = false
+    setResults(null)
+    setError('')
+    api.get<{ results: SubtitleResult[] }>(`/api/files/${fileId}/subtitles/search?lang=${lang}`).then(
+      (r) => !stale && setResults(r.results),
+      (e) => !stale && setError((e as Error).message),
+    )
+    return () => {
+      stale = true
+    }
+  }, [fileId, lang])
+  const pick = async (r: SubtitleResult) => {
+    setBusy(r.fileId)
+    setError('')
+    try {
+      const res = await api.post<{ streams: MediaStream[]; index: number }>(`/api/files/${fileId}/subtitles/download`, {
+        fileId: r.fileId,
+        language: r.language,
+        hearingImpaired: r.hearingImpaired,
+      })
+      onDone(res.streams, res.index)
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+  const langs = commonLanguages.includes(lang) ? commonLanguages : [lang, ...commonLanguages]
+  return (
+    <div className="menu player-menu subsearch">
+      <div className="menu-section">Find subtitles online</div>
+      <label className="subsearch-lang">
+        <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label="Language">
+          {langs.map((l) => (
+            <option key={l} value={l}>{languageName(l)}</option>
+          ))}
+        </select>
+      </label>
+      {error && <p className="subsearch-note bad">{error}</p>}
+      {!results && !error && <p className="subsearch-note">Searching OpenSubtitles…</p>}
+      {results?.length === 0 && <p className="subsearch-note">Nothing found in {languageName(lang)}.</p>}
+      {results?.slice(0, 30).map((r) => (
+        <button key={r.fileId} disabled={busy !== null} onClick={() => pick(r)} title={r.name}>
+          <span className="subsearch-name">
+            {busy === r.fileId ? 'Downloading…' : r.name}
+            <small>
+              {[
+                r.hashMatch && 'Made for this file',
+                `${r.downloads.toLocaleString()} downloads`,
+                r.hearingImpaired && 'SDH',
+                r.ai && 'Machine translated',
+                r.trusted && 'Trusted',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </small>
+          </span>
+        </button>
+      ))}
     </div>
   )
 }

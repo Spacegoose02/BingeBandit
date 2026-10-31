@@ -240,6 +240,40 @@ export default function AdminSettings() {
         </section>
 
         <section className="panel form">
+          <h3>Scrub previews and subtitles</h3>
+          <label className="check">
+            <input type="checkbox" checked={s.trickplay_enabled !== 'false'} onChange={set('trickplay_enabled')} />
+            Show thumbnails while scrubbing through movies and episodes
+          </label>
+          <p className="muted small">
+            The “Make scrub previews” task under <Link to="/admin/tasks">Scheduled Tasks</Link> makes them from each file's keyframes during
+            maintenance hours, and a file played before then gets them in the background. They take a few MB per hour of video.
+          </p>
+          <label>
+            OpenSubtitles API key (for “Find subtitles online” in the players)
+            <input value={s.opensubtitles_api_key ?? ''} onChange={set('opensubtitles_api_key')} placeholder="Paste your key" autoComplete="off" spellCheck={false} />
+          </label>
+          <div className="field-grid">
+            <label>
+              OpenSubtitles username
+              <input value={s.opensubtitles_username ?? ''} onChange={set('opensubtitles_username')} autoComplete="off" spellCheck={false} />
+            </label>
+            <label>
+              OpenSubtitles password
+              <input type="password" value={s.opensubtitles_password ?? ''} onChange={set('opensubtitles_password')} autoComplete="new-password" />
+            </label>
+          </div>
+          <p className="muted small">
+            Make a free consumer key at{' '}
+            <a href="https://www.opensubtitles.com/en/consumers" target="_blank" rel="noreferrer">
+              opensubtitles.com/consumers
+            </a>
+            . The account is optional, but OpenSubtitles allows more downloads a day with one. Downloaded subtitles are saved
+            beside the video as .srt files, so the media folder must be writable. Kid profiles can't download.
+          </p>
+        </section>
+
+        <section className="panel form">
           <h3>Library</h3>
           <label className="check">
             <input type="checkbox" checked={s.watch_folders === 'true'} onChange={set('watch_folders')} />

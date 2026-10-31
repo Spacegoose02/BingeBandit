@@ -15,6 +15,7 @@ import { roomPosition, TogetherPanel, useTogether } from '../together'
 import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
+import { delayLabel, ScrubThumb, SubtitleSearch, THUMB_WIDTH, useTrickplay } from '../subtitleTools'
 
 const REPORT_EVERY = 10 // seconds
 const STALL_MS = 8000 // direct play with no progress this long falls back to the transcoder
@@ -220,6 +221,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const [sub, setSub] = useState<MediaStream | undefined>()
   const [cues, setCues] = useState<Cue[]>([])
   const [menu, setMenu] = useState(false)
+  const [subSearch, setSubSearch] = useState(false)
+  const [subDelay, setSubDelay] = useState(0) // seconds; positive shows subtitles later
+  const [subLang, setSubLang] = useState<string | undefined>()
   // -1: play the file as is when this device can; 0: have the server convert
   // it at its own size; otherwise the converted height.
   const [quality, setQuality] = useState(-1)
@@ -260,6 +264,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           return
         }
         setFile(f)
+        setSubLang(prefs?.subtitleLanguage)
         const picked = pickTracks(f.streams ?? [], prefs)
         setAudio(picked.audio)
         audioRef.current = picked.audio
@@ -443,6 +448,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 
   const chooseSub = (s?: MediaStream) => {
     setSub(s)
+    setSubDelay(0) // another file, another timing
     const burn = s && IMAGE_SUBS.has(s.codec) ? s.index : -1
     if (burn !== burnRef.current) {
       burnRef.current = burn
@@ -643,6 +649,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   useEffect(() => {
     backInterceptor.current = () => {
       if (lock.handleBack()) return true
+      if (subSearch) {
+        setSubSearch(false)
+        return true
+      }
       if (togetherOpen) {
         setTogetherOpen(false)
         return true
@@ -670,7 +680,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0) return
-    if (menu || togetherOpen || summary) return // the menu's buttons handle the keys
+    if (menu || togetherOpen || summary || subSearch) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
       if (!paused) showControls('full')
@@ -717,7 +727,20 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const subs = (file?.streams ?? []).filter((s) => s.type === 'subtitle' && (TEXT_SUBS.has(s.codec) || IMAGE_SUBS.has(s.codec)))
   // ExoPlayer numbers audio tracks in file order, so the direct-play choice is a position.
   const audioPos = audios.findIndex((s) => s.index === audio)
-  const cue = sub && TEXT_SUBS.has(sub.codec) ? cueAt(cues, pos) : ''
+  const cue = sub && TEXT_SUBS.has(sub.codec) ? cueAt(cues, pos - subDelay) : ''
+  const nudgeSubDelay = (d: number) => setSubDelay((v) => Math.round((v + d) * 10) / 10)
+  const subtitleDownloaded = (streams: MediaStream[], index: number) => {
+    setSubSearch(false)
+    if (file) setFile({ ...file, streams })
+    const s = streams.find((x) => x.index === index)
+    if (s) chooseSub(s)
+    say('Subtitles added')
+  }
+  // Scrub previews: above the marker while scrubbing (TV) or dragging (phone).
+  const thumbs = useTrickplay(file?.id)
+  const [dragT, setDragT] = useState<number | null>(null)
+  const [barWidth, setBarWidth] = useState(0)
+  const previewT = scrub ?? dragT
 
   const title = item ? (item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title) : ''
   const subtitleLine = item?.kind === 'episode' ? item.title : ''
@@ -765,8 +788,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           Phone: tapping the picture shows or hides the controls. */}
       <Pressable android_disableSound={quietPress}
         style={StyleSheet.absoluteFill}
-        hasTVPreferredFocus={!menu && !togetherOpen && !summary && controls !== 'full'}
-        focusable={!menu && !togetherOpen && !summary && controls !== 'full'}
+        hasTVPreferredFocus={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
+        focusable={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
         onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
       />
       {!!cue && (
@@ -781,7 +804,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !lock.locked && (
+      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !subSearch && !lock.locked && (
         <Pressable android_disableSound={quietPress} style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
@@ -794,9 +817,17 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               {!!subtitleLine && <Text style={st.sub} numberOfLines={1}>{subtitleLine}</Text>}
             </View>
           </View>
-          <View>
+          <View onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}>
+            {file && thumbs && previewT !== null && duration > 0 && barWidth > 0 && (
+              <View
+                pointerEvents="none"
+                style={[st.preview, { left: Math.max(0, Math.min(barWidth - THUMB_WIDTH, (previewT / duration) * barWidth - THUMB_WIDTH / 2)) }]}
+              >
+                <ScrubThumb fileId={file.id} info={thumbs} t={previewT} />
+              </View>
+            )}
             {isPhone ? (
-              <SeekBar pct={pct} duration={duration} onSeek={(t) => {
+              <SeekBar pct={pct} duration={duration} onDrag={setDragT} onSeek={(t) => {
                 userSeek(t)
                 showControls('full')
               }} />
@@ -960,8 +991,34 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
             ))}
           </ScrollView>
           {subs.length === 0 && <Text style={st.hint}>This file has no subtitles.</Text>}
+          {!current()?.user.kid && file && (
+            <ScrollView horizontal contentContainerStyle={st.menuRow}>
+              <Button
+                small
+                label="Find subtitles online"
+                onPress={() => {
+                  setMenu(false)
+                  setControls('hidden')
+                  setSubSearch(true)
+                }}
+              />
+            </ScrollView>
+          )}
+          {!!sub && TEXT_SUBS.has(sub.codec) && (
+            <>
+              <Text style={st.menuTitle}>Subtitle timing · {delayLabel(subDelay)}</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small label="Earlier  −0.5s" onPress={() => nudgeSubDelay(-0.5)} />
+                <Button small label="Later  +0.5s" onPress={() => nudgeSubDelay(0.5)} />
+                {subDelay !== 0 && <Button small label="Reset" onPress={() => setSubDelay(0)} />}
+              </ScrollView>
+            </>
+          )}
           {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} style={st.done} /> : <Text style={st.hint}>Back closes this menu</Text>}
         </View>
+      )}
+      {subSearch && file && (
+        <SubtitleSearch fileId={file.id} language={subLang} onDone={subtitleDownloaded} style={barsPad} />
       )}
       {togetherOpen && (
         <TogetherPanel
@@ -981,13 +1038,14 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 }
 
 /** A touch progress bar: drag or tap to pick a time; the video seeks when the finger lifts. */
-function SeekBar({ pct, duration, onSeek }: { pct: number; duration: number; onSeek: (t: number) => void }) {
+function SeekBar({ pct, duration, onSeek, onDrag }: { pct: number; duration: number; onSeek: (t: number) => void; onDrag: (t: number | null) => void }) {
   const bar = useRef<View>(null)
   const box = useRef({ x: 0, width: 1 }) // the bar's position on screen
   const [drag, setDrag] = useState<number | null>(null) // 0..1 while the finger is down
   // Screen coordinates: locationX would be relative to whatever is under the finger (e.g. the time label).
   const at = (pageX: number) => Math.max(0, Math.min(1, (pageX - box.current.x) / box.current.width))
   const shown = drag !== null ? drag * 100 : pct
+  useEffect(() => onDrag(drag !== null ? drag * duration : null), [drag, duration, onDrag])
   return (
     <View
       ref={bar}
@@ -1051,6 +1109,7 @@ const st = StyleSheet.create(scaled({
   menuRow: { paddingVertical: 10 },
   controlRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   seekFocus: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 6 },
+  preview: { position: 'absolute', bottom: '100%', marginBottom: 16 },
   scrubMark: { position: 'absolute', top: -8, width: 6, height: 26, marginLeft: -3, borderRadius: 3, backgroundColor: '#fff' },
   summaryTitle: { color: colors.text, fontSize: font.title, fontWeight: '700' },
   summaryMeta: { color: colors.muted, fontSize: font.small, marginTop: 8 },

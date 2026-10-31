@@ -109,6 +109,9 @@ Shows list their seasons, and each season lists its episodes with a ✓ on the o
 The web player plays a file directly when your browser can, and otherwise converts it on the fly. While watching you can:
 
 - switch quality, audio track and subtitles,
+- see a thumbnail of where you'll land while dragging or scrubbing the progress bar (made by the "Make scrub previews" task, or in the background the first time a file plays),
+- move subtitles earlier or later in half-second steps when they're out of sync (Options → Subtitle timing, or G and H on a keyboard),
+- find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
 - skip intros and credits,
 - carry on to the next episode automatically,
 - start **Watch Together** to watch in sync with someone else on the server.

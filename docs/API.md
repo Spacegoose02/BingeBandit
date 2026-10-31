@@ -120,6 +120,11 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |
+| GET | `/files/{id}/subtitles/search?lang=` | Search OpenSubtitles for the file (`lang` is a language name or code, English by default) → `{language, results: [{fileId, name, language, downloads, hearingImpaired, hashMatch, trusted, ai}]}`, best first. 409 without an API key in Settings; 403 for kid profiles. |
+| POST | `/files/{id}/subtitles/download` | `{fileId, language, hearingImpaired}` from a search result: saves it beside the video as `<video>.<lang>.srt` → `{streams, index}` (the file's streams and the new one's index). 429 when the day's OpenSubtitles downloads are used up. |
+| GET | `/files/{id}/trickplay` | Scrub previews → `{interval, width, height, columns, rows, count, sheets}`: thumbnail `n` (at `n × interval` seconds) is in sheet `n / (columns × rows)`, column `n % columns`, row `(n / columns) % rows`. 404 until they're made (asking starts making them). |
+| GET | `/files/{id}/trickplay/{n}.jpg` | Sheet `n` (from 0) of thumbnails. |
+| GET | `/files/{id}/trickplay.bif?from=` | The thumbnails as a Roku BIF file; `from` is where a conversion started, in seconds. |
 | POST | `/progress` | `{playSessionId, itemId, fileId, position, duration, paused, stopped, mode, client, played}`. Send every ~10 s while playing and once with `stopped: true`. `played` is the total seconds actually played in this play session (the server caps it at wall-clock time). Optional `lights: false` keeps Hue Sync and other light plugins off this player (left out means on). This drives resume points, watched state, Now Playing, history and webhooks. |
 
 ## Live TV and DVR
