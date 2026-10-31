@@ -190,6 +190,7 @@ function IntroVideo({
         style={StyleSheet.absoluteFill}
         resizeMode="contain"
         paused={!active}
+        selectedTextTrack={{ type: SelectedTrackType.DISABLED }}
         onEnd={onDone}
         onError={onError ?? onDone}
       />
@@ -826,6 +827,11 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           resizeMode="contain"
           paused={paused || !active}
           selectedAudioTrack={mode === 'direct' && audioPos >= 0 ? { type: SelectedTrackType.INDEX, value: audioPos } : undefined}
+          // The app draws text subtitles itself (cues above) and the server
+          // burns in image ones. Left alone, ExoPlayer also shows a file's
+          // default or forced track (or follows Android's caption setting),
+          // which Subtitles → Off can't turn off.
+          selectedTextTrack={{ type: SelectedTrackType.DISABLED }}
           onProgress={onProgress}
           onLoad={(d) => {
             // ExoPlayer quietly drops a video track this device can't decode
