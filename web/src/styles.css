@@ -932,6 +932,20 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .menu-anchor { position: relative; }
 .player-menu { position: absolute; right: 0; bottom: 48px; max-height: 60vh; overflow-y: auto; min-width: 260px; }
 .player-summary { width: min(420px, 80vw); }
+.seek { position: relative; }
+.scrub-preview { position: absolute; bottom: 26px; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.scrub-thumb { border-radius: 6px; background-color: #000; background-repeat: no-repeat; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 8px 24px rgba(0, 0, 0, 0.6); }
+.scrub-time { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.75); }
+.menu-stepper { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.menu-stepper span { flex: 1; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.subsearch { width: min(440px, 90vw); }
+.subsearch-lang { display: block; padding: 4px 12px 8px; }
+.subsearch-lang select { width: 100%; }
+.subsearch-note { margin: 0; padding: 6px 12px 10px; font-size: 13px; color: var(--muted); }
+.subsearch-note.bad { color: var(--danger); }
+.subsearch-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.subsearch-name, .subsearch-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subsearch-name small { color: var(--muted); font-size: 12px; }
 .player-summary p { margin: 0; padding: 4px 12px 10px; font-size: 14px; line-height: 1.5; color: var(--text); }
 .spinner {
   position: absolute;

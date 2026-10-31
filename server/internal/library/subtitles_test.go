@@ -108,3 +108,53 @@ func TestVideoDir(t *testing.T) {
 		}
 	}
 }
+
+// A downloaded subtitle lands beside the video without replacing one already
+// there, and shows up in the file's streams.
+func TestSaveSubtitle(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	lib := &store.Library{Name: "Movies", Kind: "movies", Paths: []string{dir}}
+	st.CreateLibrary(lib)
+	video := filepath.Join(dir, "Movie.mkv")
+	os.WriteFile(video, nil, 0o644)
+	os.WriteFile(filepath.Join(dir, "Movie.en.srt"), []byte("mine"), 0o644)
+	id, err := st.UpsertItem(&store.Item{LibraryID: lib.ID, Kind: "movie", Title: "Movie", MatchKey: "movie:movie"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf := &store.MediaFile{ItemID: id, Path: video, Size: 1, Streams: []store.Stream{{Index: 0, Type: "video", Codec: "h264"}}}
+	if err := st.UpsertFile(mf, 1); err != nil {
+		t.Fatal(err)
+	}
+	mf, _ = st.FileByPath(video)
+	sc := NewScanner(st, nil, "ffprobe-missing")
+	streams, index, err := sc.SaveSubtitle(mf, "en", true, []byte("new"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "Movie.en.srt")); string(b) != "mine" {
+		t.Error("existing subtitle overwritten")
+	}
+	var got *store.Stream
+	for i := range streams {
+		if streams[i].Index == index {
+			got = &streams[i]
+		}
+	}
+	if got == nil || got.External != "Movie.en.sdh.srt" || got.Language != "eng" || !got.HearingImpaired {
+		t.Fatalf("new stream %+v", got)
+	}
+	if again, _ := st.File(mf.ID); len(again.Streams) != 3 {
+		t.Errorf("stored %d streams, want video and two subtitles", len(again.Streams))
+	}
+	// Same language again: numbered, still English.
+	_, index, _ = sc.SaveSubtitle(mf, "en", true, []byte("again"))
+	if _, err := os.Stat(filepath.Join(dir, "Movie.en.sdh.2.srt")); err != nil || index < 0 {
+		t.Errorf("second download: %v, index %d", err, index)
+	}
+}

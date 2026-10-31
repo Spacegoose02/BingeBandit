@@ -22,12 +22,14 @@ import (
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/opensubs"
 	"bingebandit/internal/plugins"
 	"bingebandit/internal/sports"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
+	"bingebandit/internal/trickplay"
 	"bingebandit/internal/web"
 )
 
@@ -42,6 +44,8 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
+	Trickplay  *trickplay.Generator
+	OpenSubs   *opensubs.Client
 	Live       *livetv.Manager
 	Logos      *livetv.LogoCache
 	LogoLib    *livetv.LogoLibrary
@@ -296,6 +300,11 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/progress", s.progress)
 			r.Get("/files/{id}/direct", s.directPlay)
 			r.Get("/files/{id}/subtitles/{stream}", s.subtitle)
+			r.Get("/files/{id}/subtitles/search", s.searchSubtitles)
+			r.Post("/files/{id}/subtitles/download", s.downloadSubtitle)
+			r.Get("/files/{id}/trickplay", s.trickplayInfo)
+			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
+			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
