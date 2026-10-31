@@ -32,6 +32,7 @@ const (
 	SettingOpenSubsUser      = "opensubtitles_username" // an OpenSubtitles account raises the daily download limit
 	SettingOpenSubsPassword  = "opensubtitles_password"
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
+	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
 	SettingContinueDays      = "continue_watching_days"  // titles not played for this long leave Continue Watching; 0 = never
 	SettingRecentDays        = "recently_added_days"     // Recently Added only shows titles added this many days back; 0 = any
@@ -111,6 +112,7 @@ var SettingDefaults = map[string]string{
 	SettingOpenSubsUser:      "",
 	SettingOpenSubsPassword:  "",
 	SettingRecommendations:   "true",
+	SettingRequests:          "true",
 	SettingWatchedPercent:    "90",
 	SettingContinueDays:      "0",
 	SettingRecentDays:        "90",

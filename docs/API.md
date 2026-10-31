@@ -91,7 +91,9 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 |---|---|---|
 | GET | `/home` | Hero, Continue Watching and the Home rows. |
 | GET | `/libraries` | Libraries you can see. |
-| GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
+| GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. Filters, any mix: `genre`, `yearFrom`, `yearTo`, `unwatched=1` (movies not watched, shows with an episode left), `minRating` (out of 10). Filtered pages send no collections and fold none away. |
+| GET | `/libraries/{id}/filters` | `{genres, decades}` for a filter bar; decades newest first (`2020`, `2010`…). |
+| GET | `/people?name=` | A cast or crew member by name: `{name, photo, titles: [{item, role, kind}]}`, newest first, only titles you can see. `kind` is `cast` if they acted in it; `role` is their parts, else their jobs. 404 when nothing credits them. |
 | GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
 | POST | `/admin/libraries/{id}/kometa` | Admin. Body: a Kometa collection file (YAML). `?dryRun=1` only returns the plan; `?recommended=1` shows collections on Recommended unless the file sets `visible_library: false`. Returns `{collections: [{id, name, lists, sort, sortTitle, exists, visible, skipped}]}`; posters and list syncs continue in the background. |
 | PUT, POST | `/admin/collections/{id}/artwork` | Admin. `PUT {type: "poster"\|"backdrop", url}` downloads an image (or a ThePosterDB poster page; an empty url resets it); `POST ?type=` takes a multipart `file`. |
@@ -103,6 +105,11 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/items/{id}/next` | The next episode to play. |
 | POST | `/items/{id}/watched`, `/items/{id}/unwatched` | Mark watched or unwatched. |
 | GET | `/search?q=` | Search titles and people. |
+| GET | `/requests` | Your title requests (admins: `?all=1` for everyone's) → `{requests, enabled, canRequest, reason}`; admins also get `handlers`, the plugins that fetch approved requests. A request is `{id, kind, tmdbId, title, year, poster, overview, requestedBy, people, note, status, reason, link, mine}`; `status` is `pending`, `approved` (waiting for the plugin), `sent`, `failed`, `declined` or `available`. |
+| GET | `/requests/search?q=&kind=` | TMDB movies and shows to request: `[{kind, tmdbId, title, year, overview, poster, itemId, onServer, request}]`. 403 for kids or when an admin turned requests off (setting `requests_enabled`); 503 without a TMDB key. |
+| POST | `/requests` | `{kind, tmdbId, title, year, poster, overview, note}` asks for a title (201), or joins an existing request for it (200). 409 when it's already in a library. An admin's request is approved at once. |
+| DELETE | `/requests/{id}` | Take your name off a request that isn't approved (or was declined, or is in); admins delete any with `?all=1`. |
+| POST | `/admin/requests/{id}/approve`, `/admin/requests/{id}/decline` | Admin. Decline takes `{reason}`, which the people who asked are told. Approving a failed request tries again. |
 | GET | `/discover` | Discover rows: `[{id, name, videos: [{id, title, description, publishedAt}]}]`, newest first. `id` is the YouTube video id (thumbnail `https://i.ytimg.com/vi/{id}/mqdefault.jpg`). |
 | GET | `/discover/videos/{id}` | Plays a Discover video through the server (TV app): yt-dlp finds its stream and the answer is `{url, type}`, an HLS playlist (`/discover/videos/{id}/index.m3u8`, its parts at `…/s/{n}`; `type` `m3u8`) or an MP4 file (`…/video.mp4`, with Range; `type` `mp4`). Only videos on Discover; 502 with the reason when YouTube won't give one. |
 | GET / POST / DELETE | `/watchlist`, `/watchlist/{id}` | Your watchlist. |
@@ -228,6 +235,7 @@ Admins manage plugins under `/api/admin/plugins`: `GET /admin/plugins/catalog` (
 | `player.play` / `player.pause` / `player.resume` / `player.stop` | The player itself, at once: opened, paused, resumed, closed (`reason` is `stopped`, or `timeout` when it stopped pinging for 45 s). For lights and automations. Extra fields: `sessionId`, `fileId`, `paused`, `lights` (false when Hue Sync is switched off on that device). |
 | `recording.started` / `recording.completed` / `recording.failed` | DVR recordings. `data` is the recording, without its file path. |
 | `sports.game.start` / `sports.score` / `sports.game.end` | A game of a team someone follows on the Sports page started, someone scored, or it ended. `data` has the `game` (from ESPN), its `sport`, the `scorer` team id, and the `fans` who follow each team. |
+| `request.created` / `request.approved` / `request.declined` / `request.available` | Title requests: someone asked, an admin approved or declined, or the title arrived in a library. `data` is the request. |
 | `test` | The *Send test* button. |
 
 Playback events also carry `userId`, `tmdbId`, and for episodes `showTmdbId`, `season`, `episode` and `episodeTitle`.

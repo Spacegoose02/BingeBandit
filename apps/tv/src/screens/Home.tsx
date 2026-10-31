@@ -7,7 +7,7 @@ import { refreshGameLights } from '../hue'
 import { Icon, type IconName } from '../icons'
 import { favoritesChanged, homeBack, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
-import type { HomeData, Item, Library, User } from '../types'
+import type { HomeData, Item, Library, RequestableTitle, TitleRequest, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
@@ -327,7 +327,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       )}
       {tab === 'home' && <HomeRows />}
       {library && <LibraryTab key={library.id} library={library} onTogglePin={() => togglePin(library)} />}
-      {tab === 'search' && <Search />}
+      {tab === 'search' && <Search kid={kid} />}
       {tab === 'kidsMovies' && kid && <KidsTitles key="movie" kind="movie" />}
       {tab === 'kidsShows' && kid && <KidsTitles key="show" kind="show" />}
       {tab === 'more' && (
@@ -517,16 +517,21 @@ function AccountMenu({ onClose, onSettings, onSwitchProfile, onSignOut }: { onCl
   )
 }
 
-/** Type to search titles and people; results update as you type. */
-function Search() {
+/**
+ * Type to search titles and people; results update as you type. Below them,
+ * movies and shows the server doesn't have can be requested (not for kids).
+ */
+function Search({ kid }: { kid: boolean }) {
   const nav = useNav()
   const [q, setQ] = useState('')
   const [focused, setFocused] = useState(false)
   const [results, setResults] = useState<Item[] | null>(null)
+  const [requestable, setRequestable] = useState<RequestableTitle[]>([])
   const [error, setError] = useState('')
   useEffect(() => {
     if (q.trim().length < 2) {
       setResults(null)
+      setRequestable([])
       return
     }
     const t = setTimeout(() => {
@@ -537,9 +542,24 @@ function Search() {
         },
         (e) => setError(e.message),
       )
+      // Requests off, or no TMDB key: the section just doesn't show.
+      if (!kid) {
+        api.get<RequestableTitle[]>(`/api/requests/search?q=${encodeURIComponent(q.trim())}`).then(
+          (r) => setRequestable(r.filter((x) => !x.onServer).slice(0, 12)),
+          () => setRequestable([]),
+        )
+      }
     }, 350)
     return () => clearTimeout(t)
-  }, [q])
+  }, [q, kid])
+  const ask = (r: RequestableTitle) => {
+    if (r.request && (r.request.mine || r.request.status !== 'pending')) return
+    const { kind, tmdbId, title, year, poster, overview } = r
+    api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview }).then(
+      (req) => setRequestable((list) => list.map((x) => (x.kind === kind && x.tmdbId === tmdbId ? { ...x, request: req } : x))),
+      (e) => setError(e.message),
+    )
+  }
   // Like Approved Movies/Shows: the guide spans the whole screen, so Right
   // from the side menu always lands in the search box (or the result you
   // were last on). On a Shield, Right from the open menu found nothing to
@@ -571,9 +591,48 @@ function Search() {
             ))}
           </View>
         )}
+        {requestable.length > 0 && (
+          <>
+            <Text style={st.requestHeading}>Not on the server? Pick one to request it</Text>
+            <View style={st.grid}>
+              {requestable.map((r) => {
+                const src = image(r.poster, 'w342')
+                return (
+                  <View key={`${r.kind}:${r.tmdbId}`} style={st.gridCell}>
+                    <Focusable onPress={() => ask(r)} style={st.requestPoster}>
+                      {src ? <Image source={src} style={st.requestImg} resizeMethod="resize" /> : <Text style={st.requestFallback}>{r.title}</Text>}
+                    </Focusable>
+                    <Text style={st.gridTitle} numberOfLines={1}>{r.title}{r.year ? ` (${r.year})` : ''}</Text>
+                    <Text style={[st.requestStatus, r.request?.mine && st.requestMine]} numberOfLines={1}>
+                      {requestLabel(r)}
+                    </Text>
+                  </View>
+                )
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
     </TVFocusGuideView>
   )
+}
+
+function requestLabel(r: RequestableTitle): string {
+  const req = r.request
+  if (!req) return r.kind === 'show' ? 'Show · press to request' : 'Movie · press to request'
+  switch (req.status) {
+    case 'pending':
+      return req.mine ? 'Requested · waiting for approval' : 'Someone asked · press to ask too'
+    case 'approved':
+    case 'sent':
+      return 'Approved · on its way'
+    case 'failed':
+      return 'Approved · waiting for the admin'
+    case 'declined':
+      return 'Declined'
+    case 'available':
+      return 'On the server'
+  }
 }
 
 /** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */
@@ -807,4 +866,10 @@ const st = StyleSheet.create(scaled({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   gridCell: { marginBottom: 30 },
   gridTitle: { color: colors.text, fontSize: font.small, marginTop: 8, width: 230 },
+  requestHeading: { color: colors.text, fontSize: font.heading, marginTop: 20, marginBottom: 20 },
+  requestPoster: { width: 230, height: 345, marginRight: 30, borderRadius: 11, overflow: 'hidden', backgroundColor: colors.surface2, justifyContent: 'center' },
+  requestImg: { width: '100%', height: '100%', borderRadius: 11 },
+  requestFallback: { color: colors.muted, fontSize: font.small, textAlign: 'center', padding: 12 },
+  requestStatus: { color: colors.muted, fontSize: font.small, marginTop: 2, width: 230 },
+  requestMine: { color: colors.accent },
 }))

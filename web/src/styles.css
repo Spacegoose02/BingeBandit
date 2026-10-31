@@ -159,6 +159,17 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .select-label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .select-label select { width: auto; padding: 7px 10px; font-size: 14px; }
 
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: -10px 0 22px; }
+.filter-bar select { width: auto; padding: 7px 10px; font-size: 14px; }
+.filter-toggle { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; color: var(--muted); font-weight: 600; font-size: 13px; }
+.filter-toggle.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.person-head { display: flex; align-items: center; gap: 24px; margin-bottom: 30px; }
+.person-head .person-photo { width: 140px; flex: none; }
+.person-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+a.person-card { color: inherit; text-decoration: none; }
+a.person-card:hover .card-title { color: var(--accent); }
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -1292,6 +1303,17 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   .tvsheet-address { font-size: 26px; margin: 4px 0 10px !important; }
   .tvsheet-done { break-inside: avoid; padding-top: 12px; }
 }
+
+/* Requests */
+.request-row .request-poster { width: 46px; height: 69px; border-radius: 6px; overflow: hidden; background: var(--surface); display: grid; place-items: center; flex: none; color: var(--muted); }
+.request-row .request-poster img { width: 100%; height: 100%; object-fit: cover; }
+.request-row .grow { min-width: 200px; }
+.request-results { margin-bottom: 32px; }
+.request-action { margin-top: 6px; }
+.request-overview { max-height: 9em; overflow: auto; }
+.search-request { margin: -12px 0 20px; }
+.search-request a { color: var(--accent); }
+.tabs .count { font-size: 12px; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; margin-left: 4px; }
 
 /* The Windows app's player page: mpv plays over it, so this shows only between files or after an error. */
 .desktop-player { position: fixed; inset: 0; display: grid; place-items: center; background: #000 center / cover no-repeat; }

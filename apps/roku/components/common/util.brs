@@ -230,11 +230,14 @@ sub onFireAndForget(event as object)
     doneTask(event.getRoSGNode())
 end sub
 
-' Where selecting a tile goes: a collection opens as a grid, anything else
-' its details page.
+' Where selecting a tile goes: a collection or a person opens as a grid,
+' anything else its details page.
 function openItem(c as object) as object
     if c.kind = "collection"
         return { screen: "GridScreen", params: { title: c.title, path: "/api/collections/" + c.itemId.ToStr(), build: "items" } }
+    end if
+    if c.kind = "person"
+        return { screen: "GridScreen", params: { title: c.title, path: "/api/people?name=" + c.title.EncodeUriComponent(), build: "person", empty: "Nothing else in your libraries has " + c.title + "." } }
     end if
     return { screen: "DetailsScreen", params: { id: c.itemId } }
 end function

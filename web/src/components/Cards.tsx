@@ -142,13 +142,16 @@ export function CollectionCard({ collection, libraryKind, onChanged }: { collect
   )
 }
 
+/** A cast or crew member; opens their page of titles in the library. */
 export function PersonCard({ name, role, photo }: { name: string; role: string; photo?: string }) {
   const src = img(photo, 'w185')
   return (
-    <div className="person-card">
+    <Link className="person-card" to={personPath(name)}>
       <div className="person-photo">{src ? <img src={src} alt="" loading="lazy" /> : <Icon name="user" size={36} />}</div>
       <div className="card-title" title={name}>{name}</div>
       <div className="card-sub" title={role}>{role}</div>
-    </div>
+    </Link>
   )
 }
+
+export const personPath = (name: string) => `/person?name=${encodeURIComponent(name)}`

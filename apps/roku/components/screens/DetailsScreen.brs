@@ -78,20 +78,29 @@ sub onLoaded(event as object)
 
     buildButtons(d)
 
-    row = t.content
-    if row.getChildCount() > 0
-        rowNode = row.getChild(0)
-        if kind = "season"
-            m.children.rowItemSize = [[380, 280]]
-            m.children.itemSize = [1720, 340]
-        else
-            m.children.rowItemSize = [[170, 321]]
-            m.children.itemSize = [1720, 380]
-        end if
+    rows = t.content
+    n = rows.getChildCount()
+    if n > 0
+        ' Episodes are stills; seasons and the cast are posters.
+        sizes = []
+        heights = []
+        for i = 0 to n - 1
+            if rows.getChild(i).title = "Episodes"
+                sizes.Push([380, 280])
+                heights.Push(340)
+            else
+                sizes.Push([170, 321])
+                heights.Push(380)
+            end if
+        end for
+        m.children.rowItemSize = sizes
+        m.children.rowHeights = heights
         focus = m.children.rowItemFocused
-        m.children.content = row
+        m.children.content = rows
         m.children.visible = true
-        if focus <> invalid and focus.Count() = 2 and focus[1] < rowNode.getChildCount() then m.children.jumpToRowItem = [0, focus[1]]
+        if focus <> invalid and focus.Count() = 2 and focus[0] < n
+            if focus[1] < rows.getChild(focus[0]).getChildCount() then m.children.jumpToRowItem = focus
+        end if
     else
         m.children.content = invalid
         m.children.visible = false

@@ -865,4 +865,35 @@ CREATE TABLE favorites (
 	PRIMARY KEY (user_id, item_id)
 );
 `,
+	// 51: movies and shows people asked for (Overseerr-style). One request
+	// per title; everyone who asked is in title_request_people and hears
+	// when it's added. An admin approves it and Cinemask fetches it.
+	`
+CREATE TABLE title_requests (
+	id         INTEGER PRIMARY KEY,
+	kind       TEXT NOT NULL,
+	tmdb_id    INTEGER NOT NULL,
+	title      TEXT NOT NULL,
+	year       INTEGER NOT NULL DEFAULT 0,
+	poster     TEXT NOT NULL DEFAULT '',
+	overview   TEXT NOT NULL DEFAULT '',
+	user_id    INTEGER NOT NULL DEFAULT 0,
+	note       TEXT NOT NULL DEFAULT '',
+	status     TEXT NOT NULL,
+	reason     TEXT NOT NULL DEFAULT '',
+	link       TEXT NOT NULL DEFAULT '',
+	decided_by INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	UNIQUE (kind, tmdb_id)
+);
+CREATE INDEX title_requests_status ON title_requests(status);
+CREATE TABLE title_request_people (
+	request_id INTEGER NOT NULL REFERENCES title_requests(id) ON DELETE CASCADE,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (request_id, user_id)
+);
+CREATE INDEX title_request_people_user ON title_request_people(user_id);
+`,
 }

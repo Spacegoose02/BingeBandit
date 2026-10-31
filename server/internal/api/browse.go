@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -256,7 +257,13 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 			cols = append(cols, c)
 		}
 	}
-	items, total, err := s.Store.LibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit, hide)
+	// Filtered, it's titles only: a collection can't say which of its
+	// titles match, so none are folded into one.
+	filter := libraryFilter(q)
+	if filter.Active() {
+		cols, hide = []*store.Collection{}, nil
+	}
+	items, total, err := s.Store.FilteredLibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit, hide, filter)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -268,7 +275,7 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 	}
 	if offset == 0 && (q.Get("sort") == "" || q.Get("sort") == "title") {
 		// Where each letter starts, for the A–Z jump bar.
-		letters, err := s.Store.LibraryLetters(currentUser(r).ID, id, hide)
+		letters, err := s.Store.FilteredLibraryLetters(currentUser(r).ID, id, hide, filter)
 		if err != nil {
 			writeStoreErr(w, err)
 			return
@@ -454,6 +461,56 @@ func (s *Server) setWatched(watched bool) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// libraryFilter reads a library page's filters: genre, yearFrom, yearTo,
+// unwatched=1 and minRating (out of 10).
+func libraryFilter(q url.Values) store.LibraryFilter {
+	f := store.LibraryFilter{Genre: strings.TrimSpace(q.Get("genre")), Unwatched: q.Get("unwatched") == "1" || q.Get("unwatched") == "true"}
+	f.YearFrom, _ = strconv.Atoi(q.Get("yearFrom"))
+	f.YearTo, _ = strconv.Atoi(q.Get("yearTo"))
+	f.MinRating, _ = strconv.ParseFloat(q.Get("minRating"), 64)
+	f.YearFrom, f.YearTo, f.MinRating = max(f.YearFrom, 0), max(f.YearTo, 0), max(f.MinRating, 0)
+	return f
+}
+
+// libraryFilters lists the genres and decades a library's filter bar offers.
+func (s *Server) libraryFilters(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	_, err := s.Store.Library(id)
+	if err == nil && !s.Store.CanSeeLibrary(currentUser(r), id) {
+		err = store.ErrNotFound
+	}
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	opts, err := s.Store.LibraryFilterOptions(id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, opts)
+}
+
+// person is a cast or crew member's page: the titles the user can see that
+// credit them by name.
+func (s *Server) person(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeErr(w, http.StatusBadRequest, "name required")
+		return
+	}
+	p, err := s.Store.PersonByName(currentUser(r).ID, name)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
 }
 
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
