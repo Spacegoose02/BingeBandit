@@ -31,24 +31,29 @@ type Section = 'device' | 'menu' | 'alerts' | 'profiles' | 'admin'
 
 /**
  * Runs a settings change, asking for the settings passcode first when the
- * server says this session is locked (423), then trying again.
+ * server says this session is locked (423), then trying again. onCancel runs
+ * if the passcode pad is closed instead.
  */
-function useGuard() {
-  const [ask, setAsk] = useState<{ retry: () => Promise<unknown>; error: string } | null>(null)
-  const guard = useCallback(async (change: () => Promise<unknown>): Promise<boolean> => {
+export function useGuard() {
+  const [ask, setAsk] = useState<{ retry: () => Promise<unknown>; cancel?: () => void; error: string } | null>(null)
+  const guard = useCallback(async (change: () => Promise<unknown>, onCancel?: () => void): Promise<boolean> => {
     try {
       await change()
       return true
     } catch (e) {
       if (e instanceof ApiError && e.status === 423) {
-        setAsk({ retry: change, error: '' })
+        setAsk({ retry: change, cancel: onCancel, error: '' })
         return false
       }
       throw e
     }
   }, [])
+  const cancel = () => {
+    ask?.cancel?.()
+    setAsk(null)
+  }
   const prompt = ask && (
-    <Modal transparent animationType="fade" onRequestClose={() => setAsk(null)}>
+    <Modal transparent animationType="fade" onRequestClose={cancel}>
       <View style={st.modal}>
         <PinPad
           title="Enter your settings passcode"
@@ -62,7 +67,7 @@ function useGuard() {
               setAsk({ ...ask, error: (e as Error).message })
             }
           }}
-          onCancel={() => setAsk(null)}
+          onCancel={cancel}
         />
       </View>
     </Modal>

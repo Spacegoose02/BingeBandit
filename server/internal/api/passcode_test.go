@@ -115,6 +115,7 @@ func TestGuardedPath(t *testing.T) {
 		{"PUT", "/api/me/password", true},
 		{"POST", "/api/link/approve", true},
 		{"GET", "/api/me/prefs", false},
+		{"PUT", "/api/me/pins", false},
 		{"POST", "/api/me/passcode/unlock", false},
 		{"POST", "/api/me/passcode/lock", false},
 		{"POST", "/api/progress", false},

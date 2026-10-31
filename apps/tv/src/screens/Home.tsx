@@ -12,7 +12,7 @@ import { checkForUpdate, type AppRelease } from '../updates'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import { fetchHousehold } from './Profiles'
-import Settings, { type HideableTab } from './Settings'
+import Settings, { useGuard, type HideableTab } from './Settings'
 import Discover from './Discover'
 import Sports from './Sports'
 
@@ -157,16 +157,39 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       if (lastTab === 'more' && libs.length === 0) setTab('home')
     }, () => undefined)
   }, [])
+  // Pins are behind the settings passcode (a profile's PIN), which lapses 15
+  // minutes after it was entered. A locked save asks for it instead of
+  // quietly putting the pin back.
+  const { guard, prompt: passcodePrompt } = useGuard()
   // Pinning from the app saves the whole order, as the web's pin editor does,
   // and shows the change at once.
+  // Each save sends every library, so it starts from the newest list (not the
+  // one a menu captured when it opened), saves go one at a time, and only the
+  // last one's answer is shown. Pinning a few in a row used to save one with
+  // another's pin taken back out.
+  const librariesNow = useRef(libraries)
+  librariesNow.current = libraries
+  const pinSaves = useRef<Promise<unknown>>(Promise.resolve())
+  const pinChange = useRef(0)
   const togglePin = (l: Library) => {
-    const before = libraries
-    const next = libraries.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    const before = librariesNow.current
+    const next = before.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    librariesNow.current = next
     setLibraries(next)
-    api
-      .put('/api/me/pins', { libraries: next.map((x) => ({ id: x.id, pinned: x.pinned })) })
-      .then(() => api.get<Library[]>('/api/libraries'))
-      .then(setLibraries, () => setLibraries(before))
+    const change = ++pinChange.current
+    const show = (libs: Library[]) => {
+      if (change !== pinChange.current) return
+      librariesNow.current = libs
+      setLibraries(libs)
+    }
+    const undo = () => show(before)
+    const save = () =>
+      api
+        .put('/api/me/pins', { libraries: next.map((x) => ({ id: x.id, pinned: x.pinned })) })
+        .then(() => api.get<Library[]>('/api/libraries'))
+        .then(show)
+    const run = pinSaves.current.then(() => guard(save, undo))
+    pinSaves.current = run.catch(undo)
   }
   // Tabs this person turned off, kept with their other preferences so they
   // follow the profile to every TV and phone.
@@ -182,18 +205,22 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     const before = hidden
     const next = hidden.includes(t) ? hidden.filter((x) => x !== t) : [...hidden, t]
     setHidden(next)
+    const undo = () => setHidden(before)
     // The rest of the preferences go back as they are.
-    api
-      .get<MenuPrefs>('/api/me/prefs')
-      .then((p) =>
-        api.put('/api/me/prefs', {
-          ...p,
-          hiddenTabs: next.filter((x) => !optIn.includes(x)),
-          pinnedTabs: optIn.filter((x) => !next.includes(x)),
-        }),
-      )
-      .then(() => api.get('/api/me/prefs'))
-      .catch(() => setHidden(before))
+    guard(
+      () =>
+        api
+          .get<MenuPrefs>('/api/me/prefs')
+          .then((p) =>
+            api.put('/api/me/prefs', {
+              ...p,
+              hiddenTabs: next.filter((x) => !optIn.includes(x)),
+              pinnedTabs: optIn.filter((x) => !next.includes(x)),
+            }),
+          )
+          .then(() => api.get('/api/me/prefs')),
+      undo,
+    ).catch(undo)
   }
   // An admin can turn Live TV off for someone; check on each launch, since
   // the saved sign-in may predate the change.
@@ -373,6 +400,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           onClose={() => setPinMenu(null)}
         />
       )}
+      {passcodePrompt}
       {accountMenu && (
         <AccountMenu
           onClose={() => setAccountMenu(false)}

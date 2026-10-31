@@ -63,6 +63,8 @@ func (u *unlocks) expiry(token string) time.Time {
 
 // guardedPath reports whether a request changes settings: anything under
 // /api/admin, account changes under /api/me, and approving a device link.
+// Pinning libraries is a viewing preference like the watchlist, so anyone
+// signed in to the profile may do it.
 func guardedPath(r *http.Request) bool {
 	p := r.URL.Path
 	switch {
@@ -75,7 +77,7 @@ func guardedPath(r *http.Request) bool {
 	case p == "/api/household" && r.Method != http.MethodGet:
 		return true
 	case strings.HasPrefix(p, "/api/me/") && r.Method != http.MethodGet && r.Method != http.MethodHead:
-		return p != "/api/me/passcode/unlock" && p != "/api/me/passcode/lock"
+		return p != "/api/me/passcode/unlock" && p != "/api/me/passcode/lock" && p != "/api/me/pins"
 	}
 	return false
 }
