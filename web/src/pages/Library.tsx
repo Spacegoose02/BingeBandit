@@ -35,6 +35,36 @@ interface Letter {
   offset: number
 }
 
+const ratings = [
+  ['6', '6+'],
+  ['7', '7+'],
+  ['8', '8+'],
+] as const
+
+interface FilterOptions {
+  genres: string[]
+  decades: number[]
+}
+
+const FILTER_KEYS = ['genre', 'decade', 'rating', 'unwatched'] as const
+
+/** The Library tab's filters as items query parameters ('' when none are set). */
+function filterQuery(params: URLSearchParams): string {
+  const q = new URLSearchParams()
+  const genre = params.get('genre')
+  if (genre) q.set('genre', genre)
+  const decade = Number(params.get('decade'))
+  if (decade > 0) {
+    q.set('yearFrom', String(decade))
+    q.set('yearTo', String(decade + 9))
+  }
+  const rating = params.get('rating')
+  if (rating) q.set('minRating', rating)
+  if (params.get('unwatched') === '1') q.set('unwatched', '1')
+  const s = q.toString()
+  return s ? `&${s}` : ''
+}
+
 const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
 
 type Tile = { item: Item } | { collection: Collection }
@@ -82,10 +112,24 @@ function LibraryView({ id }: { id: string }) {
   const sentinel = useRef<HTMLDivElement>(null)
   const loadingRef = useRef(false)
   useDocumentTitle(library?.name)
+  // Filters live in the address, so Back from a title returns to them.
+  const filters = filterQuery(params)
+  const filterOptions = useApi<FilterOptions>(tab === 'library' ? `/api/libraries/${id}/filters` : null).data
+  const setFilter = (k: (typeof FILTER_KEYS)[number], v: string) => {
+    const next = new URLSearchParams(params)
+    if (v) next.set(k, v)
+    else next.delete(k)
+    setParams(next, { replace: true })
+  }
+  const clearFilters = () => {
+    const next = new URLSearchParams(params)
+    FILTER_KEYS.forEach((k) => next.delete(k))
+    setParams(next, { replace: true })
+  }
 
   // Back to this page loads as many titles as were showing, in one go, so
   // the scroll position is there to return to.
-  const [restore] = useState(() => ({ sort, count: readBack<number>(key, 'loaded') ?? 0 }))
+  const [restore] = useState(() => ({ sort, filters, count: readBack<number>(key, 'loaded') ?? 0 }))
   useEffect(() => {
     if (items.length) writeBack(key, 'loaded', items.length)
   }, [key, items.length])
@@ -101,7 +145,7 @@ function LibraryView({ id }: { id: string }) {
       loadingRef.current = true
       setLoading(true)
       try {
-        const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${offset}&limit=${limit}`)
+        const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}${filters}&offset=${offset}&limit=${limit}`)
         if (gen !== generation.current) return
         setLibrary(page.library)
         setTotal(page.total)
@@ -121,12 +165,12 @@ function LibraryView({ id }: { id: string }) {
         }
       }
     },
-    [id, sort],
+    [id, sort, filters],
   )
 
   useEffect(() => {
     setItems([])
-    load(0, restore.sort === sort ? Math.min(500, Math.max(PAGE, restore.count)) : PAGE)
+    load(0, restore.sort === sort && restore.filters === filters ? Math.min(500, Math.max(PAGE, restore.count)) : PAGE)
   }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -154,7 +198,7 @@ function LibraryView({ id }: { id: string }) {
       setLoading(true)
       try {
         while (loaded.length <= l.offset && loaded.length < total) {
-          const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}&offset=${loaded.length}&limit=500`)
+          const page = await api.get<Page>(`/api/libraries/${id}/items?sort=${sort}${filters}&offset=${loaded.length}&limit=500`)
           if (gen !== generation.current || !page.items.length) break
           const have = new Set(loaded.map((it) => it.id))
           loaded = [...loaded, ...page.items.filter((it) => !have.has(it.id))]
@@ -216,7 +260,44 @@ function LibraryView({ id }: { id: string }) {
       {tab === 'collections' && <CollectionsTab libraryId={Number(id)} libraryKind={library?.kind ?? 'movies'} />}
       {tab === 'library' && (
         <>
-          {!loading && items.length === 0 && <div className="empty">This library is empty. Scans can take a few minutes for big folders.</div>}
+          <div className="filter-bar">
+            <select aria-label="Genre" value={params.get('genre') ?? ''} onChange={(e) => setFilter('genre', e.target.value)}>
+              <option value="">All genres</option>
+              {filterOptions?.genres.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <select aria-label="Year" value={params.get('decade') ?? ''} onChange={(e) => setFilter('decade', e.target.value)}>
+              <option value="">Any year</option>
+              {filterOptions?.decades.map((d) => (
+                <option key={d} value={d}>{d}s</option>
+              ))}
+            </select>
+            <select aria-label="Rating" value={params.get('rating') ?? ''} onChange={(e) => setFilter('rating', e.target.value)}>
+              <option value="">Any rating</option>
+              {ratings.map(([v, label]) => (
+                <option key={v} value={v}>Rated {label}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className={`filter-toggle${params.get('unwatched') === '1' ? ' active' : ''}`}
+              aria-pressed={params.get('unwatched') === '1'}
+              onClick={() => setFilter('unwatched', params.get('unwatched') === '1' ? '' : '1')}
+            >
+              Unwatched
+            </button>
+            {filters && (
+              <button type="button" className="btn btn-glass btn-sm" onClick={clearFilters}>
+                Clear filters
+              </button>
+            )}
+          </div>
+          {!loading && items.length === 0 && (
+            <div className="empty">
+              {filters ? 'Nothing here matches these filters.' : 'This library is empty. Scans can take a few minutes for big folders.'}
+            </div>
+          )}
           <div className={`poster-grid${showAZ ? ' has-az' : ''}`}>
             {tiles(items, collections, sort, items.length >= total).map((t) =>
               'item' in t ? (

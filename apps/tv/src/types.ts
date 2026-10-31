@@ -56,6 +56,13 @@ export interface Item {
   watch: WatchState
 }
 
+/** A cast or crew member's titles the viewer can see, newest first. */
+export interface Person {
+  name: string
+  photo?: string
+  titles: { item: Item; role: string; kind: 'cast' | 'crew' }[]
+}
+
 export interface Credit {
   name: string
   role: string // the character for cast, the job for crew

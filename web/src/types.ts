@@ -122,6 +122,13 @@ export interface Credit {
   photo?: string
 }
 
+/** A cast or crew member's page: their titles the viewer can see, newest first. */
+export interface Person {
+  name: string
+  photo?: string
+  titles: { item: Item; role: string; kind: 'cast' | 'crew' }[]
+}
+
 export type ItemKind = 'movie' | 'show' | 'season' | 'episode'
 
 export interface Item {

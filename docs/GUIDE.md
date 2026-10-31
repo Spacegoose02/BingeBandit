@@ -83,11 +83,13 @@ Libraries you pin sit in the sidebar and fill your Home. Use **Edit** next to **
 
 Each library opens on **Recommended**, with tabs for the whole **Library** and its **Collections**. Admins can use **Manage recommendations** to pick which rows appear here and on Home.
 
+The **Library** tab can be filtered by genre, decade, rating (6+, 7+ or 8+) and **Unwatched** (movies you haven't seen, shows with episodes left). On the Android TV app the filters are chips above the grid; on Roku press `*`.
+
 ![A movie library](screenshots/library.webp)
 
 ### Movie and show pages
 
-A title's page shows its details, ratings, cast, the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork.
+A title's page shows its details, ratings, cast (pick someone to see everything else of theirs in your libraries), the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork.
 
 ![A movie page](screenshots/movie.webp)
 
