@@ -21,6 +21,7 @@
     "appId": "app.bingebandit.desktop",
     "productName": "BingeBandit",
     "artifactName": "BingeBandit-Windows-${version}-${arch}.${ext}",
+    "publish": null,
     "files": ["src/**/*", "setup/**/*", "package.json"],
     "extraResources": [
       { "from": "mpv", "to": "mpv", "filter": ["**/*"] },
