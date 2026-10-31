@@ -62,6 +62,20 @@ func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "downloads are disabled on this server")
 		return
 	}
+	// Away from home, a file over the quality cap has to be converted
+	// (players fall back to that when direct play fails), and the stream
+	// limit applies.
+	if !download {
+		ip := clientIP(r)
+		if s.overRemoteCap(mf, ip) {
+			writeErr(w, http.StatusForbidden, "this file is above the server's quality limit for streams outside the home network")
+			return
+		}
+		if msg := s.streamLimitHit(currentUser(r), ip, mf.ID); msg != "" {
+			writeErr(w, http.StatusTooManyRequests, msg)
+			return
+		}
+	}
 	f, err := os.Open(mf.Path)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "file is not available")
@@ -160,6 +174,15 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	}
 	if old := s.Transcoder.Get(opts.Replace); old == nil || old.UserID != currentUser(r).ID {
 		opts.Replace = ""
+	}
+	ip := clientIP(r)
+	opts.Remote, opts.CapKbps = !s.isLocal(ip), s.remoteCapKbps(ip)
+	// Replacing a session (seeking, another track) isn't a new stream.
+	if opts.Replace == "" {
+		if msg := s.streamLimitHit(currentUser(r), ip, mf.ID); msg != "" {
+			writeErr(w, http.StatusTooManyRequests, msg)
+			return
+		}
 	}
 	sess, err := s.Transcoder.Start(mf, currentUser(r).ID, opts)
 	if err != nil {
@@ -305,6 +328,14 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.PlaySessionID != "" {
 		prev, had := s.Activity.Get(req.PlaySessionID)
+		// A player that started while another was still starting can go
+		// over the stream limit; its first report is where that's caught.
+		if !had && !req.Stopped {
+			if msg := s.streamLimitHit(u, clientIP(r), req.FileID); msg != "" {
+				writeErr(w, http.StatusTooManyRequests, msg)
+				return
+			}
+		}
 		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
 		s.emitPlayer(prev, had, np, it, req.Stopped)
 		s.recordPlay(np, it, watched)
