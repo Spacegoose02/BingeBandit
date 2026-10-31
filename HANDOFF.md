@@ -67,6 +67,17 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## TV app: fixes from testing on the onn box (2026-10-31, no migration)
+
+The #161 fixes were tested on the onn 4K box over adb (test builds 0.38.1–0.38.3 from this branch). Passed: direct play survives leaving the app, a paused movie survives 6 minutes away, ▲ goes up the channels like CH+, removing a Multi-View screen leaves the others playing, Watch Together Join replaces the player and syncs to the room, and a revoked session goes to sign-in. Not tested: the profile PIN pad (no profile has a PIN). Testing turned up these, fixed here and retested on the box:
+
+- **Quick ◀/▶ while converting** only added up to about +30 s: the old stream's `onProgress` overwrote the target between presses. Progress is ignored while a seek or conversion is pending (`Player.tsx`).
+- **Options couldn't be reached while playing**: Android re-applies `hasTVPreferredFocus` on every redraw, and progress redraws the player four times a second, so focus snapped back to Pause. `useFocusOnce` (`components.tsx`) holds the preference for half a second; used for Pause in both players and the Options menu's current choices.
+- **Subtitles came back on every reopen** (an image track the profile's setting picked, burned in, which also forced conversion): the player keeps its subtitle choice per file on the device (`bb.subs.<fileId>`), and turning burned-in subtitles off goes back to direct play. ExoPlayer's own text tracks are also forced off (`selectedTextTrack` DISABLED), since the app draws text subtitles itself.
+- **Multi-View screens reloaded on a layout change** (3 → 2 changed their nesting): each screen sits in an absolutely placed slot under one parent, keyed by its stable key.
+- **Watch Together can't invite your own other devices** (invites skip yourself); not changed.
+- The box now runs test build 0.38.3, so the next release must be newer than that (v0.38.4 or v0.39.0) for the in-app update to offer it.
+
 ## TV app bug pass: players, sign-out, Multi-View (2026-10-31, no migration)
 
 From a code review of `apps/tv` (findings in the project thread "Bug check the Android TV app").
