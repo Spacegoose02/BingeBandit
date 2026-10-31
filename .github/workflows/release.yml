@@ -123,6 +123,30 @@ jobs:
             release/*.apk
             release/*.aab
 
+  # The Windows app (apps/desktop): an installer and a portable exe, with mpv inside.
+  windows-desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Build
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm ci
+          npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+          npm run fetch-mpv
+          npm run dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/dist/BingeBandit-Windows-*.exe
+
   # The Roku channel, as a zip to sideload in developer mode (apps/roku/README.md).
   roku:
     runs-on: ubuntu-latest
