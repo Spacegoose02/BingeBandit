@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Downloaded by `npm run fetch-mpv`
+mpv/
