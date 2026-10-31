@@ -1,0 +1,45 @@
+{
+  "name": "bingebandit-desktop",
+  "productName": "BingeBandit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "BingeBandit for Windows: the web app full screen, with mpv for playback",
+  "main": "src/main.js",
+  "author": "BingeBandit",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "fetch-mpv": "node scripts/fetch-mpv.mjs",
+    "dist": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "app.bingebandit.desktop",
+    "productName": "BingeBandit",
+    "artifactName": "BingeBandit-Windows-${version}-${arch}.${ext}",
+    "files": ["src/**/*", "setup/**/*", "package.json"],
+    "extraResources": [
+      { "from": "mpv", "to": "mpv", "filter": ["**/*"] },
+      { "from": "mpv-config", "to": "mpv-config" }
+    ],
+    "win": {
+      "icon": "../../Brand/13_App_Icon_Tile_1024x1024.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "BingeBandit-Windows-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "BingeBandit-Windows-Portable-${version}.${ext}"
+    }
+  }
+}

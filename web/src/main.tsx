@@ -5,6 +5,9 @@ import { AuthProvider } from './auth'
 import App from './App'
 import { ScrollRestorer } from './backState'
 import './styles.css'
+import { enableTvMode, tvModeOn } from './tvNav'
+
+if (tvModeOn()) enableTvMode()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

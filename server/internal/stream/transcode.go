@@ -57,6 +57,13 @@ type Options struct {
 	// picked "Convert", or direct play stuttered (a high bitrate, level or
 	// profile the device can't keep up with).
 	EncodeVideo bool `json:"encodeVideo"`
+	// CapKbps is the most video this viewer may be sent (the admin's cap
+	// for streams outside the home network); 0 = no cap. Set by the
+	// server, never by the client.
+	CapKbps int `json:"-"`
+	// Remote marks a viewer outside the home network, for the per-user
+	// stream limit. Set by the server.
+	Remote bool `json:"-"`
 }
 
 type Session struct {
@@ -81,6 +88,8 @@ type Session struct {
 	AudioCodec    string `json:"audioCodec"`
 	AudioChannels int    `json:"audioChannels"`
 	AudioCopy     bool   `json:"audioCopy"`
+	// Remote is set when the viewer is outside the home network.
+	Remote bool `json:"-"`
 
 	dir        string
 	cmd        *exec.Cmd
@@ -140,7 +149,7 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 		m.Stop(o.Replace)
 	}
 	s := &Session{
-		ID: newID(), FileID: f.ID, UserID: userID, Start: o.Start, Created: time.Now().Unix(),
+		ID: newID(), FileID: f.ID, UserID: userID, Start: o.Start, Created: time.Now().Unix(), Remote: o.Remote,
 		done: make(chan struct{}), stderr: &tailBuffer{max: 4096},
 	}
 	// The caller checked access just before starting.
@@ -199,8 +208,14 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	if o.MaxHeight > 0 && (targetH == 0 || targetH > o.MaxHeight) {
 		targetH = o.MaxHeight
 	}
+	// Over the cap (or of unknown size): convert, at a height that looks
+	// good at that bitrate.
+	overCap := o.CapKbps > 0 && (FileKbps(f) == 0 || FileKbps(f) > o.CapKbps)
+	if h := HeightForKbps(o.CapKbps); overCap && (targetH == 0 || targetH > h) {
+		targetH = h
+	}
 	s.Height = targetH
-	s.VideoCopy = !o.EncodeVideo && f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
+	s.VideoCopy = !o.EncodeVideo && !overCap && f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
 	s.Tonemap = tonemap && !s.VideoCopy
 	s.BurnSubtitle = burn
 
@@ -353,6 +368,9 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			if i == 0 && o.BitrateKbps > 0 {
 				kbps = o.BitrateKbps
 			}
+			if o.CapKbps > 0 && kbps > o.CapKbps {
+				kbps = o.CapKbps
+			}
 			spec := ""
 			if len(heights) > 1 {
 				spec = fmt.Sprintf(":v:%d", i)
@@ -504,6 +522,32 @@ func defaultBitrate(height int) int {
 	default:
 		return 2500
 	}
+}
+
+// FileKbps is a file's overall bitrate in kbit/s, from the probe or else
+// its size and length; 0 when neither is known.
+func FileKbps(f *store.MediaFile) int {
+	if f.Bitrate > 0 {
+		return int(f.Bitrate / 1000)
+	}
+	if f.Size > 0 && f.Duration > 0 {
+		return int(float64(f.Size) * 8 / f.Duration / 1000)
+	}
+	return 0
+}
+
+// HeightForKbps is the tallest picture that still looks good at kbps: one
+// whose usual bitrate is at most twice that. 0 for no cap.
+func HeightForKbps(kbps int) int {
+	if kbps <= 0 {
+		return 0
+	}
+	for _, h := range []int{2160, 1440, 1080, 720} {
+		if defaultBitrate(h) <= kbps*2 {
+			return h
+		}
+	}
+	return 480
 }
 
 func (m *Manager) Get(id string) *Session {

@@ -22,7 +22,7 @@
 **Watching**
 - Plays directly when the device can, otherwise transcodes with FFmpeg, including hardware encoding (NVENC, Quick Sync, VAAPI, AMF, VideoToolbox) and HDR to SDR tone mapping
 - Audio and subtitle choice, resume across devices, skip intro and credits, auto-play next episode, Watch Together
-- Apps for Android TV, Google TV, Fire TV and Android phones, an early Roku channel, and a web app that works on phones
+- Apps for Android TV, Google TV, Fire TV and Android phones, an early Roku channel, an early Windows app that plays everything in mpv, and a web app that works on phones
 
 **Live TV**
 - M3U and XMLTV sources, channels with automatic backup streams, a cable-box style guide and a DVR

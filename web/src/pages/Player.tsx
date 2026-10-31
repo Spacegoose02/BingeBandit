@@ -5,16 +5,17 @@ import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
+import { desktop } from '../desktop'
+import DesktopPlayer from './DesktopPlayer'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
 import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, commonLanguages, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
+import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
 
-const TEXT_SUBS = new Set(['subrip', 'srt', 'ass', 'ssa', 'webvtt', 'mov_text', 'text'])
-const IMAGE_SUBS = new Set(['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvb_subtitle', 'xsub'])
 const LADDER = [2160, 1080, 720, 480]
 
 export default function Player() {
@@ -80,6 +81,19 @@ export default function Player() {
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
   if (!data || !prefs || !joined || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
   if (isMovie && preRoll && preRoll !== 'done') return <PreRoll data={preRoll} movieTitle={data.item.title} onDone={preRollDone} />
+  // In the Windows app, mpv plays the file (not in a watch party, which needs the web player).
+  if (desktop && !joined.roomId) {
+    return (
+      <DesktopPlayer
+        key={id}
+        detail={data}
+        prefs={prefs}
+        startAt={startAt}
+        fileId={Number(params.get('file')) || 0}
+        playlistId={playlistId}
+      />
+    )
+  }
   return (
     <PlayerView
       key={id}
@@ -148,43 +162,6 @@ interface Choice {
   convert: boolean // at original quality: have the server convert the video instead of playing the file as is
   audio: number // stream index; -1 = file default
   burn: number // image subtitle stream burned in by the server; -1 = none
-}
-
-/**
- * Picks audio and subtitles from the user's preferences. Returns the audio
- * stream (-1 when it's the file default, so direct play stays possible) and
- * the subtitle stream, which is either rendered by us or burned in.
- */
-function pickTracks(f: MediaFile, p: Prefs): { audio: number; sub?: MediaStream } {
-  const audios = f.streams.filter((s) => s.type === 'audio')
-  const fileDefault = audios.find((s) => s.default) ?? audios[0]
-  let chosen = fileDefault
-  if (p.audioLanguage) chosen = audios.find((s) => normLang(s.language) === normLang(p.audioLanguage)) ?? fileDefault
-  const audio = chosen && chosen !== fileDefault ? chosen.index : -1
-
-  const subs = f.streams.filter((s) => s.type === 'subtitle' && (TEXT_SUBS.has(s.codec) || IMAGE_SUBS.has(s.codec)))
-  const want = normLang(p.subtitleLanguage)
-  const inLang = subs.filter((s) => normLang(s.language) === want)
-  // Prefer text over image subtitles and plain over SDH.
-  const rank = (s: MediaStream) => (IMAGE_SUBS.has(s.codec) ? 2 : 0) + (s.hearingImpaired ? 1 : 0)
-  const best = (list: MediaStream[]) => [...list].sort((a, b) => rank(a) - rank(b))[0]
-  const full = best(inLang.filter((s) => !s.forced)) ?? best(subs.filter((s) => !s.language && !s.forced))
-  const forced = best(inLang.filter((s) => s.forced))
-
-  const foreignAudio = !!chosen?.language && normLang(chosen.language) !== want
-  let sub: MediaStream | undefined
-  switch (p.subtitleMode) {
-    case 'always':
-      sub = full ?? forced
-      break
-    case 'auto':
-      sub = foreignAudio ? full ?? forced : forced
-      break
-    case 'forced':
-      sub = forced
-      break
-  }
-  return { audio, sub }
 }
 
 interface Cue {

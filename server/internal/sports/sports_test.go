@@ -270,3 +270,22 @@ func TestRace(t *testing.T) {
 		t.Errorf("running order = %+v", g.Race)
 	}
 }
+
+// The NHL sends probable goalies' positions as a plain string, which once
+// failed the whole scoreboard ("Couldn't reach ESPN for NHL").
+func TestPositionAsString(t *testing.T) {
+	var e espnEvent
+	if err := json.Unmarshal([]byte(`{"id":"1","date":"2026-10-30T23:00Z","status":{"type":{"state":"pre"}},"competitions":[{"competitors":[
+		{"homeAway":"home","team":{"id":"20"},"probables":[{"playerId":2976847,"record":"","statistics":[],"athlete":{"displayName":"Andrei Vasilevskiy","shortName":"A. Vasilevskiy","position":"G"}}]},
+		{"homeAway":"away","team":{"id":"28"},"leaders":[{"name":"goals","leaders":[{"displayValue":"1","value":1.0,"team":{"id":"28"},"athlete":{"displayName":"Kyle Connor","position":{"abbreviation":"LW"}}}]}]}]}]}`), &e); err != nil {
+		t.Fatal(err)
+	}
+	g := e.game("nhl")
+	if g.Home.Leader == nil || g.Home.Leader.Position != "G" || g.Home.Leader.Short != "A. Vasilevskiy" {
+		t.Errorf("home = %+v", g.Home.Leader)
+	}
+	var a espnAthlete
+	if err := json.Unmarshal([]byte(`{"displayName":"X","position":{"abbreviation":"LW"}}`), &a); err != nil || a.Position.Abbreviation != "LW" {
+		t.Errorf("object position = %+v, %v", a, err)
+	}
+}

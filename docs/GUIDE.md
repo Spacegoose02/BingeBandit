@@ -258,7 +258,7 @@ BingeBandit keeps working on your home network without the internet. Signing in 
 The main sections under **Server → Settings**:
 
 - **Transcoding:** hardware encoding (NVIDIA NVENC, Intel Quick Sync, VAAPI, AMD AMF, VideoToolbox), HDR to SDR tone mapping, and the transcode folder.
-- **Network:** your public URL, trusted reverse proxies, and extra networks that count as home.
+- **Network:** your public URL, trusted reverse proxies, and extra networks that count as home. Here you can also limit streaming away from home: how many streams each account (with its profiles, live TV included) may watch at once from outside, and a quality limit that converts bigger videos down for those viewers. Admin accounts have no stream limit, and live TV isn't quality-limited.
 - **Metadata:** TMDB, TheTVDB, MDBList and the ratings provider.
 - **Trakt** and **Webhooks:** sync watch history with Trakt, and notify other services (Home Assistant, Discord bots, n8n) when things happen.
 
