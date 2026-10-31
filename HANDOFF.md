@@ -69,6 +69,13 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Library filters and cast pages (2026-10-31, no migration)
+
+- **Server** (`store/filters.go`, `api/browse.go`): `/libraries/{id}/items` takes `genre`, `yearFrom`, `yearTo`, `unwatched=1` and `minRating` (`LibraryFilter`, used by `FilteredLibraryItems` and `FilteredLibraryLetters`; the old `LibraryItems`/`LibraryLetters` call them with no filter). A filtered page sends no collections and folds no titles into them. `/libraries/{id}/filters` lists genres and decades. `/people?name=` (`PersonByName`) lists the visible movies and shows whose credits name someone; credits have no person ids, so it's by exact name.
+- **Web:** a filter bar on the Library tab (kept in the address, so Back returns to it), and Cast & Crew cards link to `/person?name=` (`pages/Person.tsx`).
+- **TV app:** Genre, Year, Rating and Unwatched chips above the Library grid (`FilterBar`, `ChoiceList` in `screens/Library.tsx`), kept per library while the app runs; OK on someone in a title's Cast row opens `screens/Person.tsx`.
+- **Roku:** `*` on a library grid opens filter dialogs (`GridView.brs`); Details gets a Cast row whose people open a grid of their titles (`personNode`, `personContent` in `ApiTask.brs`).
+- **Tested:** `go test ./internal/store/` (`TestLibraryFilters`), the web library filter and person page in Chromium against a local server with made-up titles, `tsc`/`eslint` for apps/tv, the BrighterScript check for Roku. **Not tried on an Android TV or a Roku**; the Roku Details layout with two rows (seasons or episodes, then cast) is the likeliest to need a fix.
 ## Limits for streaming away from home (2026-10-30, no migration)
 
 - Two admin settings (Settings → Network, shown while remote access is on): `remote_max_streams`, streams at once from outside per account (0 = no limit, up to 50), and `remote_max_kbps`, a video bitrate cap for viewers outside (0 = none; the web offers 1–40 Mbps). Both default to off. "Outside" is `Server.isLocal`, so LAN networks and trusted proxies count as they already did.

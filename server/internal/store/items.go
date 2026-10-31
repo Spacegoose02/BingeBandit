@@ -236,22 +236,33 @@ var librarySorts = map[string]string{
 // LibraryItems pages through a library's movies or shows, leaving out the
 // ids in hide (items shown through their collection instead).
 func (s *Store) LibraryItems(uid, libraryID int64, sort string, offset, limit int, hide []int64) ([]*Item, int, error) {
+	return s.FilteredLibraryItems(uid, libraryID, sort, offset, limit, hide, LibraryFilter{})
+}
+
+// FilteredLibraryItems is LibraryItems narrowed by a LibraryFilter.
+func (s *Store) FilteredLibraryItems(uid, libraryID int64, sort string, offset, limit int, hide []int64, f LibraryFilter) ([]*Item, int, error) {
 	order, ok := librarySorts[sort]
 	if !ok {
 		order = librarySorts["title"]
 	}
-	if hide == nil {
-		hide = []int64{}
-	}
-	hidden, _ := json.Marshal(hide)
-	where := `i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide))`
-	args := []any{uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden)), sql.Named("limit", limit), sql.Named("offset", offset)}
+	where, args := libraryWhere(uid, libraryID, hide, f)
+	args = append(args, sql.Named("limit", limit), sql.Named("offset", offset))
 	var total int
 	if err := s.db.QueryRow(`SELECT COUNT(*) FROM items i WHERE `+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	items, err := s.pagedItems("", where+` AND `+visible, order, args...)
 	return items, total, err
+}
+
+// libraryWhere matches a library's movies and shows, less hide, narrowed by f.
+func libraryWhere(uid, libraryID int64, hide []int64, f LibraryFilter) (string, []any) {
+	if hide == nil {
+		hide = []int64{}
+	}
+	hidden, _ := json.Marshal(hide)
+	where := `i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide))` + f.where()
+	return where, append([]any{uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden))}, f.args()...)
 }
 
 // Letter is where titles starting with a letter begin in a library sorted by
@@ -265,13 +276,14 @@ type Letter struct {
 // for each starting letter, in the same order and with the same items as
 // LibraryItems sorted by title.
 func (s *Store) LibraryLetters(uid, libraryID int64, hide []int64) ([]Letter, error) {
-	if hide == nil {
-		hide = []int64{}
-	}
-	hidden, _ := json.Marshal(hide)
-	rows, err := s.db.Query(`SELECT i.sort_title FROM items i
-		WHERE i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide)) AND `+visible+`
-		ORDER BY `+librarySorts["title"], uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden)))
+	return s.FilteredLibraryLetters(uid, libraryID, hide, LibraryFilter{})
+}
+
+// FilteredLibraryLetters is LibraryLetters for FilteredLibraryItems.
+func (s *Store) FilteredLibraryLetters(uid, libraryID int64, hide []int64, f LibraryFilter) ([]Letter, error) {
+	where, args := libraryWhere(uid, libraryID, hide, f)
+	rows, err := s.db.Query(`SELECT i.sort_title FROM items i WHERE `+where+` AND `+visible+`
+		ORDER BY `+librarySorts["title"], args...)
 	if err != nil {
 		return nil, err
 	}

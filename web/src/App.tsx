@@ -8,6 +8,7 @@ import Home from './pages/Home'
 import LibraryPage from './pages/Library'
 import ItemPage from './pages/Item'
 import CollectionPage from './pages/Collection'
+import PersonPage from './pages/Person'
 import { DiscoverPage } from './pages/Discover'
 import SportsPage from './pages/Sports'
 import { FavoritesPage, KidsTitlesPage, PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />
+          <Route path="/person" element={<PersonPage />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/sports" element={<SportsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
