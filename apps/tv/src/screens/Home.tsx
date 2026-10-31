@@ -163,19 +163,33 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const { guard, prompt: passcodePrompt } = useGuard()
   // Pinning from the app saves the whole order, as the web's pin editor does,
   // and shows the change at once.
+  // Each save sends every library, so it starts from the newest list (not the
+  // one a menu captured when it opened), saves go one at a time, and only the
+  // last one's answer is shown. Pinning a few in a row used to save one with
+  // another's pin taken back out.
+  const librariesNow = useRef(libraries)
+  librariesNow.current = libraries
+  const pinSaves = useRef<Promise<unknown>>(Promise.resolve())
+  const pinChange = useRef(0)
   const togglePin = (l: Library) => {
-    const before = libraries
-    const next = libraries.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    const before = librariesNow.current
+    const next = before.map((x) => (x.id === l.id ? { ...x, pinned: !x.pinned } : x))
+    librariesNow.current = next
     setLibraries(next)
-    const undo = () => setLibraries(before)
-    guard(
-      () =>
-        api
-          .put('/api/me/pins', { libraries: next.map((x) => ({ id: x.id, pinned: x.pinned })) })
-          .then(() => api.get<Library[]>('/api/libraries'))
-          .then(setLibraries),
-      undo,
-    ).catch(undo)
+    const change = ++pinChange.current
+    const show = (libs: Library[]) => {
+      if (change !== pinChange.current) return
+      librariesNow.current = libs
+      setLibraries(libs)
+    }
+    const undo = () => show(before)
+    const save = () =>
+      api
+        .put('/api/me/pins', { libraries: next.map((x) => ({ id: x.id, pinned: x.pinned })) })
+        .then(() => api.get<Library[]>('/api/libraries'))
+        .then(show)
+    const run = pinSaves.current.then(() => guard(save, undo))
+    pinSaves.current = run.catch(undo)
   }
   // Tabs this person turned off, kept with their other preferences so they
   // follow the profile to every TV and phone.
