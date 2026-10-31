@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-31. Latest release v0.37.0, 51 schema migrations._
+_Last updated: 2026-10-31. Latest release v0.38.0, 51 schema migrations._
 
 
 ## Start here
@@ -66,6 +66,13 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Passcode fixes on the TV, and the Windows release build (2026-10-31, no migration)
+
+- **Server section stayed visible behind the passcode** (#158): Back or Cancel on the passcode prompt left Settings → Server showing the libraries, live sources and their buttons (changes still got 423). `AdminSection` (`apps/tv/src/screens/Settings.tsx`) now loads admin settings, live sources and libraries in one guarded request and renders nothing until it succeeds; a cancelled prompt leaves a "Locked" notice with Enter passcode. The Who's watching PIN, Profiles & PINs and the Roku settings screen were checked and weren't affected.
+- **Pinned libraries undid themselves** (#159): a profile's PIN is its passcode, so `PUT /api/me/pins` got 423 once the 15-minute unlock lapsed (or never unlocked, for a profile the app opened on its own) and Home quietly put the old pins back. `PUT /api/me/pins` is no longer guarded (`api/passcode.go`, `TestGuardedPath`); see **Settings passcode**. Menu tab pins still save through the locked `/api/me/prefs` and now bring up the passcode pad (`useGuard`, exported from Settings). Pin saves start from the newest library list and run one at a time.
+- **Windows app missing from v0.37.0:** the release job `windows-desktop` built both exes, then electron-builder crashed writing update info (`Cannot read properties of null (reading 'channel')`). `GITHUB_TOKEN` is set for `fetch-mpv`, which makes electron-builder assume a GitHub publish target, and it couldn't detect the repository, so its publish list was `[null]`. `apps/desktop/package.json` now has `"build": {"publish": null}` (the app has no auto-update yet). Reproduced with `getPublishConfigs` from app-builder-lib (`[null]` before, `null` after) and `electron-builder --win --dir` still packages; the NSIS and portable steps need Wine, so the first full run is the v0.38.0 release.
+- **Tested:** `tsc` and eslint for apps/tv, `go test ./internal/api` and `go vet`, `npm test` in apps/desktop. Nothing ran on a device.
 
 ## Windows app with mpv, TV mode, and Multi-View on the web (2026-10-31, no migration)
 
