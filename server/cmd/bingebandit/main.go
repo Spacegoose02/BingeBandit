@@ -21,11 +21,13 @@ import (
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/opensubs"
 	"bingebandit/internal/plugins"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
+	"bingebandit/internal/trickplay"
 )
 
 // version is set at build time: -ldflags "-X main.version=v0.1.0"
@@ -58,9 +60,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	detector := markers.NewDetector(st, cfg.FFmpeg, filepath.Join(cfg.DataDir, "cache", "fingerprints"))
+	thumbs := trickplay.New(st, cfg.FFmpeg, cfg.DataDir)
 	images := metadata.NewImageCache(filepath.Join(cfg.DataDir, "cache", "images"))
 	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{
-		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, Images: images, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
+		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, Trickplay: thumbs, Images: images, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
 	})...)
 	go scanner.Watch(ctx)
 	live := livetv.NewManager(st, cfg.FFmpeg, cfg.FFprobe, cfg.DataDir)
@@ -82,6 +85,14 @@ func main() {
 		Activity:   stream.NewActivity(),
 		Tasks:      scheduler,
 		Markers:    detector,
+		Trickplay:  thumbs,
+		OpenSubs: &opensubs.Client{
+			UserAgent: "BingeBandit v" + version,
+			Key:       func() string { return st.Setting(store.SettingOpenSubsKey) },
+			Login: func() (string, string) {
+				return st.Setting(store.SettingOpenSubsUser), st.Setting(store.SettingOpenSubsPassword)
+			},
+		},
 		Live:       live,
 		Logos:      livetv.NewLogoCache(filepath.Join(cfg.DataDir, "cache", "logos")),
 		LogoLib:    livetv.NewLogoLibrary(filepath.Join(cfg.DataDir, "logos")),

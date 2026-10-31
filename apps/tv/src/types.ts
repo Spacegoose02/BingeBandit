@@ -56,6 +56,13 @@ export interface Item {
   watch: WatchState
 }
 
+/** A cast or crew member's titles the viewer can see, newest first. */
+export interface Person {
+  name: string
+  photo?: string
+  titles: { item: Item; role: string; kind: 'cast' | 'crew' }[]
+}
+
 export interface Credit {
   name: string
   role: string // the character for cast, the job for crew
@@ -238,4 +245,31 @@ export interface SportsSummary {
   players: { team: string; title: string; labels: string[]; rows: { name: string; position?: string; stats: string[] }[] }[]
   leaders: { title: string; away?: SportsLeader; home?: SportsLeader }[]
   standings: { title: string; labels: string[]; rows: { id: string; name: string; logo?: string; stats: string[] }[] }[]
+}
+
+/** A movie or show someone asked for (one per title; later askers join it). */
+export interface TitleRequest {
+  id: number
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  poster?: string
+  requestedBy: string
+  people: number
+  status: 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
+  mine: boolean
+}
+
+/** A TMDB search result the viewer can request. */
+export interface RequestableTitle {
+  kind: 'movie' | 'show'
+  tmdbId: number
+  title: string
+  year?: number
+  overview?: string
+  poster?: string
+  itemId?: number
+  onServer?: boolean
+  request?: TitleRequest
 }

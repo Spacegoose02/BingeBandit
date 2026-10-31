@@ -22,16 +22,18 @@ import (
 	"bingebandit/internal/metadata"
 	"bingebandit/internal/s3"
 	"bingebandit/internal/store"
+	"bingebandit/internal/trickplay"
 )
 
 type Deps struct {
-	Store    *store.Store
-	Metadata *metadata.Service
-	Scanner  *library.Scanner
-	Markers  *markers.Detector
-	Images   *metadata.ImageCache
-	DataDir  string
-	FFprobe  string
+	Store     *store.Store
+	Metadata  *metadata.Service
+	Scanner   *library.Scanner
+	Markers   *markers.Detector
+	Trickplay *trickplay.Generator
+	Images    *metadata.ImageCache
+	DataDir   string
+	FFprobe   string
 }
 
 // Builtin returns the standard task list.
@@ -102,6 +104,12 @@ func Builtin(d Deps) []*Task {
 			Description: "Compare the audio of episodes in each season to find intros and end credits, and look for the end credits of movies, for the Skip buttons.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.Markers.Pending,
+		},
+		{
+			ID: "make_scrub_previews", Name: "Make scrub previews",
+			Description: "Make the thumbnails players show while you drag or scrub through a movie or episode, from each file's keyframes (one every 10 seconds). Files played before they have any get them in the background too.",
+			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
+			Run: d.Trickplay.Pending,
 		},
 		{
 			ID: "build_default_collections", Name: "Build default collections",
@@ -429,6 +437,10 @@ func (d Deps) cleanCache(ctx context.Context) (string, error) {
 		}
 		return nil
 	})
+	// Scrub previews: <fileID>-<size>/
+	n, bytes := trickplay.Clean(d.DataDir, sizes)
+	removed += n
+	freed += bytes
 	// Audio fingerprints: <fileID>-<size>-<part>-<seconds>.fp
 	filepath.Walk(filepath.Join(d.DataDir, "cache", "fingerprints"), func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {

@@ -159,6 +159,17 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .select-label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .select-label select { width: auto; padding: 7px 10px; font-size: 14px; }
 
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: -10px 0 22px; }
+.filter-bar select { width: auto; padding: 7px 10px; font-size: 14px; }
+.filter-toggle { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; color: var(--muted); font-weight: 600; font-size: 13px; }
+.filter-toggle.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.person-head { display: flex; align-items: center; gap: 24px; margin-bottom: 30px; }
+.person-head .person-photo { width: 140px; flex: none; }
+.person-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+a.person-card { color: inherit; text-decoration: none; }
+a.person-card:hover .card-title { color: var(--accent); }
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -925,6 +936,20 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .menu-anchor { position: relative; }
 .player-menu { position: absolute; right: 0; bottom: 48px; max-height: 60vh; overflow-y: auto; min-width: 260px; }
 .player-summary { width: min(420px, 80vw); }
+.seek { position: relative; }
+.scrub-preview { position: absolute; bottom: 26px; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.scrub-thumb { border-radius: 6px; background-color: #000; background-repeat: no-repeat; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 8px 24px rgba(0, 0, 0, 0.6); }
+.scrub-time { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.75); }
+.menu-stepper { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
+.menu-stepper span { flex: 1; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.subsearch { width: min(440px, 90vw); }
+.subsearch-lang { display: block; padding: 4px 12px 8px; }
+.subsearch-lang select { width: 100%; }
+.subsearch-note { margin: 0; padding: 6px 12px 10px; font-size: 13px; color: var(--muted); }
+.subsearch-note.bad { color: var(--danger); }
+.subsearch-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.subsearch-name, .subsearch-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subsearch-name small { color: var(--muted); font-size: 12px; }
 .player-summary p { margin: 0; padding: 4px 12px 10px; font-size: 14px; line-height: 1.5; color: var(--text); }
 .spinner {
   position: absolute;
@@ -1282,6 +1307,17 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   .tvsheet-address { font-size: 26px; margin: 4px 0 10px !important; }
   .tvsheet-done { break-inside: avoid; padding-top: 12px; }
 }
+
+/* Requests */
+.request-row .request-poster { width: 46px; height: 69px; border-radius: 6px; overflow: hidden; background: var(--surface); display: grid; place-items: center; flex: none; color: var(--muted); }
+.request-row .request-poster img { width: 100%; height: 100%; object-fit: cover; }
+.request-row .grow { min-width: 200px; }
+.request-results { margin-bottom: 32px; }
+.request-action { margin-top: 6px; }
+.request-overview { max-height: 9em; overflow: auto; }
+.search-request { margin: -12px 0 20px; }
+.search-request a { color: var(--accent); }
+.tabs .count { font-size: 12px; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 7px; margin-left: 4px; }
 
 /* The Windows app's player page: mpv plays over it, so this shows only between files or after an error. */
 .desktop-player { position: fixed; inset: 0; display: grid; place-items: center; background: #000 center / cover no-repeat; }

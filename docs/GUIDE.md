@@ -83,11 +83,13 @@ Libraries you pin sit in the sidebar and fill your Home. Use **Edit** next to **
 
 Each library opens on **Recommended**, with tabs for the whole **Library** and its **Collections**. Admins can use **Manage recommendations** to pick which rows appear here and on Home.
 
+The **Library** tab can be filtered by genre, decade, rating (6+, 7+ or 8+) and **Unwatched** (movies you haven't seen, shows with episodes left). On the Android TV app the filters are chips above the grid; on Roku press `*`.
+
 ![A movie library](screenshots/library.webp)
 
 ### Movie and show pages
 
-A title's page shows its details, ratings, cast, the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork.
+A title's page shows its details, ratings, cast (pick someone to see everything else of theirs in your libraries), the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork.
 
 ![A movie page](screenshots/movie.webp)
 
@@ -102,6 +104,7 @@ Shows list their seasons, and each season lists its episodes with a ✓ on the o
 - **Search** looks across every library you can see.
 - **Watchlist** keeps titles you want to get to. Movies leave it once you finish them.
 - **Playlists** are your own lists, and can be shared with others on the server.
+- **Requests** is where you ask for a movie or show the server doesn't have (Overseerr-style). Search TMDB, pick one, add a note if you like, and an admin approves or declines it. Approved requests go to [Cinemask](https://github.com/Spacegoose02/cinemask) through the Cinemask Upgrades plugin, which adds the title and searches for it at once; when it lands in a library, everyone who asked gets a notification. If someone already asked, you join their request. Admins see every request on the same page, and their own requests are approved straight away. On the TV app, Search lists titles the server doesn't have under its results; pick one to request it. Kid profiles can't request, and **Settings → Library** turns requests off for everyone. Requests need a TMDB key.
 - **Discover** shows new trailers and videos from YouTube playlists and channels an admin picks. On the TV and phone app they play in the app's own player (the server reads them with yt-dlp, which the Docker image includes); if a video won't play that way, the app offers to open it in YouTube.
 
 ## 5. Watch
@@ -109,6 +112,9 @@ Shows list their seasons, and each season lists its episodes with a ✓ on the o
 The web player plays a file directly when your browser can, and otherwise converts it on the fly. While watching you can:
 
 - switch quality, audio track and subtitles,
+- see a thumbnail of where you'll land while dragging or scrubbing the progress bar (made by the "Make scrub previews" task, or in the background the first time a file plays),
+- move subtitles earlier or later in half-second steps when they're out of sync (Options → Subtitle timing, or G and H on a keyboard),
+- find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
 - skip intros and credits,
 - carry on to the next episode automatically,
 - start **Watch Together** to watch in sync with someone else on the server.

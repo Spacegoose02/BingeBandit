@@ -22,12 +22,14 @@ import (
 	"bingebandit/internal/logs"
 	"bingebandit/internal/markers"
 	"bingebandit/internal/metadata"
+	"bingebandit/internal/opensubs"
 	"bingebandit/internal/plugins"
 	"bingebandit/internal/sports"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
+	"bingebandit/internal/trickplay"
 	"bingebandit/internal/web"
 )
 
@@ -42,6 +44,8 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
+	Trickplay  *trickplay.Generator
+	OpenSubs   *opensubs.Client
 	Live       *livetv.Manager
 	Logos      *livetv.LogoCache
 	LogoLib    *livetv.LogoLibrary
@@ -147,6 +151,10 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/me/password", s.changePassword)
 			r.Put("/me/display-name", s.setDisplayName)
 			r.Get("/me/recommendations", s.getRecommendOptIn)
+			r.Get("/requests", s.myRequests)
+			r.Get("/requests/search", s.searchRequestable)
+			r.Post("/requests", s.createRequest)
+			r.Delete("/requests/{id}", s.deleteRequest)
 			r.Put("/me/recommendations", s.setRecommendOptIn)
 			r.Get("/items/{id}/recommend", s.recommendRecipients)
 			r.Post("/together", s.startTogether)
@@ -275,6 +283,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/home", s.home)
 			r.Get("/libraries", s.libraries)
 			r.Get("/libraries/{id}/items", s.libraryItems)
+			r.Get("/libraries/{id}/filters", s.libraryFilters)
+			r.Get("/people", s.person)
 			r.Get("/items/{id}", s.item)
 			r.Get("/items/{id}/trailers/{n}", s.trailerFile)
 			r.Get("/items/{id}/next", s.nextEpisode)
@@ -293,6 +303,11 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/progress", s.progress)
 			r.Get("/files/{id}/direct", s.directPlay)
 			r.Get("/files/{id}/subtitles/{stream}", s.subtitle)
+			r.Get("/files/{id}/subtitles/search", s.searchSubtitles)
+			r.Post("/files/{id}/subtitles/download", s.downloadSubtitle)
+			r.Get("/files/{id}/trickplay", s.trickplayInfo)
+			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
+			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
@@ -407,6 +422,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 
 				r.Post("/dvr/recordings/{id}/approve", s.approveRecording)
 				r.Post("/dvr/rules/{id}/approve", s.approveRule)
+				r.Post("/requests/{id}/approve", s.approveRequest)
+				r.Post("/requests/{id}/decline", s.declineRequest)
 
 				r.Get("/history", s.adminHistory)
 				r.Get("/statistics", s.adminStatistics)

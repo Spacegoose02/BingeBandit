@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -715,6 +716,21 @@ func (h *Host) Pages(admin bool) []PageLinks {
 		}
 		out = append(out, pl)
 	}
+	return out
+}
+
+// Handlers names the running plugins that list event by name (not "*"),
+// such as the ones that send approved title requests somewhere.
+func (h *Host) Handlers(event string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := []string{}
+	for _, in := range h.inst {
+		if in.state == StateRunning && in.manifest != nil && slices.Contains(in.manifest.Events, event) {
+			out = append(out, in.manifest.Name)
+		}
+	}
+	slices.Sort(out)
 	return out
 }
 

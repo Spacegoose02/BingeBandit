@@ -165,6 +165,24 @@ func (s *Store) UnprobedFiles(limit int) ([]*MediaFile, error) {
 	return out, rows.Err()
 }
 
+// VideoFiles lists every media file, newest first.
+func (s *Store) VideoFiles() ([]*MediaFile, error) {
+	rows, err := s.db.Query(`SELECT ` + fileCols + ` FROM media_files ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*MediaFile{}
+	for rows.Next() {
+		f, err := scanFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 // UpdateStreams replaces a file's stream list (used when sidecar subtitles change).
 func (s *Store) UpdateStreams(id int64, streams []Stream) error {
 	b, _ := json.Marshal(streams)

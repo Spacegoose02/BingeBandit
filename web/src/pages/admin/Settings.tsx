@@ -252,6 +252,40 @@ export default function AdminSettings() {
         </section>
 
         <section className="panel form">
+          <h3>Scrub previews and subtitles</h3>
+          <label className="check">
+            <input type="checkbox" checked={s.trickplay_enabled !== 'false'} onChange={set('trickplay_enabled')} />
+            Show thumbnails while scrubbing through movies and episodes
+          </label>
+          <p className="muted small">
+            The “Make scrub previews” task under <Link to="/admin/tasks">Scheduled Tasks</Link> makes them from each file's keyframes during
+            maintenance hours, and a file played before then gets them in the background. They take a few MB per hour of video.
+          </p>
+          <label>
+            OpenSubtitles API key (for “Find subtitles online” in the players)
+            <input value={s.opensubtitles_api_key ?? ''} onChange={set('opensubtitles_api_key')} placeholder="Paste your key" autoComplete="off" spellCheck={false} />
+          </label>
+          <div className="field-grid">
+            <label>
+              OpenSubtitles username
+              <input value={s.opensubtitles_username ?? ''} onChange={set('opensubtitles_username')} autoComplete="off" spellCheck={false} />
+            </label>
+            <label>
+              OpenSubtitles password
+              <input type="password" value={s.opensubtitles_password ?? ''} onChange={set('opensubtitles_password')} autoComplete="new-password" />
+            </label>
+          </div>
+          <p className="muted small">
+            Make a free consumer key at{' '}
+            <a href="https://www.opensubtitles.com/en/consumers" target="_blank" rel="noreferrer">
+              opensubtitles.com/consumers
+            </a>
+            . The account is optional, but OpenSubtitles allows more downloads a day with one. Downloaded subtitles are saved
+            beside the video as .srt files, so the media folder must be writable. Kid profiles can't download.
+          </p>
+        </section>
+
+        <section className="panel form">
           <h3>Library</h3>
           <label className="check">
             <input type="checkbox" checked={s.watch_folders === 'true'} onChange={set('watch_folders')} />
@@ -270,6 +304,14 @@ export default function AdminSettings() {
             Let people recommend movies and shows to each other
           </label>
           <p className="muted small">Off hides the Recommend buttons, the opt-in under Account and the “Recommended for You” row on Home, on the web and in the TV app.</p>
+          <label className="check">
+            <input type="checkbox" checked={s.requests_enabled !== 'false'} onChange={set('requests_enabled')} />
+            Let people request movies and shows the server doesn’t have
+          </label>
+          <p className="muted small">
+            Requests wait for an admin on the <Link to="/requests">Requests</Link> page. Approved ones go to Cinemask through the Cinemask
+            Upgrades plugin. Kid profiles can’t request.
+          </p>
           <label>
             Count as watched after (% of the runtime)
             <input type="number" min={50} max={100} value={s.watched_percent ?? '90'} onChange={set('watched_percent')} />

@@ -2,6 +2,7 @@ package library
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -177,4 +178,40 @@ func sameSidecars(streams, side []store.Stream) bool {
 	a, _ := json.Marshal(cur)
 	b, _ := json.Marshal(side)
 	return string(a) == string(b)
+}
+
+// LanguageCode turns a language name or ISO 639-1/639-2 code into the 639-2
+// code ffprobe uses ("" when unknown).
+func LanguageCode(s string) string { return languages[strings.ToLower(strings.TrimSpace(s))] }
+
+// SaveSubtitle writes a downloaded subtitle beside the video as
+// "<video>.<lang>.srt" (numbered when that name is taken, so nothing is
+// overwritten), then refreshes the file's subtitle list. It returns the
+// file's streams and the index of the new one.
+func (s *Scanner) SaveSubtitle(mf *store.MediaFile, lang string, hearingImpaired bool, data []byte) ([]store.Stream, int, error) {
+	base := strings.TrimSuffix(filepath.Base(mf.Path), filepath.Ext(mf.Path))
+	tags := lang
+	if hearingImpaired {
+		tags += ".sdh"
+	}
+	name := base + "." + tags + ".srt"
+	for n := 2; ; n++ {
+		if _, err := os.Stat(filepath.Join(filepath.Dir(mf.Path), name)); os.IsNotExist(err) {
+			break
+		}
+		name = fmt.Sprintf("%s.%s.%d.srt", base, tags, n)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(mf.Path), name), data, 0o644); err != nil {
+		return nil, 0, fmt.Errorf("could not save the subtitles beside the video (is the media folder read-only?): %w", err)
+	}
+	streams := withSidecars(mf.Streams, sidecars(mf.Path))
+	if err := s.st.UpdateStreams(mf.ID, streams); err != nil {
+		return nil, 0, err
+	}
+	for _, st := range streams {
+		if st.External == name {
+			return streams, st.Index, nil
+		}
+	}
+	return streams, -1, nil
 }

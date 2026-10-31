@@ -96,6 +96,7 @@ func (s *Server) RunNotifications(ctx context.Context) {
 		if time.Since(episodes) >= notifyInterval {
 			episodes = time.Now()
 			s.notifyNewEpisodes()
+			s.markArrivedRequests()
 			if err := s.Store.PruneNotifications(); err != nil {
 				slog.Warn("prune notifications", "err", err)
 			}

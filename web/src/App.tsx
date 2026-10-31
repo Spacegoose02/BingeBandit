@@ -8,6 +8,7 @@ import Home from './pages/Home'
 import LibraryPage from './pages/Library'
 import ItemPage from './pages/Item'
 import CollectionPage from './pages/Collection'
+import PersonPage from './pages/Person'
 import { DiscoverPage } from './pages/Discover'
 import SportsPage from './pages/Sports'
 import { FavoritesPage, KidsTitlesPage, PlaylistPage, PlaylistsPage, WatchlistPage } from './pages/Lists'
@@ -17,6 +18,7 @@ import AdminLiveTV from './pages/admin/LiveTV'
 import LiveGuide from './pages/LiveGuide'
 import RecordingsPage from './pages/Recordings'
 import Search from './pages/Search'
+import RequestsPage from './pages/Requests'
 import Account from './pages/Account'
 import TVSetupSheet from './pages/TVSetupSheet'
 import LinkDevice from './pages/LinkDevice'
@@ -85,6 +87,7 @@ export default function App() {
           <Route path="/library/:id" element={<LibraryPage />} />
           <Route path="/item/:id" element={<ItemPage />} />
           <Route path="/collection/:id" element={<CollectionPage />} />
+          <Route path="/person" element={<PersonPage />} />
           <Route path="/discover" element={<DiscoverPage />} />
           <Route path="/sports" element={<SportsPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
@@ -96,6 +99,7 @@ export default function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/:username" element={<ProfilePage />} />
           <Route path="/search" element={<Search />} />
+          <Route path="/requests" element={<RequestsPage />} />
           <Route path="/account" element={<PasscodeGate><Account /></PasscodeGate>} />
           <Route path="/link" element={<PasscodeGate><LinkDevice /></PasscodeGate>} />
           <Route path="/admin" element={<RequireAdmin />}>

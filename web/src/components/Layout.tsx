@@ -101,6 +101,12 @@ export default function Layout() {
             <Icon name="list" />
             <span>Playlists</span>
           </NavLink>
+          {!user?.kid && (
+            <NavLink to="/requests" className="nav-item">
+              <Icon name="plus" />
+              <span>Requests</span>
+            </NavLink>
+          )}
           {((libraries && libraries.length > 0) || favoritesPinned) && (
             <div className="nav-section nav-section-row">
               <span>Pinned</span>
