@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <title>BingeBandit</title>
+  <link rel="stylesheet" href="setup.css">
+</head>
+<body>
+  <main>
+    <img class="logo" src="logo.png" alt="BingeBandit">
+    <h1>Which server should this PC use?</h1>
+    <p class="error" id="error" hidden></p>
+    <form id="form">
+      <input id="address" autocomplete="off" spellcheck="false" placeholder="192.168.1.10 or tv.example.com" autofocus>
+      <button type="submit" id="connect">Connect</button>
+    </form>
+    <p class="status" id="status" aria-live="polite"></p>
+    <section>
+      <div class="row">
+        <h2>On your network</h2>
+        <button type="button" class="link" id="rescan">Search again</button>
+      </div>
+      <ul id="found"></ul>
+    </section>
+    <p class="hint">F11 switches full screen. Ctrl+Shift+S comes back here to change the server.</p>
+  </main>
+  <script src="setup.js"></script>
+</body>
+</html>

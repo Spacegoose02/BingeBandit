@@ -200,6 +200,10 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 	if ch == nil {
 		return
 	}
+	if msg := s.streamLimitHit(currentUser(r), clientIP(r), 0); msg != "" {
+		writeErr(w, http.StatusTooManyRequests, msg)
+		return
+	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "hls")
 	if err != nil {
 		log.Printf("live tv: %s couldn't start channel %v %q: %v", currentUser(r).Username, ch.Number, ch.Name, err)
@@ -324,6 +328,10 @@ func (s *Server) leaveChannel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
 	ch := s.watchableChannel(w, r)
 	if ch == nil {
+		return
+	}
+	if msg := s.streamLimitHit(currentUser(r), clientIP(r), 0); msg != "" {
+		writeErr(w, http.StatusTooManyRequests, msg)
 		return
 	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "ts")
