@@ -72,9 +72,17 @@ export default function MultiView({ channels: initial }: { channels: number[] })
     setAudio((a) => Math.min(a, n - 1))
     setFocused((f) => Math.min(f, n - 1))
   }
+  // Each screen keeps its own key as others are removed around it, so the
+  // screens after a removed one keep playing instead of all rejoining.
+  const keys = useRef<number[]>([])
+  const nextKey = useRef(0)
+  while (keys.current.length < tiles.length) keys.current.push(nextKey.current++)
+  if (keys.current.length > tiles.length) keys.current.length = tiles.length
   const remove = (i: number) => {
     if (tiles.length === 1) return setTiles([null])
+    keys.current.splice(i, 1)
     setTiles((ts) => ts.filter((_, j) => j !== i))
+    setFocused((f) => (f > i ? f - 1 : Math.min(f, tiles.length - 2)))
     setAudio((a) => (a === i ? 0 : a > i ? a - 1 : a))
   }
 
@@ -123,7 +131,7 @@ export default function MultiView({ channels: initial }: { channels: number[] })
   const n = tiles.length
   const tile = (i: number, style: object) => (
     <Screen
-      key={i}
+      key={keys.current[i]}
       index={i}
       channelId={tiles[i]}
       channel={channel(tiles[i])}
@@ -281,10 +289,12 @@ function useTileStream(channelId: Tile) {
     let retry: ReturnType<typeof setTimeout> | undefined
     joinChannel(channelId).then(
       (r) => {
+        // A join answered after the screen moved on is left at once; it
+        // mustn't take the place of the newer one, which would then never be left.
+        if (cancelled) return leaveChannel(r.viewerId)
         viewer.current = r.viewerId
         stall.current = r.stallSecs
-        if (cancelled) leaveChannel(r.viewerId)
-        else setStream({ src: r.playlist, buffer: r.bufferSecs })
+        setStream({ src: r.playlist, buffer: r.bufferSecs })
       },
       () => {
         if (!cancelled) retry = setTimeout(() => setAttempt((a) => a + 1), 5000)

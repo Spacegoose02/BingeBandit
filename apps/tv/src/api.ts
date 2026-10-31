@@ -60,6 +60,16 @@ export function onUnreachable(fn: (failed: string) => Promise<string | null>) {
   reconnect = fn
 }
 
+// Called once when the server no longer knows this device's session (it was
+// signed out from Signed-in devices, a password change, or a profile being
+// linked or removed), so the app can go back to sign-in instead of showing
+// errors everywhere.
+let signedOut: ((server: string) => void) | null = null
+
+export function onSignedOut(fn: (server: string) => void) {
+  signedOut = fn
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string, public data?: Record<string, unknown>) {
     super(message)
@@ -79,7 +89,8 @@ export async function request<T>(method: string, path: string, body?: unknown, s
   const signedIn = !!session && server === session.server
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  if (session?.token && signedIn) headers.Authorization = `Bearer ${session.token}`
+  const sentToken = signedIn ? session?.token : undefined
+  if (sentToken) headers.Authorization = `Bearer ${sentToken}`
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   let res: Response
@@ -98,6 +109,9 @@ export async function request<T>(method: string, path: string, body?: unknown, s
   }
   if (res.status === 204 || res.status === 202) return undefined as T
   const data = await res.json().catch(() => null)
+  // "not signed in" is the session check itself; other 401s (a wrong
+  // password in a form) leave the session alone.
+  if (res.status === 401 && signedIn && data?.error === 'not signed in' && session?.token === sentToken) signedOut?.(server)
   if (!res.ok) throw new ApiError(res.status, data?.error ?? `Server error ${res.status}`, data ?? undefined)
   return data as T
 }

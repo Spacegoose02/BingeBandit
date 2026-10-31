@@ -52,7 +52,8 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
   const it = d?.item ?? item
   const playable = it.kind === 'movie' || it.kind === 'episode'
   const target = playable ? it : d?.upNext
-  const resume = target && target.watch?.position > 30 ? target.watch.position : 0
+  // The same 15 s as Continue Watching on Home and the server.
+  const resume = target && target.watch?.position > 15 ? target.watch.position : 0
   const watched = playable ? !!it.watch?.watched : !!it.childCount && !it.unwatchedCount
   // The watchlist, recommendations and collections hold movies and shows.
   const top: Item | undefined = it.kind === 'movie' || it.kind === 'show' ? it : d?.show

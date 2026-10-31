@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import { absolute, api, authHeaders, current, trackWrite } from '../api'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
@@ -7,7 +7,7 @@ import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePr
 import { Button, Focusable } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
-import { backInterceptor, useNav } from '../nav'
+import { backInterceptor, holdOnReturn, useNav, useScreen } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
 import { useLandscape } from '../screen'
@@ -19,6 +19,8 @@ import { delayLabel, ScrubThumb, SubtitleSearch, THUMB_WIDTH, useTrickplay } fro
 
 const REPORT_EVERY = 10 // seconds
 const STALL_MS = 8000 // direct play with no progress this long falls back to the transcoder
+const FIRST_FRAME_MS = 20000 // the same before the first frame: a big remux over Wi-Fi can be slow to start
+const SEEK_SETTLE_MS = 600 // while converting, seeks wait for the presses to stop
 const LADDER = [2160, 1080, 720, 480]
 
 // What ExoPlayer plays everywhere without extra decoders. Containers are the
@@ -180,12 +182,14 @@ function IntroVideo({
   doneLabel?: string
 }) {
   useLandscape()
+  const { active } = useScreen()
   return (
     <View style={st.screen}>
       <Video
         source={{ uri, type, headers: authHeaders() }}
         style={StyleSheet.absoluteFill}
         resizeMode="contain"
+        paused={!active}
         onEnd={onDone}
         onError={onError ?? onDone}
       />
@@ -205,6 +209,9 @@ function IntroVideo({
 function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; together?: string }) {
   const nav = useNav()
   useLandscape()
+  // Hidden under another screen (it shouldn't be, but an invite or a deep
+  // link could push one): stay paused and leave the remote alone.
+  const { active } = useScreen()
   const insets = useSafeAreaInsets()
   const lock = useLock()
   const video = useRef<VideoRef>(null)
@@ -279,7 +286,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           startTranscode.current = true
         } else {
           if (picked.sub) setSub(picked.sub)
-          setSrc({ uri: absolute(`/api/files/${f.id}/direct`), startPosition: start * 1000 })
+          // posRef, not start: a watch party's first update may already have moved it.
+          setSrc({ uri: absolute(`/api/files/${f.id}/direct`), startPosition: posRef.current * 1000 })
         }
       },
       (e) => setError(e.message),
@@ -346,20 +354,40 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paused])
 
+  // A paused movie stays put when the app comes back, even after the TV's
+  // screensaver sent it to the background for a while (App.tsx).
+  useEffect(() => {
+    if (!active) return
+    holdOnReturn.current = paused
+    return () => {
+      holdOnReturn.current = false
+    }
+  }, [paused, active])
+
   // Report a final position and free the transcoder when leaving.
   const reportRef = useRef(report)
   reportRef.current = report
   useEffect(
     () => () => {
+      transcodeReq.current++ // a conversion still on its way is freed when it answers
+      if (seekTimer.current) clearTimeout(seekTimer.current)
       reportRef.current(true, finished.current)
       if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
     },
     [],
   )
 
+  // Each conversion request gets a number; an answer to one a newer request
+  // replaced is dropped (and its session freed), so quick seeks can't leave
+  // the player on an older start point or an ffmpeg running.
+  const transcodeReq = useRef(0)
+  const answeredReq = useRef(0) // the newest request that has answered (or been given up)
+  const seekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const transcode = useCallback(
     async (at: number) => {
       if (!file) return
+      if (seekTimer.current) clearTimeout(seekTimer.current)
+      const req = ++transcodeReq.current
       setBuffering(true)
       setError('')
       try {
@@ -383,13 +411,21 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           ...surroundCaps(),
           maxAudioChannels: 6,
         })
+        if (req !== transcodeReq.current) {
+          api.del(`/api/transcode/${res.session.id}`).catch(() => undefined)
+          return
+        }
+        answeredReq.current = req
         transcodeId.current = res.session.id
         offset.current = at
         lastTime.current = 0
         setMode('transcode')
         setSrc({ uri: absolute(res.playlist), type: 'm3u8' })
       } catch (e) {
-        setError((e as Error).message)
+        if (req === transcodeReq.current) {
+          answeredReq.current = req
+          setError((e as Error).message)
+        }
       }
     },
     [file],
@@ -400,7 +436,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   useEffect(() => {
     if (file && startTranscode.current) {
       startTranscode.current = false
-      transcode(start)
+      transcode(posRef.current) // where a watch party's first update put it, if one came first
     }
   }, [file, transcode, start])
 
@@ -410,6 +446,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     setMenu(false)
     if (q < 0 && file && burnRef.current < 0 && canDirectPlay(file, audioRef.current)) {
       if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
+      answeredReq.current = ++transcodeReq.current
+      if (seekTimer.current) clearTimeout(seekTimer.current)
       transcodeId.current = ''
       offset.current = 0
       lastTime.current = 0
@@ -465,19 +503,31 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   // error (e.g. 4:4:4 HEVC on Amlogic chips): playback just never starts. If
   // direct play makes no progress for a while, let the server convert it.
   const lastAdvance = useRef(Date.now())
+  const advanced = useRef(false) // a frame has played from this source
   useEffect(() => {
     lastAdvance.current = Date.now()
-  }, [src, paused])
+  }, [src, paused, active])
+  useEffect(() => {
+    advanced.current = false
+  }, [src])
+  // Android stops timers while the app is away, so the first tick back would
+  // see a long gap and convert a file that was playing fine.
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active') lastAdvance.current = Date.now()
+    })
+    return () => listener.remove()
+  }, [])
   useEffect(() => {
     if (mode !== 'direct' || !src) return
     const t = setInterval(() => {
-      if (!paused && Date.now() - lastAdvance.current > STALL_MS) {
+      if (!paused && active && Date.now() - lastAdvance.current > (advanced.current ? STALL_MS : FIRST_FRAME_MS)) {
         clearInterval(t)
         transcode(posRef.current)
       }
     }, 2000)
     return () => clearInterval(t)
-  }, [mode, src, paused, transcode])
+  }, [mode, src, paused, active, transcode])
 
   // Position-based reports stop while paused or buffering, and the server
   // drops a player from Now Playing after 45 s without one.
@@ -490,7 +540,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 
   const onProgress = (p: OnProgressData) => {
     const step = p.currentTime - lastTime.current
-    if (step > 0) lastAdvance.current = Date.now()
+    if (step > 0) {
+      lastAdvance.current = Date.now()
+      advanced.current = true
+    }
     lastTime.current = p.currentTime
     if (!paused && step > 0 && step < 2) played.current += step
     posRef.current = offset.current + p.currentTime
@@ -519,8 +572,17 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     posRef.current = t
     setPos(t)
     lastSeek.current = Date.now()
-    if (mode === 'direct') video.current?.seek(t)
-    else transcode(t) // the server converts from the new point
+    lastAdvance.current = Date.now() // a seek in a big file can take a while to land
+    // A conversion still starting counts as converting: its player isn't up yet.
+    const converting = mode === 'transcode' || transcodeReq.current !== answeredReq.current
+    if (!converting) {
+      video.current?.seek(t)
+      return
+    }
+    // The server converts from the new point, once the presses stop.
+    setBuffering(true)
+    if (seekTimer.current) clearTimeout(seekTimer.current)
+    seekTimer.current = setTimeout(() => transcode(posRef.current), SEEK_SETTLE_MS)
   }
 
   // Watch Together: everyone else's play, pause, seek and next episode
@@ -647,6 +709,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 
   // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
   useEffect(() => {
+    if (!active) return
     backInterceptor.current = () => {
       if (lock.handleBack()) return true
       if (subSearch) {
@@ -679,7 +742,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   useTVEventHandler((evt) => {
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
-    if (!evt || evt.eventKeyAction === 0) return
+    if (!evt || evt.eventKeyAction === 0 || !active) return
     if (menu || togetherOpen || summary || subSearch) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
@@ -761,7 +824,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           source={{ ...src, headers: authHeaders() }}
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
-          paused={paused}
+          paused={paused || !active}
           selectedAudioTrack={mode === 'direct' && audioPos >= 0 ? { type: SelectedTrackType.INDEX, value: audioPos } : undefined}
           onProgress={onProgress}
           onLoad={(d) => {
@@ -776,6 +839,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
             showControls('seek') // a glimpse of the title and position
           }}
           onBuffer={({ isBuffering }) => {
+            if (isBuffering && !buffering) lastAdvance.current = Date.now() // each stall gets its own 8 s
             setBuffering(isBuffering)
             if (isBuffering) onStall()
           }}

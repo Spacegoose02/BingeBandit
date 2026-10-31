@@ -6,6 +6,15 @@ import { ItemMenuContext, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import type { Credit, Item, ItemDetail } from '../types'
 
+/** A resume point as a clock: 4:05, or 1:35:12 past an hour. */
+function fmtClock(t: number) {
+  t = Math.floor(t)
+  const h = Math.floor(t / 3600)
+  const m = Math.floor((t % 3600) / 60)
+  const s = String(t % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`
+}
+
 function fmtDuration(min?: number) {
   if (!min) return ''
   const h = Math.floor(min / 60)
@@ -18,17 +27,36 @@ export default function Details({ id }: { id: number }) {
   const menu = useContext(ItemMenuContext)
   const [d, setD] = useState<ItemDetail | null>(() => cached<ItemDetail>(`/api/items/${id}`) ?? null)
   const [error, setError] = useState('')
+  const [failed, setFailed] = useState('') // a button's change that didn't save
 
   const load = useCallback(() => {
     writesDone()
       .then(() => api.get<ItemDetail>(`/api/items/${id}`))
-      .then(setD, (e) => setError(e.message))
+      .then(
+        (detail) => {
+          setD(detail)
+          setError('') // a blip earlier doesn't stay on screen once it loads
+        },
+        (e) => setError(e.message),
+      )
   }, [id])
+  // Watchlist and watched: say so when the server didn't take it.
+  const change = async (p: Promise<unknown>) => {
+    setFailed('')
+    await p.catch((e: Error) => setFailed(e.message))
+    load()
+  }
   // Again each time Back comes here (from the player: the new resume point).
   const { returns } = useScreen()
   useEffect(load, [load, returns])
 
-  if (error) return <Center><Text style={st.error}>{error}</Text></Center>
+  if (error && !d)
+    return (
+      <Center>
+        <Text style={st.error}>{error}</Text>
+        <Button label="Try again" primary preferFocus onPress={load} />
+      </Center>
+    )
   if (!d) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
 
   const it = d.item
@@ -36,7 +64,8 @@ export default function Details({ id }: { id: number }) {
   // Shows and seasons play their next unwatched episode.
   const target: Item | undefined = playable ? it : d.upNext
   // A finished title being watched again resumes too; finishing resets the position.
-  const resume = target && target.watch?.position > 30 ? target.watch.position : 0
+  // The same 15 s as Continue Watching on Home.
+  const resume = target && target.watch?.position > 15 ? target.watch.position : 0
   const bg = image(it.backdrop || it.showBackdrop || d.show?.backdrop, 'w1280')
   const meta = [it.year, it.contentRating, fmtDuration(it.runtime), it.rating ? `★ ${it.rating.toFixed(1)}` : '', it.genres?.slice(0, 3).join(', ')]
     .filter(Boolean)
@@ -66,7 +95,7 @@ export default function Details({ id }: { id: number }) {
           {target ? (
             <>
               <Button
-                label={resume ? `Resume from ${Math.floor(resume / 60)}:${String(Math.floor(resume % 60)).padStart(2, '0')}` : playable ? 'Play' : `Play S${target.seasonNumber} E${target.episodeNumber}`}
+                label={resume ? `Resume from ${fmtClock(resume)}` : playable ? 'Play' : `Play S${target.seasonNumber} E${target.episodeNumber}`}
                 primary
                 preferFocus
                 onPress={() => nav.push({ name: 'player', id: target.id, start: resume })}
@@ -82,20 +111,15 @@ export default function Details({ id }: { id: number }) {
           {(it.kind === 'movie' || it.kind === 'show') && (
             <Button
               label={it.onWatchlist ? 'On your watchlist ✓' : 'Add to watchlist'}
-              onPress={async () => {
-                await (it.onWatchlist ? api.del(`/api/watchlist/${it.id}`) : api.post(`/api/watchlist/${it.id}`)).catch(() => undefined)
-                load()
-              }}
+              onPress={() => change(it.onWatchlist ? api.del(`/api/watchlist/${it.id}`) : api.post(`/api/watchlist/${it.id}`))}
             />
           )}
           <Button
             label={fullyWatched ? 'Mark unwatched' : 'Mark watched'}
-            onPress={async () => {
-              await api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`).catch(() => undefined)
-              load()
-            }}
+            onPress={() => change(api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`))}
           />
         </View>
+        {!!failed && <Text style={st.error}>{failed}</Text>}
 
         {it.kind === 'show' && !!d.children?.length && (
           <>
