@@ -1,9 +1,26 @@
-import React, { memo, useCallback, useContext, useRef, useState } from 'react'
+import React, { memo, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View, type ImageProps, type PressableProps, type ViewStyle } from 'react-native'
 import { image } from './api'
 import { FocusMemoryContext, ItemMenuContext } from './nav'
 import { scaled, colors, font, gutter, isPhone, quietPress } from './theme'
 import type { Collection, Item } from './types'
+
+/**
+ * True for a moment after `on` turns true, for hasTVPreferredFocus on a
+ * screen that redraws all the time (a player's progress). Android applies
+ * the preferred focus again on every redraw while it stays true, so focus
+ * kept snapping back to that button and the others couldn't be reached.
+ */
+export function useFocusOnce(on: boolean): boolean {
+  const [grab, setGrab] = useState(false)
+  useEffect(() => {
+    if (!on) return
+    setGrab(true)
+    const t = setTimeout(() => setGrab(false), 500)
+    return () => clearTimeout(t)
+  }, [on])
+  return on && grab
+}
 
 /** A remote-friendly button: grows and lights up when focused. */
 export function Button({

@@ -129,50 +129,36 @@ export default function MultiView({ channels: initial }: { channels: number[] })
   }
 
   const n = tiles.length
-  const tile = (i: number, style: object) => (
-    <Screen
-      key={keys.current[i]}
-      index={i}
-      channelId={tiles[i]}
-      channel={channel(tiles[i])}
-      game={tiles[i] ? gameOn.get(tiles[i]!) : undefined}
-      audio={audio === i}
-      preferFocus={i === 0}
-      style={style}
-      onFocus={() => setFocused(i)}
-      onPress={() => (tiles[i] ? setAudio(i) : setPicker(i))}
-      onLongPress={() => (tiles[i] ? setOptions(i) : setPicker(i))}
-    />
-  )
   // 1: full; 2: side by side; 3: one large and two stacked; 4: a grid.
-  const grid =
-    n === 1 ? (
-      tile(0, st.full)
-    ) : n === 2 ? (
-      <View style={st.rowCenter}>
-        {tile(0, st.half)}
-        {tile(1, st.half)}
-      </View>
-    ) : n === 3 ? (
-      <View style={st.row}>
-        {tile(0, st.big)}
-        <View style={st.column}>
-          {tile(1, st.small)}
-          {tile(2, st.small)}
-        </View>
-      </View>
-    ) : (
-      <View style={st.column}>
-        <View style={st.row}>
-          {tile(0, st.quarter)}
-          {tile(1, st.quarter)}
-        </View>
-        <View style={st.row}>
-          {tile(2, st.quarter)}
-          {tile(3, st.quarter)}
-        </View>
+  // Every screen sits in its own slot under the same parent, so changing the
+  // layout moves the slots instead of rebuilding (and reloading) the players.
+  const slots: [number, number, number, number][] =
+    n === 1
+      ? [[0, 0, 100, 100]]
+      : n === 2
+        ? [[0, 0, 50, 100], [50, 0, 50, 100]]
+        : n === 3
+          ? [[0, 0, 200 / 3, 100], [200 / 3, 0, 100 / 3, 50], [200 / 3, 50, 100 / 3, 50]]
+          : [[0, 0, 50, 50], [50, 0, 50, 50], [0, 50, 50, 50], [50, 50, 50, 50]]
+  const grid = tiles.map((_, i) => {
+    const [left, top, width, height] = slots[i]
+    return (
+      <View key={keys.current[i]} style={[st.slot, { left: `${left}%`, top: `${top}%`, width: `${width}%`, height: `${height}%` }]}>
+        <Screen
+          index={i}
+          channelId={tiles[i]}
+          channel={channel(tiles[i])}
+          game={tiles[i] ? gameOn.get(tiles[i]!) : undefined}
+          audio={audio === i}
+          preferFocus={i === 0}
+          style={n === 2 ? st.half : st.full}
+          onFocus={() => setFocused(i)}
+          onPress={() => (tiles[i] ? setAudio(i) : setPicker(i))}
+          onLongPress={() => (tiles[i] ? setOptions(i) : setPicker(i))}
+        />
       </View>
     )
+  })
 
   return (
     <View style={st.screen}>
@@ -480,14 +466,9 @@ const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   screen: { flex: 1, backgroundColor: '#05070a', padding: 14 },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 },
-  row: { flex: 1, flexDirection: 'row' },
-  rowCenter: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  column: { flex: 1 },
+  slot: { position: 'absolute', justifyContent: 'center' },
   full: { flex: 1 },
-  half: { flex: 1, aspectRatio: 16 / 9 },
-  big: { flex: 2 },
-  small: { flex: 1 },
-  quarter: { flex: 1 },
+  half: { width: '100%', aspectRatio: 16 / 9 },
   tile: { margin: 6, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: 'transparent' },
   tileFocused: { borderColor: colors.text },
   empty: { color: colors.muted, fontSize: font.small },
