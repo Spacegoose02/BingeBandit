@@ -91,7 +91,9 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 |---|---|---|
 | GET | `/home` | Hero, Continue Watching and the Home rows. |
 | GET | `/libraries` | Libraries you can see. |
-| GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. |
+| GET | `/libraries/{id}/items` | Query: `sort`, `offset`, `limit` (max 500) → `{library, items, total}`. Filters, any mix: `genre`, `yearFrom`, `yearTo`, `unwatched=1` (movies not watched, shows with an episode left), `minRating` (out of 10). Filtered pages send no collections and fold none away. |
+| GET | `/libraries/{id}/filters` | `{genres, decades}` for a filter bar; decades newest first (`2020`, `2010`…). |
+| GET | `/people?name=` | A cast or crew member by name: `{name, photo, titles: [{item, role, kind}]}`, newest first, only titles you can see. `kind` is `cast` if they acted in it; `role` is their parts, else their jobs. 404 when nothing credits them. |
 | GET | `/libraries/{id}/collections`, `/collections/{id}` | Collections. A smart one carries its rules (`labelRule`, `genreRule`, `studioRule`, `yearFrom`, `yearTo`); everything matching all the set rules is a member, plus anything added by hand. |
 | POST | `/admin/libraries/{id}/kometa` | Admin. Body: a Kometa collection file (YAML). `?dryRun=1` only returns the plan; `?recommended=1` shows collections on Recommended unless the file sets `visible_library: false`. Returns `{collections: [{id, name, lists, sort, sortTitle, exists, visible, skipped}]}`; posters and list syncs continue in the background. |
 | PUT, POST | `/admin/collections/{id}/artwork` | Admin. `PUT {type: "poster"\|"backdrop", url}` downloads an image (or a ThePosterDB poster page; an empty url resets it); `POST ?type=` takes a multipart `file`. |

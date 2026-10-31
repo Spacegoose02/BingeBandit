@@ -25,7 +25,7 @@ func TestLibraryFilters(t *testing.T) {
 	alien := add("Alien", 1979, 8.2, `["Horror","Science Fiction"]`, `[{"name":"Sigourney Weaver","role":"Ripley","kind":"cast","photo":"/w.jpg"},{"name":"Ridley Scott","role":"Director","kind":"crew"}]`)
 	aliens := add("Aliens", 1986, 7.9, `["Action","Science Fiction"]`, `[{"name":"Sigourney Weaver","role":"Ripley","kind":"cast"}]`)
 	add("Gladiator", 2000, 8.5, `["Action","Drama"]`, `[{"name":"Russell Crowe","role":"Maximus","kind":"cast"},{"name":"Ridley Scott","role":"Director","kind":"crew"},{"name":"Ridley Scott","role":"Producer","kind":"crew"}]`)
-	add("Cats", 2019, 2.8, `["Comedy"]`, `[]`)
+	add("Cats", 2019, 2.8, `["Comedy"]`, `[{"name":"Sigourney Weaver","role":"Producer","kind":"crew"},{"name":"Sigourney Weaver","role":"Narrator","kind":"cast"}]`)
 	if err := s.SetWatched(u.ID, []int64{alien}, true); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestLibraryFilters(t *testing.T) {
 		t.Errorf("Ridley Scott: %+v", p.Titles)
 	}
 	p, err = s.PersonByName(u.ID, "Sigourney Weaver")
-	if err != nil || p.Photo == "" || len(p.Titles) != 2 || p.Titles[0].Item.ID != aliens || p.Titles[1].Kind != "cast" || p.Titles[1].Role != "Ripley" {
+	if err != nil || p.Photo == "" || len(p.Titles) != 3 || p.Titles[0].Role != "Narrator" || p.Titles[1].Item.ID != aliens || p.Titles[2].Kind != "cast" || p.Titles[2].Role != "Ripley" {
 		t.Errorf("Sigourney Weaver: %+v %v", p, err)
 	}
 	if _, err := s.PersonByName(u.ID, "Nobody"); err != ErrNotFound {

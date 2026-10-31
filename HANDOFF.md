@@ -63,6 +63,14 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Library filters and cast pages (2026-10-31, no migration)
+
+- **Server** (`store/filters.go`, `api/browse.go`): `/libraries/{id}/items` takes `genre`, `yearFrom`, `yearTo`, `unwatched=1` and `minRating` (`LibraryFilter`, used by `FilteredLibraryItems` and `FilteredLibraryLetters`; the old `LibraryItems`/`LibraryLetters` call them with no filter). A filtered page sends no collections and folds no titles into them. `/libraries/{id}/filters` lists genres and decades. `/people?name=` (`PersonByName`) lists the visible movies and shows whose credits name someone; credits have no person ids, so it's by exact name.
+- **Web:** a filter bar on the Library tab (kept in the address, so Back returns to it), and Cast & Crew cards link to `/person?name=` (`pages/Person.tsx`).
+- **TV app:** Genre, Year, Rating and Unwatched chips above the Library grid (`FilterBar`, `ChoiceList` in `screens/Library.tsx`), kept per library while the app runs; OK on someone in a title's Cast row opens `screens/Person.tsx`.
+- **Roku:** `*` on a library grid opens filter dialogs (`GridView.brs`); Details gets a Cast row whose people open a grid of their titles (`personNode`, `personContent` in `ApiTask.brs`).
+- **Tested:** `go test ./internal/store/` (`TestLibraryFilters`), the web library filter and person page in Chromium against a local server with made-up titles, `tsc`/`eslint` for apps/tv, the BrighterScript check for Roku. **Not tried on an Android TV or a Roku**; the Roku Details layout with two rows (seasons or episodes, then cast) is the likeliest to need a fix.
+
 ## Game Lights beyond football (2026-10-30, no migration)
 
 - **Plugin** (`game-lights/games.go`, `plays.go`, `effects.go`): score changes now light every team sport. `Follower.points` keeps each game's score and works out what each side scored, so goals by both sides between two looks both light (before, ESPN naming no scorer lit nothing).

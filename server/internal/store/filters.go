@@ -86,7 +86,7 @@ type Person struct {
 // PersonCredit is one of a person's titles and what they did in it.
 type PersonCredit struct {
 	Item *Item  `json:"item"`
-	Role string `json:"role"` // characters for cast, jobs for crew, joined with ", "
+	Role string `json:"role"` // their characters if they acted in it, else their jobs, joined with ", "
 	Kind string `json:"kind"` // cast if they acted in it at all, else crew
 }
 
@@ -107,22 +107,29 @@ func (s *Store) PersonByName(uid int64, name string) (*Person, error) {
 	p := &Person{Name: name, Titles: []PersonCredit{}}
 	for _, it := range items {
 		pc := PersonCredit{Item: it, Kind: "crew"}
-		var roles []string
+		var parts, jobs []string
 		for _, c := range it.Credits {
 			if c.Name != name {
 				continue
 			}
-			if c.Kind == "cast" {
-				pc.Kind = "cast"
-			}
-			if c.Role != "" && !slices.Contains(roles, c.Role) {
-				roles = append(roles, c.Role)
-			}
 			if p.Photo == "" {
 				p.Photo = c.Photo
 			}
+			if c.Kind == "cast" {
+				pc.Kind = "cast"
+				if c.Role != "" && !slices.Contains(parts, c.Role) {
+					parts = append(parts, c.Role)
+				}
+			} else if c.Role != "" && !slices.Contains(jobs, c.Role) {
+				jobs = append(jobs, c.Role)
+			}
 		}
-		pc.Role = strings.Join(roles, ", ")
+		// Someone who acted in it and produced it is listed for the part.
+		if pc.Kind == "cast" {
+			pc.Role = strings.Join(parts, ", ")
+		} else {
+			pc.Role = strings.Join(jobs, ", ")
+		}
 		it.Credits = nil
 		p.Titles = append(p.Titles, pc)
 	}
