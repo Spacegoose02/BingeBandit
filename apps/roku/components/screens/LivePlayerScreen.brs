@@ -68,6 +68,8 @@ sub tune()
     showBusy("Tuning...")
     m.joinCount = m.joinCount + 1
     c = m.channels[m.index]
+    ' The guide previews and focuses the last channel watched.
+    m.global.lastChannel = c.id
     ' The server waits for the stream's first segments, up to ~25 s.
     api("POST", "/api/live/channels/" + c.id.ToStr() + "/watch", {}, "onJoined", { timeout: 40000, join: m.joinCount })
 end sub

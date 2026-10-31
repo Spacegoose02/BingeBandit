@@ -140,6 +140,11 @@ sub buildButtons(d as object)
             m.actions.Push({ act: "play", id: target.id, start: 0 })
         end if
     end if
+    trailers = getOr(d, "trailers", [])
+    if type(trailers) = "roArray" and trailers.Count() > 0
+        labels.Push("Trailer")
+        m.actions.Push({ act: "trailer", url: trailers[0].url })
+    end if
     if it.watch <> invalid and isTrue(it.watch.watched)
         labels.Push("Mark unwatched")
         m.actions.Push({ act: "unwatched" })
@@ -159,6 +164,8 @@ sub buildButtons(d as object)
     for i = 0 to labels.Count() - 1
         labels[i] = labels[i].Trim()
     end for
+    ' Five buttons (with a trailer) only fit across a little narrower.
+    if labels.Count() > 4 then m.buttons.buttonWidth = 260 else m.buttons.buttonWidth = 320
     m.buttons.buttons = labels
 end sub
 
@@ -167,6 +174,8 @@ sub onButton()
     id = m.detail.item.id.ToStr()
     if a.act = "play"
         m.top.navigate = { screen: "PlayerScreen", params: { id: a.id, start: a.start } }
+    else if a.act = "trailer"
+        m.top.navigate = { screen: "PlayerScreen", params: { trailer: { url: a.url, title: m.detail.item.title } } }
     else if a.act = "watched" or a.act = "unwatched"
         api("POST", "/api/items/" + id + "/" + a.act, {}, "onChanged")
     else if a.act = "list"

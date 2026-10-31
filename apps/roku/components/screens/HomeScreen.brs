@@ -119,7 +119,7 @@ end sub
 function makeView(e as object) as object
     if e.id = "home" then return CreateObject("roSGNode", "RowsView")
     if e.id = "search" then return CreateObject("roSGNode", "SearchView")
-    if e.id = "live" then return CreateObject("roSGNode", "LiveView")
+    if e.id = "live" then return CreateObject("roSGNode", "GuideView")
     v = CreateObject("roSGNode", "GridView")
     if e.id = "kidsMovies"
         v.params = { title: "Approved Movies", path: "/api/kids/titles?kind=movie", build: "items", empty: "No movies approved yet. A parent approves them in BingeBandit." }

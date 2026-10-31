@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live TV: a cable-box guide. What's focused up top with the last channel previewing, then channels against a timeline. -->
+<component name="GuideView" extends="BaseView">
+  <children>
+    <Label id="pTitle" width="940" translation="[0, 40]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="42" />
+    </Label>
+    <Label id="pMeta" width="940" translation="[0, 104]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+    </Label>
+    <Label id="pSub" width="940" translation="[0, 146]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </Label>
+    <Label id="pDesc" width="940" translation="[0, 190]" wrap="true" maxLines="3" lineSpacing="4" color="0xC9CFD6FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+    </Label>
+    <Label id="note" width="940" translation="[0, 312]" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+    </Label>
+    <Group translation="[1000, 36]">
+      <Rectangle width="480" height="270" color="0x14181DFF" />
+      <Video id="preview" width="480" height="270" enableUI="false" />
+      <BusySpinner id="spinner" translation="[208, 103]" visible="false" />
+      <Rectangle width="76" height="34" translation="[12, 12]" color="0x2DD4BFFF" />
+      <Label text="LIVE" width="76" height="34" translation="[12, 12]" horizAlign="center" vertAlign="center" color="0x04211DFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="20" />
+      </Label>
+      <Rectangle id="tunedBg" width="480" height="40" translation="[0, 230]" color="0x00000099" visible="false" />
+      <Label id="tuned" width="456" height="40" translation="[12, 230]" vertAlign="center" color="0xF2F4F7FF">
+        <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="22" />
+      </Label>
+    </Group>
+    <TimeGrid id="grid" translation="[0, 360]" width="1480" height="690" numRows="8" channelInfoWidth="300" duration="7200" maxDays="1"
+      automaticLoadingDataFeedback="false" fillProgramGaps="false" channelNoDataText="No guide information"
+      focusBitmapUri="pkg:/images/button_focus.9.png" programBackgroundBitmapUri="pkg:/images/button.9.png"
+      programTitleColor="0xF2F4F7FF" programTitleFocusedColor="0x04211DFF" channelInfoTextColor="0xF2F4F7FF" timeLabelColor="0x98A1ADFF"
+      nowBarBlendColor="0x2DD4BFFF" pastTimeScreenBlendColor="0x0B0D10A0">
+      <Font role="programTitleFont" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+      <Font role="channelInfoFont" uri="pkg:/fonts/Inter-Bold.otf" size="26" />
+      <Font role="timeLabelFont" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+    </TimeGrid>
+    <Label id="status" width="1400" translation="[0, 600]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+    <!-- The whole screen, from inside Home's panel. -->
+    <OptionsMenu id="menu" translation="[-400, 0]" visible="false" />
+    <Timer id="reload" duration="300" repeat="true" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/GuideView.brs" />
+</component>
