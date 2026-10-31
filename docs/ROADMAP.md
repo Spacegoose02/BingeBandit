@@ -39,6 +39,8 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Parallel probing for faster first scans |
 | ✅ | Subtitles: external `.srt/.ass/.vtt` sidecars (language, forced, SDH from the file name), image subtitles (PGS/VobSub) burned in, per-user size and background |
 | ✅ | Subtitles in a `Subs/` folder (release downloads): `Subs/2_English.srt` for a movie, `Subs/<episode>/…` and `Subs/<episode>.en.srt` for TV |
+| ✅ | Scrub previews: thumbnail sheets from keyframes (scheduled task, or on first play), shown on the web and TV seek bars; BIF for Roku's trick play bar |
+| ✅ | Subtitle search and download from OpenSubtitles in the web and TV players, and a subtitle timing offset |
 | ✅ | Per-user playback preferences: auto-pick audio language (English by default) and subtitles (off / auto for foreign audio / forced only / always), auto-play next episode |
 | ✅ | Retry failed playback automatically; fall back from direct play to transcoding |
 | ✅ | Lower quality automatically when playback keeps buffering (user setting) |

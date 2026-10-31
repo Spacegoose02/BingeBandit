@@ -165,6 +165,7 @@ sub playDirect(at as dynamic)
     c.streamFormat = directFormat(m.file)
     c.title = m.top.findNode("title").text
     c.HttpHeaders = authHeaders()
+    setBif(c, 0)
     c.PlayStart = at
     showBusy("")
     m.video.content = c
@@ -209,9 +210,19 @@ sub onTranscode(event as object)
     c.streamFormat = "hls"
     c.title = m.top.findNode("title").text
     c.HttpHeaders = authHeaders()
+    setBif(c, m.offset)
     c.PlayStart = 0
     m.video.content = c
     m.video.control = "play"
+end sub
+
+' Scrub thumbnails for the trick play bar, from the server's BIF file. A
+' conversion counts from where it started, so the server shifts the index.
+sub setBif(c as object, from as dynamic)
+    url = withToken(m.global.server + "/api/files/" + m.file.id.ToStr() + "/trickplay.bif?from=" + Int(from).ToStr())
+    c.HDBifUrl = url
+    c.FHDBifUrl = url
+    c.SDBifUrl = url
 end sub
 
 sub stopTranscode()

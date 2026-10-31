@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-30. Latest release v0.36.0, 50 schema migrations._
+_Last updated: 2026-10-31. Latest release v0.36.0, 50 schema migrations._
 
 
 
@@ -59,6 +59,7 @@ Most outside services and all hardware were only tested against fakes. These are
 
 - **Devices:** the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN (NASCAR's fields especially), Multi-View with four streams (each now ignores Android audio focus) and Game Lights rooms per TV.
 - **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
+- **Subtitles:** OpenSubtitles search and download against the real API, Roku thumbnails from the BIF file.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
 - **Media:** intro and credits detection on real seasons (thresholds may need tuning), image subtitle burn-in from a Blu-ray rip, Dolby Vision and Atmos detection, Quick Sync on Intel and NVENC session limits with adaptive streaming.
@@ -68,6 +69,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Scrub previews, subtitle search and subtitle timing (2026-10-31, no migration)
+
+- **Scrub previews** (`internal/trickplay`): `Generator.Make` runs ffmpeg over keyframes only (`-skip_frame nokey`, `fps=1/10:round=up` so each slot shows the last keyframe at or before it) into 10×10 sheets of 320-wide thumbnails under `<data>/cache/trickplay/<fileID>-<size>/` with an `info.json`. New maintenance task `make_scrub_previews` (`Pending`, newest files first); `GET /files/{id}/trickplay` queues a missing file in the background (`Queue`, one ffmpeg at a time). `trickplay.Clean` runs in Clean up cache. `BIF` cuts the sheets into a Roku BIF (`?from=` shifts it for a conversion). Setting `trickplay_enabled` (on by default).
+- **Subtitle search** (`internal/opensubs`): OpenSubtitles REST v1 with the admin's API key (`opensubtitles_api_key`, optional `opensubtitles_username`/`_password` for a higher download limit; login tokens kept 12 h). Search by TMDB/IMDb id (the show's for episodes, with season and episode), plus the OpenSubtitles file hash for "made for this file" matches. `Scanner.SaveSubtitle` writes `<video>.<lang>[.sdh][.N].srt` beside the video (never overwriting) and refreshes the sidecar streams. Kid profiles get 403. Settings live in a new "Scrub previews and subtitles" panel in admin Settings.
+- **Web player** (`pages/Player.tsx`): thumbnail and time above the seek bar on hover/drag (`ScrubPreview`), Options → Find subtitles online (`SubtitleSearch`) and Subtitle timing (±0.5 s, G/H keys); the offset resets when another subtitle is picked.
+- **TV app** (`src/subtitleTools.tsx`, `screens/Player.tsx`): thumbnail above the marker while scrubbing with ◀ ▶ (and while dragging on phones), Find subtitles online and Subtitle timing in Options.
+- **Roku** (`PlayerScreen.brs`, `setBif`): sets `HDBifUrl`/`FHDBifUrl`/`SDBifUrl` so the built-in trick play bar shows thumbnails.
+- Burned-in (image) subtitles ignore the timing offset; it applies to text subtitles, which all clients draw themselves.
+- **Tested:** `go test ./...` (`TestMake` runs real ffmpeg and checks the sheet, info and BIF; `TestSearchAndDownload` and `TestHash` against a fake OpenSubtitles; `TestSaveSubtitle`), a local server run (scan, info 404 then ready, sheet and BIF served, setting off → 404), `tsc` and a production build for web, `tsc` and `eslint` for apps/tv. **Not tried:** the real OpenSubtitles API (no key here; field names are from its docs), the TV app on a device, the Roku BIF on a Roku.
 
 ## Title requests (2026-10-31, migration 51)
 

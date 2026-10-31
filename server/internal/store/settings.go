@@ -27,6 +27,10 @@ const (
 	SettingTranscodeThrottle = "transcode_throttle"
 	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
+	SettingTrickplay         = "trickplay_enabled"      // thumbnails while scrubbing the seek bar
+	SettingOpenSubsKey       = "opensubtitles_api_key"  // subtitle search in the players
+	SettingOpenSubsUser      = "opensubtitles_username" // an OpenSubtitles account raises the daily download limit
+	SettingOpenSubsPassword  = "opensubtitles_password"
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
 	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
@@ -103,6 +107,10 @@ var SettingDefaults = map[string]string{
 	SettingTranscodeThrottle: "true",
 	SettingAdaptiveStreaming: "false",
 	SettingAllowDownloads:    "false",
+	SettingTrickplay:         "true",
+	SettingOpenSubsKey:       "",
+	SettingOpenSubsUser:      "",
+	SettingOpenSubsPassword:  "",
 	SettingRecommendations:   "true",
 	SettingRequests:          "true",
 	SettingWatchedPercent:    "90",

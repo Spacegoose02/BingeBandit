@@ -558,6 +558,30 @@ export interface MediaFile {
   streams: MediaStream[]
 }
 
+/** Scrub previews: thumbnail n (at n × interval seconds) is in sheet n / (columns × rows). */
+export interface TrickplayInfo {
+  interval: number
+  width: number
+  height: number
+  columns: number
+  rows: number
+  count: number
+  sheets: number
+}
+
+/** A subtitle found on OpenSubtitles. */
+export interface SubtitleResult {
+  fileId: number
+  name: string
+  language: string
+  downloads: number
+  hearingImpaired: boolean
+  hashMatch: boolean
+  trusted: boolean
+  ai: boolean
+  uploader?: string
+}
+
 export interface Library {
   id: number
   name: string
