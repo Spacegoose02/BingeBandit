@@ -14,7 +14,7 @@
   </interface>
   <children>
     <Rectangle width="1920" height="1080" color="0x00000080" />
-    <Rectangle width="760" height="1080" translation="[1160, 0]" color="0x14181DF8" />
+    <Rectangle width="760" height="1080" translation="[1160, 0]" color="0x14181DFF" />
     <Label id="title" width="640" translation="[1220, 70]" wrap="true" maxLines="2" color="0xF2F4F7FF">
       <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="40" />
     </Label>

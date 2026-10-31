@@ -176,7 +176,7 @@ function asString(v as dynamic) as string
     if v = invalid then return ""
     t = type(v)
     if t = "roString" or t = "String" then return v
-    if t = "roInt" or t = "Integer" or t = "roLongInteger" or t = "LongInteger" then return v.ToStr()
+    if t = "roInt" or t = "roInteger" or t = "Integer" or t = "roLongInteger" or t = "LongInteger" then return v.ToStr()
     if t = "roFloat" or t = "Float" or t = "roDouble" or t = "Double" then return Str(v).Trim()
     if t = "roBoolean" or t = "Boolean"
         if v then return "true" else return "false"

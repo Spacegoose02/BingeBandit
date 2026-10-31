@@ -29,6 +29,7 @@ sub init()
     m.filter = "all"
     m.sel = invalid ' { index, channel, program (invalid in a gap), start, stop }
     m.focusId = 0 ' the channel to keep focused across reloads
+    m.followLast = false ' after watching: focus the last channel watched instead
     m.prefs = invalid
     m.loading = false
     m.loaded = 0
@@ -39,6 +40,7 @@ sub init()
     m.joinCount = 0
     m.menuLevel = ""
     m.menuActions = []
+    m.menuMsg = ""
     m.status.text = "Loading the guide..."
     load()
 end sub
@@ -103,13 +105,16 @@ sub onLoaded(event as object)
     showNote("")
     ' Keep the focused channel; the first time, the last one watched.
     want = m.focusId
-    if want = 0 then want = lastChannel()
+    if want = 0 or m.followLast then want = lastChannel()
+    m.followLast = false
     m.grid.contentStartTime = res.data.from
     m.grid.content = t.content
     i = channelIndex(want)
     if i < 0 then i = 0
     if m.shown.Count() > 0 then m.grid.jumpToChannel = i
     if m.previewOn and m.tunedId = 0 then startPreview()
+    ' A favourite or recording just changed: show the choices as they are now.
+    if m.menu.visible and m.menuLevel = "main" and m.sel <> invalid then openMenu("main", m.menuMsg)
 end sub
 
 function lastChannel() as integer
@@ -230,7 +235,7 @@ sub watch(i as integer)
     if i < 0 or i >= m.shown.Count() then return
     stopPreview()
     ' Back from watching, the guide follows the channel flipped to.
-    m.focusId = 0
+    m.followLast = true
     m.top.navigate = { screen: "LivePlayerScreen", params: { channels: m.shown, index: i } }
 end sub
 
@@ -348,6 +353,9 @@ sub openMenu(level as string, message as string)
             m.menuActions.Push({ act: "level", level: "filter" })
         end if
         m.menu.message = message
+        m.menuMsg = message
+        ' Redrawn after a choice: stay on it.
+        if message <> "" and m.menu.visible then focus = m.menu.chosen
     else if level = "filter"
         m.menu.title = "Channels shown"
         m.menu.message = ""
