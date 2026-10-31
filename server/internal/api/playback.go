@@ -262,15 +262,17 @@ func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(name, ".m3u8") {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "no-cache")
-		if q := playlistQuery(r); q != "" {
-			b, err := io.ReadAll(f)
-			if err != nil {
-				writeErr(w, http.StatusServiceUnavailable, err.Error())
-				return
-			}
-			w.Write(rewritePlaylist(b, q, r.URL.Query().Get("fromStart") == "1"))
+		// Every media playlist gets EXT-X-START at 0: until ffmpeg finishes,
+		// it's an EVENT playlist, and players such as ExoPlayer (Android TV)
+		// otherwise join it near its end like a live stream, skipping what
+		// was already converted (a fast remux can list minutes ahead).
+		b, err := io.ReadAll(f)
+		if err != nil {
+			writeErr(w, http.StatusServiceUnavailable, err.Error())
 			return
 		}
+		w.Write(rewritePlaylist(b, playlistQuery(r), true))
+		return
 	} else {
 		w.Header().Set("Content-Type", "video/mp2t")
 	}
@@ -325,6 +327,13 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 
 	if watched && it.Kind == "movie" {
 		s.Store.RemoveFromWatchlist(u.ID, it.ID) // finished: no longer "to watch"
+	}
+	// Paused players stop fetching once their buffer is full; their reports
+	// keep the conversion from being stopped as idle.
+	if req.TranscodeID != "" && !req.Stopped && s.Transcoder != nil {
+		if t := s.Transcoder.Get(req.TranscodeID); t != nil && t.UserID == u.ID {
+			t.Touch()
+		}
 	}
 	if req.PlaySessionID != "" {
 		prev, had := s.Activity.Get(req.PlaySessionID)

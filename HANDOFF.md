@@ -67,6 +67,16 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Server bug fixes: empty mount points, paused conversions, EXT-X-START, stuck shares (2026-10-31, no migration)
+
+From a read-through bug check of the server (report in the project's `bug-check/server-bug-check.md`).
+
+- **An unplugged drive could empty a library:** a drive that goes away usually leaves its mount point behind, empty, and a scan treated that as "every file deleted", pruning the items and (by cascade) their watch state, edits and collections. `Scanner.unmounted` (`library/scanner.go`) now skips pruning for a library folder that is empty while the library still has files under it (full scans and folder rescans). New `store.HasFilesUnder`. An empty *new* library still scans normally.
+- **Pausing a conversion for 90 s killed it:** once a player's buffer is full it stops fetching, so the janitor stopped the session and the TV app showed "Playback failed" on resume. `/api/progress` now calls `Session.Touch` for the reporting user's own `transcodeId` (all three apps keep reporting while paused).
+- **Converted playback could start late on Android:** a conversion's EVENT playlist only got `EXT-X-START:TIME-OFFSET=0` for `?token=&fromStart=1` (Roku), so ExoPlayer joined it near its live edge. `transcodeFile` now adds it to every transcode media playlist; the web player already started at 0, and Roku still works the same.
+- **Health page hung on a stuck network share:** folder checks now give up after 10 s (`checkWithTimeout`, `health.go`), report the folder as not responding (offline, so the alert fires) and don't start another check on a path whose last one is still blocked. `checkFolders` checks folders in parallel now.
+- **Tested:** new `TestScanKeepsLibraryOnEmptyMountPoint` (fails without the fix), `TestProgressKeepsPausedTranscodeAlive` (real ffmpeg, also checks EXT-X-START on a header-authenticated playlist), `TestRewritePlaylistWithoutToken`, `TestStuckFolderCheck` (with `-race`); full `go vet`, `go test ./...` and `gofmt`. Not tried on a device: ExoPlayer honouring EXT-X-START on the onn box, and a real unmounted drive or stuck SMB share.
+
 ## Passcode fixes on the TV, and the Windows release build (2026-10-31, no migration)
 
 - **Server section stayed visible behind the passcode** (#158): Back or Cancel on the passcode prompt left Settings → Server showing the libraries, live sources and their buttons (changes still got 423). `AdminSection` (`apps/tv/src/screens/Settings.tsx`) now loads admin settings, live sources and libraries in one guarded request and renders nothing until it succeeds; a cancelled prompt leaves a "Locked" notice with Enter passcode. The Who's watching PIN, Profiles & PINs and the Roku settings screen were checked and weren't affected.

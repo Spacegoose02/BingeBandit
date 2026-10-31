@@ -35,3 +35,19 @@ func TestPlaylistQueryOnlyForTokenRequests(t *testing.T) {
 		t.Errorf("got %q", q)
 	}
 }
+
+// Apps that sign in with a header (the Android TV app) get EXT-X-START too,
+// with the URIs left alone, so ExoPlayer plays a growing conversion from its
+// start instead of joining near its end.
+func TestRewritePlaylistWithoutToken(t *testing.T) {
+	in := "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:4.0,\nseg00000.ts\n"
+	got := string(rewritePlaylist([]byte(in), "", true))
+	want := "#EXTM3U\n#EXT-X-START:TIME-OFFSET=0,PRECISE=YES\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:4\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXTINF:4.0,\nseg00000.ts\n"
+	if got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+	master := "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nv0_index.m3u8\n"
+	if got := string(rewritePlaylist([]byte(master), "", true)); got != master {
+		t.Errorf("master playlist changed:\n%s", got)
+	}
+}
