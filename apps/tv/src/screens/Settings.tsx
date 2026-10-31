@@ -729,10 +729,26 @@ function AdminSection({ guard }: { guard: Guard }) {
   const [sources, setSources] = useState<LiveSource[]>([])
   const [libraries, setLibraries] = useState<Library[]>([])
   const [msg, setMsg] = useState('')
+  // Nothing shows until the passcode (when there is one) lets the settings
+  // load, so backing out of its prompt leaves the section empty, not open.
+  const [locked, setLocked] = useState(false)
   const load = useCallback(() => {
-    guard(() => api.get<Record<string, string>>('/api/admin/settings').then(setSettings)).catch((e) => setMsg(e.message))
-    api.get<LiveSource[]>('/api/admin/live/sources').then(setSources, () => undefined)
-    api.get<Library[]>('/api/libraries').then(setLibraries, () => undefined)
+    guard(async () => {
+      const next = await api.get<Record<string, string>>('/api/admin/settings')
+      const [src, libs] = await Promise.all([
+        api.get<LiveSource[]>('/api/admin/live/sources').catch(() => [] as LiveSource[]),
+        api.get<Library[]>('/api/libraries').catch(() => [] as Library[]),
+      ])
+      setSettings(next)
+      setSources(src)
+      setLibraries(libs)
+      setLocked(false)
+    }).then(
+      (ok) => {
+        if (!ok) setLocked(true)
+      },
+      (e) => setMsg(e.message),
+    )
   }, [guard])
   useEffect(load, [load])
   const run = (change: () => Promise<unknown>, done: string) =>
@@ -747,6 +763,21 @@ function AdminSection({ guard }: { guard: Guard }) {
   const step = (key: string, value: number) => run(() => api.put('/api/admin/settings', { [key]: String(value) }), 'Saved.')
   const days = num('continue_watching_days', 0)
   const pct = num('watched_percent', 90)
+  if (!settings)
+    return (
+      <>
+        {!!msg && <Text style={st.msg}>{msg}</Text>}
+        {locked && (
+          <View style={st.option}>
+            <Text style={st.value}>Locked</Text>
+            <Text style={st.hint}>Enter your settings passcode to see the server settings.</Text>
+            <View style={st.buttons}>
+              <Button small label="Enter passcode" onPress={load} />
+            </View>
+          </View>
+        )}
+      </>
+    )
   return (
     <>
       {!!msg && <Text style={st.msg}>{msg}</Text>}
