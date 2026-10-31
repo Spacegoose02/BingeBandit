@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { useBackState } from '../backState'
@@ -6,7 +6,18 @@ import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { useApi, useDocumentTitle } from '../hooks'
-import type { SportsGame, SportsHome, SportsLeague, SportsSide, SportsTeam } from '../types'
+import { MAX_SCREENS, isSportsChannel, multiViewPicks, multiViewUrl, setMultiViewPicks } from '../sportsHub'
+import type { LiveChannel, Prefs, SportsGame, SportsHome, SportsLeague, SportsSide, SportsTeam } from '../types'
+
+/** What every game card needs from the page: Multi-View picks and spoiler-free mode. */
+interface Hub {
+  picks: number[]
+  pick: (channelId: number) => void
+  spoilerFree: boolean
+  revealed: Set<string>
+  reveal: (gameId: string) => void
+}
+const HubContext = createContext<Hub>({ picks: [], pick: () => undefined, spoilerFree: false, revealed: new Set(), reveal: () => undefined })
 
 /** ESPN's day (US Eastern) as YYYYMMDD, days from today. */
 function espnDay(offset: number) {
@@ -36,18 +47,71 @@ export default function SportsPage() {
   const live = data?.games.filter((g) => g.state === 'in') ?? []
   const soon = data?.games.filter((g) => g.state === 'pre') ?? []
   const done = data?.games.filter((g) => g.state === 'post') ?? []
+  const { data: prefs, reload: reloadPrefs } = useApi<Prefs>('/api/me/prefs')
+  const { data: channels } = useApi<LiveChannel[]>('/api/live/channels')
+  const sportsChannels = useMemo(() => (channels ?? []).filter(isSportsChannel), [channels])
+  const [picks, setPicks] = useState(multiViewPicks)
+  const [notice, setNotice] = useState('')
+  const [revealed, setRevealed] = useState<Set<string>>(() => new Set())
+  const pick = useCallback((id: number) => {
+    const cur = multiViewPicks()
+    let msg: string
+    if (cur.includes(id)) msg = 'Already in Multi-View.'
+    else if (cur.length >= MAX_SCREENS) msg = `Multi-View is full: ${MAX_SCREENS} screens.`
+    else {
+      cur.push(id)
+      setMultiViewPicks(cur)
+      msg = `Added to Multi-View (${cur.length} of ${MAX_SCREENS}).`
+    }
+    setPicks(multiViewPicks())
+    setNotice(msg)
+    window.setTimeout(() => setNotice((n) => (n === msg ? '' : n)), 4000)
+  }, [])
+  const spoilerFree = !!prefs?.spoilerFree
+  const setSpoilerFree = async (on: boolean) => {
+    const cur = await api.get<Prefs>('/api/me/prefs')
+    await api.put('/api/me/prefs', { ...cur, spoilerFree: on })
+    reloadPrefs()
+  }
+  const hub = useMemo<Hub>(
+    () => ({ picks, pick, spoilerFree, revealed, reveal: (id) => setRevealed((r) => new Set(r).add(id)) }),
+    [picks, pick, spoilerFree, revealed],
+  )
 
   return (
+    <HubContext.Provider value={hub}>
     <div className="page sports">
       <header className="page-head">
         <div>
           <h1>Sports</h1>
           <div className="muted">Your teams' games, live scores and results, from ESPN.</div>
         </div>
-        <button className="btn btn-primary" onClick={() => setPicking(true)}>
-          <Icon name="trophy" size={18} /> {data?.teams.length ? 'Change teams' : 'Pick your teams'}
-        </button>
+        <div className="sports-actions">
+          <span className="sports-spoiler" title="Hide scores until you ask to see one">
+            <label className="switch">
+              <input type="checkbox" checked={spoilerFree} onChange={(e) => setSpoilerFree(e.target.checked)} aria-label="Spoiler-free" />
+              <span />
+            </label>
+            Spoiler-free
+          </span>
+          <Link className="btn btn-glass" to={multiViewUrl(picks)}>
+            <Icon name="stack" size={18} /> Multi-View{picks.length ? ` (${picks.length})` : ''}
+          </Link>
+          <button className="btn btn-primary" onClick={() => setPicking(true)}>
+            <Icon name="trophy" size={18} /> {data?.teams.length ? 'Change teams' : 'Pick your teams'}
+          </button>
+        </div>
       </header>
+      {notice && (
+        <div className="sports-notice" role="status">
+          {notice}
+          {picks.length > 0 && (
+            <Link to={multiViewUrl(picks)} className="btn btn-sm btn-primary">
+              Open Multi-View
+            </Link>
+          )}
+        </div>
+      )}
       {(error || data?.error) && <div className="form-error">{error || data?.error}</div>}
       {data && data.teams.length === 0 && (
         <div className="empty">
@@ -71,6 +135,7 @@ export default function SportsPage() {
         <div className="empty">No games for your teams from two days ago to a week from now.</div>
       )}
       {leagues.length > 0 && <Scoreboard leagues={leagues} first={data?.teams[0]?.league} />}
+      {sportsChannels.length > 0 && <SportsChannels channels={sportsChannels} />}
       {picking && data && (
         <TeamPicker
           leagues={leagues}
@@ -83,6 +148,43 @@ export default function SportsPage() {
         />
       )}
     </div>
+    </HubContext.Provider>
+  )
+}
+
+/** The sports networks among the Live TV channels: watch one, or add it to Multi-View. */
+function SportsChannels({ channels }: { channels: LiveChannel[] }) {
+  const { picks, pick } = useContext(HubContext)
+  return (
+    <section className="sports-section">
+      <h2>Sports channels</h2>
+      <div className="sports-grid">
+        {channels.map((c) => (
+          <div key={c.id} className="sports-card panel">
+            <div className="sports-card-head">
+              <strong>
+                {c.number} {c.name}
+              </strong>
+            </div>
+            <div className="muted small sports-where">{c.now?.title ?? ' '}</div>
+            <div className="sports-channels">
+              <Link to={`/live/${c.id}`} className="btn btn-glass btn-sm">
+                <Icon name="play" size={14} fill /> Watch
+              </Link>
+              <MultiViewButton channelId={c.id} picked={picks.includes(c.id)} onPick={pick} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function MultiViewButton({ channelId, picked, onPick }: { channelId: number; picked: boolean; onPick: (id: number) => void }) {
+  return (
+    <button className="btn btn-glass btn-sm" onClick={() => onPick(channelId)} disabled={picked} title="Add to Multi-View">
+      <Icon name={picked ? 'check' : 'plus'} size={14} /> Multi-View
+    </button>
   )
 }
 
@@ -108,6 +210,8 @@ function TeamLogo({ team, size }: { team: SportsTeam; size: number }) {
 }
 
 function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: string }) {
+  const { picks, pick, spoilerFree, revealed, reveal } = useContext(HubContext)
+  const hidden = spoilerFree && g.state !== 'pre' && !revealed.has(g.id)
   const side = (s: SportsSide) => (
     <div className={`sports-side${g.state === 'post' && s.winner ? ' winner' : ''}${g.mine?.includes(s.id) ? ' mine' : ''}`}>
       <TeamLogo team={s} size={32} />
@@ -115,7 +219,7 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
         {s.shortName || s.name}
         {s.record && <span className="muted small"> {s.record}</span>}
       </span>
-      {g.state !== 'pre' && <span className="sports-score">{s.score}</span>}
+      {g.state !== 'pre' && !hidden && <span className="sports-score">{s.score}</span>}
     </div>
   )
   return (
@@ -127,7 +231,7 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
             <span className="sports-dot" /> {g.detail}
           </span>
         ) : (
-          <span className="muted small">{g.state === 'pre' ? startLabel(g.start) : g.detail}</span>
+          <span className="muted small">{g.state === 'pre' ? startLabel(g.start) : hidden ? 'Final' : g.detail}</span>
         )}
       </div>
       {g.race || (!g.home.id && !g.away.id) ? (
@@ -136,7 +240,7 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
           <div className="sports-side">
             <span className="sports-name">{g.name}</span>
           </div>
-          {g.state !== 'pre' && <div className="muted small">{(g.race ?? []).slice(0, 3).map((d) => `${d.place}. ${d.shortName}`).join('   ')}</div>}
+          {g.state !== 'pre' && !hidden && <div className="muted small">{(g.race ?? []).slice(0, 3).map((d) => `${d.place}. ${d.shortName}`).join('   ')}</div>}
         </>
       ) : (
         <>
@@ -147,13 +251,19 @@ function GameCard({ game: g, leagueName }: { game: SportsGame; leagueName: strin
       {(g.broadcasts?.length || g.venue) && (
         <div className="muted small sports-where">{[g.broadcasts?.join(', '), g.state !== 'post' ? g.venue : ''].filter(Boolean).join(' · ')}</div>
       )}
-      {g.channels && g.channels.length > 0 && (
+      {(hidden || (g.channels && g.channels.length > 0)) && (
         <div className="sports-channels">
-          {g.channels.map((c) => (
+          {g.channels?.map((c) => (
             <Link key={c.id} to={`/live/${c.id}`} className="btn btn-glass btn-sm" title={c.title}>
               <Icon name="play" size={14} fill /> {c.name}
             </Link>
           ))}
+          {g.channels?.[0] && g.state !== 'post' && <MultiViewButton channelId={g.channels[0].id} picked={picks.includes(g.channels[0].id)} onPick={pick} />}
+          {hidden && (
+            <button className="btn btn-glass btn-sm" onClick={() => reveal(g.id)}>
+              Show score
+            </button>
+          )}
         </div>
       )}
     </div>

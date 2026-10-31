@@ -13,6 +13,7 @@ What it does:
   - skips intros and credits as your preferences say (OK skips when offered);
   - plays the next episode in the same window, or offers it (N or OK);
   - Back, Escape or Backspace stops, and the app goes back to where you were.
+- **Multi-View** (`/multiview`, from the Sports page): up to four Live TV channels at once, like the TV app's. OK moves the sound to the focused screen, the menu key has change channel, full screen and remove, and the toolbar sets the number of screens, jumps to the next game of your teams and saves layouts. It works in any browser too.
 - Watch Together and Live TV stay in the app's own browser player for now.
 
 ## Keys in the player

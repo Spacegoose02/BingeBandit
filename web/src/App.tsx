@@ -27,6 +27,7 @@ import AdminLibraries from './pages/admin/Libraries'
 import AdminUsers from './pages/admin/Users'
 import AdminSettings from './pages/admin/Settings'
 import AdminTasks from './pages/admin/Tasks'
+import AdminHealth from './pages/admin/Health'
 import AdminLogs from './pages/admin/Logs'
 import AdminImport from './pages/admin/Import'
 import AdminPlugins from './pages/admin/Plugins'
@@ -38,6 +39,7 @@ import { profilePickPending } from './profilePick'
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
 const LivePlayer = lazy(() => import('./pages/LivePlayer'))
+const MultiView = lazy(() => import('./pages/MultiView'))
 
 function RequireUser() {
   const { user } = useAuth()
@@ -78,6 +80,14 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route
+          path="/multiview"
+          element={
+            <Suspense fallback={<div className="player"><div className="spinner" /></div>}>
+              <MultiView />
+            </Suspense>
+          }
+        />
         <Route path="/tv-setup" element={<TVSetupSheet />} />
         <Route element={<Layout />}>
           <Route index element={<Home />} />
@@ -110,6 +120,7 @@ export default function App() {
               <Route path="statistics" element={<AdminStatistics />} />
               <Route path="live" element={<AdminLiveTV />} />
               <Route path="tasks" element={<AdminTasks />} />
+              <Route path="health" element={<AdminHealth />} />
               <Route path="logs" element={<AdminLogs />} />
               <Route path="import" element={<AdminImport />} />
               <Route path="plugins" element={<AdminPlugins />} />

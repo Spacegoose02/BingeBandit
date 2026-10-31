@@ -65,7 +65,6 @@ func main() {
 	scheduler := tasks.New(st, tasks.Builtin(tasks.Deps{
 		Store: st, Metadata: meta, Scanner: scanner, Markers: detector, Trickplay: thumbs, Images: images, DataDir: cfg.DataDir, FFprobe: cfg.FFprobe,
 	})...)
-	go scheduler.Start(ctx)
 	go scanner.Watch(ctx)
 	live := livetv.NewManager(st, cfg.FFmpeg, cfg.FFprobe, cfg.DataDir)
 	recorder := livetv.NewRecorder(st, live, cfg.DataDir)
@@ -115,6 +114,9 @@ func main() {
 	go srv.Plugins.Start(ctx)
 	go srv.RunNotifications(ctx)
 	go srv.RunSports(ctx)
+	go srv.RunHealth(ctx)
+	scheduler.OnDone = srv.TaskDone
+	go scheduler.Start(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
 	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
 

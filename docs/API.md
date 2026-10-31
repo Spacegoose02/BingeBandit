@@ -203,6 +203,8 @@ Passkeys belong to the address they were added on (the page's host), so add them
 
 `GET /api/admin/files?offset=&limit=` (up to 1000 a page) is the plugin API's `/files` for an admin's key: every movie and episode file with its item and quality, `{files, total}`. Cinemask reads quality this way instead of opening every title.
 
+`GET /api/admin/health` (`?refresh=1` asks GitHub again) is the Health page: `{update: {current, checking, latest: {version, url, publishedAt, notes}, available, error}, folders: [{label, kind, path, online, error, total, free, low}], lowPercent, system, tasks, alerts, channels}`. `POST /api/admin/alerts/test` takes the `alert_*` settings (unsaved ones win over saved) and returns `{results: {email|discord|ntfy: "sent" or the error}}`. `GET /api/admin/system` has `update` when the daily check found a newer version.
+
 Admin-only endpoints are under `/api/admin/…`: libraries and scans, item editing and matching, users and library access, settings, Live TV sources and channels, tasks, logs, statistics, webhooks and single sign-on. They change often, so read the web app's source (`web/src/pages/admin`) to see how they're used.
 
 ## Plugins
