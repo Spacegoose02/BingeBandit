@@ -8,10 +8,10 @@ import { desktop } from './desktop'
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-// Reached another way: a card's menu buttons (the menu key) and the second
+// Reached another way: menu buttons on cards and screens (the menu key), the second
 // link on a landscape card (the picture already goes there); rows scroll
 // by themselves as focus moves along them.
-const SKIP = '.card-menu-btn, .wide-card a.card-title, .row-arrow'
+const SKIP = '.card-menu-btn, .wide-card a.card-title, .row-arrow, [data-menu]'
 
 type Dir = 'up' | 'down' | 'left' | 'right'
 const DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' }
@@ -102,9 +102,10 @@ function focus(el: HTMLElement) {
 function start(): HTMLElement | null {
   const list = candidates()
   if (last && last.isConnected && list.includes(last)) return last
-  // On a page: its main button (Play), else its first card, else its first item.
+  // On a page: where it says to start, its main button (Play), else its first card, else its first item.
   const main = list.filter((el) => el.closest('main'))
   return (
+    list.find((el) => el.matches('[data-tv-start]')) ??
     main.find((el) => el.matches('.btn-primary')) ??
     main.find((el) => el.matches('.poster-link, .wide-frame, .episode-still')) ??
     (main.length ? main : list)[0] ??
@@ -162,7 +163,7 @@ function onKey(e: KeyboardEvent) {
   }
   if (e.key === 'ContextMenu' || e.key === 'm') {
     if (e.key === 'm' && typing(active)) return
-    const btn = active?.closest('.has-menu')?.querySelector<HTMLButtonElement>('.card-menu-btn:not(.card-edit-btn)')
+    const btn = active?.closest('.has-menu')?.querySelector<HTMLButtonElement>('.card-menu-btn:not(.card-edit-btn), [data-menu]')
     if (btn) {
       e.preventDefault()
       btn.click()

@@ -36,6 +36,7 @@ import { profilePickPending } from './profilePick'
 // hls.js is most of the bundle; only load it when someone presses play.
 const Player = lazy(() => import('./pages/Player'))
 const LivePlayer = lazy(() => import('./pages/LivePlayer'))
+const MultiView = lazy(() => import('./pages/MultiView'))
 
 function RequireUser() {
   const { user } = useAuth()
@@ -73,6 +74,14 @@ export default function App() {
           element={
             <Suspense fallback={<div className="player"><div className="spinner" /></div>}>
               <LivePlayer />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/multiview"
+          element={
+            <Suspense fallback={<div className="player"><div className="spinner" /></div>}>
+              <MultiView />
             </Suspense>
           }
         />
