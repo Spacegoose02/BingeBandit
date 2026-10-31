@@ -5,6 +5,12 @@ Where BingeBandit stands, written so the next person (or AI session) can pick it
 _Last updated: 2026-10-30. Latest release v0.36.0, 50 schema migrations._
 
 
+
+## Sports Hub fixes: NHL scoreboard, Multi-View freezes (2026-10-30, no migration)
+
+- **NHL "Couldn't reach ESPN":** the NHL's probable goalies come with `athlete.position` as a plain string ("G") where every other feed sends `{abbreviation}`, so decoding failed and the whole NHL scoreboard was dropped. `espnPosition` reads either (checked against ESPN's live NHL scoreboard; `TestPositionAsString`).
+- **Multi-View secondary screens freezing:** screens played at the live edge with no recovery. Each screen now plays the server's buffer behind live (`liveBuffer`, as the full-screen player does), reports a stall past the server's stall time (so the server can move the channel to its next stream), and rejoins when buffering or a standing-still picture lasts that long, or after an error (backing off up to 30 s). Still not tried on a device; a box with fewer hardware video decoders than screens can still struggle.
+
 ## Start here
 
 ### What this is
@@ -70,6 +76,12 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 - **TV app:** Genre, Year, Rating and Unwatched chips above the Library grid (`FilterBar`, `ChoiceList` in `screens/Library.tsx`), kept per library while the app runs; OK on someone in a title's Cast row opens `screens/Person.tsx`.
 - **Roku:** `*` on a library grid opens filter dialogs (`GridView.brs`); Details gets a Cast row whose people open a grid of their titles (`personNode`, `personContent` in `ApiTask.brs`).
 - **Tested:** `go test ./internal/store/` (`TestLibraryFilters`), the web library filter and person page in Chromium against a local server with made-up titles, `tsc`/`eslint` for apps/tv, the BrighterScript check for Roku. **Not tried on an Android TV or a Roku**; the Roku Details layout with two rows (seasons or episodes, then cast) is the likeliest to need a fix.
+## Limits for streaming away from home (2026-10-30, no migration)
+
+- Two admin settings (Settings → Network, shown while remote access is on): `remote_max_streams`, streams at once from outside per account (0 = no limit, up to 50), and `remote_max_kbps`, a video bitrate cap for viewers outside (0 = none; the web offers 1–40 Mbps). Both default to off. "Outside" is `Server.isLocal`, so LAN networks and trusted proxies count as they already did.
+- **Stream limit** (`api/remotelimits.go`, `streamLimitHit`): counts the whole account (owner and profiles) away from home: players pinging `/progress` (not local), remote transcodes that no player has reported yet, and live TV viewers (`livetv.Manager.ViewerIPs`, DVR left out). The same file from the same address is the same stream (seeking, quality changes, direct play falling back to converting). Checked at `/files/{id}/direct` (not downloads), new `/files/{id}/transcode` (not `replace`), a play session's first `/progress` (catches two players starting together) and both live joins (`watch`, `stream.ts`); over it answers 429 with a message. Admin accounts are exempt, which was my call; easy to drop.
+- **Quality cap**: `/files/{id}/direct` answers 403 for a remote viewer when `stream.FileKbps` is over the cap (unknown bitrate is let through); the web, TV and Roku players already fall back to converting on a direct play error, so older installed apps work unchanged. Transcodes get `Options.CapKbps` (server-set, `json:"-"`): over the cap, video is never copied, the height drops to `stream.HeightForKbps` (one whose usual rate is at most twice the cap: 8 Mbps → 1080p, 4 → 720p, 2 → 480p) and every rung's maxrate is held under the cap. Live TV isn't capped: its HLS is shared by every viewer of a channel. Audio isn't counted in the cap.
+- **Tested:** `go test ./...` (`TestRemoteStreamLimits`, `TestBuildArgsCap`), `tsc` and the web build. Not tried with real remote players; the 429 messages show in the web and TV players' error text, and on Roku as its generic playback error.
 
 ## Game Lights beyond football (2026-10-30, no migration)
 

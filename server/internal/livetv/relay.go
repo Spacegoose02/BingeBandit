@@ -164,6 +164,22 @@ func (m *Manager) KickUser(userID int64) {
 	}
 }
 
+// ViewerIPs lists where each viewer belonging to one of users is watching
+// from, one entry per viewer, leaving out DVR recordings.
+func (m *Manager) ViewerIPs(users map[int64]bool) []string {
+	var out []string
+	for _, r := range m.snapshot() {
+		r.mu.Lock()
+		for _, v := range r.viewers {
+			if users[v.UserID] && v.IP != dvrClient {
+				out = append(out, v.IP)
+			}
+		}
+		r.mu.Unlock()
+	}
+	return out
+}
+
 // Leave removes a viewer by id from whichever relay has it.
 func (m *Manager) Leave(viewerID string) {
 	for _, r := range m.snapshot() {

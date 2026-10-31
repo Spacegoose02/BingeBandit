@@ -1,0 +1,66 @@
+:root {
+  --bg: #0b0d10;
+  --surface: #171b21;
+  --surface-2: #1f242c;
+  --border: rgba(255, 255, 255, 0.16);
+  --text: #eceef1;
+  --muted: #98a1ad;
+  --accent: #2dd4bf;
+  --accent-ink: #04201c;
+  --danger: #f2626b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 18px/1.5 'Segoe UI', system-ui, sans-serif;
+  display: grid;
+  place-items: center;
+}
+main { width: min(640px, 100% - 48px); }
+.logo { width: 280px; display: block; margin-bottom: 32px; }
+h1 { font-size: 30px; font-weight: 600; margin: 0 0 20px; }
+h2 { font-size: 16px; font-weight: 600; color: var(--muted); margin: 0; text-transform: uppercase; letter-spacing: 0.06em; }
+form { display: flex; gap: 12px; }
+input {
+  flex: 1;
+  font: inherit;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 14px 24px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+input:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+button.link { background: none; color: var(--accent); padding: 4px 8px; font-weight: 500; }
+.error { color: var(--danger); margin: 0 0 16px; }
+.status { color: var(--muted); min-height: 1.5em; }
+section { margin-top: 24px; }
+.row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+ul button {
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+ul button:hover, ul button:focus-visible { background: var(--surface-2); }
+ul small { color: var(--muted); font-weight: 400; }
+.hint { color: var(--muted); font-size: 14px; margin-top: 32px; }

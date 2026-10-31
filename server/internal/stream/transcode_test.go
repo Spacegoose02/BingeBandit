@@ -221,3 +221,38 @@ func TestTonemapAlgorithmsWithFFmpeg(t *testing.T) {
 		}
 	}
 }
+
+// A cap on remote streams converts files above it, at a height that suits
+// the bitrate, and holds every quality at or under it.
+func TestBuildArgsCap(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.SetSettings(map[string]string{store.SettingAdaptiveStreaming: "true"})
+	m := &Manager{st: st, ffmpeg: "ffmpeg", dataDir: t.TempDir()}
+	f := &store.MediaFile{Path: "movie.mkv", VideoCodec: "h264", BitDepth: 8, Height: 2160, Bitrate: 60_000_000,
+		Streams: []store.Stream{{Index: 0, Type: "video", Codec: "h264"}, {Index: 1, Type: "audio", Codec: "aac", Default: true}}}
+
+	s := &Session{dir: "out"}
+	args := strings.Join(m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: -1, CapKbps: 4000}), " ")
+	if s.VideoCopy || s.Height != 720 || !strings.Contains(args, "scale=-2:720") || !strings.Contains(args, "-maxrate 4000k") {
+		t.Errorf("4 Mbps cap on 4K: copy=%v height=%d\n%s", s.VideoCopy, s.Height, args)
+	}
+
+	// Adaptive: the top rung is capped, lower ones keep their own rates.
+	s = &Session{dir: "out"}
+	args = strings.Join(m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: -1, CapKbps: 8000, Adaptive: true}), " ")
+	if len(s.Variants) != 3 || s.Variants[0] != 1080 || !strings.Contains(args, "-maxrate:v:0 8000k") || !strings.Contains(args, "-maxrate:v:1 5000k") {
+		t.Errorf("8 Mbps adaptive: variants=%v\n%s", s.Variants, args)
+	}
+
+	// Under the cap, H.264 is still copied.
+	f.Bitrate = 3_000_000
+	s = &Session{dir: "out"}
+	m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: -1, CapKbps: 4000})
+	if !s.VideoCopy {
+		t.Error("a file under the cap should be copied")
+	}
+}
