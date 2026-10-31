@@ -8,7 +8,7 @@ import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, report
 import { fetchGameLights, saveGameLights, type GameLightsPerson } from '../lights'
 import { useLock } from '../lock'
 import { refreshScoreBug, scoreBugChannel } from '../scorebug'
-import { backInterceptor, showLiveGuide, useNav } from '../nav'
+import { backInterceptor, showLiveGuide, useNav, useScreen } from '../nav'
 import { useLandscape } from '../screen'
 import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import type { LiveChannel } from '../types'
@@ -38,6 +38,8 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [paused, setPaused] = useState(false)
   const [behind, setBehind] = useState(0)
   const nav = useNav()
+  // Hidden under another screen: stay paused and leave the remote alone.
+  const { active } = useScreen()
   const [info, setInfo] = useState(true)
   const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
   // Options: Game Lights and the score bug for an easy on / off, and the
@@ -70,6 +72,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   pausedRef.current = paused
   // A locked player swallows Back (the keypad unlocks it); Back then puts the buttons away.
   useEffect(() => {
+    if (!active) return
     backInterceptor.current = () => {
       if (lock.handleBack()) return true
       if (menu) {
@@ -267,7 +270,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   // that ends the hold mustn't also bring up the buttons.
   const held = useRef(false)
   useTVEventHandler((evt) => {
-    if (!evt) return
+    if (!evt || !active) return
     if (evt.eventType === 'longSelect') {
       if (!held.current) {
         held.current = true
@@ -275,7 +278,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       }
       return
     }
-    if (evt.eventKeyAction === 0) return // act on key up, as in Player
+    if (evt.eventKeyAction === 0 || !active) return // act on key up, as in Player
     if (held.current && evt.eventType === 'select') {
       held.current = false
       return
@@ -286,10 +289,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       // ▲▼ still change channel.
       switch (evt.eventType) {
         case 'up':
-          step(-1)
+          step(1)
           break
         case 'down':
-          step(1)
+          step(-1)
           break
         case 'channelUp':
           step(1)
@@ -306,11 +309,12 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       return
     }
     switch (evt.eventType) {
+      // ▲ goes up the numbers, like CH+ (and a swipe up on a phone).
       case 'up':
-        step(-1)
+        step(1)
         break
       case 'down':
-        step(1)
+        step(-1)
         break
       // The remote's CH+ / CH− (or P+ / P−) buttons, where it has them: up the numbers and down.
       case 'channelUp':
@@ -399,7 +403,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           source={{ uri: src, type: 'm3u8', headers: authHeaders(), bufferConfig: liveBuffer(offset) }}
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
-          paused={paused}
+          paused={paused || !active}
           onLoad={() => {
             playing()
             showInfo(paused) // a new channel shows its info bar, then hides it

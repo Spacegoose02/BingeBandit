@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { ApiError, api, current, image, saveSession, type Session } from '../api'
 import { Button, Focusable } from '../components'
+import { backInterceptor } from '../nav'
 import { colors, font, scaled } from '../theme'
 import type { Member, User } from '../types'
 
@@ -44,6 +45,20 @@ export default function Profiles({ onDone, onCancel }: { onDone: (s: Session) =>
   useEffect(() => {
     fetchHousehold().then(setMembers, (e) => setError((e as Error).message))
   }, [])
+
+  // Back on a PIN pad goes back to the profiles (not out of the app, or out of the picker).
+  useEffect(() => {
+    if (!asking) return
+    const back = () => {
+      setAsking(null)
+      setError('')
+      return true
+    }
+    backInterceptor.current = back
+    return () => {
+      if (backInterceptor.current === back) backInterceptor.current = null
+    }
+  }, [asking])
 
   const choose = async (m: Member, pin = '') => {
     const s = current()

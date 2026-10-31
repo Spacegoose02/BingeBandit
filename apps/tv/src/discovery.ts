@@ -4,14 +4,21 @@ import type { ServerInfo } from './types'
 
 const PORT = 8484
 
-/** Asks one address whether it's a BingeBandit server. */
-export async function probe(url: string, timeoutMs = 1500): Promise<ServerInfo | null> {
+/**
+ * Asks one address whether it's a BingeBandit server. Servers since v0.27
+ * say so ("product"); an older one is taken on its {"status":"ok"} with a
+ * version, except by the network scan (strict), where another device on
+ * port 8484 could answer the same way.
+ */
+export async function probe(url: string, timeoutMs = 1500, strict = false): Promise<ServerInfo | null> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), timeoutMs)
   try {
     const res = await fetch(url + '/api/health', { signal: ctl.signal })
     const data = await res.json()
-    if (data?.product !== 'BingeBandit' && data?.status !== 'ok') return null
+    const ours = data?.product === 'BingeBandit'
+    const older = !strict && data?.product === undefined && data?.status === 'ok' && typeof data?.version === 'string'
+    if (!ours && !older) return null
     return { url, name: data.name || 'BingeBandit', version: data.version || '', id: data.id || undefined }
   } catch {
     return null
@@ -58,7 +65,7 @@ export async function scan(onFound: (s: ServerInfo) => void): Promise<number> {
   let found = 0
   // Fifty at a time keeps cheap TV sticks from choking.
   for (let i = 0; i < hosts.length; i += 50) {
-    const batch = await Promise.all(hosts.slice(i, i + 50).map((h) => probe(h, 900)))
+    const batch = await Promise.all(hosts.slice(i, i + 50).map((h) => probe(h, 900, true)))
     for (const s of batch) {
       if (s) {
         found++

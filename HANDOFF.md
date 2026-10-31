@@ -67,6 +67,23 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## TV app bug pass: players, sign-out, Multi-View (2026-10-31, no migration)
+
+From a code review of `apps/tv` (findings in the project thread "Bug check the Android TV app").
+
+- **Watch Together invite over a player** (`together.tsx`, `TogetherInvites`): Join now replaces a player on top instead of pushing a second one, which left the first playing (two soundtracks, remote driving both). `Player`, `IntroVideo` and `LivePlayer` also pause, ignore the remote and leave `backInterceptor` alone while `useScreen().active` is false.
+- **Joining a party started at 0:00** (`Player.tsx`): the first source and the first conversion start at `posRef` (where the room's first update put it) instead of `start`.
+- **Direct play switched to converting on its own** (`Player.tsx` watchdog): resets on returning to the app (Android pauses timers in the background), on seeks and on each new stall; 20 s before the first frame instead of 8 s.
+- **Seeking while converting** (`seekTo`): presses settle for 600 ms before one conversion request; an answer to a request a newer one replaced is dropped and its session deleted, also on leaving the player. A conversion still starting counts as converting.
+- **Paused movie and the screensaver** (`App.tsx`): a paused movie (`holdOnReturn` in `nav.tsx`) keeps its place for 4 hours away instead of 5 minutes.
+- **Signed out on the server** (`api.ts` `onSignedOut`, `App.tsx`): a 401 "not signed in" for the current token goes to sign-in on the same server.
+- **Who's watching PIN pad**: Back closes the pad (`Profiles.tsx`).
+- **Multi-View**: screens keep stable keys, so removing one doesn't restart the rest; a join that answers late is left instead of replacing the newer viewer (`useTileStream`).
+- **Live TV**: ▲ goes up the channel numbers like CH+ and a phone swipe up (it went the other way).
+- **Details**: an error clears once it loads, with Try again; resume from 15 s like Home and the server (also the hold menu); hour-long resume points read 1:35:12; Watchlist and Mark watched say when they fail.
+- **LAN scan** (`discovery.ts`): only lists servers that say `"product": "BingeBandit"`; a typed address still accepts pre-v0.27 servers.
+- **Tested:** `tsc` and eslint for apps/tv. Device testing over adb is next.
+
 ## Passcode fixes on the TV, and the Windows release build (2026-10-31, no migration)
 
 - **Server section stayed visible behind the passcode** (#158): Back or Cancel on the passcode prompt left Settings → Server showing the libraries, live sources and their buttons (changes still got 423). `AdminSection` (`apps/tv/src/screens/Settings.tsx`) now loads admin settings, live sources and libraries in one guarded request and renders nothing until it succeeds; a cancelled prompt leaves a "Locked" notice with Enter passcode. The Who's watching PIN, Profiles & PINs and the Roku settings screen were checked and weren't affected.

@@ -37,6 +37,12 @@ export const backInterceptor: { current: (() => boolean) | null } = { current: n
  */
 export const homeBack: { current: (() => boolean) | null } = { current: null }
 
+/**
+ * Set by the movie player while it is paused, so coming back to the app after
+ * a long time away (the screensaver came on) doesn't start over on Home.
+ */
+export const holdOnReturn: { current: boolean } = { current: false }
+
 /** Switches Home to its Live TV guide (set by Home, which sits under the live player). */
 export const showLiveGuide: { current: (() => void) | null } = { current: null }
 
