@@ -718,6 +718,14 @@ export interface SystemInfo {
   ffmpeg: string
   ffprobe: string
   metadataActive: boolean
+  update?: ServerRelease // set when the daily check found a newer version
+}
+
+export interface ServerRelease {
+  version: string
+  url: string
+  publishedAt: string
+  notes?: string
 }
 
 export interface PluginSetting {

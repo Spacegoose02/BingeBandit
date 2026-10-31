@@ -420,6 +420,8 @@ export default function AdminSettings() {
           </label>
         </section>
 
+        <AdminAlerts s={s} set={set} />
+
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
         <div className="actions">
           <button className="btn btn-primary">Save settings</button>
@@ -428,6 +430,116 @@ export default function AdminSettings() {
       <SingleSignOn />
       <Webhooks />
     </div>
+  )
+}
+
+const alertKinds: [string, string][] = [
+  ['alert_updates', 'A new BingeBandit version is out'],
+  ['alert_backups', 'A database backup failed'],
+  ['alert_drives', 'A library or storage folder goes offline (or comes back)'],
+  ['alert_disk_space', 'A drive is nearly full'],
+  ['alert_recordings', 'A recording failed'],
+]
+
+const channelLabels: Record<string, string> = { email: 'Email', discord: 'Discord', ntfy: 'ntfy' }
+
+/** Where admin alerts go besides admins' notifications, and which ones are sent. Saved with the rest of the form. */
+function AdminAlerts({ s, set }: { s: Settings; set: (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
+  const [test, setTest] = useState<{ ok?: boolean; text: string } | null>(null)
+
+  const sendTest = async () => {
+    setTest({ text: 'Sending…' })
+    const keys = ['alert_email_to', 'alert_smtp_host', 'alert_smtp_port', 'alert_smtp_user', 'alert_smtp_password', 'alert_smtp_from', 'alert_discord_url', 'alert_ntfy_url', 'alert_ntfy_token']
+    try {
+      const r = await api.post<{ results: Record<string, string> }>('/api/admin/alerts/test', Object.fromEntries(keys.map((k) => [k, s[k] ?? ''])))
+      const entries = Object.entries(r.results)
+      setTest({
+        ok: entries.every(([, v]) => v === 'sent'),
+        text: entries.map(([ch, v]) => `${channelLabels[ch] ?? ch}: ${v === 'sent' ? 'sent' : v}`).join(' · '),
+      })
+    } catch (err) {
+      setTest({ ok: false, text: (err as Error).message })
+    }
+  }
+
+  return (
+    <section className="panel form">
+      <h3>Admin alerts</h3>
+      <p className="muted small">
+        Admins always see these in their notifications. Fill in any of email, Discord or ntfy to also get them on your phone. The{' '}
+        <Link to="/admin/health">Health</Link> page shows drives, free space and the alerts sent lately.
+      </p>
+      {alertKinds.map(([key, label]) => (
+        <label key={key} className="check">
+          <input type="checkbox" checked={s[key] !== 'false'} onChange={set(key)} />
+          {label}
+        </label>
+      ))}
+      <div className="field-grid">
+        <label>
+          Nearly full below (% free)
+          <input type="number" min={1} max={50} value={s.disk_low_percent ?? '5'} onChange={set('disk_low_percent')} />
+        </label>
+        <label className="check" style={{ alignSelf: 'end' }}>
+          <input type="checkbox" checked={s.update_check !== 'false'} onChange={set('update_check')} />
+          Check GitHub for new versions daily
+        </label>
+      </div>
+
+      <h4>Discord</h4>
+      <label>
+        Channel webhook URL
+        <input className="mono" value={s.alert_discord_url ?? ''} onChange={set('alert_discord_url')} placeholder="https://discord.com/api/webhooks/…" autoComplete="off" spellCheck={false} />
+        <span className="muted small">In Discord: channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL.</span>
+      </label>
+
+      <h4>ntfy</h4>
+      <div className="field-grid">
+        <label>
+          Topic URL
+          <input className="mono" value={s.alert_ntfy_url ?? ''} onChange={set('alert_ntfy_url')} placeholder="https://ntfy.sh/my-bingebandit" autoComplete="off" spellCheck={false} />
+        </label>
+        <label>
+          Access token or user:password (optional)
+          <input className="mono" type="password" value={s.alert_ntfy_token ?? ''} onChange={set('alert_ntfy_token')} autoComplete="new-password" />
+        </label>
+      </div>
+      <p className="muted small">Subscribe to the same topic in the ntfy app. On ntfy.sh, pick a topic name nobody would guess.</p>
+
+      <h4>Email</h4>
+      <label>
+        Send to
+        <input value={s.alert_email_to ?? ''} onChange={set('alert_email_to')} placeholder="me@example.com, other@example.com" autoComplete="off" spellCheck={false} />
+      </label>
+      <div className="field-grid">
+        <label>
+          SMTP server
+          <input className="mono" value={s.alert_smtp_host ?? ''} onChange={set('alert_smtp_host')} placeholder="smtp.gmail.com" autoComplete="off" spellCheck={false} />
+        </label>
+        <label>
+          Port
+          <input type="number" min={1} max={65535} value={s.alert_smtp_port ?? '587'} onChange={set('alert_smtp_port')} />
+        </label>
+        <label>
+          Username
+          <input value={s.alert_smtp_user ?? ''} onChange={set('alert_smtp_user')} autoComplete="off" spellCheck={false} />
+        </label>
+        <label>
+          Password
+          <input type="password" value={s.alert_smtp_password ?? ''} onChange={set('alert_smtp_password')} autoComplete="new-password" />
+        </label>
+      </div>
+      <label>
+        From address
+        <input value={s.alert_smtp_from ?? ''} onChange={set('alert_smtp_from')} placeholder="Blank = the username" autoComplete="off" spellCheck={false} />
+      </label>
+      <p className="muted small">Port 587 uses STARTTLS, 465 uses TLS. For Gmail, use an app password.</p>
+
+      <div className="actions">
+        <button type="button" className="btn btn-glass btn-sm" onClick={sendTest}>Send a test alert</button>
+        {test && <span className={test.ok === undefined ? 'muted small' : test.ok ? 'form-ok' : 'form-error'}>{test.text}</span>}
+      </div>
+    </section>
   )
 }
 

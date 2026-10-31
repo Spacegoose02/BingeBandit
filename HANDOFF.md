@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-30. Latest release v0.36.0, 50 schema migrations._
+_Last updated: 2026-10-31. Latest release v0.36.0, 50 schema migrations._
 
 
 ## Start here
@@ -62,6 +62,14 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Admin alerts, update notices and server health (2026-10-31, no migration)
+
+- **Alerts** (`api/alerts.go`): `Server.sendAlert` puts an alert in every admin's notifications (kind `server`) and sends it, in the background, to Discord (webhook embed), ntfy (POST with Title/Priority/Click, Bearer token or Basic for `user:password`) and email (`net/smtp`: TLS on 465, STARTTLS when offered otherwise). Settings rows `alert_*`, `disk_low_percent`, `update_check`; each kind can be turned off. The last 20 alerts and each channel's result are kept in memory for the Health page. `POST /admin/alerts/test` sends one with unsaved settings.
+- **What alerts:** a failed `backup_database` run (new `Scheduler.OnDone` hook, wired to `Server.TaskDone` in main; the scheduler now starts after the API server is built), `recording.failed` (from `Emit`), storage folders going offline or coming back and drives below `disk_low_percent` (`RunHealth` → `checkFolders` every 5 min, one alert per change, state kept in memory so a restart re-reports a folder still offline), and a newer release (`checkUpdate`, daily, once per version via the internal setting `update_notified_version`).
+- **Offline** means missing, not a folder, or, for a library with items, empty (an unmounted mount point). Disk space is `syscall.Statfs` (`disk_unix.go`) or `GetDiskFreeSpaceEx` (`disk_windows.go`, so `golang.org/x/sys` is now a direct dependency).
+- **Web:** Server → Health (`pages/admin/Health.tsx`): update notice with release notes, each folder's drive with a bar, system facts, enabled tasks with failures, recent alerts. Settings → Admin alerts. The Dashboard shows `UpdateNotice` when `/admin/system` has `update`.
+- **Tested:** `go test -race ./internal/api` (`TestAlertChannels` with a fake Discord/ntfy, `TestAlertEmail` with a fake SMTP server, `TestFolderAlerts`, `TestUpdateCheck`, `TestBackupAndRecordingAlerts`, `TestAlertSettings`), `go build` for windows and darwin, `tsc` and the web build. Ran the server locally: the Health page found v0.36.0 on real GitHub for a 0.35.0 build and showed both folders; screenshots of Health and Settings looked right. **Not tried against real Discord, ntfy or an SMTP server**, nor on Windows or Unraid drives.
 
 ## Game Lights beyond football (2026-10-30, no migration)
 

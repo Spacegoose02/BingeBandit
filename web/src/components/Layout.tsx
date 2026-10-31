@@ -158,6 +158,10 @@ export default function Layout() {
                 <Icon name="plug" />
                 <span>Plugins</span>
               </NavLink>
+              <NavLink to="/admin/health" className="nav-item">
+                <Icon name="activity" />
+                <span>Health</span>
+              </NavLink>
               <NavLink to="/admin/tasks" className="nav-item">
                 <Icon name="clock" />
                 <span>Tasks</span>

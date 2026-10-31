@@ -266,6 +266,9 @@ func sendAlertEmail(c alertChannels, server, link string, a alert) error {
 	if c.SMTPHost == "" {
 		return errors.New("no SMTP server set")
 	}
+	if c.SMTPFrom == "" {
+		return errors.New("fill in a From address or an SMTP username")
+	}
 	from, err := mail.ParseAddress(c.SMTPFrom)
 	if err != nil {
 		return fmt.Errorf("the From address %q isn't an email address", c.SMTPFrom)
