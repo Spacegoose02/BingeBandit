@@ -40,6 +40,9 @@ type Scheduler struct {
 	st    *store.Store
 	tasks []*Task
 
+	// OnDone, when set, hears about every finished run.
+	OnDone func(t *Task, result string, err error)
+
 	mu      sync.Mutex
 	running map[string]bool
 }
@@ -142,6 +145,9 @@ func (s *Scheduler) launch(ctx context.Context, t *Task) bool {
 			log.Printf("task %q: %s (%s)", t.Name, result, time.Since(started).Round(time.Second))
 		}
 		s.st.RecordTaskRun(t.ID, started, result, err)
+		if s.OnDone != nil {
+			s.OnDone(t, result, err)
+		}
 		s.mu.Lock()
 		delete(s.running, t.ID)
 		s.mu.Unlock()

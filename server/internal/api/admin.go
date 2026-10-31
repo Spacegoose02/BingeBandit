@@ -24,14 +24,19 @@ import (
 )
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"version":        s.Version,
 		"os":             runtime.GOOS + "/" + runtime.GOARCH,
 		"dataDir":        s.DataDir,
 		"ffmpeg":         media.Version(s.FFmpeg),
 		"ffprobe":        media.Version(s.FFprobe),
 		"metadataActive": s.Metadata.Enabled(),
-	})
+	}
+	// Only what the daily check already found; the Health page asks GitHub.
+	if rel := s.cachedRelease(); rel != nil && s.isNewer(rel.Version) {
+		out["update"] = rel
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +118,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if err := validAlertSettings(in); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if v, ok := in[store.SettingDVRNaming]; ok && v != "library" && v != "folder" {
 		writeErr(w, http.StatusBadRequest, "recording naming must be library or folder")
 		return
@@ -138,6 +147,7 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		store.SettingContinueDays:      {0, 3650},
 		store.SettingRecentDays:        {0, 3650},
 		store.SettingDefaultMinimum:    {1, 1000},
+		store.SettingDiskLowPercent:    {1, 50},
 	} {
 		if v, ok := in[key]; ok {
 			if n, err := strconv.Atoi(v); err != nil || n < rng[0] || n > rng[1] {

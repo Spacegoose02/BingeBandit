@@ -31,6 +31,7 @@ var webhookClient = &http.Client{Timeout: 10 * time.Second}
 // background. Payloads are signed with HMAC-SHA256 when a secret is set.
 func (s *Server) Emit(event string, data any) {
 	s.notifyEvent(event, data)
+	s.alertEvent(event, data)
 	if s.Plugins != nil {
 		s.Plugins.Emit(event, data)
 	}
