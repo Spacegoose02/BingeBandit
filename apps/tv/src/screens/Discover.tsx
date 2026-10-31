@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { api, cached } from '../api'
 import { Center, Focusable } from '../components'
 import { useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
+
+const PREPARE_AFTER_MS = 700
 
 interface DiscoverVideo {
   id: string
@@ -37,6 +39,18 @@ export default function Discover() {
     api.get<DiscoverRow[]>('/api/discover').then(setRows, (e) => setError(e.message))
   }, [])
   const open = (v: DiscoverVideo) => nav.push({ name: 'youtube', id: v.id, title: v.title })
+  // A tile that stays highlighted a moment has the server start finding its
+  // stream, so it starts at once when pressed. Passing over tiles asks nothing.
+  const prepTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prepare = (v: DiscoverVideo) => {
+    if (prepTimer.current) clearTimeout(prepTimer.current)
+    prepTimer.current = setTimeout(() => {
+      api.post(`/api/discover/videos/${v.id}/prepare`).catch(() => undefined)
+    }, PREPARE_AFTER_MS)
+  }
+  useEffect(() => () => {
+    if (prepTimer.current) clearTimeout(prepTimer.current)
+  }, [])
 
   if (!rows) return <Center><Text style={st.muted}>{error || 'Loading…'}</Text></Center>
   return (
@@ -48,7 +62,7 @@ export default function Discover() {
           <Text style={st.sectionTitle}>{r.name}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.row}>
             {r.videos.map((v, i) => (
-              <Focusable key={v.id} onPress={() => open(v)} hasTVPreferredFocus={ri === 0 && i === 0} style={st.card}>
+              <Focusable key={v.id} onPress={() => open(v)} onFocus={() => prepare(v)} hasTVPreferredFocus={ri === 0 && i === 0} style={st.card}>
                 <Image source={{ uri: `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg` }} style={st.thumb} resizeMethod="resize" />
                 <Text style={st.title} numberOfLines={2}>{v.title}</Text>
                 <Text style={st.small}>{ago(v.publishedAt)}</Text>
