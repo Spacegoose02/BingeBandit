@@ -58,7 +58,7 @@ func TestNetworkChannels(t *testing.T) {
 		}
 	}
 	prog("wcbs.us", "College Football", "Miami at Virginia Tech.", "Sports")
-	prog("wdbj.us", "SEC on CBS", "", "")                                     // no teams named
+	prog("wdbj.us", "SEC on CBS", "", "")                                 // no teams named
 	prog("wsls.us", "College Football: Alabama at Georgia", "", "Sports") // another region's game
 	if _, err := gi.Finish(); err != nil {
 		t.Fatal(err)
