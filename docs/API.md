@@ -133,7 +133,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | POST | `/files/{id}/offline` | Offline download for the phone app. `{height, audioStream, burnSubtitle}`: `height` 0 is the original file, otherwise a one-off MP4 copy (H.264, stereo AAC) no taller than that, made in the background with `audioStream` and an image subtitle `burnSubtitle` burned in (`-1` = default track / none). → `{status, progress, url, size, height, error}`: `status` is `ready` (download `url`, which takes range requests), `queued` or `preparing` (`progress` 0..1; ask again), or `failed` (asking again retries). Same rules as `/files/{id}/direct?download=1`: admins, or everyone when the admin allows downloads (403 otherwise), and only titles the profile can see. Copies nobody asks for in 7 days are deleted. |
 | GET | `/offline/{key}` | A finished copy from `/files/{id}/offline` (its `url`). Checks downloads and access again; 404 when it has been cleared (ask for it again). |
 | POST | `/offline/check` | `{items: [itemId…]}` → `{canDownload, allowed: [itemId…]}`: which downloaded titles the profile may keep. The phone app deletes the others (downloads turned off, a library taken away, a kid approval removed). |
-| GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
+| GET | `/transcode/{sid}/{name}` | HLS playlist and segments. `stream.ts` is the whole conversion as one MPEG-TS stream, following it as it goes (for DLNA TVs). |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |
 | GET | `/files/{id}/subtitles/search?lang=` | Search OpenSubtitles for the file (`lang` is a language name or code, English by default) → `{language, results: [{fileId, name, language, downloads, hearingImpaired, hashMatch, trusted, ai}]}`, best first. 409 without an API key in Settings; 403 for kid profiles. |
@@ -143,6 +143,19 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/files/{id}/trickplay/{n}.jpg` | Sheet `n` (from 0) of thumbnails. |
 | GET | `/files/{id}/trickplay.bif?from=` | The thumbnails as a Roku BIF file; `from` is where a conversion started, in seconds. |
 | POST | `/progress` | `{playSessionId, itemId, fileId, position, duration, paused, stopped, mode, client, played}`. Send every ~10 s while playing and once with `stopped: true`. `played` is the total seconds actually played in this play session (the server caps it at wall-clock time). Optional `lights: false` keeps Hue Sync and other light plugins off this player (left out means on). This drives resume points, watched state, Now Playing, history and webhooks. A new session's first report answers 429 when it puts the account over the stream limit away from home. |
+
+### Casting to TVs
+
+The server plays on Chromecasts, Google TVs and DLNA smart TVs on its network; the app that starts a cast is only its remote. TVs open the media with a `?token=` that only reaches that cast's file, its conversion and artwork, and stops working when the cast ends.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/cast/devices?refresh=1` | `{devices: [{id, name, kind, model, host}]}`, `kind` `chromecast` or `dlna`. Found by mDNS and SSDP (about 2.5 s) plus the admin's `cast_devices` addresses, and kept for a minute; `refresh=1` looks again. |
+| POST | `/cast/start` | `{deviceId, itemId, fileId?, start?, audioStream?}` (a movie or episode; `start` in seconds) → a cast: `{id, device, itemId, fileId, title, subtitle, poster, duration, position, state, volume, mode, error, started}`. `state` is `loading`, `playing`, `paused`, `idle` or `finished`; `volume` is 0–1 (Chromecast) or -1; `mode` is `direct` (MP4 with 8-bit H.264 and AAC/MP3 up to 1080p) or `transcode` (HLS for Chromecasts, one MPEG-TS stream for DLNA). A new cast to a TV ends the one already on it. 502 with the TV's reason when it won't play. |
+| GET | `/cast/sessions` | `{sessions: [...]}`: your casts. The server follows each TV, saves the position like `/progress` (client "Cast to *TV name*") and ends the cast when the TV stops or finishes. |
+| GET | `/cast/sessions/{id}` | One cast; 404 once it ended. |
+| POST | `/cast/sessions/{id}` | `{action: "play" \| "pause" \| "seek" \| "volume" \| "audio", position?, level?, audioStream?}` → the cast. Seeking a conversion starts a new one there and reloads the TV. `volume` is Chromecast only (400 for DLNA). |
+| DELETE | `/cast/sessions/{id}` | Stop playing on the TV. |
 
 ## Live TV and DVR
 

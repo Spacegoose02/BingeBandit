@@ -5,6 +5,7 @@ import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
 import { Avatar } from './Avatar'
 import { Icon, type IconName } from './Icon'
+import { CastBar } from './Cast'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
 import { PinsDialog, savePins, setFavoritesPinned } from './Pins'
@@ -219,6 +220,7 @@ export default function Layout() {
           <Outlet />
         </SelectionProvider>
       </main>
+      <CastBar />
       <PasscodePrompt />
       {(editingPins || askPins) && libraries && (
         <PinsDialog

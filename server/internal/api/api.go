@@ -59,6 +59,7 @@ type Server struct {
 	FFmpeg     string
 	FFprobe    string
 	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
+	ListenAddr string // where the server listens (":8484"), for the address TVs are sent
 
 	updates     appUpdates
 	tvApp       tvApp
@@ -87,6 +88,7 @@ type Server struct {
 	sportsWake chan struct{}
 	health     healthState
 	alerts     alertHistory
+	casts      castManager
 	chapters   chapterCache
 	// offline makes download copies for the phone app (offline.go).
 	offline offlineCopies
@@ -327,6 +329,16 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/offline/check", s.checkOffline)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
+			// TVs being cast to ask what a link is before opening it.
+			r.Head("/files/{id}/direct", s.directPlay)
+			r.Head("/transcode/{sid}/{name}", s.transcodeFile)
+
+			r.Get("/cast/devices", s.castDeviceList)
+			r.Post("/cast/start", s.castStart)
+			r.Get("/cast/sessions", s.castSessionList)
+			r.Get("/cast/sessions/{id}", s.castSessionGet)
+			r.Post("/cast/sessions/{id}", s.castSessionControl)
+			r.Delete("/cast/sessions/{id}", s.castSessionStop)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(requireAdmin)

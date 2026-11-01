@@ -16,6 +16,7 @@ import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
 import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
+import { CastPicker } from '../components/Cast'
 
 const LADDER = [2160, 1080, 720, 480]
 
@@ -266,6 +267,7 @@ function PlayerView({
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
   const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch' | 'chapters'>(null)
+  const [casting, setCasting] = useState(false) // picking a TV to carry on there
   const menuRef = useRef(menu)
   menuRef.current = menu
   // Seconds the subtitles are moved: positive shows them later.
@@ -1003,6 +1005,11 @@ function PlayerView({
               )}
             </div>
           )}
+          {!roomId && (
+            <button className="icon-btn" onClick={() => setCasting(true)} aria-label="Play on a TV" title="Play on a TV">
+              <Icon name="cast" size={22} />
+            </button>
+          )}
           <div className="menu-anchor">
             <button
               className={`icon-btn ${roomId ? 'active' : ''}`}
@@ -1124,6 +1131,21 @@ function PlayerView({
             </div>
           </div>
         </div>
+      )}
+      {casting && file && (
+        <CastPicker
+          itemId={item.id}
+          fileId={file.id}
+          start={position()}
+          audioStream={choice.audio}
+          onClose={() => setCasting(false)}
+          onStarted={() => {
+            // The TV carries on from here; this player stops (its cleanup
+            // saves the position and ends any conversion).
+            videoRef.current?.pause()
+            nav(`/item/${item.id}`, { replace: true })
+          }}
+        />
       )}
     </div>
   )

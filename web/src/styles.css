@@ -1379,3 +1379,23 @@ html.tv .poster-link:focus-visible .card-title { color: var(--accent); }
 .sports-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .sports-spoiler { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; font-size: 14px; }
 .sports-notice { display: flex; align-items: center; gap: 12px; margin: 8px 0; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-weight: 600; }
+
+/* Casting: the TV picker and the remote along the bottom */
+.cast-devices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.cast-device { display: flex; align-items: center; gap: 14px; text-align: left; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); color: inherit; }
+.cast-device:hover:not(:disabled) { border-color: var(--accent); }
+.cast-device > span:first-of-type { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cast-bar { position: fixed; left: var(--sidebar); right: 0; bottom: 0; z-index: 60; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.4); padding: 8px 18px; display: flex; flex-direction: column; gap: 6px; }
+.cast-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.cast-row img { width: 36px; height: 54px; object-fit: cover; border-radius: 4px; }
+.cast-info { display: flex; flex-direction: column; min-width: 140px; flex: 0 1 260px; }
+.cast-info strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cast-controls { display: flex; gap: 4px; }
+.cast-seek { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; }
+.cast-seek input { flex: 1; accent-color: var(--accent); }
+.cast-volume { width: 90px; accent-color: var(--accent); }
+@media (max-width: 860px) {
+  .cast-bar { bottom: calc(64px + env(safe-area-inset-bottom)); padding: 8px 12px; }
+  .cast-volume { display: none; }
+}
+body:has(.cast-bar) .main { padding-bottom: 96px; }

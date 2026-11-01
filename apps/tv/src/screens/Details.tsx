@@ -109,6 +109,7 @@ export default function Details({ id }: { id: number }) {
                 onPress={() => nav.push({ name: 'player', id: target.id, start: resume, offline: !!downloaded(target.id) || undefined })}
               />
               {resume > 0 && <Button label="From the start" onPress={() => nav.push({ name: 'player', id: target.id, start: 0, offline: !!downloaded(target.id) || undefined })} />}
+              {isPhone && <Button label="Play on a TV" onPress={() => nav.push({ name: 'cast', id: target.id, start: resume })} />}
             </>
           ) : (
             !d.children?.length && <Text style={st.muted}>Nothing to play here yet.</Text>

@@ -231,6 +231,12 @@ On a phone or tablet, a movie, an episode or a whole season can be saved to watc
 
 Downloads follow the **Let users download files** setting in Admin → Settings (admins can always download). A download is deleted from the phone when the server stops allowing downloads, when the profile can no longer see the title (a library taken away, a kid approval removed), or when you sign out on that phone. Converted copies take the server's CPU (or GPU, with hardware encoding) while they're made, one at a time, and are kept in the server's cache for a week.
 
+### Playing on a TV (Chromecast, Google TV and DLNA)
+
+On a movie or episode, the cast button (web) or **Play on a TV** (Android phones) lists the Chromecasts, Google TVs and DLNA smart TVs on your network. Pick one and the server sends the video straight to the TV; the browser or phone becomes the remote (pause, skip, seek, and the TV's volume for Chromecasts), and the bar at the bottom of the web app shows what's playing on TVs. You can also send something already playing in the web or phone player to a TV from where you are. Watching on a TV this way saves your place and history like any other player.
+
+The server does the casting, not your browser, so it works over plain `http://` and on any phone. It needs to be on the same network as the TV. In Docker, use host networking (`network_mode: host`, or Network Type **Host** on Unraid) so it can find TVs; otherwise list the TVs' IP addresses under **Admin → Settings → Casting** and set the address TVs reach the server at (for example `http://192.168.1.10:8484`). MP4 files with H.264 play on the TV as they are; anything else is converted as it plays. Subtitles aren't sent to the TV yet.
+
 ### Roku
 
 There's an early Roku channel that has to be sideloaded with the Roku in developer mode. See [apps/roku/README.md](../apps/roku/README.md).

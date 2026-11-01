@@ -904,3 +904,31 @@ export interface NetworkChannels {
   network: string
   channels: number[]
 }
+
+/** A Chromecast, Google TV or DLNA TV the server can play on. */
+export interface CastDevice {
+  id: string
+  name: string
+  kind: 'chromecast' | 'dlna'
+  model?: string
+  host: string
+  manual?: boolean
+}
+
+/** Something the server is playing on a TV, with the app as its remote. */
+export interface CastSession {
+  id: string
+  device: CastDevice
+  itemId: number
+  fileId: number
+  title: string
+  subtitle?: string
+  poster?: string
+  duration: number
+  position: number
+  state: 'loading' | 'playing' | 'paused' | 'idle' | 'finished'
+  volume: number // 0-1, -1 when unknown
+  mode: 'direct' | 'transcode'
+  error?: string
+  started: number
+}

@@ -171,6 +171,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := validCastSettings(in); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if v, ok := in[store.SettingLiveProxy]; ok {
 		if _, err := livetv.ParseProxy(v); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
