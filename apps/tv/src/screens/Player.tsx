@@ -16,6 +16,7 @@ import { roomPosition, TogetherPanel, useTogether } from '../together'
 import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, MediaFile } from '../types'
+import { chapterAt, chapterName, useChapters } from '../chapters'
 import { delayLabel, ScrubThumb, SubtitleSearch, THUMB_WIDTH, useTrickplay } from '../subtitleTools'
 
 const REPORT_EVERY = 10 // seconds
@@ -847,6 +848,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   }
   // Scrub previews: above the marker while scrubbing (TV) or dragging (phone).
   const thumbs = useTrickplay(file?.id)
+  const chapters = useChapters(file?.id)
+  const chapterIdx = chapterAt(chapters, pos)
+  const scrubChapter = scrub !== null && chapters.length ? ` · ${chapterName(chapters, chapterAt(chapters, scrub))}` : ''
   const [dragT, setDragT] = useState<number | null>(null)
   const [barWidth, setBarWidth] = useState(0)
   const previewT = scrub ?? dragT
@@ -942,7 +946,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               </View>
             )}
             {isPhone ? (
-              <SeekBar pct={pct} duration={duration} onDrag={setDragT} onSeek={(t) => {
+              <SeekBar pct={pct} duration={duration} chapters={chapters} onDrag={setDragT} onSeek={(t) => {
                 userSeek(t)
                 showControls('full')
               }} />
@@ -960,6 +964,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                 >
                   <View style={st.track}>
                     <View style={[st.fill, { width: `${pct}%` }]} />
+                    <ChapterTicks chapters={chapters} duration={duration} />
                     {scrub !== null && duration > 0 && <View style={[st.scrubMark, { left: `${Math.min(100, (scrub / duration) * 100)}%` }]} />}
                   </View>
                 </Focusable>
@@ -969,7 +974,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               <Text style={st.time}>{clock(scrub ?? pos)}</Text>
               <Text style={st.mode}>
                 {scrub !== null
-                  ? `Jump to ${clock(scrub)}: OK or wait`
+                  ? `Jump to ${clock(scrub)}${scrubChapter}: OK or wait`
                   : seekFocused
                     ? '◀ ▶ to move through the video'
                     : paused
@@ -1057,6 +1062,26 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
                 {(['sync', 'theater', 'off'] as HueMode[]).map((m) => (
                   <Button key={m} small primary={hereMode === m} label={hueModeNames[m]} onPress={() => pickHue(m)} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+          {chapters.length > 0 && (
+            <>
+              <Text style={st.menuTitle}>Chapters</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {chapters.map((c, i) => (
+                  <Button
+                    key={i}
+                    small
+                    primary={i === chapterIdx}
+                    label={`${clock(c.start)}  ${chapterName(chapters, i)}`}
+                    onPress={() => {
+                      setMenu(false)
+                      userSeek(c.start)
+                      say(chapterName(chapters, i))
+                    }}
+                  />
                 ))}
               </ScrollView>
             </>
@@ -1152,8 +1177,20 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   )
 }
 
+/** A thin gap in the progress bar where each chapter after the first starts. */
+function ChapterTicks({ chapters, duration }: { chapters: { start: number }[]; duration: number }) {
+  if (!duration || chapters.length < 2) return null
+  return (
+    <>
+      {chapters.slice(1).map((c, i) =>
+        c.start < duration ? <View key={i} pointerEvents="none" style={[st.chapterTick, { left: `${(c.start / duration) * 100}%` }]} /> : null,
+      )}
+    </>
+  )
+}
+
 /** A touch progress bar: drag or tap to pick a time; the video seeks when the finger lifts. */
-function SeekBar({ pct, duration, onSeek, onDrag }: { pct: number; duration: number; onSeek: (t: number) => void; onDrag: (t: number | null) => void }) {
+function SeekBar({ pct, duration, chapters, onSeek, onDrag }: { pct: number; duration: number; chapters: { start: number }[]; onSeek: (t: number) => void; onDrag: (t: number | null) => void }) {
   const bar = useRef<View>(null)
   const box = useRef({ x: 0, width: 1 }) // the bar's position on screen
   const [drag, setDrag] = useState<number | null>(null) // 0..1 while the finger is down
@@ -1177,6 +1214,7 @@ function SeekBar({ pct, duration, onSeek, onDrag }: { pct: number; duration: num
     >
       <View style={st.track} pointerEvents="none">
         <View style={[st.fill, { width: `${shown}%` }]} />
+        <ChapterTicks chapters={chapters} duration={duration} />
       </View>
       <View style={[st.thumb, { left: `${shown}%` }]} pointerEvents="none" />
       {drag !== null && <Text style={[st.dragTime, { left: `${shown}%` }]} pointerEvents="none">{clock(drag * duration)}</Text>}
@@ -1226,6 +1264,7 @@ const st = StyleSheet.create(scaled({
   controlRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   seekFocus: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 6 },
   preview: { position: 'absolute', bottom: '100%', marginBottom: 16 },
+  chapterTick: { position: 'absolute', top: 0, width: 4, height: 10, marginLeft: -2, backgroundColor: 'rgba(0,0,0,0.75)' },
   scrubMark: { position: 'absolute', top: -8, width: 6, height: 26, marginLeft: -3, borderRadius: 3, backgroundColor: '#fff' },
   summaryTitle: { color: colors.text, fontSize: font.title, fontWeight: '700' },
   summaryMeta: { color: colors.muted, fontSize: font.small, marginTop: 8 },

@@ -67,6 +67,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Chapters in every player (2026-11-01, no migration)
+
+- **Server:** `GET /api/files/{id}/chapters` (`api/chapters.go`) answers `{chapters: [{start, end, title?}]}` in seconds of the original file, the same clock as progress and markers. `media.Chapters` runs `ffprobe -show_chapters` (header only, quick); `parseChapters` drops empty chapters, a lone chapter covering the whole file, and titles that are only a timestamp or number (players say "Chapter N"). Results are cached in memory per file id (`chapterCache`, up to 2000 files) and checked against size and mtime, so a replaced file is read again after the next scan. No column and no migration on purpose: several threads were adding migrations at the same time, and reading again after a restart costs one ffprobe. Converted streams still drop chapters (`-map_chapters -1`); the players take them from the API instead.
+- **Web** (`web/src/chapters.ts`, `pages/Player.tsx`): gaps in the seek bar where chapters start, the chapter's name over the scrub preview, a Chapters button (list icon) with the current one marked, and `[` / `]` or Page Up / Page Down for previous and next chapter (previous goes to the start of the current chapter unless it began under 3 s ago).
+- **TV and phone app** (`apps/tv/src/chapters.ts`, `screens/Player.tsx`): marks on the progress bar (TV and the phone's touch bar), "Jump to 12:34 · Chapter name" while scrubbing, and a Chapters row at the top of Options.
+- **Roku** (`PlayerScreen`): marks in a `ticks` group over the bar, the current chapter's name between the times, and Options → Chapters.
+- **Windows app:** mpv already shows a file's chapters on its own seek bar and Page Up / Page Down move between them, so nothing was added there; BingeBandit's own controls over mpv can use the same endpoint.
+- **Tested:** `TestParseChapters`; `TestFileChapters` makes an MKV with two chapters with ffmpeg and checks the endpoint, the 404 for someone without the library, and that a replaced file is read again. Web and TV app typechecked and linted; Roku checked with BrighterScript. Not tried in a browser by hand, on a TV or on a Roku.
+
 ## Sports: games on the right local channel, Admin → Live TV → Networks (2026-11-01, migration 52, v0.40.0)
 
 Michael reported Sports games landing on the wrong channels: CBS games not on WDBJ, NBC not on WSLS (Roanoke locals). Cause: `findChannels` (`api/sports.go`) never used the network ESPN lists (`Game.Broadcasts`). It only looked for a guide programme near kick-off naming both teams, so a local whose guide says "SEC on CBS" never matched, while other cities' CBS stations, replays or preview shows that named the teams did, and the first six matches by channel number filled the list.

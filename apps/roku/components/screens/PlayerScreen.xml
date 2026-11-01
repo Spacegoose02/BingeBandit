@@ -34,9 +34,13 @@
       </Label>
       <Rectangle id="track" width="1700" height="8" translation="[110, 940]" color="0xFFFFFF40" />
       <Rectangle id="bar" width="0" height="8" translation="[110, 940]" color="0x2DD4BFFF" />
+      <Group id="ticks" />
       <Rectangle id="handle" width="6" height="30" translation="[110, 929]" color="0xF2F4F7FF" />
       <Label id="elapsed" width="400" translation="[110, 966]" color="0xF2F4F7FF">
         <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
+      </Label>
+      <Label id="chapter" width="900" translation="[510, 966]" horizAlign="center" color="0x98A1ADFF">
+        <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
       </Label>
       <Label id="total" width="400" translation="[1410, 966]" horizAlign="right" color="0xF2F4F7FF">
         <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
