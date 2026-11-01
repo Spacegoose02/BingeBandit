@@ -5,15 +5,31 @@ const { contextBridge, ipcRenderer } = require('electron')
 // server's pages get the player (main.js checks the sender again); the
 // local setup page gets the server finder.
 
+// In-app updates, for both: state() and onChange(cb) say whether a new
+// version is downloading or ready, install() restarts into it.
+const updates = {
+  version: ipcRenderer.sendSync('app:version'),
+  state: () => ipcRenderer.invoke('update:state'),
+  check: () => ipcRenderer.invoke('update:check'),
+  install: () => ipcRenderer.invoke('update:install'),
+  onChange: (cb) => {
+    const listener = (_e, s) => cb(s)
+    ipcRenderer.on('update:changed', listener)
+    return () => ipcRenderer.removeListener('update:changed', listener)
+  },
+}
+
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('bbSetup', {
     probe: (input) => ipcRenderer.invoke('setup:probe', input),
     scan: () => ipcRenderer.invoke('setup:scan'),
     use: (url) => ipcRenderer.invoke('setup:use', url),
+    updates,
   })
 } else if (location.origin === ipcRenderer.sendSync('bb:origin')) {
   contextBridge.exposeInMainWorld('bbDesktop', {
     player: 'mpv',
+    features: ['live', 'together', 'ui'],
     play: (req) => ipcRenderer.invoke('player:play', req),
     command: (name, arg) => ipcRenderer.invoke('player:command', name, arg),
     release: () => ipcRenderer.invoke('player:release'),
@@ -22,5 +38,6 @@ if (location.protocol === 'file:') {
       ipcRenderer.on('player:event', listener)
       return () => ipcRenderer.removeListener('player:event', listener)
     },
+    updates,
   })
 }

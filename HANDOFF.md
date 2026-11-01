@@ -44,7 +44,7 @@ Before changing code, know these:
 Several of these are being worked on in parallel; check open pull requests before starting one. Done in v0.35.0 and now in the log: Hue Sync and Game Lights per profile and per device on the TV, a profile's own Hue hub, the Sports Hub, the single OK click, the Roku settings passcode and the /tv install link.
 
 - **Sports on the web:** Multi-View, Sports channels and spoiler-free are on the web now (#149, #155). Still missing: box scores and game details, Sports rows and favorite teams by division.
-- **Windows app:** BingeBandit's own controls over mpv, Live TV and Watch Together in mpv, code signing and in-app updates.
+- **Windows app:** code signing, once there's a certificate (Michael chose to stay unsigned for now; the release build signs when the `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` secrets exist).
 - **An admin switch for recommendations on the web.** (`recommendations_enabled` already exists in admin Settings, from the third feature board; check what the card still wants.)
 - **Bugs and security:** a review pass is in progress.
 
@@ -54,7 +54,7 @@ Most outside services and all hardware were only tested against fakes. These are
 
 - **Devices:** offline downloads on a phone (the whole flow, the foreground service on Android 14+), the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback, the guide's preview, audio track switching, drawn subtitles over video and the LAN scan never ran even in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN (NASCAR's fields especially), Multi-View with four streams (each now ignores Android audio focus) and Game Lights rooms per TV.
 - **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
-- **Windows app:** a real Windows PC (mpv's named pipe, the NSIS installer), `fetch-mpv` against the live GitHub API.
+- **Windows app:** a real Windows PC (mpv's named pipe, the NSIS installer, the controls with LuaJIT and DirectWrite fonts), `fetch-mpv` against the live GitHub API, an in-app update from one real release to the next, a real Live TV channel in mpv.
 - **Discover in the TV player:** yt-dlp against real YouTube (blocked where it was built); it falls back to offering the YouTube app.
 - **Subtitles:** OpenSubtitles search and download against the real API, Roku thumbnails from the BIF file.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
@@ -67,6 +67,16 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Windows app: BingeBandit's controls over mpv, Live TV and Watch Together in mpv, in-app updates (2026-11-01, no migration)
+
+- **Controls** (`apps/desktop/mpv-scripts/bingebandit.lua`, loaded with `--script`, mpv's OSC and OSD bar off, Inter from `mpv-scripts/fonts`): title and subtitle, clock, a progress bar with intro and credits marked, time and "ends at", a Skip intro / Next episode button, an Up next card, messages, and a right-hand options menu (the page's sections, then audio and subtitle tracks from mpv's track list). Remote, keyboard and mouse all work; the menu takes the keys while it's open. Written for Lua 5.1 and 5.2.
+  - Page ↔ controls: `bridge.command('state' | 'menu' | 'osd')` become `script-message-to bingebandit bb-state | bb-menu | bb-toast`; keys and picks come back as `{type:'key', name, arg}` (`bb-enter`, `bb-next`, `bb-pick <id>`, `bb-channel up|down`). `Mpv` queues commands until the pipe connects and resends state and menu when the script says `bb-ui-ready`.
+  - `input.conf` now routes keys to `script-binding bingebandit/...`. An `input.conf` (or `mpv.conf`) still byte-for-byte an older default is replaced (`OLD_DEFAULTS` in `main.js`, by sha256); add the old hash there whenever a default file changes.
+- **Live TV in mpv** (`web/src/pages/DesktopLivePlayer.tsx`): mpv plays the server's HLS playlist from the live edge (`start: null` → `--start=none`), Bearer header on every segment. Channel up/down, a Channels menu, favorites, LIVE / −m:ss badge from mpv's cache. Seat ping, rejoin with backoff, and the stall → `/buffering` → rejoin logic are the web player's.
+- **Watch Together in mpv** (`DesktopPlayer.tsx`): `useTogether` as in the web player; remote changes are applied to mpv and ignored as echoes for 2.5 s, drift over 3 s is corrected every 5 s, the menu starts a party, invites, copies the link (Electron's clipboard) and leaves.
+- **Compatibility:** `bbDesktop.features` (`live`, `together`, `ui`); a newer server with an older app keeps Live TV and parties in the browser player and falls back to mpv's text for prompts.
+- **Updates** (`apps/desktop/src/updates.js`, electron-updater): `publish` in package.json is GitHub `Spacegoose02/BingeBandit` (this also fixes the `[null]` publish crash for good), the release uploads `latest.yml` and the blockmap. Downloads in the background, installs on quit, `DesktopUpdateNotice` in the web layout and the setup page offer Restart now. The portable exe only links to the release. `BB_NO_UPDATES=1` turns it off.
+- **Tested:** `npm test` in apps/desktop (new: a real mpv with the controls taking state and menu, OK → `bb-enter`, a menu pick, channel keys in live mode, Back quitting), screenshots of every state under Xvfb, mpv against a local live HLS stream behind a Bearer check (started 3 segments from the edge, every request signed in), `electron-builder --win nsis` writes the right `app-update.yml` (the installer itself needs Wine), web `tsc` and build. **Not tested:** a real Windows PC, a real update, the real server's Live TV or a watch party end to end in mpv.
 ## Push notifications to phones and browsers (2026-11-01, migration 53)
 
 Notifications now also arrive as Web Push messages with BingeBandit closed: finished requests, game alerts, Watch Together invites, and every other kind under the bell.
