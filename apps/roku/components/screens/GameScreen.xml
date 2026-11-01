@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One game from the Sports Hub: the score, where to watch it, following its teams, and its box score, stats, leaders and standings. -->
+<component name="GameScreen" extends="BaseScreen">
+  <children>
+    <Rectangle width="1920" height="1080" color="0x0B0D10FF" />
+    <Rectangle id="stripe" width="12" height="300" translation="[0, 60]" />
+    <Label id="kicker" width="1600" translation="[110, 60]" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </Label>
+    <Poster id="awayLogo" width="90" height="90" translation="[110, 110]" loadDisplayMode="scaleToFit" />
+    <Label id="awayName" width="1150" height="90" translation="[230, 110]" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <Label id="awayScore" width="300" height="90" translation="[1510, 110]" horizAlign="right" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="72" />
+    </Label>
+    <Poster id="homeLogo" width="90" height="90" translation="[110, 220]" loadDisplayMode="scaleToFit" />
+    <Label id="homeName" width="1150" height="90" translation="[230, 220]" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="48" />
+    </Label>
+    <Label id="homeScore" width="300" height="90" translation="[1510, 220]" horizAlign="right" vertAlign="center" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="72" />
+    </Label>
+    <Label id="meta" width="1700" translation="[110, 336]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+    </Label>
+    <LabelList id="list" translation="[100, 410]" itemSize="[580, 64]" itemSpacing="[0, 6]" numRows="9" vertFocusAnimationStyle="floatingFocus"
+      color="0xF2F4F7FF" focusedColor="0xF2F4F7FF" focusBitmapUri="pkg:/images/focus.9.png">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="28" />
+      <Font role="focusedFont" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </LabelList>
+    <Rectangle width="1100" height="620" translation="[730, 410]" color="0x14181DFF" />
+    <Group id="panel" translation="[760, 430]" />
+    <Label id="note" width="1700" translation="[110, 1036]" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+    </Label>
+    <Timer id="reload" duration="30" repeat="true" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/common/sports.brs" />
+  <script type="text/brightscript" uri="pkg:/components/screens/GameScreen.brs" />
+</component>

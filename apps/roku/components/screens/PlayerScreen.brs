@@ -4,7 +4,8 @@
 ' The controls are our own so seeking can restart a conversion at the new
 ' point. Audio and subtitles follow the viewer's preferences (web Account)
 ' and change from Options (*); text subtitles are drawn here from WebVTT and
-' image subtitles are burned in by the server.
+' image subtitles are burned in by the server. Watch Together keeps the
+' player in a room with people on other screens (see the section below).
 
 sub init()
     m.video = m.top.findNode("video")
@@ -28,6 +29,8 @@ sub init()
     m.stallTimer.observeField("fire", "onStall")
     m.nextTimer.observeField("fire", "onNextTick")
     m.toastTimer.observeField("fire", "hideToast")
+    m.togetherTimer = m.top.findNode("togetherTimer")
+    m.togetherTimer.observeField("fire", "pollRoom")
     m.menu.observeField("chosen", "onMenuChosen")
     m.menu.observeField("closed", "onMenuClosed")
     m.video.observeField("state", "onState")
@@ -75,6 +78,21 @@ sub init()
     m.trailerFormat = ""
     m.playSession = "roku-" + CreateObject("roDeviceInfo").GetRandomUUID()
     m.di = CreateObject("roDeviceInfo")
+    ' Watch Together: the room's id ("" when not in one), the newest change
+    ' seen, the server clock minus ours (ms), who's in it, and the people who
+    ' can be invited.
+    m.room = ""
+    m.roomRev = 0
+    m.roomSkew = 0#
+    m.roomAsked = 0#
+    m.roomMembers = []
+    m.roomPeople = invalid
+    m.roomInvited = {}
+    m.roomPolling = false
+    m.roomLoad = 0
+    m.roomStart = -1.0
+    m.roomPaused = false
+    m.pendingPause = invalid
     showBusy("Loading...")
 end sub
 
@@ -88,6 +106,19 @@ sub onParams()
         return
     end if
     m.waiting = 2
+    ' Joining a watch party: where the room is decides where to start.
+    room = getOr(m.top.params, "together", "")
+    if room <> ""
+        m.room = room
+        m.waiting = 3
+        if isTrue(m.top.params.announce)
+            ' Moving the party on to the next episode: say so before looking.
+            api("POST", "/api/together/" + room + "/state", { itemId: m.top.params.id, paused: false, position: 0 }, "onRoomFirst")
+        else
+            api("GET", "/api/together/" + room + "?watching=1", invalid, "onRoomFirst")
+        end if
+        m.roomAsked = nowMs()
+    end if
     api("GET", "/api/items/" + m.top.params.id.ToStr(), invalid, "onItem")
     api("GET", "/api/me/prefs", invalid, "onPrefs")
 end sub
@@ -141,6 +172,11 @@ sub start()
     if isImageSub(m.sub) then m.burn = m.sub.index
     if isTextSub(m.sub) then loadCues()
     at = getOr(m.top.params, "start", 0)
+    if m.room <> ""
+        if m.roomStart >= 0 then at = m.roomStart
+        m.pendingPause = m.roomPaused
+        m.togetherTimer.control = "start"
+    end if
     m.pos = at
     if canDirectPlay(m.file) then playDirect(at) else transcode(at)
 end sub
@@ -364,6 +400,15 @@ sub onState()
             if m.video.position > 20 then m.video.seek = 0
         end if
         if m.audioPending and m.mode = "direct" then applyDirectAudio()
+        ' The watch party is paused: stay paused once the video is ready.
+        if m.pendingPause <> invalid
+            p = m.pendingPause
+            m.pendingPause = invalid
+            if p
+                m.video.control = "pause"
+                return
+            end if
+        end if
         m.reportTimer.control = "start"
         if m.wasPaused then report(false, false)
         m.wasPaused = false
@@ -428,6 +473,7 @@ sub onClosing()
     if not m.top.closing then return
     m.reportTimer.control = "stop"
     m.nextTimer.control = "stop"
+    m.togetherTimer.control = "stop"
     if not m.finished then report(true, false, true)
     m.video.control = "stop"
     if m.transcodeId <> ""
@@ -575,7 +621,7 @@ sub checkMarkers()
         if mode = "auto"
             m.introDone = true
             say("Skipped the intro")
-            seekTo(intro["end"])
+            userSeek(intro["end"])
         else if mode = "button"
             kind = "intro"
         end if
@@ -612,7 +658,7 @@ sub doSkip()
     if kind = "intro"
         m.introDone = true
         intro = markerOf("intro")
-        if intro <> invalid then seekTo(intro["end"])
+        if intro <> invalid then userSeek(intro["end"])
     else if kind = "credits"
         skipCredits()
     end if
@@ -623,7 +669,7 @@ sub skipCredits()
     m.skip.visible = false
     m.skipKind = ""
     c = markerOf("credits")
-    if afterCredits() and c <> invalid then seekTo(c["end"]) else finish()
+    if afterCredits() and c <> invalid then userSeek(c["end"]) else finish()
 end sub
 
 ' --- Controls -----------------------------------------------------------------
@@ -639,8 +685,9 @@ sub showOverlay()
         if m.quality > 0 then mode = mode + " at " + resolutionLabel(m.quality)
     end if
     if m.video.state = "paused" then mode = "Paused  ·  " + mode
+    if m.room <> "" then mode = mode + "  ·  Together (" + roomCount().ToStr() + ")"
     m.top.findNode("state").text = mode
-    if m.mode = "trailer" then hint = "" else hint = "* Options: audio, subtitles, quality"
+    if m.mode = "trailer" then hint = "" else hint = "* Options: audio, subtitles, quality, watch together"
     m.top.findNode("hint").text = hint
     drawProgress()
     drawCue()
@@ -683,7 +730,7 @@ sub commitSeek()
     t = m.seekTarget
     m.seekTarget = -1
     if t < 0 then return
-    seekTo(t)
+    userSeek(t)
     showOverlay()
 end sub
 
@@ -720,8 +767,10 @@ function onKeyEvent(key as string, press as boolean) as boolean
     if key = "OK" or key = "play"
         if m.video.state = "paused"
             m.video.control = "resume"
+            sendRoom(false, m.pos)
         else if m.video.state = "playing"
             m.video.control = "pause"
+            sendRoom(true, m.pos)
         end if
         showOverlay()
         return true
@@ -788,6 +837,8 @@ sub openMenu(level as string)
         m.menuActions.Push({ act: "level", level: "subs" })
         labels.Push("Quality: " + qualityLabel())
         m.menuActions.Push({ act: "level", level: "quality" })
+        if m.room <> "" then labels.Push("Together (" + roomCount().ToStr() + "): invite or leave") else labels.Push("Watch together")
+        m.menuActions.Push({ act: "level", level: "together" })
     else if level = "audio"
         m.menu.title = "Audio"
         cur = audioFor(m.file, m.audio)
@@ -811,6 +862,8 @@ sub openMenu(level as string)
             labels.Push(l)
             m.menuActions.Push({ act: "sub", stream: s })
         end for
+    else if level = "together"
+        togetherMenu(labels)
     else if level = "quality"
         m.menu.title = "Quality"
         m.menu.message = "Converting takes a moment to start. A lower quality helps when playback keeps stopping."
@@ -841,10 +894,23 @@ sub onMenuChosen()
     a = m.menuActions[m.menu.chosen]
     if a = invalid then return
     if a.act = "level"
+        if a.level = "together" then m.roomPeople = invalid
         openMenu(a.level)
         return
     end if
+    if a.act = "startRoom"
+        startRoom()
+        return
+    end if
+    if a.act = "invite"
+        invite(a.person)
+        return
+    end if
     closeMenu()
+    if a.act = "leaveRoom"
+        leaveRoom("You left the watch party.")
+        return
+    end if
     if a.act = "audio"
         chooseAudio(a.index)
     else if a.act = "sub"
@@ -862,7 +928,9 @@ end sub
 sub closeMenu()
     m.menu.visible = false
     m.menuLevel = ""
-    m.top.setFocus(true)
+    ' A child, not the screen itself: focusing an ancestor of the focused
+    ' menu can leave the menu holding the keys.
+    m.top.findNode("keys").setFocus(true)
 end sub
 
 sub chooseAudio(index as integer)
@@ -935,7 +1003,264 @@ end sub
 
 sub playNext()
     m.nextTimer.control = "stop"
-    m.top.navigate = { action: "replace", screen: "PlayerScreen", params: { id: m.next.id, start: 0 } }
+    params = { id: m.next.id, start: 0 }
+    if m.room <> ""
+        ' Everyone in the watch party moves on with this viewer (the next
+        ' player tells the room as it opens).
+        params.together = m.room
+        params.announce = true
+    end if
+    m.top.navigate = { action: "replace", screen: "PlayerScreen", params: params }
+end sub
+
+' --- Watch Together ---------------------------------------------------------
+'
+' The same rooms as the web and the Android TV app. Roku has no server-sent
+' events, so the room is read every second and a half (which also keeps this
+' viewer counted as in it). Someone else's play, pause, seek or next episode
+' is applied here; this viewer's own go out through sendRoom.
+
+' The time now in ms since 1970, as a Double (too big for an Integer).
+function nowMs() as double
+    d = CreateObject("roDateTime")
+    return CDbl(d.AsSeconds()) * 1000# + d.GetMilliseconds()
+end function
+
+' Where the room's playback is right now, in seconds.
+function roomPosition(st as object) as float
+    p = getOr(st, "position", 0)
+    if isTrue(st.paused) then return p
+    ahead = (nowMs() + m.roomSkew - CDbl(getOr(st, "at", 0))) / 1000#
+    if ahead < 0 then ahead = 0
+    p = p + ahead
+    ' A clock far off can't send the player past the end.
+    if m.duration > 5 and p > m.duration - 5 then p = m.duration - 5
+    return p
+end function
+
+' Notes the server's clock from an answer to a request sent at m.roomAsked
+' (kept here: a Double in a task's request can lose its precision): half the
+' round trip is how old the server's reading is.
+sub roomClock(res as object)
+    if res.data = invalid or res.data.now = invalid or m.roomAsked <= 0 then return
+    m.roomSkew = CDbl(res.data.now) - (m.roomAsked + nowMs()) / 2#
+end sub
+
+' Joining: where the room is says where to start and whether to wait paused.
+sub onRoomFirst(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    if m.top.closing then return
+    res = event.getData()
+    if res.ok and type(res.data) = "roAssociativeArray" and res.data.state <> invalid
+        roomClock(res)
+        st = res.data.state
+        m.roomRev = getOr(st, "rev", 0)
+        m.roomMembers = getOr(res.data, "members", [])
+        if getOr(st, "itemId", 0) = m.top.params.id
+            m.roomStart = roomPosition(st)
+            m.roomPaused = isTrue(st.paused)
+        else
+            ' The party already moved on to something else: go there.
+            m.waiting = -1
+            m.top.navigate = { action: "replace", screen: "PlayerScreen", params: { id: st.itemId, start: roomPosition(st), together: m.room } }
+            return
+        end if
+    else
+        m.room = ""
+        say("That watch party has ended.")
+    end if
+    m.waiting = m.waiting - 1
+    if m.waiting = 0 then start()
+end sub
+
+sub pollRoom()
+    if m.room = "" or m.roomPolling then return
+    m.roomPolling = true
+    api("GET", "/api/together/" + m.room + "?watching=1", invalid, "onRoom", { room: m.room })
+    m.roomAsked = nowMs()
+end sub
+
+sub onRoom(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    m.roomPolling = false
+    if m.top.closing or t.request.room <> m.room then return
+    res = event.getData()
+    if not res.ok
+        if res.status = 404 or res.status = 403 then leaveRoom("The watch party has ended.")
+        return
+    end if
+    if type(res.data) <> "roAssociativeArray" or res.data.state = invalid then return
+    roomClock(res)
+    m.roomMembers = getOr(res.data, "members", [])
+    st = res.data.state
+    if getOr(st, "rev", 0) > m.roomRev
+        m.roomRev = st.rev
+        applyRoom(st)
+    end if
+end sub
+
+' Someone else changed the room: go where it is now.
+sub applyRoom(st as object)
+    want = roomPosition(st)
+    if m.item <> invalid and getOr(st, "itemId", 0) <> m.item.id
+        m.top.navigate = { action: "replace", screen: "PlayerScreen", params: { id: st.itemId, start: want, together: m.room } }
+        return
+    end if
+    jumped = Abs(want - m.pos) > 2
+    if jumped then seekTo(want)
+    paused = isTrue(st.paused)
+    s = m.video.state
+    wasPaused = s = "paused"
+    if s = "playing" or s = "paused"
+        if paused and s = "playing" then m.video.control = "pause"
+        if not paused and s = "paused" then m.video.control = "resume"
+    else
+        ' Still starting or converting: settle once it plays.
+        m.pendingPause = paused
+    end if
+    me = getOr(m.global.user, "id", 0)
+    who = getOr(st, "byName", "")
+    if getOr(st, "by", 0) <> me and who <> ""
+        if paused <> wasPaused
+            if paused then say(who + " paused") else say(who + " pressed play")
+        else if jumped
+            say(who + " jumped to " + clockTime(want))
+        end if
+    end if
+    if m.overlay.visible then showOverlay()
+end sub
+
+' This viewer played, paused or jumped: tell the room.
+sub sendRoom(paused as boolean, at as float)
+    if m.room = "" then return
+    api("POST", "/api/together/" + m.room + "/state", { paused: paused, position: at }, "onRoomSent", { room: m.room })
+end sub
+
+sub onRoomSent(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    res = event.getData()
+    if not res.ok or t.request.room <> m.room or type(res.data) <> "roAssociativeArray" or res.data.state = invalid then return
+    ' Our own change: don't apply it again when the next look sees it.
+    if getOr(res.data.state, "rev", 0) > m.roomRev then m.roomRev = res.data.state.rev
+    m.roomMembers = getOr(res.data, "members", m.roomMembers)
+end sub
+
+' A seek the viewer asked for (the remote, Skip intro), which the room follows.
+sub userSeek(t as float)
+    seekTo(t)
+    sendRoom(m.video.state = "paused", t)
+end sub
+
+function roomCount() as integer
+    n = m.roomMembers.Count()
+    if n < 1 then n = 1
+    return n
+end function
+
+' Options -> Watch together: start a room, or invite people and leave.
+sub togetherMenu(labels as object)
+    m.menu.title = "Watch together"
+    if m.room = ""
+        m.menu.message = "Watch with someone else on this server, each on your own screen. Play, pause and skipping stay in step."
+        labels.Push("Start watching together")
+        m.menuActions.Push({ act: "startRoom" })
+        return
+    end if
+    names = []
+    for each mem in m.roomMembers
+        names.Push(getOr(mem, "name", ""))
+    end for
+    who = joinStrings(names, ", ")
+    if who = "" then who = "just you so far"
+    m.menu.message = "Watching with: " + who + ". Invite someone and it pops up on their TV, phone or browser."
+    if m.roomPeople = invalid
+        m.roomLoad = m.roomLoad + 1
+        api("GET", "/api/together/" + m.room + "/people", invalid, "onRoomPeople", { load: m.roomLoad })
+    else
+        inRoom = {}
+        for each mem in m.roomMembers
+            inRoom[asString(mem.userId)] = true
+        end for
+        for each p in m.roomPeople
+            if not inRoom.DoesExist(asString(p.id))
+                if m.roomInvited.DoesExist(asString(p.id)) then labels.Push(getOr(p, "name", "") + ": invited") else labels.Push("Invite " + getOr(p, "name", ""))
+                m.menuActions.Push({ act: "invite", person: p })
+            end if
+        end for
+        if m.roomPeople.Count() = 0 then m.menu.message = m.menu.message + " Nobody else can play this title here."
+    end if
+    labels.Push("Leave the watch party")
+    m.menuActions.Push({ act: "leaveRoom" })
+end sub
+
+sub onRoomPeople(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    if t.request.load <> m.roomLoad then return
+    res = event.getData()
+    if res.ok and type(res.data) = "roArray" then m.roomPeople = res.data else m.roomPeople = []
+    if m.menu.visible and m.menuLevel = "together" then openMenu("together")
+end sub
+
+sub startRoom()
+    if m.item = invalid then return
+    api("POST", "/api/together", { itemId: m.item.id, position: m.pos, paused: m.video.state = "paused" }, "onRoomStarted")
+    m.roomAsked = nowMs()
+end sub
+
+sub onRoomStarted(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    res = event.getData()
+    if not res.ok or type(res.data) <> "roAssociativeArray"
+        m.menu.message = "Couldn't start it: " + asString(res.error)
+        return
+    end if
+    roomClock(res)
+    m.room = res.data.id
+    m.roomRev = getOr(res.data.state, "rev", 0)
+    m.roomMembers = getOr(res.data, "members", [])
+    m.roomPeople = invalid
+    m.roomInvited = {}
+    m.togetherTimer.control = "start"
+    pollRoom()
+    if m.menu.visible then openMenu("together")
+end sub
+
+sub invite(p as object)
+    api("POST", "/api/together/" + m.room + "/invite", { userIds: [p.id] }, "onInvited", { name: getOr(p, "name", ""), id: p.id })
+end sub
+
+sub onInvited(event as object)
+    t = event.getRoSGNode()
+    doneTask(t)
+    res = event.getData()
+    if not res.ok
+        m.menu.message = res.error
+        return
+    end if
+    m.roomInvited[asString(t.request.id)] = true
+    if m.menu.visible and m.menuLevel = "together"
+        f = m.menu.chosen
+        openMenu("together")
+        m.menu.message = t.request.name + " is invited. It pops up on their screen."
+        m.menu.focus = f
+    end if
+end sub
+
+sub leaveRoom(message as string)
+    if m.room = "" then return
+    m.room = ""
+    m.roomMembers = []
+    m.roomPeople = invalid
+    m.roomInvited = {}
+    m.pendingPause = invalid
+    m.togetherTimer.control = "stop"
+    say(message)
+    if m.overlay.visible then showOverlay()
 end sub
 
 ' --- Status -----------------------------------------------------------------

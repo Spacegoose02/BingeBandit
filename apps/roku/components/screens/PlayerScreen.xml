@@ -67,12 +67,16 @@
       </Label>
     </Group>
     <OptionsMenu id="menu" visible="false" />
+    <!-- Takes focus back from the Options menu; its keys come up to this screen. -->
+    <Group id="keys" />
     <Timer id="toastTimer" duration="4" repeat="false" />
     <Timer id="reportTimer" duration="10" repeat="true" />
     <Timer id="hideTimer" duration="5" repeat="false" />
     <Timer id="seekTimer" duration="0.9" repeat="false" />
     <Timer id="stallTimer" duration="12" repeat="false" />
     <Timer id="nextTimer" duration="1" repeat="true" />
+    <!-- Watch Together: the room is read this often (no server-sent events on Roku). -->
+    <Timer id="togetherTimer" duration="1.5" repeat="true" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/common/tracks.brs" />

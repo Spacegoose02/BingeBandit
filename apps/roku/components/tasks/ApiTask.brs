@@ -26,6 +26,10 @@ sub execute()
         m.top.response = loadVtt(req)
         return
     end if
+    if build = "sports"
+        m.top.response = loadSports(req)
+        return
+    end if
     res = httpRequest(req)
     if res.ok and build <> ""
         content = invalid
@@ -636,4 +640,110 @@ sub guideGap(row as object, start as integer, stopAt as integer)
     n.playStart = start
     n.playDuration = stopAt - start
     n.addFields({ program: {}, gap: true })
+end sub
+
+' --- Sports Hub ------------------------------------------------------------------
+
+' A day of every league's games as RowList rows: Live now, Your teams, then a
+' row per league, each live first, then soonest to start, then results newest
+' first. Today's Your teams row is the week around today (from /api/sports),
+' like the TV app. The viewer's preferences come along for spoiler-free mode.
+function loadSports(req as object) as object
+    res = httpRequest({ path: "/api/sports/scores?date=" + req.date, timeout: 30000 })
+    if not res.ok then return res
+    data = res.data
+    if type(data) <> "roAssociativeArray" then return { ok: false, status: res.status, error: "The server sent something unexpected." }
+    teamGames = invalid
+    teams = getOr(data, "teams", [])
+    if req.today = true
+        home = httpRequest({ path: "/api/sports", timeout: 30000 })
+        if home.ok and type(home.data) = "roAssociativeArray"
+            teamGames = getOr(home.data, "games", [])
+            teams = getOr(home.data, "teams", teams)
+        end if
+    end if
+    prefs = httpRequest({ path: "/api/me/prefs" })
+    leagues = getOr(data, "leagues", [])
+    byId = {}
+    sportsSeen = []
+    for each l in leagues
+        byId[l.id] = l
+        known = false
+        for each s in sportsSeen
+            if s = l.sport then known = true
+        end for
+        if not known then sportsSeen.Push(l.sport)
+    end for
+    sport = getOr(req, "sport", "all")
+    onChannel = getOr(req, "withChannel", false) = true
+    games = []
+    for each g in getOr(data, "games", [])
+        if sportsKeep(g, byId, sport, onChannel) then games.Push(g)
+    end for
+    root = CreateObject("roSGNode", "ContentNode")
+    live = []
+    mine = []
+    for each g in games
+        if getOr(g, "state", "") = "in" then live.Push(g)
+        if getOr(g, "mine", []).Count() > 0 then mine.Push(g)
+    end for
+    if teamGames <> invalid
+        mine = []
+        for each g in teamGames
+            if sportsKeep(g, byId, sport, onChannel) then mine.Push(g)
+        end for
+    end if
+    sportsRow(root, "Live now", live, byId)
+    sportsRow(root, "Your teams", mine, byId)
+    for each l in leagues
+        if sport = "all" or l.sport = sport
+            list = []
+            for each g in games
+                if getOr(g, "league", "") = l.id then list.Push(g)
+            end for
+            sportsRow(root, l.name, list, byId)
+        end if
+    end for
+    m.top.content = root
+    out = { ok: true, status: 200, data: data, teams: teams, sports: sportsSeen, leagues: leagues }
+    if prefs.ok and type(prefs.data) = "roAssociativeArray" then out.prefs = prefs.data
+    return out
+end function
+
+' Whether a game passes the hub's sport and "on my channels" filters.
+function sportsKeep(g as object, byId as object, sport as string, onChannel as boolean) as boolean
+    l = byId[getOr(g, "league", "")]
+    if sport <> "all" and (l = invalid or l.sport <> sport) then return false
+    if onChannel and getOr(g, "channels", []).Count() = 0 then return false
+    return true
+end function
+
+sub sportsRow(root as object, title as string, games as object, byId as object)
+    if games.Count() = 0 then return
+    rank = { pre: 1, post: 2 }
+    sorted = []
+    for each g in games
+        t = isoSeconds(g.start)
+        r = rank[getOr(g, "state", "")]
+        if r = invalid then r = 0
+        k = t
+        if r = 2 then k = -t
+        sorted.Push({ k: r * 10000000000# + k, g: g })
+    end for
+    sorted.SortBy("k")
+    row = root.createChild("ContentNode")
+    row.title = title
+    for each s in sorted
+        g = s.g
+        l = byId[getOr(g, "league", "")]
+        n = row.createChild("ContentNode")
+        n.title = getOr(g, "shortName", getOr(g, "name", ""))
+        leagueName = ""
+        sport = ""
+        if l <> invalid
+            leagueName = getOr(l, "name", "")
+            sport = getOr(l, "sport", "")
+        end if
+        n.addFields({ game: g, leagueName: leagueName, sport: sport, mine: getOr(g, "mine", []).Count() > 0 })
+    end for
 end sub
