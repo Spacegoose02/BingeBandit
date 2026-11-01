@@ -7,6 +7,8 @@ import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext
 import CastScreen from './src/screens/Cast'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
+import Downloads from './src/screens/Downloads'
+import { startDownloads } from './src/downloads'
 import { CollectionScreen } from './src/screens/Library'
 import PersonScreen from './src/screens/Person'
 import Home from './src/screens/Home'
@@ -163,6 +165,11 @@ export default function App() {
     setPhase({ name: 'app' })
   }, [])
 
+  // Offline downloads (phones) follow the network once signed in.
+  useEffect(() => {
+    if (phase.name === 'app' && isPhone) startDownloads()
+  }, [phase.name])
+
   const top = stack[stack.length - 1].route
   let screen: React.ReactNode
   switch (phase.name) {
@@ -228,7 +235,9 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
     case 'person':
       return <PersonScreen name={r.person} />
     case 'player':
-      return <Player id={r.id} start={r.start} together={r.together} />
+      return <Player id={r.id} start={r.start} together={r.together} offline={r.offline} />
+    case 'downloads':
+      return <Downloads withBack />
     case 'live':
       return <LivePlayer channelId={r.channelId} />
     case 'trailer':

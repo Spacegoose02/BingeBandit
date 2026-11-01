@@ -89,6 +89,9 @@ type Server struct {
 	health     healthState
 	alerts     alertHistory
 	casts      castManager
+	chapters   chapterCache
+	// offline makes download copies for the phone app (offline.go).
+	offline offlineCopies
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -311,10 +314,14 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/files/{id}/subtitles/{stream}", s.subtitle)
 			r.Get("/files/{id}/subtitles/search", s.searchSubtitles)
 			r.Post("/files/{id}/subtitles/download", s.downloadSubtitle)
+			r.Get("/files/{id}/chapters", s.fileChapters)
 			r.Get("/files/{id}/trickplay", s.trickplayInfo)
 			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
 			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
+			r.Post("/files/{id}/offline", s.prepareOffline)
+			r.Get("/offline/{key}", s.offlineFile)
+			r.Post("/offline/check", s.checkOffline)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
 			// TVs being cast to ask what a link is before opening it.

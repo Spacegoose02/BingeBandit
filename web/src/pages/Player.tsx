@@ -13,7 +13,8 @@ import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, commonLanguages, episodeLabel, formatClock, languageName, normLang, resolutionLabel } from '../format'
 import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
-import type { Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
+import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
+import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
 import { CastPicker } from '../components/Cast'
 
@@ -263,7 +264,7 @@ function PlayerView({
   const [muted, setMuted] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
-  const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch'>(null)
+  const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch' | 'chapters'>(null)
   const [casting, setCasting] = useState(false) // picking a TV to carry on there
   const menuRef = useRef(menu)
   menuRef.current = menu
@@ -468,6 +469,21 @@ function PlayerView({
       stale = true
     }
   }, [fileKey])
+  const chapters = useChapters(fileKey)
+  const chapterIdx = chapterAt(chapters, time)
+  const nextChapter = () => {
+    const t = nextChapterStart(chapters, position())
+    if (t !== null) {
+      seek(t)
+      setToast(chapterName(chapters, chapterAt(chapters, t)))
+    }
+  }
+  const prevChapter = () => {
+    if (!chapters.length) return
+    const t = prevChapterStart(chapters, position())
+    seek(t)
+    setToast(chapterName(chapters, chapterAt(chapters, t)))
+  }
   const hoverAt = (clientX: number) => {
     const r = seekRef.current?.getBoundingClientRect()
     if (!r || !duration) return
@@ -661,6 +677,11 @@ function PlayerView({
         m: () => setMuted((m) => !m),
         ArrowUp: () => setVolume((v) => Math.min(1, v + 0.1)),
         ArrowDown: () => setVolume((v) => Math.max(0, v - 0.1)),
+        // Chapters, as in most players: Page Up / Page Down, or [ and ].
+        PageUp: prevChapter,
+        PageDown: nextChapter,
+        '[': prevChapter,
+        ']': nextChapter,
       }
       const fn = actions[e.key]
       if (fn) {
@@ -891,7 +912,8 @@ function PlayerView({
           onTouchMove={(e) => hoverAt(e.touches[0].clientX)}
           onTouchEnd={() => setHover(null)}
         >
-          {hover && <ScrubPreview fileId={file.id} info={thumbs} {...hover} />}
+          {hover && <ScrubPreview fileId={file.id} info={thumbs} chapter={chapterTitleAt(chapters, hover.t)} {...hover} />}
+          {duration > 0 && <ChapterTicks chapters={chapters} duration={duration} />}
           <input
             type="range"
             min={0}
@@ -938,6 +960,36 @@ function PlayerView({
           <span className={`mode-pill ${mode}`}>
             {modeLabel}
           </span>
+          {chapters.length > 0 && (
+            <div className="menu-anchor">
+              <button
+                className={`icon-btn ${menu === 'chapters' ? 'active' : ''}`}
+                onClick={() => setMenu(menu === 'chapters' ? null : 'chapters')}
+                aria-label="Chapters"
+                title="Chapters ( [ and ] )"
+              >
+                <Icon name="list" size={22} />
+              </button>
+              {menu === 'chapters' && (
+                <div className="menu player-menu player-chapters">
+                  <div className="menu-section">Chapters</div>
+                  {chapters.map((c, i) => (
+                    <button
+                      key={i}
+                      className={i === chapterIdx ? 'active' : ''}
+                      onClick={() => {
+                        seek(c.start)
+                        setMenu(null)
+                      }}
+                    >
+                      <span className="chapter-time">{formatClock(c.start)}</span>
+                      <span className="chapter-name">{chapterName(chapters, i)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {!!item.overview && (
             <div className="menu-anchor">
               <button className={`icon-btn ${menu === 'summary' ? 'active' : ''}`} onClick={() => setMenu(menu === 'summary' ? null : 'summary')} aria-label="Summary" title="Summary">
@@ -1103,7 +1155,7 @@ function delayLabel(d: number): string {
 }
 
 /** The thumbnail and time above the seek bar where the pointer is. */
-function ScrubPreview({ fileId, info, t, x, width }: { fileId: number; info: TrickplayInfo | null; t: number; x: number; width: number }) {
+function ScrubPreview({ fileId, info, chapter, t, x, width }: { fileId: number; info: TrickplayInfo | null; chapter: string; t: number; x: number; width: number }) {
   const w = 240
   let thumb: React.CSSProperties | null = null
   if (info) {
@@ -1123,7 +1175,25 @@ function ScrubPreview({ fileId, info, t, x, width }: { fileId: number; info: Tri
   return (
     <div className="scrub-preview" style={{ left: Math.max(0, Math.min(width - boxW, x - boxW / 2)), width: boxW }}>
       {thumb && <div className="scrub-thumb" style={thumb} />}
+      {chapter && <div className="scrub-chapter">{chapter}</div>}
       <div className="scrub-time">{formatClock(t)}</div>
+    </div>
+  )
+}
+
+/** The chapter's name at t for the scrub preview; '' when there are no chapters. */
+function chapterTitleAt(chapters: Chapter[], t: number): string {
+  const i = chapterAt(chapters, t)
+  return i < 0 ? '' : chapterName(chapters, i)
+}
+
+/** A small gap in the seek bar where each chapter after the first starts. */
+function ChapterTicks({ chapters, duration }: { chapters: Chapter[]; duration: number }) {
+  return (
+    <div className="chapter-ticks" aria-hidden>
+      {chapters.slice(1).map((c, i) =>
+        c.start < duration ? <span key={i} style={{ left: `${(c.start / duration) * 100}%` }} /> : null,
+      )}
     </div>
   )
 }

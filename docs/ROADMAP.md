@@ -39,6 +39,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | ✅ | Parallel probing for faster first scans |
 | ✅ | Subtitles: external `.srt/.ass/.vtt` sidecars (language, forced, SDH from the file name), image subtitles (PGS/VobSub) burned in, per-user size and background |
 | ✅ | Subtitles in a `Subs/` folder (release downloads): `Subs/2_English.srt` for a movie, `Subs/<episode>/…` and `Subs/<episode>.en.srt` for TV |
+| ✅ | Chapters: marks on the seek bar, the chapter's name while scrubbing, and a chapter list in the web, TV, phone and Roku players |
 | ✅ | Scrub previews: thumbnail sheets from keyframes (scheduled task, or on first play), shown on the web and TV seek bars; BIF for Roku's trick play bar |
 | ✅ | Subtitle search and download from OpenSubtitles in the web and TV players, and a subtitle timing offset |
 | ✅ | Per-user playback preferences: auto-pick audio language (English by default) and subtitles (off / auto for foreign audio / forced only / always), auto-play next episode |
@@ -164,7 +165,7 @@ Every card from the planning board, grouped into milestones in build order. ✅ 
 | 🟡 | **Roku app** (`apps/roku`, BrightScript/SceneGraph): pairing-code sign-in, Who's watching? with PINs, Home, libraries with filters, cast pages, search, details, direct play or HLS conversion with resume, Live TV; audio and subtitle choice, skip intro and credits, a guide grid with preview, favourites, follows and recording, trailers; sideloaded zip from CI. Not yet: Watch Together, Sports Hub, Channel Store listing. Untested on a real Roku |
 | | Casting to devices (Chromecast, DLNA) |
 | ✅ | Keeps working at home when the internet is down: the Android and Roku apps learn the server's home address and public URL and switch to whichever answers; artwork is cached ahead of time (Cache artwork task); guide section on local DNS |
-| | **Offline downloads** for phones and tablets (watch on the road). Today only the web's "Download original file" exists, which saves the raw file to play in another app. Sketch: a server endpoint that prepares a download copy (original when the device can play it, else a one-off transcode at a chosen quality, with subtitles), checked against the download permission and kid approvals; a Downloads screen in the phone app that saves to app storage with progress, pause/resume over Wi-Fi only, and a storage limit; the player plays the local file and remembers progress offline, then syncs watched state when the server is reachable again; downloads expire if the account or profile loses access. Not for TVs or Roku (Roku can't store video) |
+| ✅ | **Offline downloads** for phones and tablets (watch on the road): Download on a movie, episode or season (original when the phone plays it, else a 1080p/720p/480p copy the server converts first, text subtitles saved alongside), checked against the download setting and what the profile can see; a Downloads tab with progress, pause/resume, Wi-Fi only and a storage limit; the player plays the saved file, keeps the position offline and sends it when the server answers; downloads are deleted when the profile loses access or signs out. Not for TVs or Roku. Not yet run on a phone |
 | | Push notifications |
 
 ## M9: Plugins 🟡 (phases 1–3: plugin system, Hue Sync, Cinemask Upgrades)

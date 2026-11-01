@@ -558,6 +558,13 @@ export interface MediaFile {
   streams: MediaStream[]
 }
 
+/** A chapter mark in a file; seconds from the start of the file. */
+export interface Chapter {
+  start: number
+  end: number
+  title?: string
+}
+
 /** Scrub previews: thumbnail n (at n × interval seconds) is in sheet n / (columns × rows). */
 export interface TrickplayInfo {
   interval: number

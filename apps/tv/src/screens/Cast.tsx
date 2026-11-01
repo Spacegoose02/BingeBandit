@@ -177,6 +177,7 @@ function Remote({ session, onChange }: { session: CastSession; onChange: (s: Cas
           <SeekBar
             pct={s.duration ? Math.min(100, (s.position / s.duration) * 100) : 0}
             duration={s.duration}
+            chapters={[]}
             onDrag={setDragT}
             onSeek={(t) => control({ action: 'seek', position: t })}
           />
