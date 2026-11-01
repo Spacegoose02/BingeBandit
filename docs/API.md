@@ -64,9 +64,14 @@ Rules:
 | POST | `/me/trakt/connect`, `/me/trakt/poll` | Connect Trakt: show `userCode` and `verificationUrl`, then poll (202 while waiting, 200 when connected). |
 | POST | `/me/trakt/import`, `/me/trakt/push` | Import your Trakt history; send plays to Trakt (`{all: true}` includes plays from before connecting). |
 | PUT / DELETE | `/me/trakt` | `{autoSync}`; disconnect. |
-| GET | `/notifications` | `{notifications, unread}`: your newest 50 (`kind` is `episodes` or `recording`; `link` is a web app path). Kept for 60 days. |
+| GET | `/notifications` | `{notifications, unread}`: your newest 50 (`kind` is `episodes`, `recording`, `sports`, `live`, `request` or `server`; `link` is a web app path). Each also goes to your push devices. Kept for 60 days. |
 | POST | `/notifications/read` | `{ids: [...]}` marks those read; `{}` marks all read. |
 | DELETE | `/notifications` | Clears yours. |
+| GET | `/push` | `{publicKey, devices, kinds}`: the VAPID key to subscribe with (`applicationServerKey`), your devices (`{id, endpoint, device, kindsOff, createdAt, lastUsed}`) and the kinds a device can turn off (`request`, `sports`, `together`, `live`, `episodes`, `recording`, `server`). |
+| POST | `/push/devices` | `{endpoint, keys: {p256dh, auth}, device, kindsOff}` (a `PushSubscription.toJSON()` plus a name) turns push on for a browser; the endpoint must be https on a known push service (Google, Mozilla, Apple, Microsoft). The same endpoint again updates it and moves it to you. At most 30 per person. |
+| PUT | `/push/devices/{id}` | `{kindsOff}` |
+| DELETE | `/push/devices/{id}` | Forgets one of your devices. |
+| POST | `/push/test` | Sends a test to each of your devices: `{results: {"<id>": "sent" or the error}}`. A device whose push service says it's gone is removed. |
 | GET | `/activity/friends` | What people who share are watching now. |
 | GET / PUT / DELETE | `/me/passcode` | Settings passcode: `{set, unlocked, unlockedUntil}`; PUT `{passcode}` (4–8 digits); DELETE removes it. |
 | POST | `/me/passcode/unlock`, `/me/passcode/lock` | `{passcode}` or `{password}` unlocks this session's settings for 15 minutes of use. While locked, `/admin/*`, account changes under `/me` and profile management answer **423**. |

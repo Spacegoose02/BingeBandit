@@ -6,8 +6,10 @@ import App from './App'
 import { ScrollRestorer } from './backState'
 import './styles.css'
 import { enableTvMode, tvModeOn } from './tvNav'
+import { registerServiceWorker } from './push'
 
 if (tvModeOn()) enableTvMode()
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -689,7 +689,7 @@ func (s *Server) sportsSoon(g sports.Game, fans []store.SportsFan, now time.Time
 				n.Link = fmt.Sprintf("/live/%d", c.ID)
 			}
 		}
-		if err := s.Store.AddNotification(n); err != nil {
+		if err := s.notify(n); err != nil {
 			slog.Warn("notification", "err", err)
 		}
 	}
@@ -715,7 +715,7 @@ func (s *Server) sportsResult(g sports.Game, fans []store.SportsFan) {
 		}
 		n := &store.Notification{UserID: f.UserID, Kind: "sports", Link: "/sports", Image: us.Logo,
 			Title: fmt.Sprintf("%s %s %s %s–%s", us.Short, verb, them.Short, us.Score, them.Score), Body: g.Detail}
-		if err := s.Store.AddNotification(n); err != nil {
+		if err := s.notify(n); err != nil {
 			slog.Warn("notification", "err", err)
 		}
 	}

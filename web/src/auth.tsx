@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from './api'
+import { turnOffPush } from './push'
 import type { User } from './types'
 import { getPasskey, passkeyErrorMessage } from './passkeys'
 import { askForProfile } from './profilePick'
@@ -74,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = async () => {
+    // A browser that's signed out shouldn't keep getting this person's notifications.
+    await turnOffPush().catch(() => undefined)
     await api.post('/api/auth/logout').catch(() => undefined)
     setUser(null)
   }

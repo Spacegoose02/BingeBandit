@@ -147,7 +147,7 @@ func (s *Server) notifyAdmins(a alert) {
 			continue
 		}
 		n := &store.Notification{UserID: u.ID, Kind: "server", Title: a.Title, Body: a.Body, Link: a.Link}
-		if err := s.Store.AddNotification(n); err != nil {
+		if err := s.notify(n); err != nil {
 			slog.Warn("notification", "err", err)
 		}
 	}
