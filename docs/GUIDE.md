@@ -233,6 +233,8 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 <p align="center"><img src="screenshots/mobile-home.webp" alt="BingeBandit on a phone" width="300"></p>
 
+**Install it as an app** to get an icon on the home screen and a full-screen window without the browser's address bar. On Android, open BingeBandit in Chrome and press **Install app** under **Account → Install the app** (or use Chrome's ⋮ menu → Install app). On an iPhone or iPad, open it in Safari and use Share → **Add to Home Screen**; the installed app keeps its own sign-in, so you sign in once more there. Phones only install from an `https://` address, so use BingeBandit's public address rather than `http://192.168…`. Updates arrive on their own: the installed app always loads from your server.
+
 **Push notifications** bring your notifications to your phone or computer when BingeBandit is closed: a request that's ready, your team's game starting, an invitation to watch together, and anything else under the bell. Turn them on under **Account → Push notifications** in each browser you want them in, pick what each device gets, and press **Send a test**. Browsers only allow this on an `https://` address, so open BingeBandit through its public address (a reverse proxy with a certificate) rather than `http://192.168…`. On an iPhone or iPad, add BingeBandit to the Home Screen first (Share → Add to Home Screen) and turn them on from there. Signing out of a browser turns its notifications off. The Windows, TV and Roku apps don't get push notifications; their alerts still show while they're open.
 
 ### Android TV, Google TV, Fire TV and Android phones
