@@ -8,6 +8,7 @@ On phones:
 - **Live TV:** swipe up or down to change channel.
 - **Guide:** swipe through time; tap a program to see it, and tap again to watch.
 - **Kid lock:** the **Lock** button in either player asks for a 2-digit PIN you choose. Until that PIN is entered, taps and Back do nothing.
+- **Downloads:** **Download** on a movie, episode or season saves it in the app's storage (the original, or a 1080p/720p/480p copy the server converts first), with its text subtitles and poster. The **Downloads** tab has progress, pause/resume, Wi-Fi only and a storage limit; it plays with no connection and sends what was watched once the server answers again (`src/downloads.ts`, `DownloadsModule.kt`, a `DownloadService` notification keeps it going with the screen off).
 
 What it does:
 

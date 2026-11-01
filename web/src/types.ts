@@ -129,7 +129,39 @@ export interface Person {
   titles: { item: Item; role: string; kind: 'cast' | 'crew' }[]
 }
 
-export type ItemKind = 'movie' | 'show' | 'season' | 'episode'
+export type ItemKind =
+  | 'movie'
+  | 'show'
+  | 'season'
+  | 'episode'
+  // Music: artist > album > track. Audiobooks: audiobook > chapter. Photos: photoalbum > photo.
+  | 'artist'
+  | 'album'
+  | 'track'
+  | 'audiobook'
+  | 'chapter'
+  | 'photoalbum'
+  | 'photo'
+
+/** Item kinds from music, audiobook and photo libraries. */
+export const MEDIA_ITEM_KINDS: ItemKind[] = ['artist', 'album', 'track', 'audiobook', 'chapter', 'photoalbum', 'photo']
+export const isMediaKind = (k: ItemKind) => MEDIA_ITEM_KINDS.includes(k)
+
+/** A track, chapter or photo with the file it plays or shows. */
+export interface Track {
+  item: Item
+  file: {
+    fileId: number
+    duration: number
+    container: string
+    audioCodec?: string
+    width?: number
+    height?: number
+    size: number
+  }
+  /** A track's album, a chapter's book or a photo's album. */
+  album?: string
+}
 
 export interface Item {
   id: number
@@ -149,6 +181,7 @@ export interface Item {
   rating?: number
   contentRating?: string
   genres?: string[]
+  /** Albums and tracks: the artist; audiobooks and chapters: the author. */
   studio?: string
   runtime?: number
   releaseDate?: string
@@ -558,6 +591,13 @@ export interface MediaFile {
   streams: MediaStream[]
 }
 
+/** A chapter mark in a file; seconds from the start of the file. */
+export interface Chapter {
+  start: number
+  end: number
+  title?: string
+}
+
 /** Scrub previews: thumbnail n (at n × interval seconds) is in sheet n / (columns × rows). */
 export interface TrickplayInfo {
   interval: number
@@ -582,10 +622,12 @@ export interface SubtitleResult {
   uploader?: string
 }
 
+export type LibraryKind = 'movies' | 'shows' | 'music' | 'audiobooks' | 'photos'
+
 export interface Library {
   id: number
   name: string
-  kind: 'movies' | 'shows'
+  kind: LibraryKind
   paths: string[] | null
   createdAt: number
   lastScan: number
@@ -613,6 +655,12 @@ export interface ItemDetail {
   tvdbId?: number // shows that take their metadata from TheTVDB
   tvdbOrder?: string // '' (aired) | dvd | absolute
   trailers?: LocalTrailer[] // movies: trailer files from the movie's folder
+  /** Albums, audiobooks and photo albums (and their tracks, chapters, photos): what they play or show, in order. */
+  tracks?: Track[]
+  /** Albums and tracks: their artist. */
+  artist?: Item
+  /** Tracks, chapters and photos: their album, audiobook or photo album. */
+  parent?: Item
 }
 
 export interface LocalTrailer {
@@ -896,4 +944,32 @@ export interface RequestableTitle {
 export interface NetworkChannels {
   network: string
   channels: number[]
+}
+
+/** A Chromecast, Google TV or DLNA TV the server can play on. */
+export interface CastDevice {
+  id: string
+  name: string
+  kind: 'chromecast' | 'dlna'
+  model?: string
+  host: string
+  manual?: boolean
+}
+
+/** Something the server is playing on a TV, with the app as its remote. */
+export interface CastSession {
+  id: string
+  device: CastDevice
+  itemId: number
+  fileId: number
+  title: string
+  subtitle?: string
+  poster?: string
+  duration: number
+  position: number
+  state: 'loading' | 'playing' | 'paused' | 'idle' | 'finished'
+  volume: number // 0-1, -1 when unknown
+  mode: 'direct' | 'transcode'
+  error?: string
+  started: number
 }

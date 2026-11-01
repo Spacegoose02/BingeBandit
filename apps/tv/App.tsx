@@ -4,8 +4,11 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
 import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
+import CastScreen from './src/screens/Cast'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
+import Downloads from './src/screens/Downloads'
+import { startDownloads } from './src/downloads'
 import { CollectionScreen } from './src/screens/Library'
 import PersonScreen from './src/screens/Person'
 import Home from './src/screens/Home'
@@ -162,6 +165,11 @@ export default function App() {
     setPhase({ name: 'app' })
   }, [])
 
+  // Offline downloads (phones) follow the network once signed in.
+  useEffect(() => {
+    if (phase.name === 'app' && isPhone) startDownloads()
+  }, [phase.name])
+
   const top = stack[stack.length - 1].route
   let screen: React.ReactNode
   switch (phase.name) {
@@ -227,7 +235,9 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
     case 'person':
       return <PersonScreen name={r.person} />
     case 'player':
-      return <Player id={r.id} start={r.start} together={r.together} />
+      return <Player id={r.id} start={r.start} together={r.together} offline={r.offline} />
+    case 'downloads':
+      return <Downloads withBack />
     case 'live':
       return <LivePlayer channelId={r.channelId} />
     case 'trailer':
@@ -236,6 +246,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <YouTubeScreen id={r.id} title={r.title} />
     case 'multiview':
       return <MultiView channels={r.channels} />
+    case 'cast':
+      return <CastScreen id={r.id} start={r.start} session={r.session} />
   }
 }
 

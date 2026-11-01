@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
+import { roomPosition, togetherLink, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
-import { desktop, mpvTrackId, type DesktopEvent } from '../desktop'
-import { episodeLabel } from '../format'
+import { desktop, desktopCan, mpvTrackId, type DesktopEvent, type DesktopMenuSection } from '../desktop'
+import { episodeLabel, formatClock } from '../format'
 import { pickTracks } from '../tracks'
 import type { Item, ItemDetail, Prefs } from '../types'
 
 /**
  * The player in the Windows app: the file plays in mpv, full screen over the
- * app, and this page keeps the server in step (progress, watched, Hue Sync)
- * and does what the web player does around the video: intro and credits
- * skipping and the next episode. mpv stays open between episodes.
+ * app, under BingeBandit's own controls (apps/desktop/mpv-scripts). This page
+ * keeps the server in step (progress, watched, Hue Sync), tells the controls
+ * what to show, and does what the web player does around the video: intro and
+ * credits skipping, the next episode, and Watch Together. mpv stays open
+ * between episodes.
  */
 export default function DesktopPlayer({
   detail,
@@ -19,12 +22,14 @@ export default function DesktopPlayer({
   startAt,
   fileId,
   playlistId,
+  together,
 }: {
   detail: ItemDetail
   prefs: Prefs
   startAt: number
   fileId: number
   playlistId: number
+  together: { roomId: string | null; announce: boolean; error?: string }
 }) {
   const bridge = desktop!
   const { item, files = [] } = detail
@@ -33,6 +38,7 @@ export default function DesktopPlayer({
   const duration = file?.duration || (item.runtime ?? 0) * 60
   const [error, setError] = useState(file ? '' : 'This title has no file to play.')
   const [upNext, setUpNext] = useState<Item | null>(null)
+  const [promptKind, setPromptKind] = useState<'' | 'intro' | 'credits'>('')
 
   const pos = useRef(startAt)
   const paused = useRef(false)
@@ -54,7 +60,49 @@ export default function DesktopPlayer({
   // A movie with a scene after the credits jumps to that scene instead of ending.
   const afterCredits = !hasNext && !!credits && credits.end < duration - 5
   const done = playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`
-  const nextUrl = (next: Item) => `/play/${next.id}${playlistId ? `?playlist=${playlistId}` : ''}`
+
+  const setPrompt = (p: '' | 'intro' | 'credits') => {
+    prompt.current = p
+    setPromptKind(p)
+    // An older Windows app has mpv's own controls: say it in text instead.
+    if (p && !desktopCan('ui')) {
+      bridge.command('osd', p === 'intro' ? 'Press OK to skip the intro' : hasNext ? 'Press OK for the next episode' : 'Press OK to skip the credits')
+    }
+  }
+
+  // Watch Together: everyone else's play, pause, seek and next item land
+  // here and go to mpv; this viewer's own go out through share().
+  const [, setParams] = useSearchParams()
+  const [roomId, setRoomId] = useState(desktopCan('together') ? together.roomId : null)
+  const [people, setPeople] = useState<{ id: number; name: string }[]>([])
+  const roomJoined = useRef(false)
+  // Until when (ms) changes in mpv come from the room, not from this viewer.
+  const following = useRef(0)
+  const tg = useTogether(roomId, (s, skew) => {
+    if (s.itemId !== item.id) {
+      nav(`/play/${s.itemId}?together=${roomId}`, { replace: true })
+      return
+    }
+    const target = roomPosition(s, skew)
+    const jump = Math.abs(pos.current - target) > 2
+    const pauseChanged = s.paused !== paused.current
+    following.current = Date.now() + 2500
+    if (jump) bridge.command('seek', target)
+    if (pauseChanged) bridge.command('pause', s.paused)
+    const what = pauseChanged ? (s.paused ? 'paused' : 'pressed play') : jump ? `skipped to ${formatClock(target)}` : ''
+    if (what && s.byName) bridge.command('osd', `${s.byName} ${what}`)
+  })
+  const share = (p: boolean, at: number) => {
+    if (roomId) tg.send({ paused: p, position: at })
+  }
+  const nextUrl = (next: Item) => {
+    const q = new URLSearchParams()
+    if (playlistId) q.set('playlist', String(playlistId))
+    if (roomId) q.set('together', roomId)
+    return `/play/${next.id}${q.toString() ? `?${q}` : ''}`
+  }
+  // Moving on in a watch party takes everyone along.
+  const goNext = (next: Item) => nav(nextUrl(next), { replace: true, state: { togetherMove: !!roomId } })
 
   const report = (stopped = false, toEnd = false) => {
     if (!file || !started.current) return
@@ -85,6 +133,7 @@ export default function DesktopPlayer({
   // Finished (the end, or skipping the credits): on to the next episode, or out.
   const onEnded = async () => {
     report(false, true)
+    setPrompt('')
     if (!hasNext) {
       bridge.command('stop')
       return nav(done, { replace: true })
@@ -97,10 +146,10 @@ export default function DesktopPlayer({
         bridge.command('stop')
         return nav(done, { replace: true })
       }
-      if (prefs.autoPlayNext) return nav(nextUrl(next), { replace: true })
+      if (prefs.autoPlayNext || roomId) return goNext(next)
       upNextRef.current = next
       setUpNext(next)
-      bridge.command('osd', `Up next: ${next.title}. Press N or OK to play it, Back to stop.`)
+      if (!desktopCan('ui')) bridge.command('osd', `Up next: ${next.title}. Press N or OK to play it, Back to stop.`)
     } catch {
       bridge.command('stop')
       nav(-1)
@@ -109,14 +158,17 @@ export default function DesktopPlayer({
 
   const skipNow = () => {
     const which = prompt.current
-    prompt.current = ''
+    setPrompt('')
     if (which === 'intro' && intro) {
       introDone.current = true
       bridge.command('seek', intro.end)
+      share(paused.current, intro.end)
     } else if (which === 'credits' && credits) {
       creditsDone.current = true
-      if (afterCredits) bridge.command('seek', credits.end)
-      else onEnded()
+      if (afterCredits) {
+        bridge.command('seek', credits.end)
+        share(paused.current, credits.end)
+      } else onEnded()
     }
   }
 
@@ -129,22 +181,67 @@ export default function DesktopPlayer({
         prompt.current = 'intro'
         bridge.command('osd', 'Skipped the intro')
         skipNow()
-      } else if (prompt.current !== 'intro') {
-        prompt.current = 'intro'
-        bridge.command('osd', 'Press OK to skip the intro')
-      }
+      } else if (prompt.current !== 'intro') setPrompt('intro')
     } else if (inCredits && !creditsDone.current && prefs.skipCredits !== 'off') {
       if (prefs.skipCredits === 'auto' && (hasNext || afterCredits)) {
         prompt.current = 'credits'
         if (afterCredits) bridge.command('osd', 'Skipped to the scene after the credits')
         skipNow()
-      } else if (prompt.current !== 'credits') {
-        prompt.current = 'credits'
-        bridge.command('osd', hasNext ? 'Press OK for the next episode' : 'Press OK to skip the credits')
-      }
-    } else if (!inIntro && !inCredits) {
-      prompt.current = ''
+      } else if (prompt.current !== 'credits') setPrompt('credits')
+    } else if (!inIntro && !inCredits && prompt.current) {
+      setPrompt('')
     }
+  }
+
+  const startRoom = async () => {
+    try {
+      const r = await api.post<TogetherRoom>('/api/together', { itemId: item.id, position: pos.current, paused: paused.current })
+      roomJoined.current = true
+      setRoomId(r.id)
+      setParams(
+        (p) => {
+          p.set('together', r.id)
+          p.delete('t')
+          return p
+        },
+        { replace: true },
+      )
+      bridge.command('osd', 'Watch party started. Invite people from the menu.')
+    } catch (e) {
+      bridge.command('osd', (e as Error).message)
+    }
+  }
+  const leaveRoom = () => {
+    setRoomId(null)
+    setParams(
+      (p) => {
+        p.delete('together')
+        return p
+      },
+      { replace: true },
+    )
+    bridge.command('osd', 'You left the watch party')
+  }
+  const invite = async (userId: number) => {
+    try {
+      await api.post(`/api/together/${roomId}/invite`, { userIds: [userId] })
+      bridge.command('osd', `Invited ${people.find((p) => p.id === userId)?.name ?? ''}`)
+    } catch (e) {
+      bridge.command('osd', (e as Error).message)
+    }
+  }
+
+  // A menu entry picked in the controls.
+  const onPick = (id: string) => {
+    if (id === 'next') {
+      creditsDone.current = true
+      onEnded()
+    } else if (id === 'tg:start') startRoom()
+    else if (id === 'tg:leave') leaveRoom()
+    else if (id === 'tg:copy' && tg.room) {
+      bridge.command('copy', togetherLink(tg.room))
+      bridge.command('osd', 'Invite link copied')
+    } else if (id.startsWith('tg:invite:')) invite(Number(id.slice('tg:invite:'.length)))
   }
 
   // Keep the latest closures for mpv's events.
@@ -155,12 +252,17 @@ export default function DesktopPlayer({
         const step = e.position - pos.current
         if (!paused.current && !e.paused && step > 0 && step < 3) played.current += step
         const pauseChanged = started.current && e.paused !== paused.current
+        const seeked = started.current && Math.abs(step) > 3
         pos.current = e.position
         paused.current = e.paused
         if (!started.current) {
           started.current = true
           report()
-        } else if (pauseChanged || Math.abs(step) > 3) report() // paused, resumed or seeked
+        } else if (pauseChanged || seeked) {
+          report()
+          // This viewer paused, played or skipped: tell the room.
+          if (Date.now() > following.current) share(e.paused, e.position)
+        }
         markers(e.position)
         break
       }
@@ -168,8 +270,9 @@ export default function DesktopPlayer({
         if (!finished.current) onEnded()
         break
       case 'key':
-        if (upNextRef.current) {
-          nav(nextUrl(upNextRef.current), { replace: true })
+        if (e.name === 'bb-pick') onPick(e.arg ?? '')
+        else if (upNextRef.current) {
+          goNext(upNextRef.current)
         } else if (e.name === 'bb-enter') {
           if (prompt.current) skipNow()
           else bridge.command('pause', !paused.current)
@@ -211,6 +314,7 @@ export default function DesktopPlayer({
           : undefined,
       })
       .catch((e: Error) => setError(e.message))
+    if (together.error) bridge.command('osd', `Couldn't join the watch party: ${together.error}`)
     const t = window.setInterval(() => !paused.current && report(), 10000)
     return () => {
       off()
@@ -221,6 +325,88 @@ export default function DesktopPlayer({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // On joining a room: match its play/pause, or tell it this viewer moved it on.
+  useEffect(() => {
+    if (!tg.room || roomJoined.current) return
+    roomJoined.current = true
+    if (together.announce && roomId === together.roomId) tg.send({ itemId: item.id, paused: false, position: 0 })
+    else if (tg.room.state.paused) {
+      following.current = Date.now() + 2500
+      bridge.command('pause', true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tg.room])
+  // Stay within a few seconds of the room while it plays.
+  useEffect(() => {
+    if (!roomId) return
+    const t = window.setInterval(() => {
+      const r = tg.room
+      if (!r || r.state.paused || paused.current || !started.current || Date.now() < following.current) return
+      const target = tg.position()
+      if (Math.abs(pos.current - target) > 3) {
+        following.current = Date.now() + 2500
+        bridge.command('seek', target)
+      }
+    }, 5000)
+    return () => window.clearInterval(t)
+  })
+  useEffect(() => {
+    if (!tg.ended) return
+    bridge.command('osd', 'The watch party has ended.')
+    setRoomId(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tg.ended])
+  // Who can be invited.
+  useEffect(() => {
+    setPeople([])
+    if (!roomId) return
+    api.get<{ id: number; name: string }[]>(`/api/together/${roomId}/people`).then(setPeople, () => undefined)
+  }, [roomId])
+
+  // What the controls show.
+  const members = tg.room?.members ?? []
+  const subtitle =
+    item.kind === 'episode'
+      ? `${episodeLabel(item)} · ${item.title}`
+      : [item.year, item.runtime ? `${item.runtime} min` : ''].filter(Boolean).join(' · ')
+  const promptLabel =
+    promptKind === 'intro' ? 'Skip intro' : promptKind === 'credits' ? (hasNext ? 'Next episode' : 'Skip credits') : ''
+  const uiState = JSON.stringify({
+    mode: 'vod',
+    title: item.kind === 'episode' ? (item.showTitle ?? item.title) : item.title,
+    subtitle,
+    markers: [intro, credits].filter(Boolean).map((m) => ({ start: m!.start, end: m!.end })),
+    prompt: promptLabel,
+    upNext: upNext ? (upNext.kind === 'episode' ? `${episodeLabel(upNext)} · ${upNext.title}` : upNext.title) : '',
+    badge: roomId ? `Watching together${members.length ? ` · ${members.length}` : ''}` : '',
+  })
+  useEffect(() => {
+    bridge.command('state', JSON.parse(uiState))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uiState])
+
+  const menu: DesktopMenuSection[] = []
+  if (hasNext) menu.push({ title: 'Playing', items: [{ id: 'next', label: playlistId ? 'Play the next item' : 'Play the next episode' }] })
+  if (desktopCan('together')) {
+    const others = people.filter((p) => !members.some((m) => m.userId === p.id))
+    menu.push({
+      title: 'Watch together',
+      items: roomId
+        ? [
+            { label: members.length ? members.map((m) => m.name).join(', ') : 'Joining…', disabled: true },
+            ...others.map((p) => ({ id: `tg:invite:${p.id}`, label: `Invite ${p.name}` })),
+            { id: 'tg:copy', label: 'Copy invite link' },
+            { id: 'tg:leave', label: 'Leave the watch party' },
+          ]
+        : [{ id: 'tg:start', label: 'Start a watch party' }],
+    })
+  }
+  const menuJson = JSON.stringify(menu)
+  useEffect(() => {
+    bridge.command('menu', JSON.parse(menuJson))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuJson])
 
   const backdrop = img(item.backdrop, 'w1280')
   return (
@@ -238,7 +424,7 @@ export default function DesktopPlayer({
           <>
             <p>Up next: {upNext.title}</p>
             <div className="desktop-player-actions">
-              <button className="btn btn-primary" onClick={() => nav(nextUrl(upNext), { replace: true })} autoFocus>
+              <button className="btn btn-primary" onClick={() => goNext(upNext)} autoFocus>
                 Play next
               </button>
               <button className="btn" onClick={() => bridge.command('stop')}>
@@ -248,7 +434,7 @@ export default function DesktopPlayer({
           </>
         ) : (
           <>
-            <p>Playing in the BingeBandit player.</p>
+            <p>Playing in the BingeBandit player{roomId ? ', watching together' : ''}.</p>
             <button className="btn" onClick={() => bridge.command('stop')} autoFocus>
               Stop
             </button>

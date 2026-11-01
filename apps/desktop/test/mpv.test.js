@@ -89,3 +89,65 @@ test('plays, reports time, ends and quits', { skip: !(has('mpv', '--version') &&
   p.quit()
   await next('closed')
 })
+
+// BingeBandit's controls (mpv-scripts/bingebandit.lua) in a real mpv: the
+// state and menu reach them, keys come back as BingeBandit's events, and a
+// pick in the menu reaches the page.
+test('the controls take the page menu and send picks and keys back', { skip: !(has('mpv', '--version') && has('ffmpeg', '-version')) && 'needs mpv and ffmpeg', timeout: 30000 }, async (t) => {
+  const { findUi } = require('../src/mpv')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bb-ui-'))
+  const file = path.join(dir, 'clip.mkv')
+  execFileSync('ffmpeg', ['-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=20:size=160x120:rate=25', '-f', 'lavfi', '-i', 'sine=duration=20', '-shortest', file])
+  fs.writeFileSync(path.join(dir, 'mpv.conf'), 'vo=null\nao=null\n')
+  fs.copyFileSync(path.join(__dirname, '..', 'mpv-config', 'input.conf'), path.join(dir, 'input.conf'))
+  let p
+  t.after(() => {
+    if (p && !p.closed) p.proc.kill()
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+  p = new Mpv('mpv', { url: file, title: 'Test', start: 0, audio: 'auto', sub: 'no', subUrl: undefined }, {
+    headers: [],
+    configDir: dir,
+    fullscreen: false,
+    uiDir: findUi(''),
+  })
+  const events = []
+  p.on('event', (e) => events.push(e))
+  const waitFor = (pred, what) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`no ${what} in 10 s: ${JSON.stringify(events.slice(-10))}`)), 10000)
+      const check = (e) => {
+        if (pred(e)) {
+          clearTimeout(timer)
+          p.off('event', check)
+          resolve(e)
+        }
+      }
+      p.on('event', check)
+    })
+  // Sent at once, before the pipe or the script is up: they arrive anyway.
+  p.ui('bb-state', { mode: 'vod', title: 'Test', prompt: 'Skip intro' })
+  p.ui('bb-menu', [{ title: 'Watch together', items: [{ label: 'Alex, Sam', disabled: true }, { id: 'tg:leave', label: 'Leave' }] }])
+  await waitFor((e) => e.type === 'time', 'time')
+  // A moment for the script to start and hear the state again.
+  await new Promise((r) => setTimeout(r, 500))
+
+  // OK goes to the page (it decides: skip, up next or pause).
+  p.send(['keypress', 'ENTER'])
+  await waitFor((e) => e.type === 'key' && e.name === 'bb-enter', 'bb-enter')
+  // The menu starts on the first entry that can be picked; OK picks it.
+  p.send(['keypress', 'TAB'])
+  await new Promise((r) => setTimeout(r, 200))
+  p.send(['keypress', 'ENTER'])
+  const pick = await waitFor((e) => e.type === 'key' && e.name === 'bb-pick', 'bb-pick')
+  assert.equal(pick.arg, 'tg:leave')
+  // In live mode, up and down change channel.
+  p.ui('bb-state', { mode: 'live', title: '7 News' })
+  await new Promise((r) => setTimeout(r, 200))
+  p.send(['keypress', 'DOWN'])
+  const ch = await waitFor((e) => e.type === 'key' && e.name === 'bb-channel', 'bb-channel')
+  assert.equal(ch.arg, 'down')
+  // Back leaves the player.
+  p.send(['keypress', 'ESC'])
+  await waitFor((e) => e.type === 'closed', 'closed')
+})

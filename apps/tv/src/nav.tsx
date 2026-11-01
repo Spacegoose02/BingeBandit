@@ -6,11 +6,13 @@ export type Route =
   | { name: 'details'; id: number }
   | { name: 'collection'; id: number }
   | { name: 'person'; person: string } // a cast or crew member's titles, by name
-  | { name: 'player'; id: number; start?: number; together?: string } // together: a Watch Together room to join
+  | { name: 'player'; id: number; start?: number; together?: string; offline?: boolean } // together: a Watch Together room to join; offline: play the downloaded copy
+  | { name: 'downloads' } // phones: the downloaded titles, also reachable with no connection
   | { name: 'live'; channelId: number }
   | { name: 'trailer'; url: string; title: string }
   | { name: 'youtube'; id: string; title: string } // a Discover video, played through the server
   | { name: 'multiview'; channels: number[] } // Sports Multi-View: up to four channels at once
+  | { name: 'cast'; id?: number; start?: number; session?: string } // play on a TV in the house (phones)
 
 export interface Nav {
   push: (r: Route) => void

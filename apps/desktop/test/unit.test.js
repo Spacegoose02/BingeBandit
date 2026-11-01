@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { mpvArgs } = require('../src/mpv')
+const fs = require('node:fs')
+const path = require('node:path')
+const { mpvArgs, findUi } = require('../src/mpv')
 const { addressCandidates } = require('../src/discovery')
 
 test('mpv args carry the start, tracks, sign-in and file', () => {
@@ -24,6 +26,24 @@ test('a sidecar subtitle starts with mpv subtitles off', () => {
   assert.ok(args.includes('--sid=no'))
   assert.ok(!args.includes('--fullscreen'))
   assert.ok(!args.some((a) => a.startsWith('--http-header-fields')))
+})
+
+test('a live stream starts at the live edge, under BingeBandit controls', () => {
+  const args = mpvArgs(
+    { url: 'http://s/api/live/channels/1/hls/live.m3u8', title: '7 News', start: null, audio: 'auto', sub: 'auto', subUrl: undefined },
+    { ipc: 'p', headers: [], configDir: 'c', fullscreen: false, uiDir: '/res/mpv-scripts' },
+  )
+  assert.ok(args.includes('--start=none'))
+  assert.ok(args.includes('--sid=auto'))
+  assert.ok(args.includes('--osc=no'))
+  assert.ok(args.includes(`--script=${path.join('/res/mpv-scripts', 'bingebandit.lua')}`))
+  assert.ok(args.includes(`--osd-fonts-dir=${path.join('/res/mpv-scripts', 'fonts')}`))
+})
+
+test('the controls ship with the app', () => {
+  const dir = findUi('')
+  assert.ok(dir, 'mpv-scripts found')
+  assert.ok(fs.existsSync(path.join(dir, 'fonts', 'Inter-Regular.otf')))
 })
 
 test('typed addresses', () => {

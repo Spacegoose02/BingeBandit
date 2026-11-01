@@ -70,6 +70,7 @@ sub init()
     m.subsRaised = false
     m.cueLoad = 0
     m.markers = []
+    m.chapters = []
     m.introDone = false
     m.creditsDone = false
     m.skipKind = ""
@@ -152,6 +153,7 @@ sub onItem(event as object)
     if type(m.markers) <> "roArray" then m.markers = []
     m.duration = getOr(m.file, "duration", 0)
     if m.duration <= 0 then m.duration = getOr(m.item, "runtime", 0) * 60
+    api("GET", "/api/files/" + m.file.id.ToStr() + "/chapters", invalid, "onChapters")
     it = m.item
     if it.kind = "episode"
         m.top.findNode("title").text = getOr(it, "showTitle", it.title)
@@ -687,7 +689,13 @@ sub showOverlay()
     if m.video.state = "paused" then mode = "Paused  ·  " + mode
     if m.room <> "" then mode = mode + "  ·  Together (" + roomCount().ToStr() + ")"
     m.top.findNode("state").text = mode
-    if m.mode = "trailer" then hint = "" else hint = "* Options: audio, subtitles, quality, watch together"
+    if m.mode = "trailer"
+        hint = ""
+    else if m.chapters.Count() > 0
+        hint = "* Options: chapters, audio, subtitles, quality, watch together"
+    else
+        hint = "* Options: audio, subtitles, quality, watch together"
+    end if
     m.top.findNode("hint").text = hint
     drawProgress()
     drawCue()
@@ -713,6 +721,7 @@ sub drawProgress()
     m.top.findNode("handle").translation = [110 + 1700 * frac - 3, 929]
     m.top.findNode("elapsed").text = clockTime(t)
     if d > 0 then m.top.findNode("total").text = "-" + clockTime(d - t) else m.top.findNode("total").text = ""
+    if m.mode = "trailer" then m.top.findNode("chapter").text = "" else m.top.findNode("chapter").text = chapterName(chapterAt(t))
 end sub
 
 ' Presses add up; the jump happens once they stop.
@@ -804,6 +813,61 @@ function onKeyEvent(key as string, press as boolean) as boolean
     return false
 end function
 
+' --- Chapters ----------------------------------------------------------------
+' Marks on the progress bar, the chapter's name under it, and a Chapters list
+' in Options. Times are seconds in the original file, like m.pos.
+
+sub onChapters(event as object)
+    doneTask(event.getRoSGNode())
+    res = event.getData()
+    if not res.ok or type(res.data) <> "roAssociativeArray" then return
+    c = getOr(res.data, "chapters", [])
+    if type(c) <> "roArray" then return
+    m.chapters = c
+    drawTicks()
+    if m.overlay.visible then showOverlay()
+end sub
+
+sub drawTicks()
+    ticks = m.top.findNode("ticks")
+    ticks.removeChildrenIndex(ticks.getChildCount(), 0)
+    d = m.duration
+    if d <= 0 or m.chapters.Count() < 2 then return
+    for i = 1 to m.chapters.Count() - 1
+        st = getOr(m.chapters[i], "start", 0)
+        if st > 0 and st < d
+            r = ticks.createChild("Rectangle")
+            r.width = 4
+            r.height = 8
+            r.color = "0x000000C0"
+            r.translation = [110 + 1700 * (st / d) - 2, 940]
+        end if
+    end for
+end sub
+
+function chapterAt(t as float) as integer
+    for i = m.chapters.Count() - 1 to 0 step -1
+        if t >= getOr(m.chapters[i], "start", 0) then return i
+    end for
+    return -1
+end function
+
+function chapterName(i as integer) as string
+    if i < 0 or i >= m.chapters.Count() then return ""
+    t = getOr(m.chapters[i], "title", "")
+    if t = "" then return "Chapter " + (i + 1).ToStr()
+    return t
+end function
+
+sub chooseChapter(i as integer)
+    st = getOr(m.chapters[i], "start", 0)
+    m.seekTarget = -1
+    m.seekTimer.control = "stop"
+    userSeek(st)
+    say(chapterName(i))
+    showOverlay()
+end sub
+
 ' --- Options: audio, subtitles and quality -------------------------------------------
 
 function resolutionLabel(h as integer) as string
@@ -827,6 +891,10 @@ sub openMenu(level as string)
     if level = "main"
         m.menu.title = m.top.findNode("title").text
         m.menu.message = ""
+        if m.chapters.Count() > 0
+            labels.Push("Chapters: " + chapterName(chapterAt(m.pos)))
+            m.menuActions.Push({ act: "level", level: "chapters" })
+        end if
         if audios.Count() > 1
             a = audioFor(m.file, m.audio)
             labels.Push("Audio: " + streamLabel(a))
@@ -839,6 +907,14 @@ sub openMenu(level as string)
         m.menuActions.Push({ act: "level", level: "quality" })
         if m.room <> "" then labels.Push("Together (" + roomCount().ToStr() + "): invite or leave") else labels.Push("Watch together")
         m.menuActions.Push({ act: "level", level: "together" })
+    else if level = "chapters"
+        m.menu.title = "Chapters"
+        m.menu.message = ""
+        focus = chapterAt(m.pos)
+        for i = 0 to m.chapters.Count() - 1
+            labels.Push(clockTime(getOr(m.chapters[i], "start", 0)) + "   " + chapterName(i))
+            m.menuActions.Push({ act: "chapter", index: i })
+        end for
     else if level = "audio"
         m.menu.title = "Audio"
         cur = audioFor(m.file, m.audio)
@@ -917,6 +993,8 @@ sub onMenuChosen()
         chooseSub(a.stream)
     else if a.act = "quality"
         chooseQuality(a.q)
+    else if a.act = "chapter"
+        chooseChapter(a.index)
     end if
 end sub
 

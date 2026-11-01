@@ -72,6 +72,7 @@ export interface Credit {
 
 export interface MediaFile {
   id: number
+  size?: number // bytes
   container: string
   duration: number
   videoCodec: string
@@ -92,6 +93,7 @@ export interface ItemDetail {
   upNext?: Item
   trailers?: { url: string; name: string }[] // movies: trailer files from the movie's folder
   collections?: { collection: Collection; items: Item[] }[] // movies and shows: the collections they're in
+  canDownload?: boolean // movies and episodes: the viewer may download them (offline downloads, phones)
 }
 
 /** A row of titles on Home or a library's Recommended tab. */
@@ -272,4 +274,29 @@ export interface RequestableTitle {
   itemId?: number
   onServer?: boolean
   request?: TitleRequest
+}
+
+/** A Chromecast, Google TV or DLNA TV the server can play on. */
+export interface CastDevice {
+  id: string
+  name: string
+  kind: 'chromecast' | 'dlna'
+  model?: string
+  host: string
+}
+
+/** Something the server is playing on a TV; this app is its remote. */
+export interface CastSession {
+  id: string
+  device: CastDevice
+  itemId: number
+  title: string
+  subtitle?: string
+  poster?: string
+  duration: number
+  position: number
+  state: 'loading' | 'playing' | 'paused' | 'idle' | 'finished'
+  volume: number // 0-1, -1 when unknown
+  mode: 'direct' | 'transcode'
+  error?: string
 }

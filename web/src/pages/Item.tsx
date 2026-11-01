@@ -11,12 +11,14 @@ import { locationPath, MoveDialog, type ItemLocation } from '../components/MoveI
 import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
 import { KidsApproveButton } from '../components/KidsApprove'
+import { CastButton } from '../components/Cast'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, fileSummary, formatBytes, formatClock, formatRuntime, languageName, progressFraction } from '../format'
-import type { ExternalRatings, Item, ItemDetail, MediaFile } from '../types'
+import { isMediaKind, type ExternalRatings, type Item, type ItemDetail, type MediaFile } from '../types'
+import { MediaItemView } from './MediaItem'
 
 export default function ItemPage() {
   const { id } = useParams()
@@ -24,6 +26,7 @@ export default function ItemPage() {
   useDocumentTitle(data?.item.title)
   if (error) return <div className="page"><div className="empty">{error}</div></div>
   if (!data) return <div className="page-loading" />
+  if (isMediaKind(data.item.kind)) return <MediaItemView key={id} detail={data} reload={reload} />
   return <ItemView key={id} detail={data} reload={reload} />
 }
 
@@ -136,6 +139,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="replay10" size={18} /> From start
                 </button>
               )}
+              {playable && <CastButton itemId={item.id} fileId={file?.id} start={resumeAt} disabled={!file} />}
               {item.kind === 'show' && upNext && (
                 <Link className="btn btn-primary" to={`/play/${upNext.id}${upNext.watch.position > 15 ? `?t=${Math.floor(upNext.watch.position)}` : ''}`}>
                   <Icon name="play" fill size={18} />

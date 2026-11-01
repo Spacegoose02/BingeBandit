@@ -907,4 +907,37 @@ CREATE TABLE network_channels (
 	PRIMARY KEY (network, channel_id)
 );
 `,
+	// 53: browsers (and installed web apps on phones) that get push
+	// notifications for a user, with the kinds each one has turned off.
+	`
+CREATE TABLE push_subscriptions (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	endpoint   TEXT NOT NULL UNIQUE,
+	p256dh     TEXT NOT NULL,
+	auth       TEXT NOT NULL,
+	device     TEXT NOT NULL DEFAULT '',
+	kinds_off  TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	last_used  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX push_subscriptions_user ON push_subscriptions(user_id);
+`,
+	// 54: music, audiobook and photo libraries. Libraries and items had
+	// their kinds fixed by a CHECK in migration 1; SQLite can't alter a
+	// CHECK, and rebuilding items would cascade-delete everything that
+	// references it, so the constraint text is widened in place (the
+	// documented writable_schema route for changes that don't touch the
+	// stored rows). Music is artist > album > track, audiobooks are
+	// audiobook > chapter, photos are photoalbum > photo.
+	`
+PRAGMA writable_schema = ON;
+UPDATE sqlite_master SET sql = replace(sql, 'CHECK (kind IN (''movies'',''shows''))',
+	'CHECK (kind IN (''movies'',''shows'',''music'',''audiobooks'',''photos''))')
+	WHERE type = 'table' AND name = 'libraries';
+UPDATE sqlite_master SET sql = replace(sql, 'CHECK (kind IN (''movie'',''show'',''season'',''episode''))',
+	'CHECK (kind IN (''movie'',''show'',''season'',''episode'',''artist'',''album'',''track'',''audiobook'',''chapter'',''photoalbum'',''photo''))')
+	WHERE type = 'table' AND name = 'items';
+PRAGMA writable_schema = RESET;
+`,
 }

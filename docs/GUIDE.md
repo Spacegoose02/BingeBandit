@@ -49,7 +49,7 @@ The same section has optional keys for TheTVDB (for shows that use aired, DVD or
 
 ## 3. Add your libraries
 
-Go to **Server → Libraries → Add library**. Choose **Movies** or **TV Shows**, give it a name, and pick one or more folders. You can add as many libraries as you like, for example separate ones for kids' movies or anime.
+Go to **Server → Libraries → Add library**. Choose **Movies**, **TV Shows**, **Music**, **Audiobooks** or **Photos**, give it a name, and pick one or more folders. You can add as many libraries as you like, for example separate ones for kids' movies or anime.
 
 ![Libraries page](screenshots/admin-libraries.webp)
 
@@ -66,6 +66,20 @@ Other options when adding a library:
 
 - **Detect intros and end credits** powers the **Skip Intro** and **Skip Credits** buttons.
 - **Collections on the Library tab** decides whether a collection shows as its own poster, its movies show separately, or both.
+
+### Music, audiobooks and photos
+
+These open in the web app and the Windows app (the TV and Roku apps don't show them yet). Nothing is looked up online: details come from the files' own tags, with the folders as a fallback.
+
+```
+Music/Artist/Album (Year)/01 - Song.flac        (CD1/, CD2/ folders become discs)
+Audiobooks/Author/Book Title/01 - Part One.mp3  (or Audiobooks/Book Title.m4b)
+Photos/Beach Trip 2024/IMG_0001.jpg             (each folder is an album)
+```
+
+- **Music** lists albums, or artists with the **Artists** button. A `cover.jpg` (or `folder.jpg`) in the album folder is its artwork, else the picture inside the songs. Songs play in a bar along the bottom of the page that keeps going while you browse, with a queue, shuffle and your keyboard's media keys. Files the browser can't play (Apple Lossless in Chrome, WMA, APE) are converted as they play.
+- **Audiobooks** remember where you stopped in each book: **Resume** carries on, and books you're partway through are on Home under **Continue Listening**. The player has 30-second skips and playback speed.
+- **Photos** shows each album as a grid; click a photo for the full-screen viewer (arrow keys to move, space for a slideshow). JPEG, PNG, GIF, WebP and AVIF are shown; HEIC and RAW files are skipped.
 
 New and changed files are picked up automatically while BingeBandit is running, and a full rescan runs every few hours (see [Scheduled tasks](#scheduled-tasks-and-backups)).
 
@@ -115,6 +129,7 @@ The web player plays a file directly when your browser can, and otherwise conver
 - see a thumbnail of where you'll land while dragging or scrubbing the progress bar (made by the "Make scrub previews" task, or in the background the first time a file plays),
 - move subtitles earlier or later in half-second steps when they're out of sync (Options → Subtitle timing, or G and H on a keyboard),
 - find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
+- jump between chapters when the file has them: the marks on the progress bar, the **Chapters** button (Options → Chapters on the TV and Roku), or `[` and `]` (Page Up and Page Down) on a keyboard,
 - skip intros and credits,
 - carry on to the next episode automatically,
 - start **Watch Together** to watch in sync with someone else on the server.
@@ -218,9 +233,23 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 <p align="center"><img src="screenshots/mobile-home.webp" alt="BingeBandit on a phone" width="300"></p>
 
+**Push notifications** bring your notifications to your phone or computer when BingeBandit is closed: a request that's ready, your team's game starting, an invitation to watch together, and anything else under the bell. Turn them on under **Account → Push notifications** in each browser you want them in, pick what each device gets, and press **Send a test**. Browsers only allow this on an `https://` address, so open BingeBandit through its public address (a reverse proxy with a certificate) rather than `http://192.168…`. On an iPhone or iPad, add BingeBandit to the Home Screen first (Share → Add to Home Screen) and turn them on from there. Signing out of a browser turns its notifications off. The Windows, TV and Roku apps don't get push notifications; their alerts still show while they're open.
+
 ### Android TV, Google TV, Fire TV and Android phones
 
 The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
+
+#### Downloads on phones
+
+On a phone or tablet, a movie, an episode or a whole season can be saved to watch with no connection: open it and tap **Download**, then pick a quality. **Original** saves the file as it is (offered when the phone can play it); 1080p, 720p and 480p are smaller copies the server converts first, with the subtitles saved alongside. The **Downloads** tab shows progress, pauses and resumes, and plays what's saved; it also opens from Home when the server can't be reached. Downloads go over Wi-Fi only unless you change that there, and stop at a storage limit you set (20 GB to start). What you watch offline is sent to the server once it can be reached again.
+
+Downloads follow the **Let users download files** setting in Admin → Settings (admins can always download). A download is deleted from the phone when the server stops allowing downloads, when the profile can no longer see the title (a library taken away, a kid approval removed), or when you sign out on that phone. Converted copies take the server's CPU (or GPU, with hardware encoding) while they're made, one at a time, and are kept in the server's cache for a week.
+
+### Playing on a TV (Chromecast, Google TV and DLNA)
+
+On a movie or episode, the cast button (web) or **Play on a TV** (Android phones) lists the Chromecasts, Google TVs and DLNA smart TVs on your network. Pick one and the server sends the video straight to the TV; the browser or phone becomes the remote (pause, skip, seek, and the TV's volume for Chromecasts), and the bar at the bottom of the web app shows what's playing on TVs. You can also send something already playing in the web or phone player to a TV from where you are. Watching on a TV this way saves your place and history like any other player.
+
+The server does the casting, not your browser, so it works over plain `http://` and on any phone. It needs to be on the same network as the TV. In Docker, use host networking (`network_mode: host`, or Network Type **Host** on Unraid) so it can find TVs; otherwise list the TVs' IP addresses under **Admin → Settings → Casting** and set the address TVs reach the server at (for example `http://192.168.1.10:8484`). MP4 files with H.264 play on the TV as they are; anything else is converted as it plays. Subtitles aren't sent to the TV yet.
 
 ### Roku
 
@@ -278,7 +307,7 @@ Admins get an alert in their notifications when:
 - a drive drops below the "nearly full" level (5% free unless you change it),
 - a recording fails.
 
-To get them on your phone too, fill in any of **Discord** (a channel webhook URL), **ntfy** (a topic URL, plus a token for a private server) or **email** (an SMTP server; for Gmail use an app password) under **Server → Settings → Admin alerts**, and press **Send a test alert**. Each kind of alert can be turned off there. Folders are checked every five minutes; a folder that is already offline when the server starts is reported once it has been up for a minute.
+Admins with **push notifications** on (see Browsers and phones) get these on their phone as well. To send them somewhere else too, fill in any of **Discord** (a channel webhook URL), **ntfy** (a topic URL, plus a token for a private server) or **email** (an SMTP server; for Gmail use an app password) under **Server → Settings → Admin alerts**, and press **Send a test alert**. Each kind of alert can be turned off there. Folders are checked every five minutes; a folder that is already offline when the server starts is reported once it has been up for a minute.
 
 ### Scheduled tasks and backups
 

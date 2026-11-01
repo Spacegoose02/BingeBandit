@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -171,6 +172,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err := validCastSettings(in); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if v, ok := in[store.SettingLiveProxy]; ok {
 		if _, err := livetv.ParseProxy(v); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -307,9 +312,14 @@ func (s *Server) createLibrary(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if req.Kind != "movies" && req.Kind != "shows" {
-		writeErr(w, http.StatusBadRequest, "kind must be movies or shows")
+	if !slices.Contains(store.LibraryKinds, req.Kind) {
+		writeErr(w, http.StatusBadRequest, "kind must be movies, shows, music, audiobooks or photos")
 		return
+	}
+	if !store.IsVideoLibrary(req.Kind) {
+		// Intro and credits detection is for episodes and movies.
+		skip := true
+		req.SkipMarkers = &skip
 	}
 	if err := req.validate(); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())

@@ -52,6 +52,9 @@ type MediaFile struct {
 	AudioChannels int      `json:"audioChannels"`
 	Streams       []Stream `json:"streams"`
 	ProbedAt      int64    `json:"-"`
+	// Tags are the file's own tags (artist, album, track...) from the last
+	// probe. Not stored: music and audiobook scans read them as they probe.
+	Tags map[string]string `json:"-"`
 }
 
 const fileCols = `id, item_id, path, size, mtime, container, duration, bitrate, video_codec, width, height, bit_depth, hdr,
@@ -234,10 +237,12 @@ func (s *Store) PruneUnder(libraryID, gen int64, prefixes []string) (int64, erro
 // deleteOrphans removes movies/episodes without files, then empty seasons and shows.
 func deleteOrphans(tx *sql.Tx, libraryID int64) error {
 	for _, q := range []string{
-		`DELETE FROM items WHERE library_id = ? AND kind IN ('movie','episode') AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f.item_id = items.id)
+		`DELETE FROM items WHERE library_id = ? AND kind IN ('movie','episode','track','chapter','photo') AND NOT EXISTS (SELECT 1 FROM media_files f WHERE f.item_id = items.id)
 			AND NOT EXISTS (SELECT 1 FROM media_file_episodes l WHERE l.item_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'season' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 		`DELETE FROM items WHERE library_id = ? AND kind = 'show' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
+		`DELETE FROM items WHERE library_id = ? AND kind IN ('album','audiobook','photoalbum') AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
+		`DELETE FROM items WHERE library_id = ? AND kind = 'artist' AND NOT EXISTS (SELECT 1 FROM items e WHERE e.parent_id = items.id)`,
 	} {
 		if _, err := tx.Exec(q, libraryID); err != nil {
 			return err

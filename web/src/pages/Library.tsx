@@ -11,6 +11,8 @@ import { KometaImport } from '../components/KometaImport'
 import { RecommendationsEditor } from '../components/RecommendationsEditor'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
+import { isVideoLibrary, libraryKinds } from '../libraryKinds'
+import { MediaLibraryView } from './MediaLibrary'
 import type { Collection, HubRow, Item, Library } from '../types'
 
 const PAGE = 120
@@ -94,6 +96,11 @@ function tiles(items: Item[], collections: Collection[], sort: string, complete:
 // Keyed by id so switching libraries resets paging and restores that library's sort.
 export default function LibraryPage() {
   const { id } = useParams()
+  // Music, audiobook and photo libraries have their own page.
+  const { data: libraries } = useApi<Library[]>('/api/libraries')
+  const lib = libraries?.find((l) => String(l.id) === id)
+  if (!libraries) return <div className="page-loading" />
+  if (lib && !isVideoLibrary(lib.kind)) return <MediaLibraryView key={id} library={lib} />
   return <LibraryView key={id} id={id!} />
 }
 
@@ -235,7 +242,7 @@ function LibraryView({ id }: { id: string }) {
         <div>
           <h1>{library?.name ?? ' '}</h1>
           <div className="muted">
-            {total} {library?.kind === 'shows' ? (total === 1 ? 'show' : 'shows') : total === 1 ? 'movie' : 'movies'}
+            {total} {library ? (total === 1 ? libraryKinds[library.kind].one : libraryKinds[library.kind].many) : ''}
           </div>
         </div>
         <div className="segmented">

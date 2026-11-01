@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth'
 import { useApi } from '../hooks'
+import { libraryKinds } from '../libraryKinds'
 import type { Library, Member } from '../types'
 import { Avatar } from './Avatar'
 import { Icon, type IconName } from './Icon'
+import { CastBar } from './Cast'
 import { NotificationBell } from './Notifications'
 import { PasscodePrompt } from './Passcode'
 import { PinsDialog, savePins, setFavoritesPinned } from './Pins'
 import { SelectionProvider } from './Selection'
 import { TogetherInvites } from './Together'
+import { DesktopUpdateNotice } from './DesktopUpdate'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -212,11 +215,13 @@ export default function Layout() {
         </div>
       </aside>
       <main className="main">
+        <DesktopUpdateNotice />
         <TogetherInvites />
         <SelectionProvider>
           <Outlet />
         </SelectionProvider>
       </main>
+      <CastBar />
       <PasscodePrompt />
       {(editingPins || askPins) && libraries && (
         <PinsDialog
@@ -238,7 +243,7 @@ export default function Layout() {
 }
 
 function LibraryLink({ library: l, onTogglePin }: { library: Library; onTogglePin: () => void }) {
-  return <PinnableLink to={`/library/${l.id}`} icon={l.kind === 'movies' ? 'film' : 'tv'} name={l.name} pinned={l.pinned} onTogglePin={onTogglePin} />
+  return <PinnableLink to={`/library/${l.id}`} icon={libraryKinds[l.kind].icon} name={l.name} pinned={l.pinned} onTogglePin={onTogglePin} />
 }
 
 function PinnableLink({ to, icon, name, pinned, onTogglePin }: { to: string; icon: IconName; name: string; pinned: boolean; onTogglePin: () => void }) {

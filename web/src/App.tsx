@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './auth'
 import Layout from './components/Layout'
+import { AudioProvider } from './components/AudioPlayer'
 import Setup from './pages/Setup'
 import Login from './pages/Login'
 import Home from './pages/Home'
@@ -89,7 +90,8 @@ export default function App() {
           }
         />
         <Route path="/tv-setup" element={<TVSetupSheet />} />
-        <Route element={<Layout />}>
+        {/* The music player sits around the pages so it keeps playing between them. */}
+        <Route element={<AudioProvider><Layout /></AudioProvider>}>
           <Route index element={<Home />} />
           <Route path="/live" element={<LiveGuide />} />
           <Route path="/recordings" element={<RecordingsPage />} />

@@ -65,7 +65,7 @@ func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 	// Away from home, a file over the quality cap has to be converted
 	// (players fall back to that when direct play fails), and the stream
 	// limit applies.
-	if !download {
+	if !download && !isPhotoPath(mf.Path) {
 		ip := clientIP(r)
 		if s.overRemoteCap(mf, ip) {
 			writeErr(w, http.StatusForbidden, "this file is above the server's quality limit for streams outside the home network")
@@ -243,6 +243,15 @@ func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := chi.URLParam(r, "name")
+	if playlistQuery(r) != "" {
+		// Players that open links with ?token= include Cast devices, whose
+		// player fetches HLS from another origin.
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
+	if name == "stream.ts" {
+		s.transcodeStream(w, r, sess)
+		return
+	}
 	path, err := sess.WaitFile(r.Context(), name)
 	if errors.Is(err, os.ErrNotExist) {
 		http.NotFound(w, r)
@@ -279,6 +288,42 @@ func (s *Server) transcodeFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, name, time.Time{}, f)
 }
 
+// transcodeStream sends a conversion's segments one after another as a
+// single MPEG-TS stream, for DLNA TVs (which mostly can't open HLS). It
+// follows the conversion as it goes and ends with it.
+func (s *Server) transcodeStream(w http.ResponseWriter, r *http.Request, sess *stream.Session) {
+	if len(sess.Variants) > 1 {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "video/mpeg")
+	w.Header().Set("transferMode.dlna.org", "Streaming")
+	w.Header().Set("contentFeatures.dlna.org", "DLNA.ORG_OP=00;DLNA.ORG_CI=1;DLNA.ORG_FLAGS=01700000000000000000000000000000")
+	w.Header().Set("Cache-Control", "no-cache")
+	if r.Method == http.MethodHead {
+		return
+	}
+	flusher, _ := w.(http.Flusher)
+	for n := 0; ; n++ {
+		path, err := sess.WaitFile(r.Context(), fmt.Sprintf("seg%05d.ts", n))
+		if err != nil {
+			return // the end of the conversion, or the TV hung up
+		}
+		f, err := stream.OpenShared(path)
+		if err != nil {
+			return
+		}
+		_, err = io.Copy(w, f)
+		f.Close()
+		if err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+}
+
 func (s *Server) stopTranscode(w http.ResponseWriter, r *http.Request) {
 	if sess := s.transcodeSession(w, r); sess != nil {
 		s.Transcoder.Stop(sess.ID)
@@ -313,16 +358,35 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	u := currentUser(r)
-	it, err := s.Store.Item(u.ID, req.ItemID)
+	watched, err := s.saveProgress(currentUser(r), req, clientIP(r))
 	if err != nil {
+		var limit streamLimitErr
+		if errors.As(err, &limit) {
+			writeErr(w, http.StatusTooManyRequests, string(limit))
+			return
+		}
 		writeStoreErr(w, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+}
+
+// streamLimitErr is the stream limit's message, for a player that went over it.
+type streamLimitErr string
+
+func (e streamLimitErr) Error() string { return string(e) }
+
+// saveProgress records a player's position report from ip (a player in a
+// browser or app, or a TV the server is casting to) and keeps the
+// now-playing list, play history and events up to date.
+func (s *Server) saveProgress(u *store.User, req progressReq, ip string) (bool, error) {
+	it, err := s.Store.Item(u.ID, req.ItemID)
+	if err != nil {
+		return false, err
+	}
 	watched, err := s.Store.SaveProgress(u.ID, it.ID, req.Position, req.Duration)
 	if err != nil {
-		writeStoreErr(w, err)
-		return
+		return false, err
 	}
 
 	if watched && it.Kind == "movie" {
@@ -340,12 +404,11 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		// A player that started while another was still starting can go
 		// over the stream limit; its first report is where that's caught.
 		if !had && !req.Stopped {
-			if msg := s.streamLimitHit(u, clientIP(r), req.FileID); msg != "" {
-				writeErr(w, http.StatusTooManyRequests, msg)
-				return
+			if msg := s.streamLimitHit(u, ip, req.FileID); msg != "" {
+				return false, streamLimitErr(msg)
 			}
 		}
-		np := s.Activity.Update(s.nowPlaying(u, it, req, clientIP(r)))
+		np := s.Activity.Update(s.nowPlaying(u, it, req, ip))
 		s.emitPlayer(prev, had, np, it, req.Stopped)
 		s.recordPlay(np, it, watched)
 		if watched && !it.Watch.Watched {
@@ -362,7 +425,7 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
+	return watched, nil
 }
 
 // emitPlayer sends the live player events, which follow the player itself

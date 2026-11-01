@@ -10,9 +10,16 @@ import { ChannelLogo, channelNo, clock } from './LiveGuide'
 import { ScoreBug } from '../components/ScoreBug'
 import { useGameLights } from '../lights'
 import type { Prefs } from '../types'
+import { desktopCan } from '../desktop'
+import DesktopLivePlayer from './DesktopLivePlayer'
+
+/** Full-screen live channel player; in the Windows app, the channel plays in mpv. */
+export default function LivePlayer() {
+  return desktopCan('live') ? <DesktopLivePlayer /> : <BrowserLivePlayer />
+}
 
 /** Full-screen live channel player with channel up/down and a mini guide. */
-export default function LivePlayer() {
+function BrowserLivePlayer() {
   const { id } = useParams()
   const nav = useNavigate()
   const { data: channels, reload } = useApi<LiveChannel[]>('/api/live/channels', 60000)
