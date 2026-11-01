@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -151,7 +152,19 @@ type Client struct {
 	boards map[string]cached[[]Game]
 	// summaries are game summaries by league/id.
 	summaries map[string]cached[*Summary]
+
+	// Relay, when set, names a server that relays ESPN's site API and caches
+	// it for several apps (a CFB Tracker), and the key it wants. Reads go
+	// there first and fall back to ESPN when it's empty or doesn't answer.
+	Relay func() (url, key string)
+	// relayDown is when the relay last failed; ESPN is used directly for a
+	// minute after, so a stopped relay doesn't slow every read.
+	relayDown time.Time
 }
+
+// relayPath is where a relay serves ESPN's site API: the same paths and
+// query as BaseURL, under its own address.
+const relayPath = "/espn/site/v2/sports"
 
 type cached[T any] struct {
 	v   T
@@ -170,12 +183,38 @@ func Day(t time.Time) string { return t.In(eastern).Format("20060102") }
 
 var ErrUnknownLeague = errors.New("unknown league")
 
-func (c *Client) get(ctx context.Context, url string, out any) error {
+// get reads path (a league's path, endpoint and query) from the relay when
+// one is set and answering, otherwise from ESPN.
+func (c *Client) get(ctx context.Context, path string, out any) error {
+	if c.Relay != nil {
+		if base, key := c.Relay(); base != "" {
+			c.mu.Lock()
+			down := c.Now().Sub(c.relayDown) < time.Minute
+			c.mu.Unlock()
+			if !down {
+				err := c.fetch(ctx, strings.TrimRight(base, "/")+relayPath+path, key, out)
+				if err == nil || ctx.Err() != nil {
+					return err
+				}
+				slog.Warn("sports relay failed; reading ESPN directly for a minute", "relay", base, "err", err)
+				c.mu.Lock()
+				c.relayDown = c.Now()
+				c.mu.Unlock()
+			}
+		}
+	}
+	return c.fetch(ctx, BaseURL+path, "", out)
+}
+
+func (c *Client) fetch(ctx context.Context, url, key string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
+	if key != "" {
+		req.Header.Set("X-Api-Key", key)
+	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("ESPN: %w", err)
@@ -233,7 +272,7 @@ func (c *Client) Teams(ctx context.Context, league string) ([]Team, error) {
 			} `json:"leagues"`
 		} `json:"sports"`
 	}
-	url := BaseURL + "/" + l.path + "/teams?limit=1000"
+	url := "/" + l.path + "/teams?limit=1000"
 	if l.groups != "" {
 		url += "&groups=" + l.groups
 	}
@@ -567,7 +606,7 @@ func (c *Client) Scoreboard(ctx context.Context, league, day string) ([]Game, er
 		return e.v, nil
 	}
 	c.mu.Unlock()
-	url := BaseURL + "/" + l.path + "/scoreboard?limit=1000&dates=" + day
+	url := "/" + l.path + "/scoreboard?limit=1000&dates=" + day
 	if l.groups != "" {
 		url += "&groups=" + l.groups
 	}

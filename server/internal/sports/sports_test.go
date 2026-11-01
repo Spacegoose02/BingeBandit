@@ -289,3 +289,57 @@ func TestPositionAsString(t *testing.T) {
 		t.Errorf("object position = %+v, %v", a, err)
 	}
 }
+
+// A relay (the CFB Tracker) serves ESPN's paths under /espn/site/v2/sports
+// with a key; when it stops answering, reads go to ESPN for a minute.
+func TestRelay(t *testing.T) {
+	start := time.Date(2026, 10, 25, 23, 30, 0, 0, time.UTC)
+	espn, c, now := newFake(t, start)
+	relayed := &fakeESPN{state: "in", home: "7", away: "3", start: start}
+	var keys []string
+	up := true
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		keys = append(keys, r.Header.Get("X-Api-Key"))
+		if !up {
+			http.Error(w, "down", http.StatusBadGateway)
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, "/espn/site/v2/sports/") {
+			http.NotFound(w, r)
+			return
+		}
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/espn/site/v2/sports")
+		relayed.ServeHTTP(w, r)
+	}))
+	defer relay.Close()
+	c.Relay = func() (string, string) { return relay.URL + "/", "k3y" }
+
+	games, err := c.Scoreboard(context.Background(), "college-football", "20261025")
+	if err != nil || len(games) != 1 || games[0].Home.Score != "7" {
+		t.Fatalf("relayed games = %+v, %v", games, err)
+	}
+	if len(espn.requests) != 0 || len(relayed.requests) != 1 || relayed.requests[0] != "/football/college-football/scoreboard?limit=1000&dates=20261025&groups=80" || keys[0] != "k3y" {
+		t.Fatalf("espn %v, relay %v, keys %v", espn.requests, relayed.requests, keys)
+	}
+
+	up = false
+	if _, err := c.Teams(context.Background(), "college-football"); err != nil {
+		t.Fatal(err)
+	}
+	if len(espn.requests) != 1 {
+		t.Fatalf("relay down: ESPN asked %v", espn.requests)
+	}
+	tries := len(keys)
+	c.Summary(context.Background(), "college-football", "401")
+	if len(keys) != tries {
+		t.Error("relay asked again within a minute of failing")
+	}
+	up = true
+	*now = now.Add(2 * time.Minute)
+	if _, err := c.Teams(context.Background(), "nfl"); err != nil {
+		t.Fatal(err)
+	}
+	if len(relayed.requests) != 2 {
+		t.Errorf("relay not used again after a minute: %v", relayed.requests)
+	}
+}

@@ -69,6 +69,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Sports data through CFB Tracker (2026-11-01, no migration)
+
+Michael asked for the Sports section to read from his CFB Tracker (github.com/Spacegoose02/sports-tracker) so ESPN isn't called separately by both apps. He chose a caching relay first, with tracker-only data (rankings, news, betting lines) later.
+
+- **Settings** `sports_relay_url` and `sports_relay_key` (Server → Settings → Sports data). The address must be http(s) with no query (`validSportsSettings` in `api/sports.go`); a trailing slash is dropped.
+- **`sports.Client.Relay`** (`sports/espn.go`): `get` now takes the path after `BaseURL`. With a relay set, it reads `<relay>/espn/site/v2/sports<path>` with `X-Api-Key`, the same paths and query as ESPN's site API, so teams, scoreboards and game summaries for every league go through it unchanged. A failure (not a cancelled request) logs once and reads ESPN directly for a minute (`relayDown`). Our own caches stay as they were.
+- **Not changed:** the Game Lights plugin still reads ESPN's play feeds itself (`plugins/game-lights/plays.go`, site and core APIs); it could take the same relay later.
+- **Tested:** `go test ./...` with new `TestRelay` (paths, key, fallback when the relay errors, retry after a minute), web `tsc` and build. **Not tried** against the real tracker, whose relay route is being added in its own PR.
+
 ## Requests that beat Overseerr: seasons, 4K, progress, rules, kids, problem reports, discovery, Sonarr & Radarr (2026-11-01, migration 56)
 
 Michael asked for the request flow to replace Overseerr/Jellyseerr and beat it. All nine ideas from the review were built at once.

@@ -295,6 +295,7 @@ The main sections under **Server → Settings**:
 - **Transcoding:** hardware encoding (NVIDIA NVENC, Intel Quick Sync, VAAPI, AMD AMF, VideoToolbox), HDR to SDR tone mapping, and the transcode folder.
 - **Network:** your public URL, trusted reverse proxies, and extra networks that count as home. Here you can also limit streaming away from home: how many streams each account (with its profiles, live TV included) may watch at once from outside, and a quality limit that converts bigger videos down for those viewers. Admin accounts have no stream limit, and live TV isn't quality-limited.
 - **Metadata:** TMDB, TheTVDB, MDBList and the ratings provider.
+- **Sports data:** the address (and key) of a CFB Tracker, if you run one. The Sports pages then read scores, schedules and box scores through it, so ESPN is asked once for both apps. If the tracker doesn't answer, the server reads ESPN directly for a minute and tries the tracker again.
 - **Trakt** and **Webhooks:** sync watch history with Trakt, and notify other services (Home Assistant, Discord bots, n8n) when things happen.
 
 ### Server health and admin alerts

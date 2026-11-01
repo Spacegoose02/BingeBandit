@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"sort"
@@ -25,9 +26,29 @@ func (s *Server) sportsClient() *sports.Client {
 		if s.Sports == nil {
 			s.Sports = sports.NewClient()
 		}
+		if s.Sports.Relay == nil {
+			s.Sports.Relay = func() (string, string) {
+				return s.Store.Setting(store.SettingSportsRelayURL), s.Store.Setting(store.SettingSportsRelayKey)
+			}
+		}
 		s.sportsWake = make(chan struct{}, 1)
 	})
 	return s.Sports
+}
+
+// validSportsSettings checks the sports relay's address.
+func validSportsSettings(in map[string]string) error {
+	if v, ok := in[store.SettingSportsRelayURL]; ok {
+		v = strings.TrimRight(v, "/")
+		in[store.SettingSportsRelayURL] = v
+		if v != "" {
+			u, err := url.Parse(v)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
+				return errors.New("the sports data address must look like http://192.168.1.10:3000")
+			}
+		}
+	}
+	return nil
 }
 
 // sportsGame is a game with the user's teams marked, and where it's on in
