@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"bingebandit/internal/store"
@@ -113,6 +114,7 @@ func (d *Detector) Season(ctx context.Context, seasonID int64) (int, error) {
 	found := 0
 	if len(eps) >= 2 {
 		for _, p := range []part{introPart, creditsPart} {
+			d.prefetch(ctx, eps, p)
 			for i, ep := range eps {
 				if ctx.Err() != nil {
 					return found, ctx.Err()
@@ -162,6 +164,40 @@ func (d *Detector) bestMatch(ctx context.Context, eps []*episode, i int, p part)
 	return best, ok
 }
 
+// workers is how many files are decoded at once. Decoding is mostly
+// waiting on ffmpeg and the disk, so a few in parallel finish a season
+// several times faster without taking over the machine.
+var workers = min(4, max(1, runtime.NumCPU()/2))
+
+// prefetch fingerprints part p of every episode, a few at a time, so the
+// comparisons that follow find them ready. Failures are left for fp to
+// report when the comparison asks again.
+func (d *Detector) prefetch(ctx context.Context, eps []*episode, p part) {
+	if workers < 2 {
+		return
+	}
+	jobs := make(chan *episode)
+	var wg sync.WaitGroup
+	for range min(workers, len(eps)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ep := range jobs {
+				// Each episode goes to one worker, so its map has one writer.
+				d.fp(ctx, ep, p)
+			}
+		}()
+	}
+	for _, ep := range eps {
+		if ctx.Err() != nil {
+			break
+		}
+		jobs <- ep
+	}
+	close(jobs)
+	wg.Wait()
+}
+
 func (d *Detector) fp(ctx context.Context, ep *episode, p part) ([]uint32, error) {
 	if fp, ok := ep.fp[p.name]; ok {
 		return fp, nil
@@ -174,32 +210,55 @@ func (d *Detector) fp(ctx context.Context, ep *episode, p part) ([]uint32, error
 }
 
 // Pending analyzes every season that has new or unanalyzed episodes, and
-// every movie not yet checked for end credits.
+// every movie not yet checked for end credits. Each season and movie is
+// saved as it's done, so when ctx ends (the maintenance window closed, or
+// the server is stopping) it returns what it got through, and the next
+// run carries on with the rest.
 func (d *Detector) Pending(ctx context.Context) (string, error) {
 	seasons, err := d.st.SeasonsNeedingMarkers()
 	if err != nil {
 		return "", err
 	}
-	total := 0
-	for _, s := range seasons {
-		n, err := d.Season(ctx, s)
-		if err != nil {
-			return "", err
-		}
-		total += n
-	}
 	movies, err := d.st.MoviesNeedingMarkers()
 	if err != nil {
 		return "", err
 	}
-	for _, id := range movies {
-		found, err := d.Movie(ctx, id)
+	total, doneSeasons, doneMovies := 0, 0, 0
+	stopped := func() bool { return ctx.Err() != nil }
+	for _, s := range seasons {
+		if stopped() {
+			break
+		}
+		n, err := d.Season(ctx, s)
+		total += n
+		if stopped() {
+			break // the season is redone next run; its fingerprints are cached
+		}
 		if err != nil {
 			return "", err
 		}
+		doneSeasons++
+	}
+	for _, id := range movies {
+		if stopped() {
+			break
+		}
+		found, err := d.Movie(ctx, id)
+		if stopped() {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		doneMovies++
 		if found {
 			total++
 		}
 	}
-	return fmt.Sprintf("analyzed %d seasons and %d movies, set %d markers", len(seasons), len(movies), total), nil
+	msg := fmt.Sprintf("analyzed %d seasons and %d movies, set %d markers", doneSeasons, doneMovies, total)
+	if left := len(seasons) - doneSeasons + len(movies) - doneMovies; left > 0 {
+		msg += fmt.Sprintf("; stopped with %d seasons and %d movies to go, which the next run picks up",
+			len(seasons)-doneSeasons, len(movies)-doneMovies)
+	}
+	return msg, nil
 }

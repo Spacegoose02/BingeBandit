@@ -101,14 +101,14 @@ func Builtin(d Deps) []*Task {
 		},
 		{
 			ID: "detect_markers", Name: "Detect intros and credits",
-			Description: "Compare the audio of episodes in each season to find intros and end credits, and look for the end credits of movies, for the Skip buttons.",
-			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
+			Description: "Compare the audio of episodes in each season to find intros and end credits, and look for the end credits of movies, for the Skip buttons. Stops when the maintenance window ends and picks up where it left off next run.",
+			Maintenance: true, StopAtWindowEnd: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.Markers.Pending,
 		},
 		{
 			ID: "make_scrub_previews", Name: "Make scrub previews",
 			Description: "Make the thumbnails players show while you drag or scrub through a movie or episode, from each file's keyframes (one every 10 seconds). Files played before they have any get them in the background too.",
-			Maintenance: true, DefaultEnabled: true, DefaultHours: 24,
+			Maintenance: true, StopAtWindowEnd: true, DefaultEnabled: true, DefaultHours: 24,
 			Run: d.Trickplay.Pending,
 		},
 		{
@@ -378,10 +378,7 @@ func UploadBackup(ctx context.Context, remote *s3.Client, path string, keep int)
 var BackupFileName = regexp.MustCompile(`^bingebandit-[0-9]{8}-[0-9]{6}\.db$`)
 
 func (d Deps) optimizeDatabase(ctx context.Context) (string, error) {
-	if err := d.Store.Optimize(); err != nil {
-		return "", err
-	}
-	return "optimized", nil
+	return d.Store.Optimize(ctx)
 }
 
 func (d Deps) cleanCache(ctx context.Context) (string, error) {

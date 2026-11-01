@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -133,7 +134,7 @@ func TestPruneUnderAndMaintenance(t *testing.T) {
 		t.Errorf("backup is missing data: %v", err)
 	}
 	copyDB.Close()
-	if err := s.Optimize(); err != nil {
+	if _, err := s.Optimize(context.Background()); err != nil {
 		t.Errorf("optimize: %v", err)
 	}
 
