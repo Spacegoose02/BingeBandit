@@ -578,18 +578,17 @@ function Search({ kid }: { kid: boolean }) {
         },
         (e) => setError(e.message),
       )
-      // Requests off, or no TMDB key: the section just doesn't show.
-      if (!kid) {
-        api.get<RequestableTitle[]>(`/api/requests/search?q=${encodeURIComponent(q.trim())}`).then(
-          (r) => setRequestable(r.filter((x) => !x.onServer).slice(0, 12)),
-          () => setRequestable([]),
-        )
-      }
+      // Requests off (or not for kids here), or no TMDB key: the section just doesn't show.
+      api.get<RequestableTitle[]>(`/api/requests/search?q=${encodeURIComponent(q.trim())}`).then(
+        (r) => setRequestable(r.filter((x) => !x.onServer).slice(0, 12)),
+        () => setRequestable([]),
+      )
     }, 350)
     return () => clearTimeout(t)
   }, [q, kid])
   const ask = (r: RequestableTitle) => {
-    if (r.request && (r.request.mine || r.request.status !== 'pending')) return
+    // Anyone can add their name to someone else's request; it moves it up the list.
+    if (r.request && (r.request.mine || r.request.status === 'available')) return
     const { kind, tmdbId, title, year, poster, overview } = r
     api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview }).then(
       (req) => setRequestable((list) => list.map((x) => (x.kind === kind && x.tmdbId === tmdbId ? { ...x, request: req } : x))),
@@ -655,20 +654,29 @@ function Search({ kid }: { kid: boolean }) {
 
 function requestLabel(r: RequestableTitle): string {
   const req = r.request
-  if (!req) return r.kind === 'show' ? 'Show · press to request' : 'Movie · press to request'
+  if (!req || req.status === 'declined') return r.kind === 'show' ? 'Show · press to request' : 'Movie · press to request'
+  if (!req.mine && req.status !== 'available') return `${req.people} asked · press for you too`
   switch (req.status) {
+    case 'parent':
+      return 'Asked · waiting for a grown-up'
     case 'pending':
-      return req.mine ? 'Requested · waiting for approval' : 'Someone asked · press to ask too'
+      return 'Requested · waiting for approval'
     case 'approved':
-    case 'sent':
       return 'Approved · on its way'
+    case 'sent':
+      if (req.stage === 'downloading') {
+        const mins = req.eta ? Math.max(1, Math.round((req.eta - Date.now() / 1000) / 60)) : 0
+        return `Downloading ${Math.round((req.progress ?? 0) * 100)}%${mins ? ` · ${mins < 120 ? `${mins} min` : `${Math.round(mins / 60)} h`}` : ''}`
+      }
+      if (req.stage === 'importing') return 'Almost ready'
+      if (req.stage === 'waiting') return 'Requested · not out yet'
+      return 'Approved · searching'
     case 'failed':
       return 'Approved · waiting for the admin'
-    case 'declined':
-      return 'Declined'
     case 'available':
       return 'On the server'
   }
+  return ''
 }
 
 /** A kid's Approved Movies or Approved Shows: the titles a parent approved for them. */

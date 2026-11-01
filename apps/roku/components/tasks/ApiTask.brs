@@ -45,6 +45,8 @@ sub execute()
             content = guideContent(res, getOr(req, "filter", "all"))
         else if build = "person"
             content = personContent(res.data)
+        else if build = "requestable"
+            content = requestableContent(res.data)
         end if
         m.top.content = content
     end if
@@ -416,6 +418,44 @@ function homeContent(data as dynamic) as object
         end if
     end for
     return root
+end function
+
+'' Titles the server doesn't have, from /api/requests/search: each says
+' where its request stands, and selecting one asks for it.
+function requestableContent(data as dynamic) as object
+    root = CreateObject("roSGNode", "ContentNode")
+    if type(data) <> "roArray" then return root
+    for each r in data
+        if not isTrue(r.onServer) and root.getChildCount() < 12
+            n = CreateObject("roSGNode", "ContentNode")
+            n.title = getOr(r, "title", "")
+            year = 0
+            if r.year <> invalid then year = r.year
+            n.addFields({ kind: "request", tmdbKind: getOr(r, "kind", "movie"), tmdbId: getOr(r, "tmdbId", 0), year: year,
+                posterPath: getOr(r, "poster", ""), overview: getOr(r, "overview", ""),
+                subtitle: requestLabel(r), poster: imageUrl(getOr(r, "poster", ""), "w342"), wide: false, progress: 0.0, watched: false, unwatched: 0, backdrop: "" })
+            root.appendChild(n)
+        end if
+    end for
+    return root
+end function
+
+' Where a requestable title stands, for the line under its poster.
+function requestLabel(r as object) as string
+    req = r.request
+    if req = invalid then return "Not here · OK to request"
+    status = getOr(req, "status", "")
+    if status = "declined" then return "Not here · OK to request"
+    if not isTrue(req.mine) and status <> "available" then return "Others asked · OK for you too"
+    if status = "parent" then return "Asked a grown-up"
+    if status = "pending" then return "Requested"
+    if status = "sent" and getOr(req, "stage", "") = "downloading"
+        pct = 0
+        if req.progress <> invalid then pct = Int(req.progress * 100)
+        return "Downloading " + pct.ToStr() + "%"
+    end if
+    if status = "available" then return "On the server"
+    return "On its way"
 end function
 
 ' A grid of titles from a list, or from {items: [...]} (collections, search).

@@ -11,7 +11,14 @@ end sub
 
 sub onContent()
     c = m.top.itemContent
+    if m.watching <> invalid then m.watching.unobserveFieldScoped("subtitle")
+    m.watching = invalid
     if c = invalid then return
+    ' A requestable title's line changes once it's asked for.
+    if c.kind = "request"
+        c.observeFieldScoped("subtitle", "onSubtitle")
+        m.watching = c
+    end if
     m.art.uri = c.poster
     m.fallback.text = c.title
     m.fallback.visible = c.poster = ""
@@ -54,4 +61,9 @@ end sub
 
 sub onFocus()
     if m.top.focusPercent > 0.5 then m.title.color = "0x2DD4BFFF" else m.title.color = "0xF2F4F7FF"
+end sub
+
+sub onSubtitle()
+    c = m.top.itemContent
+    if c <> invalid then m.subLabel.text = c.subtitle
 end sub

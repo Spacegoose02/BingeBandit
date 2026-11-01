@@ -907,6 +907,18 @@ sub openMenu(level as string)
         m.menuActions.Push({ act: "level", level: "quality" })
         if m.room <> "" then labels.Push("Together (" + roomCount().ToStr() + "): invite or leave") else labels.Push("Watch together")
         m.menuActions.Push({ act: "level", level: "together" })
+        if m.item <> invalid and m.top.params.trailer = invalid and (m.item.kind = "movie" or m.item.kind = "episode")
+            labels.Push("Report a problem")
+            m.menuActions.Push({ act: "level", level: "problem" })
+        end if
+    else if level = "problem"
+        m.menu.title = "Report a problem"
+        m.menu.message = "An admin sees it with where you are now."
+        kinds = [["video", "Picture"], ["audio", "Sound"], ["subtitles", "Subtitles"], ["wrong", "Wrong file"], ["other", "Something else"]]
+        for each k in kinds
+            labels.Push(k[1])
+            m.menuActions.Push({ act: "problem", kind: k[0] })
+        end for
     else if level = "chapters"
         m.menu.title = "Chapters"
         m.menu.message = ""
@@ -995,7 +1007,15 @@ sub onMenuChosen()
         chooseQuality(a.q)
     else if a.act = "chapter"
         chooseChapter(a.index)
+    else if a.act = "problem"
+        api("POST", "/api/items/" + m.item.id.ToStr() + "/problems", { kind: a.kind, position: Int(m.pos) }, "onProblemSent")
     end if
+end sub
+
+sub onProblemSent(event as object)
+    doneTask(event.getRoSGNode())
+    res = event.getData()
+    if res.ok then say("Thanks, an admin will take a look") else say(res.error)
 end sub
 
 ' Back in a list goes up to the first one, then closes.

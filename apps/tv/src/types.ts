@@ -32,6 +32,7 @@ export interface Item {
   id: number
   kind: 'movie' | 'show' | 'season' | 'episode'
   title: string
+  tmdbId?: number
   sortTitle?: string
   year?: number
   overview?: string
@@ -259,8 +260,14 @@ export interface TitleRequest {
   poster?: string
   requestedBy: string
   people: number
-  status: 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
+  status: 'parent' | 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
   mine: boolean
+  seasons?: number[]
+  stage?: 'searching' | 'downloading' | 'importing' | 'waiting'
+  /** 0-1 */
+  progress?: number
+  /** Unix seconds. */
+  eta?: number
 }
 
 /** A TMDB search result the viewer can request. */
