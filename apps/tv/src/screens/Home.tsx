@@ -15,11 +15,13 @@ import { fetchHousehold } from './Profiles'
 import Settings, { useGuard, type HideableTab } from './Settings'
 import Discover from './Discover'
 import Sports from './Sports'
+import Downloads from './Downloads'
+import { downloadsSupported, myDownloads, removeDownloadsFor } from '../downloads'
 
 // Pinned libraries sit between Search and Live TV, as `lib:<id>`. More lists
 // every library to open or pin; an unpinned one opened from there joins the
 // menu while it's open.
-type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'discover' | 'favorites' | 'settings' | 'more' | `lib:${number}`
+type Tab = 'home' | 'search' | 'kidsMovies' | 'kidsShows' | 'sports' | 'live' | 'discover' | 'favorites' | 'downloads' | 'settings' | 'more' | `lib:${number}`
 // Discover and Favorites stay under More until pinned (pinnedTabs), so they never land in a saved menu by surprise.
 type MenuPrefs = { hiddenTabs?: HideableTab[] | null; pinnedTabs?: string[] | null }
 const optIn: HideableTab[] = ['discover', 'favorites']
@@ -27,7 +29,7 @@ const hiddenFrom = (p?: MenuPrefs | null): HideableTab[] => [
   ...(p?.hiddenTabs ?? ['sports']).filter((t) => !optIn.includes(t)),
   ...optIn.filter((t) => !p?.pinnedTabs?.includes(t)),
 ]
-const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', discover: 'Discover', favorites: 'Favorites', settings: 'Settings', more: 'More' }
+const fixedNames: Record<string, string> = { home: 'Home', search: 'Search', kidsMovies: 'Approved Movies', kidsShows: 'Approved Shows', sports: 'Sports', live: 'Live TV', discover: 'Discover', favorites: 'Favorites', downloads: 'Downloads', settings: 'Settings', more: 'More' }
 
 // Survives switching profiles, which starts the stack again on Home.
 let lastTab: Tab = 'home'
@@ -35,7 +37,7 @@ let lastTab: Tab = 'home'
 let updateCheck: Promise<AppRelease | null> | null = null
 
 
-const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', discover: 'discover', favorites: 'favorites', settings: 'settings', more: 'more' }
+const fixedIcons: Record<string, IconName> = { home: 'home', search: 'search', kidsMovies: 'movies', kidsShows: 'shows', sports: 'sports', live: 'live', discover: 'discover', favorites: 'favorites', downloads: 'more', settings: 'settings', more: 'more' }
 
 /** What holding OK on a menu entry pins or unpins: a library, or the Sports or Live TV tab. */
 interface Pinnable {
@@ -259,6 +261,8 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ...(shows('discover') ? (['discover'] as Tab[]) : []),
     ...(shows('favorites') ? (['favorites'] as Tab[]) : []),
     ...(libraries.length && shows('more') ? (['more'] as Tab[]) : []),
+    // Phones: titles saved to watch offline.
+    ...(isPhone && downloadsSupported ? (['downloads'] as Tab[]) : []),
     'settings',
   ]
   const activeTab = tabViews.current.get(tab)
@@ -266,6 +270,9 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const [accountMenu, setAccountMenu] = useState(false)
   const signOut = async () => {
     await api.post('/api/auth/logout').catch(() => undefined)
+    // Signing out takes this profile's downloads off the phone too.
+    const s = current()
+    if (s) await removeDownloadsFor(s.server, s.user.id).catch(() => undefined)
     await saveSession(null)
     lastTab = 'home'
     onSignedOut()
@@ -369,6 +376,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'sports' && <Sports />}
       {tab === 'discover' && <Discover />}
       {tab === 'favorites' && <Favorites />}
+      {tab === 'downloads' && <Downloads />}
       {tab === 'live' && liveTV && <LiveGuide />}
       {tab === 'settings' && (
         <Settings
@@ -759,6 +767,10 @@ function HomeRows() {
       <Center>
         <Text style={st.error}>{error}</Text>
         <Button label="Try again" primary preferFocus onPress={load} />
+        {/* No server on the road: what's downloaded still plays. */}
+        {isPhone && downloadsSupported && myDownloads().some((d) => d.state === 'done') && (
+          <Button label="Watch downloads" onPress={() => nav.push({ name: 'downloads' })} />
+        )}
       </Center>
     )
   if (!data) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>

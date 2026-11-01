@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { absolute, api, authHeaders, current, request, trackWrite } from '../api'
+import { absolute, api, authHeaders, cached, current, request, trackWrite } from '../api'
+import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
 import { Button, Focusable, useFocusOnce } from '../components'
@@ -43,7 +44,7 @@ function surroundCaps(): { audioCodecs: string[]; surroundCodec?: string } {
 }
 
 /** Whether this device can play the file as is with the chosen audio track. */
-function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
+export function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
   const audios = (f.streams ?? []).filter((s) => s.type === 'audio')
   const a = audios.find((s) => s.index === audioIndex) ?? audios.find((s) => s.default) ?? audios[0]
@@ -91,11 +92,12 @@ interface PreRollStep {
  * beginning: trailer files of other movies, then the server's intro video.
  * (YouTube trailers only play in the web player.)
  */
-export default function Player({ id, start = 0, together }: { id: number; start?: number; together?: string }) {
-  // Watching together skips the trailers and intro, to stay with the others.
-  const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 || together ? [] : undefined)
+export default function Player({ id, start = 0, together, offline }: { id: number; start?: number; together?: string; offline?: boolean }) {
+  // Watching together skips the trailers and intro, to stay with the others;
+  // a download plays at once (they'd need the server).
+  const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 || together || offline ? [] : undefined)
   useEffect(() => {
-    if (start > 0 || together) return
+    if (start > 0 || together || offline) return
     let stale = false
     api
       .get<{ trailers?: { url?: string; title: string }[]; intro?: { url: string } }>(`/api/items/${id}/preroll`)
@@ -110,7 +112,7 @@ export default function Player({ id, start = 0, together }: { id: number; start?
     return () => {
       stale = true
     }
-  }, [id, start, together])
+  }, [id, start, together, offline])
   const next = useCallback(() => setSteps((s) => s?.slice(1)), [])
   const skipAll = useCallback(() => setSteps([]), [])
   if (steps === undefined) {
@@ -124,7 +126,7 @@ export default function Player({ id, start = 0, together }: { id: number; start?
     const s = steps[0]
     return <IntroVideo key={s.url} uri={absolute(s.url)} label={s.label} onDone={next} onSkipAll={steps.length > 1 ? skipAll : undefined} />
   }
-  return <MediaPlayer id={id} start={start} together={together} />
+  return <MediaPlayer id={id} start={start} together={offline ? undefined : together} offline={offline} />
 }
 
 /** A movie's own trailer file, from its details page. Back or the end returns. */
@@ -233,7 +235,7 @@ function IntroVideo({
  * Plays a movie or episode. Direct play first (Android TV decodes most files
  * itself); if the device can't, the server converts it to HLS.
  */
-function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; together?: string }) {
+function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?: number; together?: string; offline?: boolean }) {
   const nav = useNav()
   useLandscape()
   // Hidden under another screen (it shouldn't be, but an invite or a deep
@@ -285,6 +287,34 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 
   // Load the item, its file and the viewer's track preferences, then start.
   useEffect(() => {
+    if (offline) {
+      // A download: everything comes from the phone; no server needed.
+      const dl = downloaded(id)
+      if (!dl?.path || !dl.file) {
+        setError('This download is no longer on this phone.')
+        return
+      }
+      // Only the subtitles saved with it (text, as WebVTT) can be shown.
+      const streams: MediaStream[] = [
+        ...(dl.file.streams ?? []).filter((x) => x.type !== 'subtitle'),
+        ...dl.subs.map((x) => ({ index: x.index, type: 'subtitle' as const, codec: 'webvtt', language: x.language, title: x.title, forced: x.forced, hearingImpaired: x.hearingImpaired })),
+      ]
+      const f: MediaFile = { ...dl.file, streams }
+      const picked = pickTracks(streams, cached<Prefs>('/api/me/prefs') ?? null)
+      savedSubChoice(f.id).then((saved) => {
+        if (saved === 'off') picked.sub = undefined
+        else if (saved !== null) picked.sub = streams.find((x) => x.type === 'subtitle' && x.index === saved) ?? picked.sub
+        setItem(dl.item)
+        setFile(f)
+        // A converted copy has the one audio track it was made with.
+        const a = dl.height ? -1 : picked.audio
+        setAudio(a)
+        audioRef.current = a
+        if (picked.sub) setSub(picked.sub)
+        setSrc({ uri: 'file://' + dl.path, startPosition: posRef.current * 1000 })
+      })
+      return
+    }
     Promise.all([
       api.get<ItemDetail>(`/api/items/${id}`),
       api.get<Prefs>('/api/me/prefs').catch(() => null),
@@ -323,7 +353,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       },
       (e) => setError(e.message),
     )
-  }, [id, start])
+  }, [id, start, offline])
 
   // Text subtitles are drawn by the app from the server's WebVTT, so they
   // stay in sync in both direct play and conversion (cue times are file time).
@@ -331,6 +361,13 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     setCues([])
     if (!file || !sub || !TEXT_SUBS.has(sub.codec)) return
     let stale = false
+    if (offline) {
+      const saved = downloaded(id)?.subs.find((x) => x.index === sub.index)
+      if (saved) readSaved(saved.path).then((t) => !stale && setCues(parseVtt(t)))
+      return () => {
+        stale = true
+      }
+    }
     fetch(absolute(`/api/files/${file.id}/subtitles/${sub.index}.vtt`), { headers: authHeaders() })
       .then((r) => (r.ok ? r.text() : ''))
       .then((t) => !stale && setCues(parseVtt(t)))
@@ -338,7 +375,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     return () => {
       stale = true
     }
-  }, [file, sub])
+  }, [file, sub, offline, id])
 
   // A Hue hub this device paired for the profile (Settings): the TV drives it itself.
   const localHub = useRef<Hub | null>(null)
@@ -354,6 +391,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     (stopped = false, done = false) => {
       if (!item || !file) return
       lastReportAt.current = Date.now()
+      // A download keeps its position on the phone too, sent later if the server can't be reached now.
+      if (offline) saveOfflineProgress(item.id, done ? duration : posRef.current, duration, done)
       const sent = api
         .post('/api/progress', {
           playSessionId: playSession.current,
@@ -371,10 +410,11 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
           lightsMode: hueType(),
           played: Math.round(played.current),
         })
+        .then(() => offline && offlineProgressSent(item.id))
         .catch(() => undefined)
       if (stopped) trackWrite(sent)
     },
-    [item, file, duration, paused, mode],
+    [item, file, duration, paused, mode, offline],
   )
 
   // Pausing and resuming are reported at once, for plugins that follow the player (Hue).
@@ -417,6 +457,11 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const transcode = useCallback(
     async (at: number) => {
       if (!file) return
+      if (offline) {
+        setBuffering(false)
+        setError("This phone can't play this download. Remove it and download it again at a converted quality.")
+        return
+      }
       if (seekTimer.current) clearTimeout(seekTimer.current)
       seekTimer.current = undefined
       const req = ++transcodeReq.current
@@ -460,7 +505,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
         }
       }
     },
-    [file],
+    [file, offline],
   )
 
   // Burned-in subtitles chosen up front: start converting once the file is known.
@@ -499,7 +544,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const onStall = () => {
     const now = Date.now()
     // Buffering right after starting or seeking is expected.
-    if (mode !== 'direct' || qualityRef.current >= 0 || lastTime.current < 5 || now - lastSeek.current < 4000) return
+    if (offline || mode !== 'direct' || qualityRef.current >= 0 || lastTime.current < 5 || now - lastSeek.current < 4000) return
     stalls.current = [...stalls.current.filter((t) => now - t < 60000), now]
     if (stalls.current.length < 3) return
     stalls.current = []
@@ -531,9 +576,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   }
 
   const onError = useCallback(() => {
-    if (mode === 'direct') transcode(posRef.current)
+    if (offline) setError("This download didn't play. Remove it and download it again.")
+    else if (mode === 'direct') transcode(posRef.current)
     else setError('Playback failed. The server could not convert this file.')
-  }, [mode, transcode])
+  }, [mode, transcode, offline])
 
   // Some TV decoders reject a stream frame by frame without ever raising an
   // error (e.g. 4:4:4 HEVC on Amlogic chips): playback just never starts. If
@@ -555,7 +601,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     return () => listener.remove()
   }, [])
   useEffect(() => {
-    if (mode !== 'direct' || !src) return
+    if (mode !== 'direct' || !src || offline) return
     const t = setInterval(() => {
       if (!paused && active && Date.now() - lastAdvance.current > (advanced.current ? STALL_MS : FIRST_FRAME_MS)) {
         clearInterval(t)
@@ -563,7 +609,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       }
     }, 2000)
     return () => clearInterval(t)
-  }, [mode, src, paused, active, transcode])
+  }, [mode, src, paused, active, transcode, offline])
 
   // Position-based reports stop while paused or buffering, and the server
   // drops a player from Now Playing after 45 s without one.
@@ -596,6 +642,15 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   const onEnd = async () => {
     finished.current = true
     report(false, true)
+    if (offline && item) {
+      const n = nextDownloaded(item)
+      if (n) {
+        nav.replace({ name: 'player', id: n.itemId, start: 0, offline: true })
+        return
+      }
+      nav.back()
+      return
+    }
     if (item?.kind === 'episode') {
       const next = await api.get<Item | undefined>(`/api/items/${item.id}/next`).catch(() => undefined)
       if (next?.id) {
@@ -719,6 +774,10 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     tg.send({ paused: pausedRef.current, position: posRef.current })
   }
   const playNext = (nextId: number) => {
+    if (offline) {
+      nav.replace({ name: 'player', id: nextId, start: 0, offline: true })
+      return
+    }
     tg.send({ itemId: nextId, paused: false, position: 0 })
     nav.replace({ name: 'player', id: nextId, start: 0, together: roomId ?? undefined })
   }
@@ -751,8 +810,12 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
   // The next episode, for the Next button.
   const [next, setNext] = useState<Item | null>(null)
   useEffect(() => {
+    if (offline) {
+      if (item) setNext(nextDownloaded(item)?.item ?? null)
+      return
+    }
     if (item?.kind === 'episode') api.get<Item | undefined>(`/api/items/${item.id}/next`).then((n) => setNext(n ?? null), () => undefined)
-  }, [item])
+  }, [item, offline])
 
   // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
   useEffect(() => {
@@ -847,8 +910,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
     say('Subtitles added')
   }
   // Scrub previews: above the marker while scrubbing (TV) or dragging (phone).
-  const thumbs = useTrickplay(file?.id)
-  const chapters = useChapters(file?.id)
+  const thumbs = useTrickplay(offline ? undefined : file?.id)
+  const chapters = useChapters(offline ? undefined : file?.id)
   const chapterIdx = chapterAt(chapters, pos)
   const scrubChapter = scrub !== null && chapters.length ? ` · ${chapterName(chapters, chapterAt(chapters, scrub))}` : ''
   const [dragT, setDragT] = useState<number | null>(null)
@@ -979,7 +1042,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                     ? '◀ ▶ to move through the video'
                     : paused
                       ? 'Paused'
-                      : mode === 'direct'
+                      : offline
+                        ? 'Downloaded'
+                        : mode === 'direct'
                         ? 'Direct play'
                         : quality > 0
                           ? `Converting · ${resolutionLabel(quality)}`
@@ -1043,8 +1108,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
       )}
       {menu && (
         <View style={[st.menu, barsPad]}>
-          <Text style={st.menuTitle}>Watch together</Text>
-          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+          {!offline && <Text style={st.menuTitle}>Watch together</Text>}
+          {!offline && <ScrollView horizontal contentContainerStyle={st.menuRow}>
             <Button
               small
               primary={!!roomId}
@@ -1055,7 +1120,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                 setTogetherOpen(true)
               }}
             />
-          </ScrollView>
+          </ScrollView>}
           {hueMode !== null && hueMode !== 'off' && (
             <>
               <Text style={st.menuTitle}>Hue Sync</Text>
@@ -1086,7 +1151,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               </ScrollView>
             </>
           )}
-          {file && (
+          {file && !offline && (
             <>
               <Text style={st.menuTitle}>Quality</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
@@ -1130,8 +1195,8 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
               />
             ))}
           </ScrollView>
-          {subs.length === 0 && <Text style={st.hint}>This file has no subtitles.</Text>}
-          {!current()?.user.kid && file && (
+          {subs.length === 0 && <Text style={st.hint}>{offline ? 'No subtitles were saved with this download.' : 'This file has no subtitles.'}</Text>}
+          {!current()?.user.kid && file && !offline && (
             <ScrollView horizontal contentContainerStyle={st.menuRow}>
               <Button
                 small

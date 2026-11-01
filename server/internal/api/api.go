@@ -88,6 +88,8 @@ type Server struct {
 	health     healthState
 	alerts     alertHistory
 	chapters   chapterCache
+	// offline makes download copies for the phone app (offline.go).
+	offline offlineCopies
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -320,6 +322,9 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
 			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
+			r.Post("/files/{id}/offline", s.prepareOffline)
+			r.Get("/offline/{key}", s.offlineFile)
+			r.Post("/offline/check", s.checkOffline)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
 
