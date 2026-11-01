@@ -19,9 +19,14 @@ type Task struct {
 	Name        string
 	Description string
 	// Maintenance tasks only start inside the maintenance window.
-	Maintenance    bool
-	DefaultEnabled bool
-	DefaultHours   int
+	Maintenance bool
+	// StopAtWindowEnd: a scheduled run of a maintenance task is stopped
+	// when the window closes (Run sees its context end and should save
+	// what it has and return), so long jobs don't run into the day.
+	// Run now isn't limited.
+	StopAtWindowEnd bool
+	DefaultEnabled  bool
+	DefaultHours    int
 	// Run does the work and returns a one-line summary for the admin UI.
 	Run func(ctx context.Context) (string, error)
 }
@@ -87,6 +92,21 @@ func (s *Scheduler) window(now time.Time) bool {
 	}
 }
 
+// windowEnd is when the maintenance window that now is in closes, or false
+// when there's no window (start and end hours are equal).
+func (s *Scheduler) windowEnd(now time.Time) (time.Time, bool) {
+	start, _ := strconv.Atoi(s.st.Setting(store.SettingMaintenanceStart))
+	end, _ := strconv.Atoi(s.st.Setting(store.SettingMaintenanceEnd))
+	if start == end {
+		return time.Time{}, false
+	}
+	at := time.Date(now.Year(), now.Month(), now.Day(), end, 0, 0, 0, now.Location())
+	if !at.After(now) {
+		at = at.AddDate(0, 0, 1)
+	}
+	return at, true
+}
+
 // Start checks every minute for due tasks until ctx ends.
 func (s *Scheduler) Start(ctx context.Context) {
 	t := time.NewTicker(time.Minute)
@@ -103,7 +123,15 @@ func (s *Scheduler) Start(ctx context.Context) {
 				}
 				due := now.Sub(time.Unix(st.LastRun, 0)) >= time.Duration(st.IntervalHours)*time.Hour
 				if due && (!task.Maintenance || s.window(now)) {
-					s.launch(ctx, task)
+					runCtx, cancel := ctx, context.CancelFunc(func() {})
+					if task.Maintenance && task.StopAtWindowEnd {
+						if end, ok := s.windowEnd(now); ok {
+							runCtx, cancel = context.WithDeadline(ctx, end)
+						}
+					}
+					if !s.launchWith(runCtx, cancel, task) {
+						cancel()
+					}
 				}
 			}
 		}
@@ -123,6 +151,12 @@ func (s *Scheduler) RunNow(ctx context.Context, id string) error {
 }
 
 func (s *Scheduler) launch(ctx context.Context, t *Task) bool {
+	return s.launchWith(ctx, func() {}, t)
+}
+
+// launchWith runs t with ctx and calls done when the run ends. It reports
+// false (and doesn't call done) if t is already running.
+func (s *Scheduler) launchWith(ctx context.Context, done context.CancelFunc, t *Task) bool {
 	s.mu.Lock()
 	if s.running[t.ID] {
 		s.mu.Unlock()
@@ -132,6 +166,7 @@ func (s *Scheduler) launch(ctx context.Context, t *Task) bool {
 	s.mu.Unlock()
 
 	go func() {
+		defer done()
 		started := time.Now()
 		// Make sure a row exists so the run can be recorded.
 		if _, ok, _ := s.st.TaskState(t.ID); !ok {

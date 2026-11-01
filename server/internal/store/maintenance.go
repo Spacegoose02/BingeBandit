@@ -53,18 +53,78 @@ func (s *Store) RecordTaskRun(id string, started time.Time, result string, runEr
 
 // Backup writes a consistent copy of the live database to path.
 func (s *Store) Backup(path string) error {
+	s.heavy.Lock()
+	defer s.heavy.Unlock()
 	_, err := s.db.Exec(`VACUUM INTO ?`, path)
 	return err
 }
 
-// Optimize refreshes query planner statistics and compacts the file.
-func (s *Store) Optimize() error {
-	for _, q := range []string{`PRAGMA optimize`, `ANALYZE`, `VACUUM`, `PRAGMA wal_checkpoint(TRUNCATE)`} {
-		if _, err := s.db.Exec(q); err != nil {
-			return err
+// IsBusy reports whether err is SQLite saying another connection holds the
+// lock it needs (SQLITE_BUSY or SQLITE_LOCKED, any extended code).
+func IsBusy(err error) bool {
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		c := coded.Code() & 0xff
+		return c == 5 || c == 6
+	}
+	return err != nil && (strings.Contains(err.Error(), "SQLITE_BUSY") || strings.Contains(err.Error(), "database is locked"))
+}
+
+// optimizeBusyTimeout is how long one VACUUM waits for the write lock, and
+// optimizeRetries how often it's tried again after that, so a burst of
+// writes from a scan or another maintenance task can't fail the run.
+var (
+	optimizeBusyTimeout = 2 * time.Minute
+	optimizeRetries     = []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute}
+)
+
+// Optimize refreshes query planner statistics and compacts the file. VACUUM
+// needs the database to itself for a moment; if other work keeps it busy
+// past the retries, compaction is skipped (statistics are still updated)
+// and the result says so, rather than failing the run.
+func (s *Store) Optimize(ctx context.Context) (string, error) {
+	s.heavy.Lock()
+	defer s.heavy.Unlock()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf(`PRAGMA busy_timeout = %d`, optimizeBusyTimeout.Milliseconds())); err != nil {
+		return "", err
+	}
+	// Back to the pool's usual timeout before this connection is reused.
+	defer conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA busy_timeout = 10000`)
+
+	retry := func(q string) error {
+		for attempt := 0; ; attempt++ {
+			_, err := conn.ExecContext(ctx, q)
+			if !IsBusy(err) || attempt >= len(optimizeRetries) {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(optimizeRetries[attempt]):
+			}
 		}
 	}
-	return nil
+	for _, q := range []string{`PRAGMA optimize`, `ANALYZE`} {
+		if err := retry(q); err != nil {
+			return "", fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	result := "updated statistics and compacted the database"
+	if err := retry(`VACUUM`); err != nil {
+		if !IsBusy(err) {
+			return "", fmt.Errorf("VACUUM: %w", err)
+		}
+		result = "updated statistics; the database stayed busy, so compacting waits for the next run"
+	}
+	// Reports busy in its result row rather than failing; a partial
+	// checkpoint is fine, the next one finishes it.
+	conn.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
+	return result, nil
 }
 
 // ReferencedImages lists every image reference in use (items, credits,

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"bingebandit/internal/avatars"
@@ -19,6 +20,10 @@ var ErrExists = errors.New("already exists")
 
 type Store struct {
 	db *sql.DB
+	// heavy keeps whole-database jobs (backup, VACUUM) from running at
+	// once: both start with the maintenance window and would fight for
+	// the lock.
+	heavy sync.Mutex
 }
 
 func Open(path string) (*Store, error) {
