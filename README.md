@@ -14,6 +14,7 @@
 
 **Your library**
 - Movie and TV libraries from any folders, picked up automatically as files change
+- Music, audiobook and photo libraries in the web and Windows apps, with a player that keeps going while you browse
 - Posters, backdrops, ratings, cast, trailers and collections from TMDB, with optional TheTVDB, MDBList, IMDb and Rotten Tomatoes scores
 - A Plex-style Home with Continue Watching, pinned libraries and recommendation rows you choose
 - Collections that follow smart rules or TMDB, Trakt, IMDb and MDBList lists, plus Kometa-style poster overlays

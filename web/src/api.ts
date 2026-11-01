@@ -8,8 +8,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The library kinds beyond movies and shows this app can browse. The server
+ * keeps music, audiobook and photo libraries from apps that don't say so
+ * (the TV and Roku apps), since they'd open them as broken movie grids.
+ */
+export const MEDIA_KINDS = 'music,audiobooks,photos'
+
 async function request<T>(method: string, path: string, body?: unknown, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { 'X-Requested-With': 'BingeBandit' }
+  const headers: Record<string, string> = { 'X-Requested-With': 'BingeBandit', 'X-BB-Media': MEDIA_KINDS }
   // A FormData body (a file upload) sets its own multipart Content-Type.
   const form = body instanceof FormData
   if (body !== undefined && !form) headers['Content-Type'] = 'application/json'

@@ -3,6 +3,7 @@ import { api } from '../api'
 import type { Library } from '../types'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
+import { libraryKinds } from '../libraryKinds'
 
 /** Moves the item at from to to, for drag and drop reordering. */
 export function moveItem<T>(list: T[], from: number, to: number): T[] {
@@ -78,7 +79,7 @@ export function PinsDialog({ libraries, first, onClose, onSaved }: { libraries: 
             <span className="drag-handle" aria-hidden="true">
               <Icon name="grip" size={16} />
             </span>
-            <Icon name={l.kind === 'movies' ? 'film' : 'tv'} size={18} />
+            <Icon name={libraryKinds[l.kind].icon} size={18} />
             <span className="pin-name">{l.name}</span>
             <button
               className={`pin-toggle ${l.pinned ? 'on' : ''}`}

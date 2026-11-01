@@ -194,6 +194,9 @@ func (s *Server) contentSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, l := range libs {
+		if !store.IsVideoLibrary(l.Kind) {
+			continue // channels play video
+		}
 		out = append(out, sourceOption{Type: "library", ID: l.ID, Name: l.Name, Detail: "whole library"})
 		if cols, err := s.Store.LibraryCollections(l.ID); err == nil {
 			for _, c := range cols {

@@ -1,4 +1,4 @@
-// Package media inspects video files with ffprobe.
+// Package media inspects video, audio and image files with ffprobe.
 package media
 
 import (
@@ -31,8 +31,9 @@ type probeOutput struct {
 		Disposition   map[string]int    `json:"disposition"`
 	} `json:"streams"`
 	Format struct {
-		Duration string `json:"duration"`
-		BitRate  string `json:"bit_rate"`
+		Duration string            `json:"duration"`
+		BitRate  string            `json:"bit_rate"`
+		Tags     map[string]string `json:"tags"`
 	} `json:"format"`
 }
 
@@ -58,6 +59,11 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 	f.Container = strings.TrimPrefix(strings.ToLower(filepath.Ext(f.Path)), ".")
 	f.Duration, _ = strconv.ParseFloat(p.Format.Duration, 64)
 	f.Bitrate, _ = strconv.ParseInt(p.Format.BitRate, 10, 64)
+	// Tag names vary in case by container (ID3 "artist", Vorbis "ARTIST").
+	f.Tags = map[string]string{}
+	for k, v := range p.Format.Tags {
+		f.Tags[strings.ToLower(k)] = strings.TrimSpace(v)
+	}
 	f.Streams = f.Streams[:0]
 	for _, s := range p.Streams {
 		st := store.Stream{
@@ -76,6 +82,12 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 		}
 		if s.CodecType == "audio" {
 			st.Profile = s.Profile
+			// Ogg and Opus keep their tags on the audio stream.
+			for k, v := range s.Tags {
+				if k = strings.ToLower(k); f.Tags[k] == "" {
+					f.Tags[k] = strings.TrimSpace(v)
+				}
+			}
 		}
 		switch s.CodecType {
 		case "video":

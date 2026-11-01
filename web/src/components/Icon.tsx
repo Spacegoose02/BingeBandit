@@ -63,6 +63,11 @@ const paths: Record<string, string> = {
   tag: 'M3.5 11.5V3.5h8l9 9-8 8-9-9z M7.5 7.5h.01',
   cast: 'M3 8V5h18v14h-7M3 11.5a7.5 7.5 0 0 1 7.5 7.5M3 15.5A3.5 3.5 0 0 1 6.5 19M3 19h.01',
   kids: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14a4 4 0 0 0 7 0M9 9.5v.5M15 9.5v.5',
+  music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  headphones: 'M4 18v-5a8 8 0 0 1 16 0v5M4 14h3v6H4zM17 14h3v6h-3z',
+  shuffle: 'M3 6h4l10 12h4M3 18h4l3-3.6M14 9.6 17 6h4M18 3l3 3-3 3M18 15l3 3-3 3',
+  prev: 'M6 5v14M19 5 9 12l10 7z',
+  skip: 'M18 5v14M5 5l10 7-10 7z',
 }
 
 export type IconName = keyof typeof paths

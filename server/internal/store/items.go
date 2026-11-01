@@ -172,6 +172,8 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	json.Unmarshal([]byte(locked), &it.Locked)
 	if u := overlayPosterURL(it.ID, it.Poster); u != "" && (it.Kind == "movie" || it.Kind == "show") {
 		it.Poster = u
+	} else if it.Poster == "" && HasCover(it.Kind) {
+		it.Poster = CoverURL(it.ID)
 	} else {
 		it.Poster = ImageURL(it.Poster)
 	}
@@ -261,8 +263,15 @@ func libraryWhere(uid, libraryID int64, hide []int64, f LibraryFilter) (string, 
 		hide = []int64{}
 	}
 	hidden, _ := json.Marshal(hide)
-	where := `i.library_id = @lib AND i.kind IN ('movie','show') AND i.id NOT IN (SELECT value FROM json_each(@hide))` + f.where()
-	return where, append([]any{uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden))}, f.args()...)
+	// Movies and shows, or the titles of another kind of library (albums,
+	// audiobooks, photo albums). The library's own kind decides, so a
+	// music library never lists a stray movie.
+	kinds := `i.kind IN ('movie','show','album','audiobook','photoalbum')`
+	if f.Kind != "" {
+		kinds = `i.kind = @kind`
+	}
+	where := `i.library_id = @lib AND ` + kinds + ` AND i.id NOT IN (SELECT value FROM json_each(@hide))` + f.where()
+	return where, append([]any{uidArg(uid), sql.Named("lib", libraryID), sql.Named("hide", string(hidden)), sql.Named("kind", f.Kind)}, f.args()...)
 }
 
 // Letter is where titles starting with a letter begin in a library sorted by

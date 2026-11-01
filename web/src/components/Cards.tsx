@@ -6,6 +6,8 @@ import type { Collection, Item } from '../types'
 import { CollectionMenu, ItemMenu } from './CardMenu'
 import { Icon } from './Icon'
 import { useSelectable, type Picked } from './Selection'
+import { mediaSubtitle, squareArt } from '../libraryKinds'
+import { isMediaKind } from '../types'
 
 /**
  * Card artwork. A poster that fails to load (the server couldn't reach TMDB
@@ -14,6 +16,8 @@ import { useSelectable, type Picked } from './Selection'
 function Art({ src, label }: { src?: string; label: string }) {
   const [tries, setTries] = useState(0)
   useEffect(() => setTries(0), [src])
+  // Music and photo covers come from the files: a missing one won't appear later.
+  const once = !!src?.includes('/cover')
   if (!src || tries > 1) return <div className="poster-fallback">{label}</div>
   return (
     <img
@@ -21,7 +25,7 @@ function Art({ src, label }: { src?: string; label: string }) {
       src={tries ? `${src}${src.includes('?') ? '&' : '?'}retry=1` : src}
       alt=""
       loading="lazy"
-      onError={() => window.setTimeout(() => setTries((t) => t + 1), tries ? 0 : 3000)}
+      onError={() => (once ? setTries(2) : window.setTimeout(() => setTries((t) => t + 1), tries ? 0 : 3000))}
     />
   )
 }
@@ -74,7 +78,7 @@ export function PosterCard({
   return (
     <div className={`poster-card has-menu${sel?.selected ? ' selected' : ''}`} id={domId} {...sel?.cardProps}>
       <Link to={`/item/${item.id}`} className="poster-link">
-        <div className="poster-frame">
+        <div className={`poster-frame${squareArt(item) ? ' square' : ''}`}>
           <Art src={poster} label={item.title} />
           <Badge item={item} />
           <Progress item={item} />
@@ -84,13 +88,18 @@ export function PosterCard({
         </div>
         <div className="card-title" title={item.title}>{item.title}</div>
         <div className="card-sub">{subtitle ??
-            (item.kind === 'season'
+            (isMediaKind(item.kind)
+              ? mediaSubtitle(item)
+              : item.kind === 'season'
               ? `${item.childCount ?? 0} episodes`
               : item.kind === 'episode'
                 ? [item.showTitle, episodeLabel(item)].filter(Boolean).join(' · ')
                 : item.year || '')}</div>
       </Link>
-      <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} onDeleted={() => setDeleted(true)} />
+      {/* Watchlist, collections, matching and moving are for movies and shows. */}
+      {!isMediaKind(item.kind) && (
+        <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} onDeleted={() => setDeleted(true)} />
+      )}
       {sel?.circle}
     </div>
   )

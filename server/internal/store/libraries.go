@@ -6,10 +6,41 @@ import (
 	"errors"
 )
 
+// Library kinds. Movies and shows are video; the others came later and only
+// the web app (and the Windows app, which shows it) can browse them, so the
+// API keeps them from older and other apps (see api.mediaKinds).
+const (
+	KindMovies     = "movies"
+	KindShows      = "shows"
+	KindMusic      = "music"
+	KindAudiobooks = "audiobooks"
+	KindPhotos     = "photos"
+)
+
+// LibraryKinds is every kind a library can be.
+var LibraryKinds = []string{KindMovies, KindShows, KindMusic, KindAudiobooks, KindPhotos}
+
+// IsVideoLibrary says whether a library kind holds movies or shows.
+func IsVideoLibrary(kind string) bool { return kind == KindMovies || kind == KindShows }
+
+// TopKinds are the item kinds a library's grid lists: what its titles are.
+// Music lists albums, or artists when asked.
+func TopKinds(libraryKind string) []string {
+	switch libraryKind {
+	case KindMusic:
+		return []string{"album", "artist"}
+	case KindAudiobooks:
+		return []string{"audiobook"}
+	case KindPhotos:
+		return []string{"photoalbum"}
+	}
+	return []string{"movie", "show"}
+}
+
 type Library struct {
 	ID        int64    `json:"id"`
 	Name      string   `json:"name"`
-	Kind      string   `json:"kind"` // movies | shows
+	Kind      string   `json:"kind"` // movies | shows | music | audiobooks | photos
 	Paths     []string `json:"paths"`
 	CreatedAt int64    `json:"createdAt"`
 	LastScan  int64    `json:"lastScan"`
@@ -24,7 +55,7 @@ type Library struct {
 }
 
 const libraryCols = `l.id, l.name, l.kind, l.paths, l.created_at, l.last_scan,
-	(SELECT COUNT(*) FROM items i WHERE i.library_id = l.id AND i.kind IN ('movie','show')), l.skip_markers, l.collection_mode`
+	(SELECT COUNT(*) FROM items i WHERE i.library_id = l.id AND i.kind IN ('movie','show','album','audiobook','photoalbum')), l.skip_markers, l.collection_mode`
 
 func scanLibrary(r interface{ Scan(...any) error }) (*Library, error) {
 	var l Library
