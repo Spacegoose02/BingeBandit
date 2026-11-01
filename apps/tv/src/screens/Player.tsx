@@ -575,11 +575,36 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     }
   }
 
+  // The server stops a conversion that hasn't been fetched or reported on for
+  // 90 s, which happens when the screensaver backgrounds a paused app (Android
+  // stops its timers). Its segments are gone, so start a new one from here.
+  const retried = useRef(false)
   const onError = useCallback(() => {
     if (offline) setError("This download didn't play. Remove it and download it again.")
     else if (mode === 'direct') transcode(posRef.current)
-    else setError('Playback failed. The server could not convert this file.')
+    else if (!retried.current) {
+      retried.current = true
+      transcode(posRef.current)
+    } else setError('Playback failed. The server could not convert this file.')
   }, [mode, transcode, offline])
+  const awayAt = useRef(0)
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'background') {
+        if (!awayAt.current) awayAt.current = Date.now()
+        return
+      }
+      if (state !== 'active') return
+      const away = awayAt.current ? Date.now() - awayAt.current : 0
+      awayAt.current = 0
+      // Long enough for the server to have stopped the conversion: restart it
+      // now, while still paused, rather than failing once the buffer runs out.
+      if (away > 60000 && modeRef.current === 'transcode' && transcodeId.current) transcode(posRef.current)
+    })
+    return () => listener.remove()
+  }, [transcode])
 
   // Some TV decoders reject a stream frame by frame without ever raising an
   // error (e.g. 4:4:4 HEVC on Amlogic chips): playback just never starts. If
@@ -628,6 +653,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     if (step > 0) {
       lastAdvance.current = Date.now()
       advanced.current = true
+      retried.current = false
     }
     lastTime.current = p.currentTime
     if (!paused && step > 0 && step < 2) played.current += step
@@ -938,6 +964,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
           paused={paused || !active}
+          // react-native-video turns keep-screen-on back on whenever pausing
+          // reports a "ready" state, so the TV's screensaver never came on.
+          preventsDisplaySleepDuringVideoPlayback={!paused && active}
           selectedAudioTrack={mode === 'direct' && audioPos >= 0 ? { type: SelectedTrackType.INDEX, value: audioPos } : undefined}
           // The app draws text subtitles itself (cues above) and the server
           // burns in image ones. Left alone, ExoPlayer also shows a file's
