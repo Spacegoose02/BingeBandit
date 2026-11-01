@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.41.0, 54 schema migrations._
+_Last updated: 2026-11-01. Latest release v0.41.1, 54 schema migrations._
 
 
 ## Start here
@@ -68,6 +68,12 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Maintenance tasks: Optimize database and Detect intros stop failing (2026-11-01, no migration, v0.41.1)
+
+- **Optimize database** failed with `SQLITE_BUSY` after 10 s: it starts with the maintenance window alongside Back up database (`VACUUM INTO`) and other writers, and `VACUUM` gave up at the pool's busy timeout. Backup and Optimize now share a store-level lock (`store/maintenance.go`) so they never overlap; Optimize runs on its own connection with a 2-minute busy timeout and retries on busy (after 30 s, 2 m, 5 m). If `VACUUM` still can't get the lock it skips compacting and succeeds, since statistics were updated; the result says compaction waits for the next run.
+- **Detect intros and credits** ran for hours and ended in `context canceled`, marking the whole run failed. New task option `StopAtWindowEnd` (`tasks/scheduler.go`) gives a scheduled run a deadline at the end of the maintenance window (intro detection and scrub previews use it; Run now has none). `markers` `Pending` stops cleanly, reports what it finished and how many seasons and movies are left, and the next run carries on (fingerprints are cached on disk). Episodes in a season are fingerprinted in parallel (`min(4, NumCPU/2)` workers, `markers/detect.go`).
+- **Tested:** `go test ./...`, with new tests for Optimize waiting out another connection's write lock, `IsBusy`, and `windowEnd` (including windows that cross midnight). Not run against a real library overnight.
 
 ## Roku: Sports Hub and Watch Together (2026-11-01, no migration)
 
