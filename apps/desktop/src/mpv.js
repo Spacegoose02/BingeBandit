@@ -10,9 +10,9 @@ const path = require('node:path')
  * @typedef {object} PlayRequest
  * @property {string} url full address of the file
  * @property {string} title shown in the window's title bar
- * @property {number} start seconds into the file
+ * @property {number | null} start seconds into the file; null for a live stream, which starts at its live edge
  * @property {number | 'auto'} audio mpv audio track id (1-based among the file's audio tracks)
- * @property {number | 'no'} sub mpv subtitle track id, or 'no'; ignored when subUrl is set
+ * @property {number | 'no' | 'auto'} sub mpv subtitle track id, 'no' or 'auto'; ignored when subUrl is set
  * @property {{ url: string, title: string, lang: string } | undefined} subUrl a sidecar subtitle file to load and show
  */
 
@@ -24,11 +24,14 @@ function ipcPath() {
   return process.platform === 'win32' ? `\\\\.\\pipe\\${name}` : path.join(os.tmpdir(), `${name}.sock`)
 }
 
+/** mpv's --start for a request: where to resume, or the live edge. */
+const startArg = (req) => (req.start == null ? 'none' : String(Math.max(0, Math.floor(req.start))))
+
 /**
  * The command line for a player started on `req`. Options that change per
  * file (start, tracks) are set again before each later file, see `load`.
  * @param {PlayRequest} req
- * @param {{ ipc: string, headers: string[], configDir: string, fullscreen: boolean }} o
+ * @param {{ ipc: string, headers: string[], configDir: string, fullscreen: boolean, uiDir?: string }} o
  */
 function mpvArgs(req, o) {
   const args = [
@@ -41,14 +44,30 @@ function mpvArgs(req, o) {
     '--no-terminal',
     '--user-agent=BingeBandit-Desktop',
     `--title=${req.title}`,
-    `--start=${Math.max(0, Math.floor(req.start))}`,
+    `--start=${startArg(req)}`,
     `--aid=${req.audio}`,
     `--sid=${req.subUrl ? 'no' : req.sub}`,
   ]
+  if (o.uiDir) {
+    // BingeBandit's own controls (mpv-scripts/bingebandit.lua) instead of mpv's.
+    args.push(
+      `--script=${path.join(o.uiDir, 'bingebandit.lua')}`,
+      `--osd-fonts-dir=${path.join(o.uiDir, 'fonts')}`,
+      '--osc=no',
+      '--osd-bar=no',
+      '--osd-font=Inter',
+    )
+  }
   if (o.headers.length) args.push(`--http-header-fields=${o.headers.join(',')}`)
   if (o.fullscreen) args.push('--fullscreen')
   args.push('--', req.url)
   return args
+}
+
+/** The folder with BingeBandit's player controls for mpv. */
+function findUi(resourcesPath) {
+  const dirs = [resourcesPath && path.join(resourcesPath, 'mpv-scripts'), path.join(__dirname, '..', 'mpv-scripts')]
+  return dirs.find((d) => d && fs.existsSync(path.join(d, 'bingebandit.lua'))) ?? ''
 }
 
 /** Where mpv is: a bundled copy first, then one the person set, then PATH. */
@@ -67,7 +86,9 @@ function findMpv(resourcesPath, configured) {
  * One running mpv. Emits 'event' with plain objects for the page:
  *   { type: 'time', position, duration, paused }  about once a second while playing, and on pause/seek
  *   { type: 'end' }                                 the file played to its end (mpv stays open, idle)
- *   { type: 'key', name }                           a BingeBandit key from input.conf (bb-enter, bb-next)
+ *   { type: 'key', name, arg }                      a BingeBandit key or menu pick from the controls
+ *                                                   (bb-enter, bb-next, bb-pick <id>, bb-channel up|down)
+ *   { type: 'buffering', on }                       playback stopped to fill the cache, or went on again
  *   { type: 'closed', position }                    mpv quit (Back, closing the window, or stop())
  *   { type: 'error', message }
  */
@@ -75,12 +96,13 @@ class Mpv extends EventEmitter {
   /**
    * @param {string} binary
    * @param {PlayRequest} req
-   * @param {{ headers: string[], configDir: string, fullscreen: boolean }} o
+   * @param {{ headers: string[], configDir: string, fullscreen: boolean, uiDir?: string }} o
    */
   constructor(binary, req, o) {
     super()
     this.ipc = ipcPath()
-    this.position = req.start
+    this.hasUi = !!o.uiDir
+    this.position = req.start ?? 0
     this.duration = 0
     this.paused = false
     this.closed = false
@@ -94,6 +116,10 @@ class Mpv extends EventEmitter {
     this.pendingSub = req.subUrl
     /** @type {net.Socket | null} */
     this.sock = null
+    /** @type {{ line: string, id: number }[]} commands sent before the pipe connected */
+    this.queued = []
+    /** @type {Map<string, string>} the last state and menu sent to the controls, sent again if they start late */
+    this.lastUi = new Map()
     this.proc = spawn(binary, mpvArgs(req, { ...o, ipc: this.ipc }), { stdio: 'ignore', windowsHide: false })
     this.proc.on('error', (err) => {
       this.emit('event', { type: 'error', message: `Couldn't start mpv (${binary}): ${err.message}` })
@@ -124,6 +150,8 @@ class Mpv extends EventEmitter {
       this.send(['observe_property', 1, 'time-pos'])
       this.send(['observe_property', 2, 'pause'])
       this.send(['observe_property', 3, 'duration'])
+      this.send(['observe_property', 4, 'paused-for-cache'])
+      for (const q of this.queued.splice(0)) sock.write(q.line)
       // The file may already be playing (its first playback-restart came
       // before this connection): then it's past the resume seek.
       this.send(['get_property', 'seeking']).then((r) => {
@@ -162,6 +190,8 @@ class Mpv extends EventEmitter {
           this.sendTime()
         } else if (m.name === 'duration' && typeof m.data === 'number') {
           this.duration = m.data
+        } else if (m.name === 'paused-for-cache') {
+          this.emit('event', { type: 'buffering', on: !!m.data })
         }
         break
       case 'file-loaded':
@@ -180,8 +210,10 @@ class Mpv extends EventEmitter {
         else if (m.reason === 'error') this.emit('event', { type: 'error', message: `mpv couldn't play this file (${m.file_error || 'error'}).` })
         break
       case 'client-message':
-        if (Array.isArray(m.args) && typeof m.args[0] === 'string' && m.args[0].startsWith('bb-')) {
-          this.emit('event', { type: 'key', name: m.args[0] })
+        if (Array.isArray(m.args) && m.args[0] === 'bb-ui-ready') {
+          for (const [name, arg] of this.lastUi) this.send(['script-message-to', 'bingebandit', name, arg])
+        } else if (Array.isArray(m.args) && typeof m.args[0] === 'string' && m.args[0].startsWith('bb-')) {
+          this.emit('event', { type: 'key', name: m.args[0], arg: typeof m.args[1] === 'string' ? m.args[1] : '' })
         }
         break
     }
@@ -195,11 +227,14 @@ class Mpv extends EventEmitter {
 
   /** @param {unknown[]} command */
   send(command) {
-    if (!this.sock || this.closed) return Promise.resolve(null)
+    if (this.closed) return Promise.resolve(null)
     const id = this.nextId++
+    const line = JSON.stringify({ command, request_id: id }) + '\n'
     return new Promise((resolve) => {
       this.waiting.set(id, resolve)
-      this.sock?.write(JSON.stringify({ command, request_id: id }) + '\n')
+      // Before the pipe is up, wait for it (connect() sends these first).
+      if (this.sock) this.sock.write(line)
+      else this.queued.push({ line, id })
     })
   }
 
@@ -209,13 +244,26 @@ class Mpv extends EventEmitter {
    */
   async load(req) {
     this.ready = false
-    this.position = req.start
+    this.position = req.start ?? 0
     this.pendingSub = req.subUrl
-    await this.send(['set_property', 'start', String(Math.max(0, Math.floor(req.start)))])
+    await this.send(['set_property', 'start', startArg(req)])
     await this.send(['set_property', 'aid', String(req.audio)])
     await this.send(['set_property', 'sid', req.subUrl ? 'no' : String(req.sub)])
     await this.send(['set_property', 'title', req.title])
     await this.send(['loadfile', req.url, 'replace'])
+  }
+
+  /**
+   * Tells BingeBandit's controls (bingebandit.lua) what to show: 'bb-state'
+   * with the title and prompts, 'bb-menu' with the page's menu entries,
+   * 'bb-toast' with a message.
+   * @param {'bb-state' | 'bb-menu' | 'bb-toast' | 'bb-menu-open'} name
+   * @param {unknown} [value]
+   */
+  ui(name, value) {
+    const arg = typeof value === 'string' ? value : JSON.stringify(value ?? null)
+    if (name === 'bb-state' || name === 'bb-menu') this.lastUi.set(name, arg)
+    return this.send(['script-message-to', 'bingebandit', name, arg])
   }
 
   quit() {
@@ -229,9 +277,11 @@ class Mpv extends EventEmitter {
     if (this.closed) return
     this.closed = true
     this.sock?.destroy()
+    for (const resolve of this.waiting.values()) resolve(null)
+    this.waiting.clear()
     if (process.platform !== 'win32') fs.rm(this.ipc, { force: true }, () => undefined)
     this.emit('event', { type: 'closed', position: this.position })
   }
 }
 
-module.exports = { Mpv, mpvArgs, findMpv }
+module.exports = { Mpv, mpvArgs, findMpv, findUi }

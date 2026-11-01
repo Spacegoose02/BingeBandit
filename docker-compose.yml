@@ -7,6 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "8484:8484"
+    # To cast to Chromecasts and DLNA TVs, the server has to see them on the
+    # network: use host networking instead of the port above, or list the
+    # TVs under Admin → Settings → Casting.
+    # network_mode: host
     volumes:
       - ./config:/config
       - /path/to/movies:/media/movies:ro

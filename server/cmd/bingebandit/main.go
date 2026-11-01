@@ -105,6 +105,7 @@ func main() {
 		FFmpeg:     cfg.FFmpeg,
 		FFprobe:    cfg.FFprobe,
 		UpdateRepo: cfg.UpdateRepo,
+		ListenAddr: cfg.Addr,
 	}
 	srv.Plugins = plugins.NewHost(st, []string{cfg.PluginsDir, filepath.Join(cfg.DataDir, "plugins")},
 		filepath.Join(cfg.DataDir, "plugin-data"), loopbackURL(cfg.Addr))

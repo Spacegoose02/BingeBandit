@@ -59,6 +59,7 @@ type Server struct {
 	FFmpeg     string
 	FFprobe    string
 	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
+	ListenAddr string // where the server listens (":8484"), for the address TVs are sent
 
 	updates     appUpdates
 	tvApp       tvApp
@@ -87,7 +88,10 @@ type Server struct {
 	sportsWake chan struct{}
 	health     healthState
 	alerts     alertHistory
+	casts      castManager
 	chapters   chapterCache
+	// offline makes download copies for the phone app (offline.go).
+	offline offlineCopies
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -181,6 +185,11 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/notifications", s.notifications)
 			r.Post("/notifications/read", s.readNotifications)
 			r.Delete("/notifications", s.clearNotifications)
+			r.Get("/push", s.pushStatus)
+			r.Post("/push/devices", s.addPushDevice)
+			r.Put("/push/devices/{id}", s.setPushDevice)
+			r.Delete("/push/devices/{id}", s.deletePushDevice)
+			r.Post("/push/test", s.testPush)
 			r.Get("/me/prefs", s.getPrefs)
 			r.Get("/me/pins", s.pins)
 			r.Put("/me/pins", s.setPins)
@@ -318,8 +327,21 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
 			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
+			r.Post("/files/{id}/offline", s.prepareOffline)
+			r.Get("/offline/{key}", s.offlineFile)
+			r.Post("/offline/check", s.checkOffline)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
+			// TVs being cast to ask what a link is before opening it.
+			r.Head("/files/{id}/direct", s.directPlay)
+			r.Head("/transcode/{sid}/{name}", s.transcodeFile)
+
+			r.Get("/cast/devices", s.castDeviceList)
+			r.Post("/cast/start", s.castStart)
+			r.Get("/cast/sessions", s.castSessionList)
+			r.Get("/cast/sessions/{id}", s.castSessionGet)
+			r.Post("/cast/sessions/{id}", s.castSessionControl)
+			r.Delete("/cast/sessions/{id}", s.castSessionStop)
 
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(requireAdmin)

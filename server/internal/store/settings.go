@@ -103,6 +103,11 @@ const (
 	SettingAlertDiskSpace    = "alert_disk_space"  // a drive is nearly full
 	SettingDiskLowPercent    = "disk_low_percent"  // free space below this is "nearly full"
 	SettingUpdateCheck       = "update_check"      // look for new server versions once a day
+
+	// Casting to TVs. The server finds them itself; these are for when it
+	// can't (Docker in bridge mode).
+	SettingCastURL     = "cast_url"     // the address TVs reach the server at, e.g. http://192.168.1.10:8484; empty = worked out
+	SettingCastDevices = "cast_devices" // TV and Chromecast addresses to look for besides the ones found, one per line
 )
 
 var SettingDefaults = map[string]string{
@@ -194,6 +199,8 @@ var SettingDefaults = map[string]string{
 	SettingAlertDiskSpace:    "true",
 	SettingDiskLowPercent:    "5",
 	SettingUpdateCheck:       "true",
+	SettingCastURL:           "",
+	SettingCastDevices:       "",
 }
 
 func (s *Store) Setting(key string) string {

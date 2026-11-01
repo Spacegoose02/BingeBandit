@@ -52,15 +52,16 @@ func requireLiveTV(next http.Handler) http.Handler {
 // Cookie-authenticated writes must carry X-Requested-With to block CSRF.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token, viaCookie := "", false
+		token, viaCookie, viaQuery := "", false, false
 		if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 			token = strings.TrimPrefix(h, "Bearer ")
 		} else if c, err := r.Cookie(cookieName); err == nil {
 			token, viaCookie = c.Value, true
-		} else if r.Method == http.MethodGet {
+		} else if r.Method == http.MethodGet || r.Method == http.MethodHead {
 			// Plex adds "?transcode=…" to tuner stream links even when they
 			// already have a query, which lands in the token.
 			token, _, _ = strings.Cut(r.URL.Query().Get("token"), "?")
+			viaQuery = true
 		}
 		u, err := s.Store.UserBySession(token)
 		session := token
@@ -68,6 +69,12 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			// API keys work wherever a session token does (apps, scripts, playlist links).
 			u, err = s.Store.UserByAPIKey(token)
 			session = ""
+		}
+		if err != nil && viaQuery {
+			// A TV being cast to, opening the cast's media.
+			if cu := s.castTokenUser(token, r.URL.Path); cu != nil {
+				u, err = cu, nil
+			}
 		}
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "not signed in")

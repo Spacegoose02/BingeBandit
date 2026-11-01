@@ -297,7 +297,7 @@ export default function AdminSettings() {
           </p>
           <label className="check">
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
-            Let users download original files
+            Let users download files (original files on the web, offline downloads in the phone app)
           </label>
           <label className="check">
             <input type="checkbox" checked={s.recommendations_enabled !== 'false'} onChange={set('recommendations_enabled')} />
@@ -490,6 +490,24 @@ export default function AdminSettings() {
               If you use Nginx, Caddy, Traefik or a Cloudflare tunnel, list its address here so BingeBandit sees the real client address and https.
               Only list proxies you run: their X-Forwarded-For headers are believed.
             </span>
+          </label>
+        </section>
+
+        <section className="panel form">
+          <h3>Casting</h3>
+          <p className="muted small">
+            People can play titles on Chromecasts, Google TVs and DLNA smart TVs from the web and phone apps. The server finds them on its own network
+            and sends them the video. In Docker, that needs host networking; otherwise list the TVs here and set the address they reach the server at.
+          </p>
+          <label>
+            Address TVs reach this server at
+            <input className="mono" value={s.cast_url ?? ''} onChange={set('cast_url')} placeholder="e.g. http://192.168.1.10:8484 (optional)" spellCheck={false} />
+            <span className="muted small">Leave empty to use this machine's own address on the TV's network.</span>
+          </label>
+          <label>
+            TVs to look for by address
+            <textarea className="mono" rows={3} value={s.cast_devices ?? ''} onChange={(e) => setS({ ...s, cast_devices: e.target.value })} placeholder={'192.168.1.50\n192.168.1.51'} spellCheck={false} />
+            <span className="muted small">One IP address per line, for TVs the server can't find by itself. Giving TVs fixed addresses in your router helps.</span>
           </label>
         </section>
 

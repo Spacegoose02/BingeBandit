@@ -64,9 +64,14 @@ Rules:
 | POST | `/me/trakt/connect`, `/me/trakt/poll` | Connect Trakt: show `userCode` and `verificationUrl`, then poll (202 while waiting, 200 when connected). |
 | POST | `/me/trakt/import`, `/me/trakt/push` | Import your Trakt history; send plays to Trakt (`{all: true}` includes plays from before connecting). |
 | PUT / DELETE | `/me/trakt` | `{autoSync}`; disconnect. |
-| GET | `/notifications` | `{notifications, unread}`: your newest 50 (`kind` is `episodes` or `recording`; `link` is a web app path). Kept for 60 days. |
+| GET | `/notifications` | `{notifications, unread}`: your newest 50 (`kind` is `episodes`, `recording`, `sports`, `live`, `request` or `server`; `link` is a web app path). Each also goes to your push devices. Kept for 60 days. |
 | POST | `/notifications/read` | `{ids: [...]}` marks those read; `{}` marks all read. |
 | DELETE | `/notifications` | Clears yours. |
+| GET | `/push` | `{publicKey, devices, kinds}`: the VAPID key to subscribe with (`applicationServerKey`), your devices (`{id, endpoint, device, kindsOff, createdAt, lastUsed}`) and the kinds a device can turn off (`request`, `sports`, `together`, `live`, `episodes`, `recording`, `server`). |
+| POST | `/push/devices` | `{endpoint, keys: {p256dh, auth}, device, kindsOff}` (a `PushSubscription.toJSON()` plus a name) turns push on for a browser; the endpoint must be https on a known push service (Google, Mozilla, Apple, Microsoft). The same endpoint again updates it and moves it to you. At most 30 per person. |
+| PUT | `/push/devices/{id}` | `{kindsOff}` |
+| DELETE | `/push/devices/{id}` | Forgets one of your devices. |
+| POST | `/push/test` | Sends a test to each of your devices: `{results: {"<id>": "sent" or the error}}`. A device whose push service says it's gone is removed. |
 | GET | `/activity/friends` | What people who share are watching now. |
 | GET / PUT / DELETE | `/me/passcode` | Settings passcode: `{set, unlocked, unlockedUntil}`; PUT `{passcode}` (4–8 digits); DELETE removes it. |
 | POST | `/me/passcode/unlock`, `/me/passcode/lock` | `{passcode}` or `{password}` unlocks this session's settings for 15 minutes of use. While locked, `/admin/*`, account changes under `/me` and profile management answer **423**. |
@@ -129,7 +134,10 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/files/{id}/direct` | The original file, with range requests. Use when the client can play the codec. Away from home, a file above the admin's quality limit answers 403 (convert it instead) and going over the admin's stream limit answers 429 with a message to show. |
 | GET | `/files/{id}/audio?start=` | A song or chapter converted to MP3 from `start` seconds, for players that can't play the file as it is; seek by asking again. Photos from `/files/{id}/direct` don't count against the stream limits. |
 | POST | `/files/{id}/transcode` | `{start, maxHeight, bitrateKbps, audioStream, burnSubtitle, replace, audioCodecs, maxAudioChannels, adaptive}` (all optional; `-1` = default track / none) → `{session, playlist}`: open `playlist` as HLS. Pass the old `session.id` as `replace` when seeking. `audioCodecs` lists what the client plays inside HLS (`aac`, `ac3`, `eac3`, `mp3`) and `maxAudioChannels` how many channels it outputs: a matching source track is copied untouched, other surround tracks become AAC 5.1 when `maxAudioChannels` ≥ 6, and everything else (or a client that sends neither) gets AAC stereo. `session.audioCodec`, `audioChannels` and `audioCopy` say what was chosen. With `adaptive: true`, when the admin has turned on adaptive streaming and the video has to be converted anyway, `playlist` is a master playlist with up to three qualities (`session.variants`, best first). Away from home the admin's quality limit caps the video (files above it are converted down) and a new session over the stream limit answers 429; `replace` sessions aren't new streams. |
-| GET | `/transcode/{sid}/{name}` | HLS playlist and segments. |
+| POST | `/files/{id}/offline` | Offline download for the phone app. `{height, audioStream, burnSubtitle}`: `height` 0 is the original file, otherwise a one-off MP4 copy (H.264, stereo AAC) no taller than that, made in the background with `audioStream` and an image subtitle `burnSubtitle` burned in (`-1` = default track / none). → `{status, progress, url, size, height, error}`: `status` is `ready` (download `url`, which takes range requests), `queued` or `preparing` (`progress` 0..1; ask again), or `failed` (asking again retries). Same rules as `/files/{id}/direct?download=1`: admins, or everyone when the admin allows downloads (403 otherwise), and only titles the profile can see. Copies nobody asks for in 7 days are deleted. |
+| GET | `/offline/{key}` | A finished copy from `/files/{id}/offline` (its `url`). Checks downloads and access again; 404 when it has been cleared (ask for it again). |
+| POST | `/offline/check` | `{items: [itemId…]}` → `{canDownload, allowed: [itemId…]}`: which downloaded titles the profile may keep. The phone app deletes the others (downloads turned off, a library taken away, a kid approval removed). |
+| GET | `/transcode/{sid}/{name}` | HLS playlist and segments. `stream.ts` is the whole conversion as one MPEG-TS stream, following it as it goes (for DLNA TVs). |
 | DELETE | `/transcode/{sid}` | Stop a transcode when the viewer leaves. |
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |
 | GET | `/files/{id}/subtitles/search?lang=` | Search OpenSubtitles for the file (`lang` is a language name or code, English by default) → `{language, results: [{fileId, name, language, downloads, hearingImpaired, hashMatch, trusted, ai}]}`, best first. 409 without an API key in Settings; 403 for kid profiles. |
@@ -139,6 +147,19 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/files/{id}/trickplay/{n}.jpg` | Sheet `n` (from 0) of thumbnails. |
 | GET | `/files/{id}/trickplay.bif?from=` | The thumbnails as a Roku BIF file; `from` is where a conversion started, in seconds. |
 | POST | `/progress` | `{playSessionId, itemId, fileId, position, duration, paused, stopped, mode, client, played}`. Send every ~10 s while playing and once with `stopped: true`. `played` is the total seconds actually played in this play session (the server caps it at wall-clock time). Optional `lights: false` keeps Hue Sync and other light plugins off this player (left out means on). This drives resume points, watched state, Now Playing, history and webhooks. A new session's first report answers 429 when it puts the account over the stream limit away from home. |
+
+### Casting to TVs
+
+The server plays on Chromecasts, Google TVs and DLNA smart TVs on its network; the app that starts a cast is only its remote. TVs open the media with a `?token=` that only reaches that cast's file, its conversion and artwork, and stops working when the cast ends.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/cast/devices?refresh=1` | `{devices: [{id, name, kind, model, host}]}`, `kind` `chromecast` or `dlna`. Found by mDNS and SSDP (about 2.5 s) plus the admin's `cast_devices` addresses, and kept for a minute; `refresh=1` looks again. |
+| POST | `/cast/start` | `{deviceId, itemId, fileId?, start?, audioStream?}` (a movie or episode; `start` in seconds) → a cast: `{id, device, itemId, fileId, title, subtitle, poster, duration, position, state, volume, mode, error, started}`. `state` is `loading`, `playing`, `paused`, `idle` or `finished`; `volume` is 0–1 (Chromecast) or -1; `mode` is `direct` (MP4 with 8-bit H.264 and AAC/MP3 up to 1080p) or `transcode` (HLS for Chromecasts, one MPEG-TS stream for DLNA). A new cast to a TV ends the one already on it. 502 with the TV's reason when it won't play. |
+| GET | `/cast/sessions` | `{sessions: [...]}`: your casts. The server follows each TV, saves the position like `/progress` (client "Cast to *TV name*") and ends the cast when the TV stops or finishes. |
+| GET | `/cast/sessions/{id}` | One cast; 404 once it ended. |
+| POST | `/cast/sessions/{id}` | `{action: "play" \| "pause" \| "seek" \| "volume" \| "audio", position?, level?, audioStream?}` → the cast. Seeking a conversion starts a new one there and reloads the TV. `volume` is Chromecast only (400 for DLNA). |
+| DELETE | `/cast/sessions/{id}` | Stop playing on the TV. |
 
 ## Live TV and DVR
 

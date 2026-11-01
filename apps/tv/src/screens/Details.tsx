@@ -4,7 +4,9 @@ import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { ItemMenuContext, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
-import type { Credit, Item, ItemDetail } from '../types'
+import type { Credit, Item, ItemDetail, MediaFile } from '../types'
+import { addDownloads, downloaded, downloadFor, downloadsSupported, estimateBytes, formatBytes, useDownloads } from '../downloads'
+import { canDirectPlay } from './Player'
 
 /** A resume point as a clock: 4:05, or 1:35:12 past an hour. */
 function fmtClock(t: number) {
@@ -28,6 +30,8 @@ export default function Details({ id }: { id: number }) {
   const [d, setD] = useState<ItemDetail | null>(() => cached<ItemDetail>(`/api/items/${id}`) ?? null)
   const [error, setError] = useState('')
   const [failed, setFailed] = useState('') // a button's change that didn't save
+  useDownloads() // redraw as a download moves along
+  const [picking, setPicking] = useState(false) // choosing a download quality
 
   const load = useCallback(() => {
     writesDone()
@@ -74,6 +78,9 @@ export default function Details({ id }: { id: number }) {
   const fullyWatched = playable ? !!it.watch?.watched : !!it.childCount && !it.unwatchedCount
   // Seasons and episodes show their show's cast.
   const cast = ((it.kind === 'season' || it.kind === 'episode' ? d.show?.credits : it.credits) ?? []).filter((c) => c.kind === 'cast').slice(0, 30)
+  // Phones save movies, episodes and whole seasons to watch offline.
+  const episodes = it.kind === 'season' ? (d.children ?? []).filter((c) => c.kind === 'episode') : []
+  const canSave = isPhone && downloadsSupported && !!d.canDownload && ((playable && !!d.files?.length) || episodes.length > 0)
   const heading = it.kind === 'episode' ? `${it.showTitle ?? d.show?.title ?? ''}` : it.kind === 'season' ? d.show?.title ?? '' : ''
 
   return (
@@ -98,9 +105,11 @@ export default function Details({ id }: { id: number }) {
                 label={resume ? `Resume from ${fmtClock(resume)}` : playable ? 'Play' : `Play S${target.seasonNumber} E${target.episodeNumber}`}
                 primary
                 preferFocus
-                onPress={() => nav.push({ name: 'player', id: target.id, start: resume })}
+                // A title on this phone plays from the download, saving data.
+                onPress={() => nav.push({ name: 'player', id: target.id, start: resume, offline: !!downloaded(target.id) || undefined })}
               />
-              {resume > 0 && <Button label="From the start" onPress={() => nav.push({ name: 'player', id: target.id, start: 0 })} />}
+              {resume > 0 && <Button label="From the start" onPress={() => nav.push({ name: 'player', id: target.id, start: 0, offline: !!downloaded(target.id) || undefined })} />}
+              {isPhone && <Button label="Play on a TV" onPress={() => nav.push({ name: 'cast', id: target.id, start: resume })} />}
             </>
           ) : (
             !d.children?.length && <Text style={st.muted}>Nothing to play here yet.</Text>
@@ -118,7 +127,18 @@ export default function Details({ id }: { id: number }) {
             label={fullyWatched ? 'Mark unwatched' : 'Mark watched'}
             onPress={() => change(api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`))}
           />
+          {canSave && <DownloadButton item={it} episodes={episodes} onPick={() => setPicking((p) => !p)} />}
         </View>
+        {canSave && picking && (
+          <DownloadChoices
+            file={playable ? d.files?.[0] : undefined}
+            onPick={(h) => {
+              setPicking(false)
+              addDownloads(playable ? [it] : episodes, h)
+            }}
+            onCancel={() => setPicking(false)}
+          />
+        )}
         {!!failed && <Text style={st.error}>{failed}</Text>}
 
         {it.kind === 'show' && !!d.children?.length && (
@@ -180,6 +200,45 @@ export default function Details({ id }: { id: number }) {
         ))}
       </ScrollView>
     </ImageBackground>
+  )
+}
+
+/** Download, or how the download is going (tapping it then opens Downloads). */
+function DownloadButton({ item, episodes, onPick }: { item: Item; episodes: Item[]; onPick: () => void }) {
+  const nav = useNav()
+  if (item.kind === 'season') {
+    const dls = episodes.map((e) => downloadFor(e.id))
+    const have = dls.filter((x) => x?.state === 'done').length
+    const going = dls.some((x) => x && x.state !== 'done' && x.state !== 'failed')
+    if (have === episodes.length) return <Button label="Season downloaded ✓" onPress={() => nav.push({ name: 'downloads' })} />
+    if (going) return <Button label={`Downloading season · ${have} of ${episodes.length}`} onPress={() => nav.push({ name: 'downloads' })} />
+    return <Button label={have ? `Download the other ${episodes.length - have}` : 'Download season'} onPress={onPick} />
+  }
+  const dl = downloadFor(item.id)
+  if (!dl || dl.state === 'failed') return <Button label={dl ? 'Download failed · try again' : 'Download'} onPress={onPick} />
+  if (dl.state === 'done') return <Button label="Downloaded ✓" onPress={() => nav.push({ name: 'downloads' })} />
+  const pct = dl.state === 'downloading' && dl.total ? ` ${Math.round((dl.done / dl.total) * 100)}%` : ''
+  return <Button label={dl.state === 'paused' ? 'Download paused' : `Downloading${pct}`} onPress={() => nav.push({ name: 'downloads' })} />
+}
+
+/** The download qualities: the original when this phone plays it, or a smaller converted copy. */
+function DownloadChoices({ file, onPick, onCancel }: { file?: MediaFile; onPick: (height: number) => void; onCancel: () => void }) {
+  const heights = [1080, 720, 480].filter((h) => !file?.height || h <= file.height)
+  if (!heights.length) heights.push(480)
+  const size = (h: number) => (file?.duration ? ` · ${formatBytes(estimateBytes(file, h))}` : '')
+  const original = !file || canDirectPlay(file, -1)
+  return (
+    <View>
+      <Text style={st.muted}>Download quality{file ? '' : ' for each episode'}</Text>
+      <View style={st.buttons}>
+        {original && <Button small label={`Original${file?.size ? ` · ${formatBytes(file.size)}` : ''}`} onPress={() => onPick(0)} />}
+        {heights.map((h, i) => (
+          <Button key={h} small primary={i === 0} label={`${h}p${size(h)}`} onPress={() => onPick(h)} />
+        ))}
+        <Button small label="Cancel" onPress={onCancel} />
+      </View>
+      {!!file && <Text style={st.muted}>Converted copies are made by the server first, then saved.</Text>}
+    </View>
   )
 }
 

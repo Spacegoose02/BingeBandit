@@ -67,8 +67,21 @@ func TestWatchTogether(t *testing.T) {
 	if code, _ := call("host-token", "POST", "/api/together/"+id+"/invite", `{"userIds":[`+itoa(outsider.ID)+`]}`); code != http.StatusBadRequest {
 		t.Errorf("inviting someone who isn't allowed: %d", code)
 	}
+	// The guest's phone gets the invitation as a push too.
+	fake := newFakePushService(t)
+	oldAllowed, oldClient := pushHostAllowed, pushClient
+	pushHostAllowed, pushClient = func(string) bool { return true }, fake.Client()
+	defer func() { pushHostAllowed, pushClient = oldAllowed, oldClient }()
+	if code, _ := call("guest-token", "POST", "/api/push/devices", mustJSON(fake.subscribe("/guest-phone"))); code != http.StatusOK {
+		t.Fatalf("guest push: %d", code)
+	}
 	if code, _ := call("host-token", "POST", "/api/together/"+id+"/invite", `{"userIds":[`+itoa(guest.ID)+`]}`); code != http.StatusNoContent {
 		t.Errorf("invite: %d", code)
+	}
+	waitFor(t, "invite push", func() bool { return len(fake.messages("/guest-phone")) == 1 })
+	if m := fake.messages("/guest-phone")[0]; m.Kind != "together" || m.Title != "host invited you to watch together" || m.Body != "Heist" ||
+		m.Link != "/play/"+itoa(movie)+"?together="+id {
+		t.Fatalf("invite push %+v", m)
 	}
 	req, _ := http.NewRequest("GET", srv.URL+"/api/together/invites", nil)
 	req.Header.Set("Authorization", "Bearer guest-token")

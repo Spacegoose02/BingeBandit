@@ -237,7 +237,7 @@ func (s *Server) notifyAdminsOfRequest(t *store.TitleRequest, from *store.User) 
 		}
 		n := &store.Notification{UserID: a.ID, Kind: "request", Title: personName(from) + " requested " + yearTitle(t),
 			Body: t.Note, Link: "/requests", Image: t.Poster}
-		if err := s.Store.AddNotification(n); err != nil {
+		if err := s.notify(n); err != nil {
 			slog.Warn("notification", "err", err)
 		}
 	}
@@ -375,7 +375,7 @@ func (s *Server) notifyRequesters(t *store.TitleRequest, title, body, link strin
 				n.Link = "/item/" + strconv.FormatInt(items[0].ID, 10)
 			}
 		}
-		if err := s.Store.AddNotification(n); err != nil {
+		if err := s.notify(n); err != nil {
 			slog.Warn("notification", "err", err)
 		}
 	}

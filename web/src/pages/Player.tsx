@@ -5,7 +5,7 @@ import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
-import { desktop } from '../desktop'
+import { desktop, desktopCan } from '../desktop'
 import DesktopPlayer from './DesktopPlayer'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
@@ -16,6 +16,7 @@ import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
 import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
+import { CastPicker } from '../components/Cast'
 
 const LADDER = [2160, 1080, 720, 480]
 
@@ -82,16 +83,18 @@ export default function Player() {
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
   if (!data || !prefs || !joined || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
   if (isMovie && preRoll && preRoll !== 'done') return <PreRoll data={preRoll} movieTitle={data.item.title} onDone={preRollDone} />
-  // In the Windows app, mpv plays the file (not in a watch party, which needs the web player).
-  if (desktop && !joined.roomId) {
+  // In the Windows app, mpv plays the file. Watch parties too, unless the app
+  // is older than Watch Together in mpv.
+  if (desktop && (!joined.roomId || desktopCan('together'))) {
     return (
       <DesktopPlayer
         key={id}
         detail={data}
         prefs={prefs}
-        startAt={startAt}
+        startAt={joined.roomId ? joined.start : startAt}
         fileId={Number(params.get('file')) || 0}
         playlistId={playlistId}
+        together={joined}
       />
     )
   }
@@ -264,6 +267,7 @@ function PlayerView({
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
   const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch' | 'chapters'>(null)
+  const [casting, setCasting] = useState(false) // picking a TV to carry on there
   const menuRef = useRef(menu)
   menuRef.current = menu
   // Seconds the subtitles are moved: positive shows them later.
@@ -1001,6 +1005,11 @@ function PlayerView({
               )}
             </div>
           )}
+          {!roomId && (
+            <button className="icon-btn" onClick={() => setCasting(true)} aria-label="Play on a TV" title="Play on a TV">
+              <Icon name="cast" size={22} />
+            </button>
+          )}
           <div className="menu-anchor">
             <button
               className={`icon-btn ${roomId ? 'active' : ''}`}
@@ -1122,6 +1131,21 @@ function PlayerView({
             </div>
           </div>
         </div>
+      )}
+      {casting && file && (
+        <CastPicker
+          itemId={item.id}
+          fileId={file.id}
+          start={position()}
+          audioStream={choice.audio}
+          onClose={() => setCasting(false)}
+          onStarted={() => {
+            // The TV carries on from here; this player stops (its cleanup
+            // saves the position and ends any conversion).
+            videoRef.current?.pause()
+            nav(`/item/${item.id}`, { replace: true })
+          }}
+        />
       )}
     </div>
   )
