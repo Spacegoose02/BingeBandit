@@ -907,4 +907,20 @@ CREATE TABLE network_channels (
 	PRIMARY KEY (network, channel_id)
 );
 `,
+	// 53: browsers (and installed web apps on phones) that get push
+	// notifications for a user, with the kinds each one has turned off.
+	`
+CREATE TABLE push_subscriptions (
+	id         INTEGER PRIMARY KEY,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	endpoint   TEXT NOT NULL UNIQUE,
+	p256dh     TEXT NOT NULL,
+	auth       TEXT NOT NULL,
+	device     TEXT NOT NULL DEFAULT '',
+	kinds_off  TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	last_used  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX push_subscriptions_user ON push_subscriptions(user_id);
+`,
 }

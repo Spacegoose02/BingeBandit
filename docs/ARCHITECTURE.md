@@ -30,6 +30,7 @@
 | `server/internal/livetv` | Live TV: M3U/XMLTV import, the channel relay and failover (`relay.go`, `pace.go`), DVR, custom channels, Dispatcharr import, logos, YouTube links through yt-dlp |
 | `server/internal/importer` | Plex/Tautulli import, list and chart sources for collections (MDBList, TMDB, Trakt, IMDb, Yamtrack), Kometa import, default collections |
 | `server/internal/trakt` | Trakt device sign-in and history sync |
+| `server/internal/webpush` | Web Push to browsers: aes128gcm encryption (RFC 8291) and VAPID signing (RFC 8292), standard library only. `api/push.go` stores subscriptions and sends every notification through `Server.notify` |
 | `server/internal/plugins` | Plugin host: runs, pairs and proxies out-of-process plugins, and the plugin catalogue |
 | `server/internal/sports` | ESPN scoreboards and the tracker that sends game events |
 | `server/internal/discover` | YouTube playlists and channels for the Discover page |

@@ -67,6 +67,17 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Push notifications to phones and browsers (2026-11-01, migration 53)
+
+Notifications now also arrive as Web Push messages with BingeBandit closed: finished requests, game alerts, Watch Together invites, and every other kind under the bell.
+
+- **Migration 53:** `push_subscriptions` (endpoint unique, keys, device name, `kinds_off`). Store: `store/push.go`. If another branch takes 53 first, renumber this one; nothing else depends on the number.
+- **`internal/webpush`:** encryption (RFC 8291 aes128gcm) and VAPID (RFC 8292, ES256 JWT), no new dependencies. The VAPID key pair is made on first use and kept in internal settings `push_vapid_public`/`push_vapid_private` (not in `SettingDefaults`, so admin settings never show it).
+- **API** (`api/push.go`, routes under `/api/push`, not `/api/me/` so the settings passcode doesn't block it): list, add, change kinds, remove, test. `Server.notify` replaces every `Store.AddNotification` call in `api/`: it stores the notification and pushes it to the user's devices that haven't turned that kind off. Watch Together invites are push-only (`pushTogetherInvite`; the web banner still covers open apps), linking to `/play/{id}?together={room}`. Only https endpoints on known push services (`pushHosts`: Google, Mozilla, Apple, Microsoft) are accepted, so a subscription can't aim the server at the home network. 404/410 from a push service removes the device.
+- **Web:** `public/sw.js` (shows and opens notifications, no caching), `src/push.ts`, `components/PushSettings.tsx` on the Account page. Signing out turns push off for that browser. Browsers need https (or localhost); iPhones need the Home Screen app. Not offered in the Windows app.
+- **Not covered:** the TV/phone app and Roku (native push would need Firebase/Apple accounts). Phones get push through their browser or the installed web app.
+- **Tested:** `internal/webpush` round trip (a fake browser decrypts and verifies the VAPID signature), `TestPushNotifications` (per-device kinds, other users, gone devices, moving a browser between accounts, refused endpoints), invite push in `TestWatchTogether`, `sw.js` handlers under Node, full `go vet`/`go test`, the web build, and the Account panel in Chromium. A push to a made-up FCM address got FCM's "gone" answer. **Not tried:** a real delivery to a phone or desktop browser (headless Chromium has no push service), Safari/iOS, Firefox.
+
 ## Sports: games on the right local channel, Admin → Live TV → Networks (2026-11-01, migration 52, v0.40.0)
 
 Michael reported Sports games landing on the wrong channels: CBS games not on WDBJ, NBC not on WSLS (Roanoke locals). Cause: `findChannels` (`api/sports.go`) never used the network ESPN lists (`Game.Broadcasts`). It only looked for a guide programme near kick-off naming both teams, so a local whose guide says "SEC on CBS" never matched, while other cities' CBS stations, replays or preview shows that named the teams did, and the first six matches by channel number filled the list.
