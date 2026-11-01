@@ -137,9 +137,13 @@ func TestTitleRequests(t *testing.T) {
 		t.Fatalf("after it arrived: %+v", got)
 	}
 	for _, uid := range []int64{sam.ID, ivy.ID} {
-		n := unread(uid)
-		if len(n) == 0 || n[0].Link != "/item/"+itoa(movie) || !strings.Contains(n[0].Title, "ready to watch") {
-			t.Errorf("user %d told: %+v", uid, n)
+		var ready, approved bool
+		for _, n := range unread(uid) {
+			ready = ready || (n.Link == "/item/"+itoa(movie) && strings.Contains(n.Title, "ready to watch"))
+			approved = approved || strings.Contains(n.Title, "Request approved")
+		}
+		if !ready || !approved {
+			t.Errorf("user %d told: ready %v, approved %v", uid, ready, approved)
 		}
 	}
 	// A title already on the server can't be requested again.

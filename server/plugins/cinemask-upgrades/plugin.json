@@ -1,6 +1,6 @@
 {
   "id": "cinemask-upgrades",
   "name": "Cinemask Upgrades",
-  "description": "Finds movies and episodes below the quality you want and searches Cinemask for better copies, and fetches approved title requests.",
+  "description": "Finds movies and episodes below the quality you want and searches Cinemask for better copies, fetches approved title requests (with their progress), and replaces files people report problems with.",
   "command": ["cinemask-upgrades"]
 }

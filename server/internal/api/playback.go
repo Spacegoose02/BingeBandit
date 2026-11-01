@@ -413,6 +413,7 @@ func (s *Server) saveProgress(u *store.User, req progressReq, ip string) (bool, 
 		s.recordPlay(np, it, watched)
 		if watched && !it.Watch.Watched {
 			s.Emit("playback.finished", s.playbackEvent(np, it))
+			go s.offerNextSeason(u, it)
 		}
 		if watched && (req.Stopped || !it.Watch.Watched) {
 			s.Trakt.PushNew(u.ID) // no-op unless the user turned on Trakt sync

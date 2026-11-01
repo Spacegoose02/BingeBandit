@@ -27,3 +27,4 @@ server/plugins/*/game-lights
 server/plugins/*/hue-sync
 server/plugins/*/watchlist-rss
 server/plugins/*/youtube-live
+server/plugins/*/arr-requests

@@ -1,0 +1,6 @@
+{
+  "id": "arr-requests",
+  "name": "Sonarr & Radarr",
+  "description": "Sends approved title requests to Sonarr and Radarr (and 4K copies to a second pair), shows their download progress, and replaces files people report problems with.",
+  "command": ["arr-requests"]
+}

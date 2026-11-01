@@ -92,7 +92,13 @@ func (s *Server) RunNotifications(ctx context.Context) {
 	t := time.NewTicker(time.Minute) // followed Live TV shows need to be on time
 	defer t.Stop()
 	var episodes time.Time
+	// Watchlists are read a few minutes after starting, then every 6 hours.
+	watchlists := time.Now().Add(-6*time.Hour + 5*time.Minute)
 	for {
+		if time.Since(watchlists) >= 6*time.Hour {
+			watchlists = time.Now()
+			go s.requestWatchlists(ctx)
+		}
 		if time.Since(episodes) >= notifyInterval {
 			episodes = time.Now()
 			s.notifyNewEpisodes()
