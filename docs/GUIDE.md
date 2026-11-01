@@ -174,7 +174,7 @@ Other things on the Live TV page:
 - **New custom channel** builds a 24/7 channel from your own movies and shows, like ErsatzTV.
 - **Logos** holds channel logos and can match them to channels automatically.
 - **Kids** picks which channels kid profiles can watch (see [Kid mode](#9-kid-mode)).
-- **Networks** ties TV networks to your channels (CBS → your local CBS station, NBC → your NBC), so the Sports page, the score bug and game alerts send each game to your own station rather than another city's. Networks you haven't listed are still found by the guide's titles.
+- **Networks** ties TV networks to your channels (CBS → your local CBS station, NBC → your NBC), so the Sports page, the score bug and game alerts send each game to your own station rather than another city's. Networks you haven't listed are still found by the guide's titles. Stat Scraps (CFB Tracker) uses the same list for its **Watch on BingeBandit** links, which open the game's channel here.
 - **Activity** shows who's watching and how each stream is doing.
 - **Use these channels in other apps** gives you M3U and XMLTV addresses for other players, and a tuner address for Plex's Live TV.
 
@@ -295,7 +295,7 @@ The main sections under **Server → Settings**:
 - **Transcoding:** hardware encoding (NVIDIA NVENC, Intel Quick Sync, VAAPI, AMD AMF, VideoToolbox), HDR to SDR tone mapping, and the transcode folder.
 - **Network:** your public URL, trusted reverse proxies, and extra networks that count as home. Here you can also limit streaming away from home: how many streams each account (with its profiles, live TV included) may watch at once from outside, and a quality limit that converts bigger videos down for those viewers. Admin accounts have no stream limit, and live TV isn't quality-limited.
 - **Metadata:** TMDB, TheTVDB, MDBList and the ratings provider.
-- **Sports data:** the address (and key) of a CFB Tracker, if you run one. The Sports pages then read scores, schedules and box scores through it, so ESPN is asked once for both apps. If the tracker doesn't answer, the server reads ESPN directly for a minute and tries the tracker again.
+- **Sports data:** the address (and key) of a CFB Tracker, if you run one. The Sports pages then read scores, schedules and box scores through it, so ESPN is asked once for both apps. If the tracker doesn't answer, the server reads ESPN directly for a minute and tries the tracker again. The same key lets the tracker (Stat Scraps) ask which of your channels shows a network, so its game pages offer **Watch on BingeBandit** straight to that channel (set `BINGEBANDIT_URL` on the tracker). It uses the channels under **Live TV → Networks** first, then a channel named for the network ("US: ESPN 2 HD" for ESPN2). The tracker only learns channel names and numbers; opening the link still asks for a BingeBandit sign-in.
 - **Trakt** and **Webhooks:** sync watch history with Trakt, and notify other services (Home Assistant, Discord bots, n8n) when things happen.
 
 ### Server health and admin alerts

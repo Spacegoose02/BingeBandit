@@ -135,6 +135,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 		r.Route("/plugin/v1", s.pluginAPI)
 		r.Handle("/avatars/*", avatars.Handler())
 		r.Route("/live/tuner/{key}", s.tunerRoutes)
+		// Stat Scraps asks which channel shows a network (watchlinks.go); keyed, not signed in.
+		r.Get("/sports/watch-links", s.sportsWatchLinks)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.requireAuth)
