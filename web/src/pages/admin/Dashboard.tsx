@@ -5,6 +5,7 @@ import { useApi, useDocumentTitle } from '../../hooks'
 import { formatBytes, formatClock, timeAgo } from '../../format'
 import { UpdateNotice } from './Health'
 import type { Library, NowPlaying, ScanStatus, Stats, SystemInfo } from '../../types'
+import { libraryKinds } from '../../libraryKinds'
 
 export default function AdminDashboard() {
   useDocumentTitle('Dashboard')
@@ -101,11 +102,11 @@ export default function AdminDashboard() {
           const scan = running.find((s) => s.libraryId === l.id)
           return (
             <div key={l.id} className="list-row">
-              <Icon name={l.kind === 'movies' ? 'film' : 'tv'} />
+              <Icon name={libraryKinds[l.kind].icon} />
               <div className="grow">
                 <div>{l.name}</div>
                 <div className="muted small">
-                  {l.itemCount} {l.kind === 'movies' ? 'movies' : 'shows'} · scanned {timeAgo(l.lastScan)}
+                  {l.itemCount} {l.itemCount === 1 ? libraryKinds[l.kind].one : libraryKinds[l.kind].many} · scanned {timeAgo(l.lastScan)}
                 </div>
               </div>
               {scan && <ScanBadge scan={scan} />}

@@ -13,10 +13,16 @@ type LibraryFilter struct {
 	YearTo    int     // last year, 0 = any
 	Unwatched bool    // movies not watched; shows with an episode left
 	MinRating float64 // TMDB (or TheTVDB) score out of 10, 0 = any
+	// Kind lists only this item kind ("artist" in a music library) rather
+	// than the library's usual titles. It's a view, not a filter.
+	Kind string
 }
 
 // Active reports whether the filter leaves anything out.
-func (f LibraryFilter) Active() bool { return f != LibraryFilter{} }
+func (f LibraryFilter) Active() bool {
+	f.Kind = ""
+	return f != LibraryFilter{}
+}
 
 func (f LibraryFilter) where() string {
 	var b strings.Builder
@@ -55,12 +61,12 @@ type FilterOptions struct {
 // shows have.
 func (s *Store) LibraryFilterOptions(libraryID int64) (*FilterOptions, error) {
 	genres, err := s.queryStrings(`SELECT DISTINCT j.value FROM items i, json_each(i.genres) j
-		WHERE i.library_id = ? AND i.kind IN ('movie','show') AND j.value != '' ORDER BY 1 COLLATE NOCASE`, libraryID)
+		WHERE i.library_id = ? AND i.kind IN ('movie','show','album','audiobook') AND j.value != '' ORDER BY 1 COLLATE NOCASE`, libraryID)
 	if err != nil {
 		return nil, err
 	}
 	rows, err := s.db.Query(`SELECT DISTINCT (year / 10) * 10 FROM items
-		WHERE library_id = ? AND kind IN ('movie','show') AND year > 0 ORDER BY 1 DESC`, libraryID)
+		WHERE library_id = ? AND kind IN ('movie','show','album','audiobook','photoalbum') AND year > 0 ORDER BY 1 DESC`, libraryID)
 	if err != nil {
 		return nil, err
 	}

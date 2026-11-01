@@ -58,6 +58,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	recommended, recommendedBy := s.recommendedRow(uid)
 	add("recommended", "Recommended for You", recommended, nil)
+	rows = append(rows, s.mediaHomeRows(r, uid)...)
 	libRows := s.homeLibraryRows(currentUser(r))
 	for _, lr := range libRows {
 		rows = append(rows, homeRow{ID: lr.ID, Title: lr.Title, Items: lr.Items, CollectionID: lr.CollectionID, LibraryID: lr.LibraryID})
@@ -166,16 +167,19 @@ func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
-	if !u.IsAdmin {
-		visible := libs[:0]
-		for _, l := range libs {
-			if s.Store.CanSeeLibrary(u, l.ID) {
-				l.Paths = nil
-				visible = append(visible, l)
-			}
+	visible := libs[:0]
+	for _, l := range libs {
+		if !seesLibraryKind(r, l.Kind) {
+			continue // music, audiobooks or photos, for an app that can't show them
 		}
-		libs = visible
+		if u.IsAdmin {
+			visible = append(visible, l)
+		} else if s.Store.CanSeeLibrary(u, l.ID) {
+			l.Paths = nil
+			visible = append(visible, l)
+		}
 	}
+	libs = visible
 	if err := s.Store.PinLibraries(u.ID, libs); err != nil {
 		writeStoreErr(w, err)
 		return
@@ -224,7 +228,7 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lib, err := s.Store.Library(id)
-	if err == nil && !s.Store.CanSeeLibrary(currentUser(r), id) {
+	if err == nil && (!s.Store.CanSeeLibrary(currentUser(r), id) || !seesLibraryKind(r, lib.Kind)) {
 		err = store.ErrNotFound
 	}
 	if err != nil {
@@ -260,7 +264,8 @@ func (s *Server) libraryItems(w http.ResponseWriter, r *http.Request) {
 	// Filtered, it's titles only: a collection can't say which of its
 	// titles match, so none are folded into one.
 	filter := libraryFilter(q)
-	if filter.Active() {
+	filter.Kind = libraryViewKind(lib, q.Get("view"))
+	if filter.Active() || !store.IsVideoLibrary(lib.Kind) {
 		cols, hide = []*store.Collection{}, nil
 	}
 	items, total, err := s.Store.FilteredLibraryItems(currentUser(r).ID, id, q.Get("sort"), max(offset, 0), limit, hide, filter)
@@ -319,13 +324,34 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		if ms, err := s.Store.Markers(it.ID); err == nil {
 			resp["markers"] = ms
 		}
-	case "show", "season":
+	case "show", "season", "artist":
 		children, err := s.Store.Children(u.ID, it.ID)
 		if err != nil {
 			writeStoreErr(w, err)
 			return
 		}
 		resp["children"] = children
+	case "album", "audiobook", "photoalbum", "track", "chapter", "photo":
+		// A track, chapter or photo opens its album, book or photo album.
+		parentID := it.ID
+		if it.ParentID != 0 && (it.Kind == "track" || it.Kind == "chapter" || it.Kind == "photo") {
+			parentID = it.ParentID
+			if p, err := s.Store.Item(u.ID, parentID); err == nil {
+				resp["parent"] = p
+			}
+		}
+		tracks, err := s.Store.Tracks(u.ID, parentID)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		resp["tracks"] = tracks
+		resp["canDownload"] = s.canDownload(u)
+	}
+	if (it.Kind == "album" || it.Kind == "track") && it.ShowID != 0 {
+		if artist, err := s.Store.Item(u.ID, it.ShowID); err == nil {
+			resp["artist"] = artist
+		}
 	}
 
 	if it.Kind == "movie" || it.Kind == "show" {
@@ -523,6 +549,14 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeStoreErr(w, err)
 		return
+	}
+	if kinds := mediaSearchKinds(r); len(kinds) > 0 {
+		more, err := s.Store.SearchKinds(currentUser(r).ID, q, kinds, 60)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		items = append(items, more...)
 	}
 	writeJSON(w, http.StatusOK, items)
 }

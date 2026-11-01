@@ -80,6 +80,9 @@ func (s *Server) homeLibraryRows(u *store.User) []libRow {
 	var slots []*slot
 	merged := map[string]*slot{}
 	for _, l := range libs {
+		if !store.IsVideoLibrary(l.Kind) {
+			continue // music and audiobooks have their own rows (mediaHomeRows)
+		}
 		rows, err := s.Store.LibraryRows(l)
 		if err != nil {
 			continue

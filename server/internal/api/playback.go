@@ -65,7 +65,7 @@ func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 	// Away from home, a file over the quality cap has to be converted
 	// (players fall back to that when direct play fails), and the stream
 	// limit applies.
-	if !download {
+	if !download && !isPhotoPath(mf.Path) {
 		ip := clientIP(r)
 		if s.overRemoteCap(mf, ip) {
 			writeErr(w, http.StatusForbidden, "this file is above the server's quality limit for streams outside the home network")

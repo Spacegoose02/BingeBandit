@@ -164,7 +164,7 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 	// Removed paths can't be stat'ed; a name without a video extension may
 	// have been a folder, so rescan its parent either way.
 	gone := errors.Is(statErr, os.ErrNotExist)
-	relevant := isVideo(ev.Name) || isSubtitleFile(ev.Name)
+	relevant := isVideo(ev.Name) || isSubtitleFile(ev.Name) || isAudio(ev.Name) || isImage(ev.Name)
 	if !isDir && !gone && !relevant {
 		return
 	}
@@ -181,9 +181,14 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 	if err != nil {
 		return
 	}
+	// Artwork and theme songs next to videos don't change a video library.
+	mediaOnly := isAudio(ev.Name) || isImage(ev.Name)
 	for _, l := range libs {
 		if root := rootFor(l, ev.Name); root != "" && hiddenBelow(root, ev.Name) {
 			continue // e.g. a title being copied in by Move
+		}
+		if mediaOnly && store.IsVideoLibrary(l.Kind) {
+			continue
 		}
 		switch {
 		case rootFor(l, dir) != "":

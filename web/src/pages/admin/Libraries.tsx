@@ -4,7 +4,8 @@ import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { timeAgo } from '../../format'
-import type { CollectionMode, Library, ScanStatus } from '../../types'
+import { isVideoLibrary, libraryKinds } from '../../libraryKinds'
+import type { CollectionMode, Library, LibraryKind, ScanStatus } from '../../types'
 import { ScanBadge } from './Dashboard'
 
 export default function AdminLibraries() {
@@ -42,11 +43,11 @@ export default function AdminLibraries() {
           return (
             <div key={l.id} className="panel lib-card">
               <div className="lib-card-head">
-                <Icon name={l.kind === 'movies' ? 'film' : 'tv'} size={24} />
+                <Icon name={libraryKinds[l.kind].icon} size={24} />
                 <div className="grow">
                   <h3>{l.name}</h3>
                   <div className="muted small">
-                    {l.kind === 'movies' ? 'Movies' : 'TV Shows'} · {l.itemCount} items · scanned {timeAgo(l.lastScan)}
+                    {libraryKinds[l.kind].label} · {l.itemCount} {l.itemCount === 1 ? libraryKinds[l.kind].one : libraryKinds[l.kind].many} · scanned {timeAgo(l.lastScan)}
                   </div>
                 </div>
               </div>
@@ -61,9 +62,11 @@ export default function AdminLibraries() {
                 <button className="btn btn-glass btn-sm" disabled={scan?.running} onClick={() => act(() => api.post(`/api/admin/libraries/${l.id}/scan`))}>
                   <Icon name="refresh" size={16} /> Scan
                 </button>
-                <button className="btn btn-glass btn-sm" disabled={scan?.running} onClick={() => act(() => api.post(`/api/admin/libraries/${l.id}/refresh`))}>
-                  <Icon name="download" size={16} /> Refresh metadata
-                </button>
+                {isVideoLibrary(l.kind) && (
+                  <button className="btn btn-glass btn-sm" disabled={scan?.running} onClick={() => act(() => api.post(`/api/admin/libraries/${l.id}/refresh`))}>
+                    <Icon name="download" size={16} /> Refresh metadata
+                  </button>
+                )}
                 <button className="btn btn-glass btn-sm" onClick={() => setEditing(l)}>
                   <Icon name="edit" size={16} /> Edit
                 </button>
@@ -78,7 +81,7 @@ export default function AdminLibraries() {
           )
         })}
       </div>
-      {libraries?.length === 0 && <div className="empty">No libraries yet. Add a folder of movies or TV shows to get started.</div>}
+      {libraries?.length === 0 && <div className="empty">No libraries yet. Add a folder of movies, TV shows, music, audiobooks or photos to get started.</div>}
 
       {editing && (
         <LibraryEditor
@@ -96,7 +99,8 @@ export default function AdminLibraries() {
 
 function LibraryEditor({ library, onClose, onSaved }: { library: Library | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(library?.name ?? '')
-  const [kind, setKind] = useState<'movies' | 'shows'>(library?.kind ?? 'movies')
+  const [kind, setKind] = useState<LibraryKind>(library?.kind ?? 'movies')
+  const video = isVideoLibrary(kind)
   const [paths, setPaths] = useState<string[]>(library?.paths ?? [])
   const [picking, setPicking] = useState(paths.length === 0)
   const [detect, setDetect] = useState(!library?.skipMarkers)
@@ -121,17 +125,17 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
       <form className="form" onSubmit={save}>
         {!library && (
           <div className="kind-picker">
-            {(['movies', 'shows'] as const).map((k) => (
+            {(Object.keys(libraryKinds) as LibraryKind[]).map((k) => (
               <button type="button" key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
-                <Icon name={k === 'movies' ? 'film' : 'tv'} size={26} />
-                {k === 'movies' ? 'Movies' : 'TV Shows'}
+                <Icon name={libraryKinds[k].icon} size={26} />
+                {libraryKinds[k].label}
               </button>
             ))}
           </div>
         )}
         <label>
           Name
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === 'movies' ? 'Movies' : 'TV Shows'} required />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={libraryKinds[kind].label} required />
         </label>
         <div>
           <div className="label">Folders</div>
@@ -158,23 +162,24 @@ function LibraryEditor({ library, onClose, onSaved }: { library: Library | null;
             </button>
           )}
         </div>
-        <p className="muted small">
-          {kind === 'movies'
-            ? 'Tip: name folders "Movie Title (Year)" for the best matches.'
-            : 'Tip: use "Show Name/Season 01/Show Name - S01E01.mkv" for the best matches.'}
-        </p>
-        <label className="check">
-          <input type="checkbox" checked={detect} onChange={(e) => setDetect(e.target.checked)} />
-          {kind === 'movies' ? 'Detect end credits (for the Skip Credits button)' : 'Detect intros and end credits (for the Skip buttons)'}
-        </label>
-        <label>
-          Collections on the Library tab
-          <select value={collectionMode} onChange={(e) => setCollectionMode(e.target.value as CollectionMode)}>
-            <option value="show">Show collections and their items</option>
-            <option value="hide">Hide collections but show their items</option>
-            <option value="collapse">Hide items which are in collections</option>
-          </select>
-        </label>
+        <p className="muted small">{libraryKinds[kind].tip}</p>
+        {!video && <p className="muted small">Music, audiobooks and photos open in the web app and the Windows app. The TV and Roku apps don't show these libraries yet.</p>}
+        {video && (
+          <>
+            <label className="check">
+              <input type="checkbox" checked={detect} onChange={(e) => setDetect(e.target.checked)} />
+              {kind === 'movies' ? 'Detect end credits (for the Skip Credits button)' : 'Detect intros and end credits (for the Skip buttons)'}
+            </label>
+            <label>
+              Collections on the Library tab
+              <select value={collectionMode} onChange={(e) => setCollectionMode(e.target.value as CollectionMode)}>
+                <option value="show">Show collections and their items</option>
+                <option value="hide">Hide collections but show their items</option>
+                <option value="collapse">Hide items which are in collections</option>
+              </select>
+            </label>
+          </>
+        )}
         {error && <div className="form-error">{error}</div>}
         <div className="actions end">
           <button type="button" className="btn btn-glass" onClick={onClose}>Cancel</button>

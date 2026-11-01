@@ -49,7 +49,7 @@ The same section has optional keys for TheTVDB (for shows that use aired, DVD or
 
 ## 3. Add your libraries
 
-Go to **Server → Libraries → Add library**. Choose **Movies** or **TV Shows**, give it a name, and pick one or more folders. You can add as many libraries as you like, for example separate ones for kids' movies or anime.
+Go to **Server → Libraries → Add library**. Choose **Movies**, **TV Shows**, **Music**, **Audiobooks** or **Photos**, give it a name, and pick one or more folders. You can add as many libraries as you like, for example separate ones for kids' movies or anime.
 
 ![Libraries page](screenshots/admin-libraries.webp)
 
@@ -66,6 +66,20 @@ Other options when adding a library:
 
 - **Detect intros and end credits** powers the **Skip Intro** and **Skip Credits** buttons.
 - **Collections on the Library tab** decides whether a collection shows as its own poster, its movies show separately, or both.
+
+### Music, audiobooks and photos
+
+These open in the web app and the Windows app (the TV and Roku apps don't show them yet). Nothing is looked up online: details come from the files' own tags, with the folders as a fallback.
+
+```
+Music/Artist/Album (Year)/01 - Song.flac        (CD1/, CD2/ folders become discs)
+Audiobooks/Author/Book Title/01 - Part One.mp3  (or Audiobooks/Book Title.m4b)
+Photos/Beach Trip 2024/IMG_0001.jpg             (each folder is an album)
+```
+
+- **Music** lists albums, or artists with the **Artists** button. A `cover.jpg` (or `folder.jpg`) in the album folder is its artwork, else the picture inside the songs. Songs play in a bar along the bottom of the page that keeps going while you browse, with a queue, shuffle and your keyboard's media keys. Files the browser can't play (Apple Lossless in Chrome, WMA, APE) are converted as they play.
+- **Audiobooks** remember where you stopped in each book: **Resume** carries on, and books you're partway through are on Home under **Continue Listening**. The player has 30-second skips and playback speed.
+- **Photos** shows each album as a grid; click a photo for the full-screen viewer (arrow keys to move, space for a slideshow). JPEG, PNG, GIF, WebP and AVIF are shown; HEIC and RAW files are skipped.
 
 New and changed files are picked up automatically while BingeBandit is running, and a full rescan runs every few hours (see [Scheduled tasks](#scheduled-tasks-and-backups)).
 

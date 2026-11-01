@@ -1,5 +1,6 @@
 // Package library walks library folders, turns files into movies/shows/
-// seasons/episodes, probes them, and prunes what disappeared.
+// seasons/episodes (or artists/albums/tracks, audiobooks/chapters and photo
+// albums/photos), probes them, and prunes what disappeared.
 package library
 
 import (
@@ -153,7 +154,8 @@ func (s *Scanner) ScanAll() {
 
 type found struct{ root, path string }
 
-// walk lists video files under start (root or a folder inside it).
+// walk lists the library's files (videos, or the audio or images of other
+// kinds) under start (root or a folder inside it).
 // complete is false if any folder could not be read.
 func walk(lib *store.Library, root, start string) (files []found, complete bool) {
 	complete = true
@@ -166,13 +168,16 @@ func walk(lib *store.Library, root, start string) (files []found, complete bool)
 			}
 			return nil
 		}
+		video := store.IsVideoLibrary(lib.Kind)
 		if d.IsDir() {
-			if p != root && skipDir(d.Name()) {
+			if p != root && ((video && skipDir(d.Name())) || (!video && skipMediaDir(d.Name()))) {
 				return fs.SkipDir
 			}
 			return nil
 		}
-		if isVideo(d.Name()) && !isSample(d.Name()) && !isExtraFile(d.Name()) {
+		if video && isVideo(d.Name()) && !isSample(d.Name()) && !isExtraFile(d.Name()) {
+			files = append(files, found{root, p})
+		} else if !video && wanted(lib.Kind, d.Name()) {
 			files = append(files, found{root, p})
 		}
 		return nil
@@ -312,6 +317,9 @@ func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status
 
 // folders is folderKeys for a shows library.
 func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64, folders map[string]string) error {
+	if !store.IsVideoLibrary(lib.Kind) {
+		return s.processTagged(ctx, lib, f, gen)
+	}
 	info, err := os.Stat(f.path)
 	if err != nil {
 		return err
@@ -499,7 +507,8 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 }
 
 func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Status, force bool) error {
-	if !s.meta.AnyEnabled() {
+	// Music, audiobooks and photos get their details from their own tags.
+	if !store.IsVideoLibrary(lib.Kind) || !s.meta.AnyEnabled() {
 		return nil
 	}
 	s.update(st, func(st *Status) { st.Phase, st.Processed, st.Found = "metadata", 0, 0 })

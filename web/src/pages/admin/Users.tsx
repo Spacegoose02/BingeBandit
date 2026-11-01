@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import type { Library, User } from '../../types'
+import { libraryKinds } from '../../libraryKinds'
 
 export default function AdminUsers() {
   useDocumentTitle('Users')
@@ -200,7 +201,7 @@ function LibraryAccess({ user, onClose, onSaved }: { user: User; onClose: () => 
           {libraries?.map((l) => (
             <label key={l.id} className="check">
               <input type="checkbox" disabled={all} checked={all || ids.has(l.id)} onChange={() => toggle(l.id)} />
-              <Icon name={l.kind === 'movies' ? 'film' : 'tv'} size={16} /> {l.name}
+              <Icon name={libraryKinds[l.kind].icon} size={16} /> {l.name}
             </label>
           ))}
         </div>
