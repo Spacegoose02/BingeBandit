@@ -175,12 +175,20 @@ func sortGames(games []sportsGame, now time.Time) {
 	})
 }
 
-// findChannels looks in the Live TV guide for each live or upcoming game: a
-// programme around kick-off whose title names both teams.
+// findChannels finds each live or upcoming game's Live TV channels. A game
+// on a network an admin mapped (Admin → Live TV → Networks, "CBS" → WDBJ 7)
+// gets those channels, unless the guide shows the channel carrying something
+// else at kick-off (another region's game, or no game at all); then other
+// channels aren't searched, so other cities' stations of the same network
+// stay out. Otherwise it looks in the guide for a programme around kick-off
+// whose title names both teams.
 func (s *Server) findChannels(uid int64, games []sportsGame) {
 	var want []int
 	from, to := int64(0), int64(0)
 	for i, g := range games {
+		for _, b := range g.Broadcasts {
+			s.networksSeen.Store(strings.ToLower(strings.TrimSpace(b)), strings.TrimSpace(b))
+		}
 		if g.State == "post" || time.Until(g.Start) > 3*24*time.Hour {
 			continue
 		}
@@ -201,8 +209,10 @@ func (s *Server) findChannels(uid int64, games []sportsGame) {
 		return
 	}
 	byEPG := map[string][]*store.Channel{}
+	byID := map[int64]*store.Channel{}
 	var ids []string
 	for _, c := range chans {
+		byID[c.ID] = c
 		if c.EPGID != "" {
 			if byEPG[c.EPGID] == nil {
 				ids = append(ids, c.EPGID)
@@ -214,29 +224,101 @@ func (s *Server) findChannels(uid int64, games []sportsGame) {
 	if err != nil {
 		return
 	}
+	networks := map[string][]int64{}
+	if list, err := s.Store.Networks(); err == nil {
+		for _, n := range list {
+			networks[strings.ToLower(n.Network)] = n.Channels
+		}
+	}
 	for _, i := range want {
 		g := &games[i]
 		st := g.Start.Unix()
+		add := func(c *store.Channel, title string) {
+			if len(g.Channels) < 6 && !slices.ContainsFunc(g.Channels, func(x sportChannel) bool { return x.ID == c.ID }) {
+				g.Channels = append(g.Channels, sportChannel{c.ID, c.Number, c.Name, title})
+			}
+		}
+		mapped := false
+		for _, b := range g.Broadcasts {
+			for _, id := range networks[strings.ToLower(strings.TrimSpace(b))] {
+				if c := byID[id]; c != nil {
+					if title, ok := carriesGame(c, g, progs); ok {
+						add(c, title)
+						mapped = true
+					}
+				}
+			}
+		}
+		if mapped {
+			continue
+		}
 		for _, p := range progs {
 			if p.Start > st+30*60 || p.Stop <= st || p.Start < st-90*60 {
 				continue
 			}
-			text := p.Title + " " + p.Subtitle + " " + p.Description
-			if g.Home.ID == "" && g.Away.ID == "" {
-				// A race: the guide names the series ("NASCAR Cup Series").
-				if l := sports.LeagueByID(g.League); l == nil || l.Sport != "racing" || !hasWord(strings.ToLower(text), "nascar") {
-					continue
-				}
-			} else if !namesTeam(text, g.Home.Team) || !namesTeam(text, g.Away.Team) {
+			if !namesGame(p, g) {
 				continue
 			}
 			for _, c := range byEPG[p.EPGID] {
-				if len(g.Channels) < 6 {
-					g.Channels = append(g.Channels, sportChannel{c.ID, c.Number, c.Name, p.Title})
-				}
+				add(c, p.Title)
 			}
 		}
 	}
+}
+
+// namesGame reports whether a guide programme names the game: both teams,
+// or for a race, the series ("NASCAR Cup Series").
+func namesGame(p store.GuideProgram, g *sportsGame) bool {
+	text := p.Title + " " + p.Subtitle + " " + p.Description
+	if g.Home.ID == "" && g.Away.ID == "" {
+		l := sports.LeagueByID(g.League)
+		return l != nil && l.Sport == "racing" && hasWord(strings.ToLower(text), "nascar")
+	}
+	return namesTeam(text, g.Home.Team) && namesTeam(text, g.Away.Team)
+}
+
+// carriesGame reports whether a channel mapped to the game's network shows
+// it, going by the guide at kick-off, and the guide entry's title. With no
+// guide for the channel, it's taken on trust. A programme that names either
+// team (or the race series) counts, and so does a sports one that names no
+// match-up ("SEC on CBS", "NFL Football"). A match-up between other teams
+// ("Alabama at Georgia": another region's game) or a programme that isn't
+// sport ("60 Minutes") means the channel isn't showing this game.
+func carriesGame(c *store.Channel, g *sportsGame, progs []store.GuideProgram) (string, bool) {
+	if c.EPGID == "" {
+		return "", true
+	}
+	st := g.Start.Unix()
+	found := false
+	for _, p := range progs {
+		if p.EPGID != c.EPGID || p.Start > st+30*60 || p.Stop <= st {
+			continue
+		}
+		found = true
+		text := p.Title + " " + p.Subtitle + " " + p.Description
+		if namesGame(p, g) || namesTeam(text, g.Home.Team) || namesTeam(text, g.Away.Team) {
+			return p.Title, true
+		}
+		if isSportsProgram(p) && !reMatchup.MatchString(p.Title+" "+p.Subtitle) {
+			return p.Title, true
+		}
+	}
+	return "", !found
+}
+
+// reMatchup spots a guide title naming a match-up: "Bears at Packers",
+// "Duke vs. UNC", "LAL @ BOS".
+var reMatchup = regexp.MustCompile(`(?i)\S\s+(at|vs\.?|v\.?|@)\s+\S`)
+
+var reSportsWord = regexp.MustCompile(`(?i)\b(sports?|football|basketball|baseball|hockey|soccer|futbol|golf|tennis|racing|nascar|wrestling|nfl|nba|wnba|mlb|nhl|mls|ncaa|ncaaf|ncaab|sec|acc|big ten|big 12|pac-12|kickoff|pregame|game ?day)\b`)
+
+// isSportsProgram reports whether the guide files a programme under sport, or
+// its title says so.
+func isSportsProgram(p store.GuideProgram) bool {
+	if strings.Contains(strings.ToLower(p.Category+","+p.Genres), "sport") {
+		return true
+	}
+	return reSportsWord.MatchString(p.Title + " " + p.Subtitle)
 }
 
 // onChannel adds the channel someone is watching to each game whose

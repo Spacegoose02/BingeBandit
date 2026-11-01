@@ -896,4 +896,15 @@ CREATE TABLE title_request_people (
 );
 CREATE INDEX title_request_people_user ON title_request_people(user_id);
 `,
+	// 52: which channels carry a TV network ("CBS" -> WDBJ 7), set by an
+	// admin, so the Sports page lists a game's local channel by its network
+	// rather than by guessing from guide titles.
+	`
+CREATE TABLE network_channels (
+	network    TEXT NOT NULL COLLATE NOCASE,
+	channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+	position   INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (network, channel_id)
+);
+`,
 }
