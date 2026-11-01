@@ -222,6 +222,12 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
 
+#### Downloads on phones
+
+On a phone or tablet, a movie, an episode or a whole season can be saved to watch with no connection: open it and tap **Download**, then pick a quality. **Original** saves the file as it is (offered when the phone can play it); 1080p, 720p and 480p are smaller copies the server converts first, with the subtitles saved alongside. The **Downloads** tab shows progress, pauses and resumes, and plays what's saved; it also opens from Home when the server can't be reached. Downloads go over Wi-Fi only unless you change that there, and stop at a storage limit you set (20 GB to start). What you watch offline is sent to the server once it can be reached again.
+
+Downloads follow the **Let users download files** setting in Admin → Settings (admins can always download). A download is deleted from the phone when the server stops allowing downloads, when the profile can no longer see the title (a library taken away, a kid approval removed), or when you sign out on that phone. Converted copies take the server's CPU (or GPU, with hardware encoding) while they're made, one at a time, and are kept in the server's cache for a week.
+
 ### Roku
 
 There's an early Roku channel that has to be sideloaded with the Roku in developer mode. See [apps/roku/README.md](../apps/roku/README.md).
