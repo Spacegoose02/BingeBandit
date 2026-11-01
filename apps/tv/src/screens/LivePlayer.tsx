@@ -408,6 +408,8 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
           style={StyleSheet.absoluteFill}
           resizeMode="contain"
           paused={paused || !active}
+          // Lets the TV's screensaver come on while paused (see Player).
+          preventsDisplaySleepDuringVideoPlayback={!paused && active}
           onLoad={() => {
             playing()
             showInfo(paused) // a new channel shows its info bar, then hides it
