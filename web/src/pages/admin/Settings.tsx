@@ -309,9 +309,38 @@ export default function AdminSettings() {
             Let people request movies and shows the server doesn’t have
           </label>
           <p className="muted small">
-            Requests wait for an admin on the <Link to="/requests">Requests</Link> page. Approved ones go to Cinemask through the Cinemask
-            Upgrades plugin. Kid profiles can’t request.
+            Requests wait for an admin on the <Link to="/requests">Requests</Link> page (or are approved at once for people you pick under
+            People & limits there). Approved ones go to Sonarr and Radarr, or Cinemask, through their plugin.
           </p>
+          {s.requests_enabled !== 'false' && (
+            <>
+              <label className="check">
+                <input type="checkbox" checked={s.request_kids === 'true'} onChange={set('request_kids')} />
+                Let kid profiles request too (a grown-up in their household says yes first)
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={s.request_4k === 'true'} onChange={set('request_4k')} />
+                Let people ask for the 4K copy
+              </label>
+              <p className="muted small">4K requests need a 4K Radarr/Sonarr, or a 4K quality profile in Cinemask, set in the plugin’s settings.</p>
+              <label>
+                Movie requests per person per week (0 is no limit)
+                <input type="number" min={0} max={1000} value={s.request_movie_limit ?? '0'} onChange={set('request_movie_limit')} />
+              </label>
+              <label>
+                Show requests per person per week (0 is no limit)
+                <input type="number" min={0} max={1000} value={s.request_show_limit ?? '0'} onChange={set('request_show_limit')} />
+              </label>
+              <label>
+                List requested titles nobody watched after (days; 0 is off)
+                <input type="number" min={0} max={3650} value={s.request_cleanup_days ?? '0'} onChange={set('request_cleanup_days')} />
+              </label>
+              <p className="muted small">
+                Limits can be changed per person on the Requests page. Titles from people’s Trakt watchlists don’t count. Never watched lists
+                requested titles none of the people who asked have played, so you can free up space.
+              </p>
+            </>
+          )}
           <label>
             Count as watched after (% of the runtime)
             <input type="number" min={50} max={100} value={s.watched_percent ?? '90'} onChange={set('watched_percent')} />

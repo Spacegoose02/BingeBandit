@@ -12,6 +12,8 @@ import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
 import { KidsApproveButton } from '../components/KidsApprove'
 import { CastButton } from '../components/Cast'
+import { MissingSeasons, RequestRow } from '../components/RequestKit'
+import { ReportProblemButton } from '../components/ReportProblem'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
@@ -159,6 +161,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               <AddToPlaylist item={item} />
               {(item.kind === 'movie' || item.kind === 'show') && <RecommendButton item={item} />}
               {(item.kind === 'movie' || item.kind === 'show') && <KidsApproveButton item={item} />}
+              {(item.kind === 'movie' || item.kind === 'episode') && <ReportProblemButton item={item} />}
               {canDownload && file && (
                 <a className="btn btn-glass icon-only" href={`/api/files/${file.id}/direct?download=1`} download title="Download original file">
                   <Icon name="download" size={18} />
@@ -247,6 +250,8 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
           </Row>
         )}
 
+        {item.kind === 'show' && item.tmdbId ? <MissingSeasons tmdbId={item.tmdbId} /> : null}
+
         {item.kind === 'season' && <EpisodeList episodes={children} />}
 
         {cast.filter((c) => c.kind === 'cast').length > 0 && (
@@ -268,6 +273,10 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
             ))}
           </Row>
         ))}
+
+        {(item.kind === 'movie' || item.kind === 'show') && item.tmdbId ? (
+          <RequestRow title="Like this, not here yet" path={`/api/requests/similar/${item.kind}/${item.tmdbId}`} />
+        ) : null}
       </div>
 
       {dialog === 'edit' && (

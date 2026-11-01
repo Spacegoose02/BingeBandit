@@ -918,10 +918,21 @@ export interface TitleRequest {
   requestedBy: string
   people: number
   note?: string
-  /** approved: waiting for Cinemask; sent: Cinemask has it; available: in a library. */
-  status: 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
+  /** parent: a kid asked, waiting for a parent; approved: waiting for the fetching app; sent: it has it; available: in a library. */
+  status: 'parent' | 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
   reason?: string
   link?: string
+  /** Seasons of a show asked for; none is the whole show. */
+  seasons?: number[]
+  fourK?: boolean
+  /** While it's fetched: searching, downloading, importing, or waiting (not out yet). */
+  stage?: 'searching' | 'downloading' | 'importing' | 'waiting'
+  /** 0-1 */
+  progress?: number
+  /** Unix seconds. */
+  eta?: number
+  releaseDate?: string
+  availableAt?: number
   createdAt: number
   updatedAt: number
   mine: boolean
@@ -935,9 +946,55 @@ export interface RequestableTitle {
   year?: number
   overview?: string
   poster?: string
+  releaseDate?: string
+  /** On a person's list: who they played, or their job. */
+  role?: string
   itemId?: number // in a library the viewer can see
   onServer?: boolean
   request?: TitleRequest
+}
+
+/** A movie or show from TMDB with what the server has of it, for picking seasons. */
+export interface RequestTitleInfo {
+  title: RequestableTitle
+  backdrop?: string
+  status?: string
+  has4K: boolean
+  /** The viewer may ask for the 4K copy. */
+  fourK: boolean
+  limit: RequestLimit
+  /** A kid whose requests go to a parent first. */
+  kidsWait: boolean
+  seasons?: { number: number; name: string; episodes: number; airDate?: string; onServer: number; requested: boolean }[]
+}
+
+export interface RequestLimit {
+  /** 0: none */
+  limit: number
+  used: number
+  resetsAt?: number
+}
+
+/** Someone saying a movie or episode has a problem. */
+export interface ProblemReport {
+  id: number
+  itemId: number
+  userId: number
+  user: string
+  kind: 'video' | 'audio' | 'subtitles' | 'wrong' | 'other'
+  note?: string
+  position?: number
+  status: 'open' | 'fixing' | 'resolved'
+  reply?: string
+  createdAt: number
+  updatedAt: number
+  title: string
+  showTitle?: string
+  itemKind: string
+  seasonNumber?: number
+  episodeNumber?: number
+  poster?: string
+  tmdbId?: number
 }
 
 /** Channels an admin says carry a TV network (Admin → Live TV → Networks). */

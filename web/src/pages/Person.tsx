@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { img } from '../api'
 import { PosterCard } from '../components/Cards'
 import { Icon } from '../components/Icon'
+import { RequestRow } from '../components/RequestKit'
 import { useApi, useDocumentTitle } from '../hooks'
 import type { Person } from '../types'
 
@@ -11,7 +12,13 @@ export default function PersonPage() {
   const name = params.get('name') ?? ''
   const { data, error } = useApi<Person>(name ? `/api/people?name=${encodeURIComponent(name)}` : null)
   useDocumentTitle(name)
-  if (error) return <div className="page"><div className="empty">Nothing in your libraries credits {name}.</div></div>
+  if (error)
+    return (
+      <div className="page">
+        <div className="empty">Nothing in your libraries credits {name}.</div>
+        <RequestRow title={`More with ${name} to request`} path={`/api/requests/person?name=${encodeURIComponent(name)}`} />
+      </div>
+    )
   if (!data) return <div className="page-loading" />
   const src = img(data.photo, 'w342')
   const acting = data.titles.filter((t) => t.kind === 'cast')
@@ -43,6 +50,7 @@ export default function PersonPage() {
       </header>
       {section('Acting', acting)}
       {section(acting.length ? 'Behind the camera' : 'Credits', crew)}
+      <RequestRow title="Not here yet" path={`/api/requests/person?name=${encodeURIComponent(data.name)}`} />
     </div>
   )
 }

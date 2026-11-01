@@ -713,7 +713,8 @@ func (s *Server) titleInfo(w http.ResponseWriter, r *http.Request) {
 		Requested bool `json:"requested"`
 	}
 	ann := s.annotateRequestable(u, []metadata.Requestable{info.Requestable}, false)[0]
-	out := map[string]any{"title": ann, "backdrop": info.Backdrop, "status": info.Status, "has4K": s.Store.Has4K(kind, id)}
+	out := map[string]any{"title": ann, "backdrop": info.Backdrop, "status": info.Status, "has4K": s.Store.Has4K(kind, id),
+		"fourK": s.fourKOn() || u.IsAdmin, "limit": s.limitState(u, kind), "kidsWait": u.Kid && u.OwnerID != 0}
 	if kind == "show" {
 		have := s.Store.ShowSeasons(id)
 		asked := map[int]bool{}

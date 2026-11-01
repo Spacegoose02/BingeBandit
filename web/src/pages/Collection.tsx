@@ -6,6 +6,7 @@ import { useAuth } from '../auth'
 import { PosterCard } from '../components/Cards'
 import { CollectionEditor } from '../components/CollectionEditor'
 import { Icon } from '../components/Icon'
+import { RequestRow } from '../components/RequestKit'
 import { KidsApproveCollectionButton } from '../components/KidsApprove'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
@@ -129,6 +130,7 @@ export default function CollectionPage() {
               ))}
             </Row>
           ))}
+          <RequestRow title="Missing from this collection" path={`/api/requests/collection/${collection.id}`} />
         </div>
       </div>
       {editing && (
