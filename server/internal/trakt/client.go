@@ -256,3 +256,18 @@ func IsAuth(err error) bool {
 	var se *statusError
 	return errors.Is(err, ErrAuth) || (errors.As(err, &se) && se.code == http.StatusUnauthorized)
 }
+
+// WatchlistEntry is a movie or show on someone's Trakt watchlist.
+type WatchlistEntry struct {
+	Type  string `json:"type"` // movie | show
+	Movie *Media `json:"movie"`
+	Show  *Media `json:"show"`
+}
+
+// Watchlist lists the movies and shows on the user's Trakt watchlist,
+// newest first.
+func (c *Client) Watchlist(ctx context.Context, token string) ([]WatchlistEntry, error) {
+	var out []WatchlistEntry
+	_, err := c.do(ctx, http.MethodGet, "/sync/watchlist/movies,shows/added?limit=250", token, nil, &out)
+	return out, err
+}

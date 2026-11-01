@@ -943,4 +943,49 @@ PRAGMA writable_schema = RESET;
 	// 55: the highest content rating a user (or profile) may see; 0 is no
 	// limit. The levels are in rating_limits.go.
 	`ALTER TABLE users ADD COLUMN max_rating INTEGER NOT NULL DEFAULT 0;`,
+	// 56: more for title requests. Shows can ask for some seasons (seasons
+	// "1,2"; empty is the whole show), and anyone can ask for the 4K copy.
+	// The plugin fetching a request reports its stage, progress (0-1) and
+	// ETA. Kids' requests can wait for a parent (status "parent"); people
+	// can be auto-approved or limited per week (request_rules, -1 limits
+	// follow the server's); "new season" offers are made once
+	// (request_offers); people report problems with what they watch
+	// (problem_reports).
+	`
+ALTER TABLE title_requests ADD COLUMN seasons TEXT NOT NULL DEFAULT '';
+ALTER TABLE title_requests ADD COLUMN four_k INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE title_requests ADD COLUMN stage TEXT NOT NULL DEFAULT '';
+ALTER TABLE title_requests ADD COLUMN progress REAL NOT NULL DEFAULT 0;
+ALTER TABLE title_requests ADD COLUMN eta INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE title_requests ADD COLUMN release_date TEXT NOT NULL DEFAULT '';
+ALTER TABLE title_requests ADD COLUMN available_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE title_request_people ADD COLUMN source TEXT NOT NULL DEFAULT '';
+CREATE TABLE request_rules (
+	user_id      INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	auto_approve INTEGER NOT NULL DEFAULT 0,
+	movie_limit  INTEGER NOT NULL DEFAULT -1,
+	show_limit   INTEGER NOT NULL DEFAULT -1,
+	watchlist    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE request_offers (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	tmdb_id    INTEGER NOT NULL,
+	season     INTEGER NOT NULL,
+	created_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, tmdb_id, season)
+);
+CREATE TABLE problem_reports (
+	id         INTEGER PRIMARY KEY,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	kind       TEXT NOT NULL,
+	note       TEXT NOT NULL DEFAULT '',
+	position   REAL NOT NULL DEFAULT 0,
+	status     TEXT NOT NULL DEFAULT 'open',
+	reply      TEXT NOT NULL DEFAULT '',
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL
+);
+CREATE INDEX problem_reports_status ON problem_reports(status, created_at);
+`,
 }

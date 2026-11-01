@@ -17,11 +17,11 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "cinemask-upgrades",
 	Name:        "Cinemask Upgrades",
-	Version:     "1.3.0",
-	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies, and fetches approved title requests.",
+	Version:     "1.4.0",
+	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies, fetches approved title requests (with their progress), and replaces files people report problems with.",
 	Author:      "BingeBandit",
 	Homepage:    "https://github.com/Spacegoose02/cinemask",
-	Events:      []string{"request.approved"},
+	Events:      []string{"request.approved", "problem.refetch"},
 	Settings: []bbplugin.Setting{
 		{Key: "url", Label: "Cinemask address", Type: "text", Help: "For example http://192.168.1.10:7979"},
 		{Key: "api_key", Label: "Cinemask API key", Type: "password",
@@ -33,7 +33,9 @@ var manifest = bbplugin.Manifest{
 		{Key: "collections", Label: "Let collections add their missing titles to Cinemask", Type: "bool", Default: "false",
 			Help: "Each collection then gets Monitor and Search switches in its editor, both off until you turn them on."},
 		{Key: "requests", Label: "Fetch title requests an admin approves", Type: "bool", Default: "true",
-			Help: "Approved requests (Requests in the sidebar) are added to Cinemask, which searches for them at once."},
+			Help: "Approved requests (Requests in the sidebar) are added to Cinemask, which searches for them at once. Their download progress shows on the Requests page."},
+		{Key: "profile_4k", Label: "Quality profile for 4K requests", Type: "text",
+			Help: "The name of a Cinemask quality profile that gets 4K copies. 4K requests (turned on in Settings → Library) use it; without one they fail with a reminder."},
 	},
 	Pages: []bbplugin.Page{{Title: "Upgrades", Path: "/", Admin: true}},
 }
@@ -50,6 +52,10 @@ type app struct {
 	// requests (tests replace them).
 	listRequests func(ctx context.Context) ([]request, error)
 	setRequest   func(ctx context.Context, id int64, status, reason, link string) error
+	// listSent and setProgress read the requests Cinemask is fetching and
+	// report how they're going.
+	listSent    func(ctx context.Context) ([]request, error)
+	setProgress func(ctx context.Context, id int64, p progress) error
 	// kick runs a collection at once after its switches change.
 	kick func(id int64)
 
@@ -69,6 +75,8 @@ func main() {
 	a.cols = &colStore{dir: func() string { return a.p.DataDir }}
 	a.listRequests = a.approvedRequests
 	a.setRequest = a.reportRequest
+	a.listSent = func(ctx context.Context) ([]request, error) { return a.requestsWith(ctx, "sent") }
+	a.setProgress = a.reportProgress
 	a.p.Start = func(ctx context.Context) {
 		go a.watchRequests(ctx)
 		a.watchCollections(ctx)
@@ -81,8 +89,12 @@ func main() {
 }
 
 func (a *app) onEvent(_ context.Context, e bbplugin.Event) {
-	if e.Event == "request.approved" {
+	switch e.Event {
+	case "request.approved":
 		go a.sendRequests(context.Background())
+		return
+	case "problem.refetch":
+		go a.onRefetch(context.Background(), e.Data)
 		return
 	}
 	if e.Event != "plugin.settings" {

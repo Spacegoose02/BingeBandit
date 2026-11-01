@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.41.1, 54 schema migrations._
+_Last updated: 2026-11-01. Latest release v0.41.1, 56 schema migrations._
 
 
 ## Start here
@@ -68,6 +68,22 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Requests that beat Overseerr: seasons, 4K, progress, rules, kids, problem reports, discovery, Sonarr & Radarr (2026-11-01, migration 56)
+
+Michael asked for the request flow to replace Overseerr/Jellyseerr and beat it. All nine ideas from the review were built at once.
+
+- **Migration 56:** `title_requests` gains `seasons` ("1,2"; empty is the whole show), `four_k`, `stage`, `progress`, `eta`, `release_date`, `available_at`; `title_request_people` gains `source` ("" or "watchlist"). New `request_rules` (per person: `auto_approve`, `movie_limit`/`show_limit` with -1 = server default, `watchlist`), `request_offers` (next-season offers made once) and `problem_reports`. (Kid filters took 55.)
+- **Store** (`store/requests.go`, `store/problems.go`): `RequestTitle` merges seasons and 4K into the one request per title and starts it over (`reopened`) when someone wants more of one that came in, was sent, failed or was declined. `ArrivedRequests` now needs every requested season (`ShowSeasons`) and, for 4K, a ≥2000-line file (`Has4K`). `UnwatchedRequests` uses `plays` (movie or show id) since `available_at`.
+- **API** (`api/requests.go`, `api/problems.go`): `placeRequest` is shared by the web and the watchlist job: validation, `serverCovers` (409), weekly limits (429, own asks only, not joins of your own or watchlist ones), status by `statusFor` (kid with a household → `parent`; admin or auto-approve → `approved`; else `pending`). Parents (`isParentOf`: the account or a grown-up profile of the kid's household) answer with `POST /requests/{id}/parent`. New: `/requests/discover`, `/requests/title/{kind}/{tmdb}`, `/requests/similar/…`, `/requests/person`, `/requests/collection/{id}`, `/requests/settings`, `/admin/requests/rules`, `/admin/requests/unwatched`, problem routes; plugin API `/problems`; the plugin's `PUT /requests/{id}` takes `stage/progress/eta`. Approving now notifies the people who asked. `offerNextSeason` runs on `playback.finished` for an episode that's the last one here. `requestWatchlists` runs from `RunNotifications` every 6 hours (25 new per person per run). Settings: `request_movie_limit`, `request_show_limit`, `request_kids`, `request_4k`, `request_cleanup_days`. Events `problem.created`, `problem.refetch` (also webhooks).
+- **TMDB** (`metadata/requestable.go`): trending, popular, upcoming, on the air, recommendations, a person's combined credits (talk and news shows dropped), and a title with its seasons; all cached an hour in memory.
+- **Trakt:** `Client.Watchlist`, `Syncer.Watchlist` (movies and shows with a TMDB id).
+- **New plugin `arr-requests` (Sonarr & Radarr, 1.0.0):** sends approved requests (Radarr `POST /movie` with `searchForMovie`, Sonarr `POST /series` with per-season `monitored` and `searchForMissingEpisodes`; existing titles get `MoviesSearch` / `PUT series` + `SeasonSearch`), 4K to an optional second pair, queue progress every 2 minutes, `problem.refetch` → `POST /history/failed/{id}` for the last grab (or a search). Sonarr titles are matched by `tmdbId`, which Sonarr 4 has; lookup tries `tmdb:<id>` then the name. Added to build.sh, build.ps1, Dockerfile, release.yml and .gitignore.
+- **Cinemask Upgrades 1.4.0:** sends `seasons`, a 4K profile by name (setting `profile_4k`, moved to it when already monitored), progress from Cinemask's `GET /api/downloads` (`monitoredId`, `progress` 0–1, `eta` seconds), and on `problem.refetch` grabs the first release not grabbed before whose rejections are only about the file on disk being good enough.
+- **Web:** `components/RequestKit.tsx` (status with progress bar and ETA, request cards with votes and Coming dates, the request dialog with seasons/4K/limit, `RequestRow`, `MissingSeasons`), `components/ReportProblem.tsx`, the Requests page rewritten with tabs (Discover / Your requests / Your reports; admins: All requests with Most wanted sort, Problems, People & limits, Never watched) and the parents' "Your kids would like" list. Item pages: missing seasons, "Like this, not here yet", Report a problem (movies, episodes); person and collection pages: request rows; player options: Report a problem with the position. Settings → Library has the new switches. A notification link `/requests?title=show:ID&season=N` opens the dialog.
+- **TV app:** search's requestable titles show progress and take Me too (kids too, when allowed); show pages have a Request season N button; player options → Report a problem. **Roku:** Search appends requestable titles (`build: "requestable"`), OK asks; player options → Report a problem.
+- **Tested:** `go test ./...` (new `TestRequestsBeyondTheBasics`: seasons, joining, reopening, plugin progress, arrival needing every season, 4K off, weekly limits, auto-approve, kids and parents, problem reports, the Never watched list; `TestTitleRequests` updated for the approval notification), `go test ./plugins/arr-requests` against a fake Sonarr/Radarr, new Cinemask plugin tests (seasons, 4K profile, progress, refetch), web `tsc` and build, TV `tsc` and `eslint`, Roku `brighterscript`. The web pages were looked at in Chromium against a fake TMDB (Discover rows, all requests, your requests, People & limits, the seasons dialog). **Not tested:** real TMDB, a real Sonarr/Radarr or Cinemask, Trakt's watchlist endpoint, the TV and Roku parts on a device.
+
 
 ## Kid filters: rating limits per profile, no Discover for kids (2026-11-01, migration 55)
 

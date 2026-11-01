@@ -33,6 +33,11 @@ const (
 	SettingOpenSubsPassword  = "opensubtitles_password"
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
 	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
+	SettingRequestMovieLimit = "request_movie_limit"     // movies each person may request per 7 days; 0 = no limit
+	SettingRequestShowLimit  = "request_show_limit"      // shows (or seasons of one) per 7 days; 0 = no limit
+	SettingRequestKids       = "request_kids"            // true: kid profiles may request, and a parent approves first
+	SettingRequest4K         = "request_4k"              // true: people may ask for the 4K copy
+	SettingRequestCleanup    = "request_cleanup_days"    // list requested titles nobody who asked watched after this many days; 0 = off
 	SettingWatchedPercent    = "watched_percent"         // how far into a movie or episode it counts as watched
 	SettingContinueDays      = "continue_watching_days"  // titles not played for this long leave Continue Watching; 0 = never
 	SettingRecentDays        = "recently_added_days"     // Recently Added only shows titles added this many days back; 0 = any
@@ -137,6 +142,11 @@ var SettingDefaults = map[string]string{
 	SettingOpenSubsPassword:  "",
 	SettingRecommendations:   "true",
 	SettingRequests:          "true",
+	SettingRequestMovieLimit: "0",
+	SettingRequestShowLimit:  "0",
+	SettingRequestKids:       "false",
+	SettingRequest4K:         "false",
+	SettingRequestCleanup:    "0",
 	SettingWatchedPercent:    "90",
 	SettingContinueDays:      "0",
 	SettingRecentDays:        "90",

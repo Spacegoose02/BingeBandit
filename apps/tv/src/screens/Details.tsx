@@ -128,6 +128,7 @@ export default function Details({ id }: { id: number }) {
             onPress={() => change(api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`))}
           />
           {canSave && <DownloadButton item={it} episodes={episodes} onPick={() => setPicking((p) => !p)} />}
+          {it.kind === 'show' && !!it.tmdbId && <MissingSeasonsButton item={it} />}
         </View>
         {canSave && picking && (
           <DownloadChoices
@@ -303,3 +304,36 @@ const st = StyleSheet.create(scaled({
   epTitle: { color: colors.text, fontSize: font.body, fontWeight: '700' },
   epOverview: { color: colors.muted, fontSize: font.small, marginTop: 8, lineHeight: 30 },
 }))
+
+interface SeasonsInfo {
+  title: { kind: 'show'; tmdbId: number; title: string; year?: number; poster?: string; overview?: string }
+  seasons?: { number: number; episodes: number; airDate?: string; onServer: number; requested: boolean }[]
+}
+
+/** On a show: the seasons the server doesn't have (out or coming), requested in one press. */
+function MissingSeasonsButton({ item }: { item: Item }) {
+  const [info, setInfo] = useState<SeasonsInfo | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    // Requests off, or no TMDB key: no button.
+    api.get<SeasonsInfo>(`/api/requests/title/show/${item.tmdbId}`).then(setInfo, () => setInfo(null))
+  }, [item.tmdbId])
+  if (msg) return <Button label={msg} onPress={() => undefined} />
+  const missing = (info?.seasons ?? []).filter((s) => s.onServer < s.episodes && s.episodes > 0)
+  if (!info || missing.length === 0) return null
+  const open = missing.filter((s) => !s.requested)
+  if (open.length === 0) return <Button label={`Season${missing.length > 1 ? 's' : ''} ${missing.map((s) => s.number).join(', ')} requested ✓`} onPress={() => undefined} />
+  const label = `Request season${open.length > 1 ? 's' : ''} ${open.map((s) => s.number).join(', ')}`
+  return (
+    <Button
+      label={label}
+      onPress={() => {
+        const { kind, tmdbId, title, year, poster, overview } = info.title
+        api.post('/api/requests', { kind, tmdbId, title, year, poster, overview, seasons: open.map((s) => s.number) }).then(
+          () => setMsg('Requested ✓'),
+          (e: Error) => setMsg(e.message),
+        )
+      }}
+    />
+  )
+}

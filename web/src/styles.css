@@ -1473,3 +1473,31 @@ body:has(.audio-bar) .main { padding-bottom: 96px; }
 .media-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .media-tools select { width: auto; }
 .photo-viewer { padding-bottom: 56px; }
+
+/* Requests: progress, votes, seasons */
+.request-progress { min-width: 150px; display: flex; flex-direction: column; gap: 4px; }
+.request-progress.compact { min-width: 0; }
+.request-bar { height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.request-bar span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width 0.6s ease; }
+.request-card .poster-link.plain { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; }
+.request-card .poster-link.plain:disabled { cursor: default; }
+.request-card .poster-frame { position: relative; }
+.request-votes { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); color: #fff; }
+.request-votes svg { color: var(--danger); }
+.request-votes.inline { position: static; background: var(--surface-2); color: var(--text); }
+.request-soon { position: absolute; left: 8px; bottom: 8px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: #fff; }
+.request-modal .request-modal-poster { width: 92px; border-radius: 8px; float: right; margin: 0 0 8px 12px; }
+.request-modal .label { flex-direction: row; justify-content: space-between; align-items: center; }
+.season-list { max-height: 260px; overflow: auto; }
+.request-sort { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+.request-sort .chip.active { color: var(--accent); border-color: var(--accent); }
+.request-limits { margin: -10px 0 18px; }
+.request-watchlist { margin-top: 28px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.small-pill { font-size: 11px; padding: 1px 6px; margin-left: 8px; vertical-align: middle; }
+.inline-field { flex-direction: row !important; align-items: center; gap: 6px !important; display: flex; color: var(--muted); }
+.problem-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.problem-kinds button { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); }
+.problem-kinds button.active { border-color: var(--accent); color: var(--accent); }
+.missing-seasons { display: flex; align-items: center; gap: 14px; padding: 14px 16px; margin: 0 0 24px; }
+.missing-seasons .grow { display: flex; flex-direction: column; gap: 6px; }

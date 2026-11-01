@@ -1124,6 +1124,26 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
               }}
             />
           </ScrollView>}
+          {!offline && item && (item.kind === 'movie' || item.kind === 'episode') && (
+            <>
+              <Text style={st.menuTitle}>Report a problem</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                {([['video', 'Picture'], ['audio', 'Sound'], ['subtitles', 'Subtitles'], ['wrong', 'Wrong file'], ['other', 'Something else']] as const).map(([kind, label]) => (
+                  <Button
+                    key={kind}
+                    small
+                    label={label}
+                    onPress={() => {
+                      setMenu(false)
+                      api
+                        .post(`/api/items/${item.id}/problems`, { kind, position: Math.floor(posRef.current) })
+                        .then(() => say('Thanks, an admin will take a look'), (e: Error) => say(e.message))
+                    }}
+                  />
+                ))}
+              </ScrollView>
+            </>
+          )}
           {hueMode !== null && hueMode !== 'off' && (
             <>
               <Text style={st.menuTitle}>Hue Sync</Text>

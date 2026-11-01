@@ -318,3 +318,35 @@ func (c *Cinemask) Link(kind string, tmdbID int64) string {
 	}
 	return c.base + path + strconv.FormatInt(tmdbID, 10)
 }
+
+// Add starts following a title (just these seasons of a show when given),
+// at a quality profile (0 for the default), searching at once when asked.
+func (c *Cinemask) Add(ctx context.Context, kind string, tmdbID, profileID int64, seasons []int, search bool) (*Monitored, error) {
+	body := map[string]any{"kind": kind, "tmdbId": tmdbID, "search": search}
+	if profileID > 0 {
+		body["profileId"] = profileID
+	}
+	if kind == "show" && len(seasons) > 0 {
+		body["seasons"] = seasons
+	}
+	var out Monitored
+	if err := c.do(ctx, "POST", "/api/monitored", body, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Download is one of Cinemask's active downloads.
+type Download struct {
+	ID          int64   `json:"id"`
+	MonitoredID int64   `json:"monitoredId"`
+	Status      string  `json:"status"`   // held, queued, downloading, paused, completed, importing
+	Progress    float64 `json:"progress"` // 0-1
+	ETA         *int    `json:"eta"`      // seconds left
+}
+
+// Downloads lists what Cinemask is downloading or importing.
+func (c *Cinemask) Downloads(ctx context.Context) ([]Download, error) {
+	var out []Download
+	return out, c.do(ctx, "GET", "/api/downloads", nil, &out)
+}

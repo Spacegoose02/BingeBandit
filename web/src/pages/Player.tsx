@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
+import { ReportProblemDialog } from '../components/ReportProblem'
 import { PreRoll } from '../components/PreRoll'
 import { desktop, desktopCan } from '../desktop'
 import DesktopPlayer from './DesktopPlayer'
@@ -267,6 +268,7 @@ function PlayerView({
   const [fullscreen, setFullscreen] = useState(false)
   const [controls, setControls] = useState(true)
   const [menu, setMenu] = useState<null | 'settings' | 'together' | 'summary' | 'subsearch' | 'chapters'>(null)
+  const [reportAt, setReportAt] = useState<number | null>(null)
   const [casting, setCasting] = useState(false) // picking a TV to carry on there
   const menuRef = useRef(menu)
   menuRef.current = menu
@@ -1033,6 +1035,14 @@ function PlayerView({
                 <button onClick={() => setMenu('together')}>
                   {roomId ? `Watching together${tg.room ? ` (${tg.room.members.length})` : ''}…` : 'Watch together…'}
                 </button>
+                <button
+                  onClick={() => {
+                    setReportAt(Math.floor(position()))
+                    setMenu(null)
+                  }}
+                >
+                  Report a problem…
+                </button>
                 {hue.mode && hueSeen && (
                   <>
                     <div className="menu-section">Hue Sync</div>
@@ -1109,6 +1119,18 @@ function PlayerView({
           </button>
         </div>
       </div>
+
+      {reportAt !== null && (
+        <ReportProblemDialog
+          itemId={item.id}
+          title={item.kind === 'episode' ? `${item.showTitle} ${episodeLabel(item)}` : item.title}
+          position={reportAt}
+          onClose={(msg) => {
+            setReportAt(null)
+            if (msg) setToast(msg)
+          }}
+        />
+      )}
 
       {upNext && (
         <div className="up-next">

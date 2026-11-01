@@ -305,3 +305,33 @@ func (t *source) Records(ctx context.Context, _ bool, emit func(importer.Record)
 	}
 	return nil
 }
+
+// WantedTitle is a movie or show from someone's Trakt watchlist.
+type WantedTitle struct {
+	Kind   string
+	TMDBID int64
+	Title  string
+	Year   int
+}
+
+// Watchlist reads uid's Trakt watchlist (titles with a TMDB id).
+func (s *Syncer) Watchlist(ctx context.Context, uid int64) ([]WantedTitle, error) {
+	c, acc, err := s.token(ctx, uid)
+	if err != nil {
+		return nil, err
+	}
+	list, err := c.Watchlist(ctx, acc.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+	var out []WantedTitle
+	for _, e := range list {
+		switch {
+		case e.Type == "movie" && e.Movie != nil && e.Movie.IDs.TMDB > 0:
+			out = append(out, WantedTitle{"movie", e.Movie.IDs.TMDB, e.Movie.Title, e.Movie.Year})
+		case e.Type == "show" && e.Show != nil && e.Show.IDs.TMDB > 0:
+			out = append(out, WantedTitle{"show", e.Show.IDs.TMDB, e.Show.Title, e.Show.Year})
+		}
+	}
+	return out, nil
+}

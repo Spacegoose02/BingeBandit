@@ -39,7 +39,7 @@
 | `server/internal/s3` | S3-compatible backup upload and download |
 | `server/internal/avatars` | The built-in animal profile pictures |
 | `server/internal/web` | `go:embed` of `dist/`, which `npm run build` in `web/` fills |
-| `server/plugins/*` | Bundled plugins: Watchlist RSS, Hue Sync, Game Lights, Cinemask Upgrades, YouTube Live |
+| `server/plugins/*` | Bundled plugins: Watchlist RSS, Hue Sync, Game Lights, Cinemask Upgrades, Sonarr & Radarr, YouTube Live |
 | `server/pkg/bbplugin` | Go kit for writing plugins |
 | `web/src` | React 18 + TypeScript + Vite + react-router 6. `pages/` (admin pages in `pages/admin/`), `components/`, `api.ts`, `types.ts` (mirrors Go JSON) |
 | `apps/tv` | Android TV / Fire TV / phone app (react-native-tvos) |
