@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Sports Hub: a day of every league's games, your teams and what's live, with the focused game described up top. -->
+<component name="SportsView" extends="BaseView">
+  <children>
+    <Label id="day" width="900" translation="[0, 40]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="42" />
+    </Label>
+    <Label id="hint" width="560" translation="[920, 52]" horizAlign="right" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="22" />
+    </Label>
+    <Label id="gName" width="1480" translation="[0, 112]" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="32" />
+    </Label>
+    <Label id="gMeta" width="1480" translation="[0, 160]" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="26" />
+    </Label>
+    <Label id="gMore" width="1480" translation="[0, 200]" wrap="true" maxLines="2" color="0xC9CFD6FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+    </Label>
+    <Label id="note" width="1480" translation="[0, 272]" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="24" />
+    </Label>
+    <RowList id="rows" translation="[0, 320]" itemComponentName="GameItem" itemSize="[1480, 250]" numRows="3"
+      rowItemSize="[[420, 180]]" rowItemSpacing="[[20, 0]]" itemSpacing="[0, 10]"
+      showRowLabel="[true]" rowLabelOffset="[[0, 10]]" rowLabelColor="0xF2F4F7FF"
+      rowFocusAnimationStyle="floatingFocus" vertFocusAnimationStyle="fixedFocus"
+      focusBitmapUri="pkg:/images/focus.9.png" drawFocusFeedback="true">
+      <Font role="rowLabelFont" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </RowList>
+    <Label id="status" width="1400" translation="[0, 560]" horizAlign="center" wrap="true" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
+    </Label>
+    <!-- The whole screen, from inside Home's panel. -->
+    <OptionsMenu id="menu" translation="[-400, 0]" visible="false" />
+    <Timer id="reload" duration="30" repeat="true" />
+    <Timer id="noteTimer" duration="5" repeat="false" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/common/sports.brs" />
+  <script type="text/brightscript" uri="pkg:/components/views/SportsView.brs" />
+</component>

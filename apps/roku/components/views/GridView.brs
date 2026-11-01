@@ -62,7 +62,9 @@ sub onFocused()
 end sub
 
 sub onSelected()
-    m.top.navigate = openItem(m.grid.content.getChild(m.grid.itemSelected))
+    if m.grid.content = invalid then return
+    c = m.grid.content.getChild(m.grid.itemSelected)
+    if c <> invalid then m.top.navigate = openItem(c)
 end sub
 
 ' --- Library filters (the * button) ------------------------------------------

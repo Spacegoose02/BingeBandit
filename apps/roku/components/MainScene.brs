@@ -12,6 +12,18 @@ sub init()
     m.resumeTimer.duration = 1
     m.resumeTimer.observeField("fire", "onResumeTimer")
     m.global.observeField("unauthorized", "onUnauthorized")
+    ' Watch Together invitations pop up over any screen once someone's signed in.
+    m.dismissed = {}
+    m.inviteDialog = invalid
+    m.invite = invalid
+    m.lookingForInvites = false
+    m.quiet = false
+    m.quietAt = 0
+    m.inviteTimer = m.top.createChild("Timer")
+    m.inviteTimer.duration = 10
+    m.inviteTimer.repeat = true
+    m.inviteTimer.observeField("fire", "lookForInvites")
+    m.inviteTimer.control = "start"
     if loadSession()
         afterSignIn()
     else
@@ -159,6 +171,108 @@ sub onNavigate(event as object)
         saveSession(invalid)
         startSignIn()
     end if
+end sub
+
+' --- Watch Together invitations ------------------------------------------------
+
+function topScreen() as dynamic
+    if m.stack.Count() = 0 then return invalid
+    return m.stack.Peek()
+end function
+
+function playing() as boolean
+    t = topScreen()
+    if t = invalid then return false
+    return t.subtype() = "PlayerScreen" or t.subtype() = "LivePlayerScreen"
+end function
+
+' Every ten seconds while someone is in (past sign-in and Who's watching?)
+' and nothing else is popped up.
+sub lookForInvites()
+    if m.global.token = "" or m.lookingForInvites or m.inviteDialog <> invalid or m.top.dialog <> invalid then return
+    if m.stack.Count() = 0 or m.stack[0].subtype() <> "HomeScreen" then return
+    m.lookingForInvites = true
+    api("GET", "/api/together/invites", invalid, "onInvites")
+    ' "Quiet while watching" (web Account), looked at once a minute.
+    now = CreateObject("roDateTime").AsSeconds()
+    if now - m.quietAt > 60
+        m.quietAt = now
+        api("GET", "/api/me/prefs", invalid, "onQuietPrefs")
+    end if
+end sub
+
+sub onQuietPrefs(event as object)
+    doneTask(event.getRoSGNode())
+    res = event.getData()
+    if res.ok and type(res.data) = "roAssociativeArray" then m.quiet = isTrue(res.data.quietWhilePlaying)
+end sub
+
+sub onInvites(event as object)
+    doneTask(event.getRoSGNode())
+    m.lookingForInvites = false
+    res = event.getData()
+    if not res.ok or type(res.data) <> "roArray" or m.inviteDialog <> invalid or m.top.dialog <> invalid then return
+    if m.stack.Count() = 0 or m.stack[0].subtype() <> "HomeScreen" then return
+    if playing() and m.quiet then return
+    t = topScreen()
+    here = ""
+    if t <> invalid and t.subtype() = "PlayerScreen" then here = getOr(t.params, "together", "")
+    for each inv in res.data
+        room = getOr(inv, "room", "")
+        if room <> "" and room = here then m.dismissed[room] = true
+        if room <> "" and not m.dismissed.DoesExist(room)
+            showInvite(inv)
+            return
+        end if
+    end for
+end sub
+
+sub showInvite(inv as object)
+    m.invite = inv
+    d = CreateObject("roSGNode", "StandardMessageDialog")
+    d.title = getOr(inv, "from", "Someone") + " wants to watch together"
+    d.message = [getOr(inv, "title", "")]
+    d.buttons = ["Join", "Not now"]
+    d.observeField("buttonSelected", "onInviteButton")
+    d.observeField("wasClosed", "onInviteClosed")
+    m.inviteDialog = d
+    m.top.dialog = d
+end sub
+
+sub onInviteButton()
+    d = m.inviteDialog
+    inv = m.invite
+    if d = invalid or inv = invalid then return
+    choice = d.buttonSelected
+    m.dismissed[inv.room] = true
+    m.inviteDialog = invalid
+    m.invite = invalid
+    d.close = true
+    if choice = 0
+        joinParty(inv)
+    else
+        apiSend("DELETE", "/api/together/" + inv.room + "/invite", invalid)
+    end if
+end sub
+
+' Back on the pop-up: not now, but without declining.
+sub onInviteClosed()
+    if m.invite <> invalid then m.dismissed[m.invite.room] = true
+    m.inviteDialog = invalid
+    m.invite = invalid
+end sub
+
+' Join opens the player in the room; over a player it takes its place, since
+' a player left underneath would keep playing.
+sub joinParty(inv as object)
+    params = { id: inv.itemId, start: 0, together: inv.room }
+    if playing()
+        s = m.stack.Pop()
+        s.unobserveField("navigate")
+        s.closing = true
+        m.screens.removeChild(s)
+    end if
+    push("PlayerScreen", params)
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A game on the Sports Hub: its league, the two sides with their scores (or a race's leaders), how it stands, and its channel. -->
+<component name="GameItem" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onContent" />
+    <field id="width" type="float" onChange="layout" />
+    <field id="height" type="float" onChange="layout" />
+    <field id="focusPercent" type="float" onChange="onFocus" />
+  </interface>
+  <children>
+    <Rectangle id="tile" color="0x1C2128FF" />
+    <Rectangle id="stripe" width="8" />
+    <Label id="league" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="20" />
+    </Label>
+    <Label id="status" horizAlign="right" color="0x98A1ADFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="20" />
+    </Label>
+    <Label id="away" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </Label>
+    <Label id="awayScore" horizAlign="right" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </Label>
+    <Label id="home" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="28" />
+    </Label>
+    <Label id="homeScore" horizAlign="right" color="0xF2F4F7FF">
+      <Font role="font" uri="pkg:/fonts/Inter-Bold.otf" size="30" />
+    </Label>
+    <Label id="foot" color="0x2DD4BFFF">
+      <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="20" />
+    </Label>
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
+  <script type="text/brightscript" uri="pkg:/components/common/sports.brs" />
+  <script type="text/brightscript" uri="pkg:/components/items/GameItem.brs" />
+</component>

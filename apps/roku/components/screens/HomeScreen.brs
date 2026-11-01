@@ -58,6 +58,9 @@ sub buildMenu(user as object, libs as object)
     for each lib in libs
         entries.Push({ id: "lib:" + lib.id.ToStr(), label: lib.name, library: lib })
     end for
+    ' Sports is always here: the TV app keeps it under More until it's
+    ' pinned (hiddenTabs), and Roku has no More.
+    entries.Push({ id: "sports", label: "Sports" })
     if getOr(user, "liveTV", true) <> false then entries.Push({ id: "live", label: "Live TV" })
     entries.Push({ id: "settings", label: "Settings" })
     entries.Push({ id: "profiles", label: "Switch profile" })
@@ -120,6 +123,7 @@ function makeView(e as object) as object
     if e.id = "home" then return CreateObject("roSGNode", "RowsView")
     if e.id = "search" then return CreateObject("roSGNode", "SearchView")
     if e.id = "live" then return CreateObject("roSGNode", "GuideView")
+    if e.id = "sports" then return CreateObject("roSGNode", "SportsView")
     v = CreateObject("roSGNode", "GridView")
     if e.id = "kidsMovies"
         v.params = { title: "Approved Movies", path: "/api/kids/titles?kind=movie", build: "items", empty: "No movies approved yet. A parent approves them in BingeBandit." }
