@@ -87,6 +87,7 @@ type Server struct {
 	sportsWake chan struct{}
 	health     healthState
 	alerts     alertHistory
+	chapters   chapterCache
 	// offline makes download copies for the phone app (offline.go).
 	offline offlineCopies
 }
@@ -311,6 +312,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/files/{id}/subtitles/{stream}", s.subtitle)
 			r.Get("/files/{id}/subtitles/search", s.searchSubtitles)
 			r.Post("/files/{id}/subtitles/download", s.downloadSubtitle)
+			r.Get("/files/{id}/chapters", s.fileChapters)
 			r.Get("/files/{id}/trickplay", s.trickplayInfo)
 			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
 			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
