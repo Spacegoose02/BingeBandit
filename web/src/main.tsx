@@ -7,9 +7,11 @@ import { ScrollRestorer } from './backState'
 import './styles.css'
 import { enableTvMode, tvModeOn } from './tvNav'
 import { registerServiceWorker } from './push'
+import { listenForInstallPrompt } from './install'
 
 if (tvModeOn()) enableTvMode()
 registerServiceWorker()
+listenForInstallPrompt()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
