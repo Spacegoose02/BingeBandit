@@ -130,6 +130,7 @@ Image URLs in responses are already paths on this server (e.g. `/api/images/tmdb
 | GET | `/files/{id}/subtitles/{stream}` | A subtitle track as WebVTT. |
 | GET | `/files/{id}/subtitles/search?lang=` | Search OpenSubtitles for the file (`lang` is a language name or code, English by default) → `{language, results: [{fileId, name, language, downloads, hearingImpaired, hashMatch, trusted, ai}]}`, best first. 409 without an API key in Settings; 403 for kid profiles. |
 | POST | `/files/{id}/subtitles/download` | `{fileId, language, hearingImpaired}` from a search result: saves it beside the video as `<video>.<lang>.srt` → `{streams, index}` (the file's streams and the new one's index). 429 when the day's OpenSubtitles downloads are used up. |
+| GET | `/files/{id}/chapters` | Chapter marks → `{chapters: [{start, end, title?}]}`, seconds in the original file. Empty when the file has none (a single chapter covering the whole file counts as none). |
 | GET | `/files/{id}/trickplay` | Scrub previews → `{interval, width, height, columns, rows, count, sheets}`: thumbnail `n` (at `n × interval` seconds) is in sheet `n / (columns × rows)`, column `n % columns`, row `(n / columns) % rows`. 404 until they're made (asking starts making them). |
 | GET | `/files/{id}/trickplay/{n}.jpg` | Sheet `n` (from 0) of thumbnails. |
 | GET | `/files/{id}/trickplay.bif?from=` | The thumbnails as a Roku BIF file; `from` is where a conversion started, in seconds. |
