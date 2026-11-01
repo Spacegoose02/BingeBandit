@@ -554,7 +554,7 @@ export default function AdminSettings() {
           <label>
             CFB Tracker key
             <input type="password" className="mono" value={s.sports_relay_key ?? ''} onChange={set('sports_relay_key')} autoComplete="new-password" spellCheck={false} />
-            <span className="muted small">The tracker's RELAY_API_KEY, if it has one.</span>
+            <span className="muted small">The tracker's RELAY_API_KEY (its relay stays off until that's set).</span>
           </label>
         </section>
 

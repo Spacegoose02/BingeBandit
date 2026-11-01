@@ -118,7 +118,7 @@ const (
 	// site API under /espn/site/v2/sports), so ESPN is read once for both
 	// apps. Empty = read ESPN directly.
 	SettingSportsRelayURL = "sports_relay_url" // e.g. http://192.168.1.10:3000
-	SettingSportsRelayKey = "sports_relay_key" // the tracker's RELAY_API_KEY, sent as X-Api-Key
+	SettingSportsRelayKey = "sports_relay_key" // the tracker's RELAY_API_KEY (required by it), sent as X-Api-Key
 )
 
 var SettingDefaults = map[string]string{
