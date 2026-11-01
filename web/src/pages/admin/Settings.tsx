@@ -297,7 +297,7 @@ export default function AdminSettings() {
           </p>
           <label className="check">
             <input type="checkbox" checked={s.allow_downloads === 'true'} onChange={set('allow_downloads')} />
-            Let users download original files
+            Let users download files (original files on the web, offline downloads in the phone app)
           </label>
           <label className="check">
             <input type="checkbox" checked={s.recommendations_enabled !== 'false'} onChange={set('recommendations_enabled')} />

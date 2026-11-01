@@ -87,6 +87,9 @@ type Server struct {
 	sportsWake chan struct{}
 	health     healthState
 	alerts     alertHistory
+	chapters   chapterCache
+	// offline makes download copies for the phone app (offline.go).
+	offline offlineCopies
 }
 
 func (s *Server) Router(ctx context.Context) http.Handler {
@@ -180,6 +183,11 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/notifications", s.notifications)
 			r.Post("/notifications/read", s.readNotifications)
 			r.Delete("/notifications", s.clearNotifications)
+			r.Get("/push", s.pushStatus)
+			r.Post("/push/devices", s.addPushDevice)
+			r.Put("/push/devices/{id}", s.setPushDevice)
+			r.Delete("/push/devices/{id}", s.deletePushDevice)
+			r.Post("/push/test", s.testPush)
 			r.Get("/me/prefs", s.getPrefs)
 			r.Get("/me/pins", s.pins)
 			r.Put("/me/pins", s.setPins)
@@ -309,10 +317,14 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/files/{id}/subtitles/{stream}", s.subtitle)
 			r.Get("/files/{id}/subtitles/search", s.searchSubtitles)
 			r.Post("/files/{id}/subtitles/download", s.downloadSubtitle)
+			r.Get("/files/{id}/chapters", s.fileChapters)
 			r.Get("/files/{id}/trickplay", s.trickplayInfo)
 			r.Get("/files/{id}/trickplay/{sheet}", s.trickplaySheet)
 			r.Get("/files/{id}/trickplay.bif", s.trickplayBIF)
 			r.Post("/files/{id}/transcode", s.startTranscode)
+			r.Post("/files/{id}/offline", s.prepareOffline)
+			r.Get("/offline/{key}", s.offlineFile)
+			r.Post("/offline/check", s.checkOffline)
 			r.Get("/transcode/{sid}/{name}", s.transcodeFile)
 			r.Delete("/transcode/{sid}", s.stopTranscode)
 

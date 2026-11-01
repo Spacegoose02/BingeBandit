@@ -297,7 +297,9 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
-	resp := map[string]any{"item": it}
+	// canDownload: the viewer may save files (the web's Download original
+	// file, the phone app's offline downloads of a movie, episode or season).
+	resp := map[string]any{"item": it, "canDownload": s.canDownload(u)}
 
 	switch it.Kind {
 	case "movie", "episode":
@@ -315,7 +317,6 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp["files"] = files
-		resp["canDownload"] = s.canDownload(u)
 		if ms, err := s.Store.Markers(it.ID); err == nil {
 			resp["markers"] = ms
 		}

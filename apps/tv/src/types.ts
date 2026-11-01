@@ -72,6 +72,7 @@ export interface Credit {
 
 export interface MediaFile {
   id: number
+  size?: number // bytes
   container: string
   duration: number
   videoCodec: string
@@ -92,6 +93,7 @@ export interface ItemDetail {
   upNext?: Item
   trailers?: { url: string; name: string }[] // movies: trailer files from the movie's folder
   collections?: { collection: Collection; items: Item[] }[] // movies and shows: the collections they're in
+  canDownload?: boolean // movies and episodes: the viewer may download them (offline downloads, phones)
 }
 
 /** A row of titles on Home or a library's Recommended tab. */
