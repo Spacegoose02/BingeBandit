@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
 import type { Library, User } from '../../types'
+import { ratingLevels } from '../../types'
 import { libraryKinds } from '../../libraryKinds'
 
 export default function AdminUsers() {
@@ -42,6 +43,10 @@ export default function AdminUsers() {
   }
   const setKid = async (u: User, on: boolean) => {
     await api.put(`/api/admin/users/${u.id}/kid`, { on }).catch((e) => alert(e.message))
+    reload()
+  }
+  const setMaxRating = async (u: User, level: number) => {
+    await api.put(`/api/admin/users/${u.id}/max-rating`, { level }).catch((e) => alert(e.message))
     reload()
   }
   const reset2FA = async (u: User) => {
@@ -109,6 +114,21 @@ export default function AdminUsers() {
               >
                 <Icon name="user" size={16} /> {u.kid ? 'Kid' : 'Not a kid'}
               </button>
+            )}
+            {!u.isAdmin && (
+              <select
+                className="btn btn-glass btn-sm"
+                value={u.maxRating ?? 0}
+                onChange={(e) => setMaxRating(u, Number(e.target.value))}
+                title={u.ownerId ? 'Highest rating this profile sees' : "Highest rating this user sees; their profiles can't go higher"}
+              >
+                <option value={0}>Any rating</option>
+                {ratingLevels.map((name, i) => (
+                  <option key={name} value={i + 1}>
+                    Up to {name}
+                  </option>
+                ))}
+              </select>
             )}
             {u.hasPasscode && (
               <button className="btn btn-glass btn-sm" onClick={() => clearPasscode(u)} title="For someone who forgot their settings passcode">

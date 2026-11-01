@@ -22,6 +22,7 @@ type User struct {
 	ShareActivity bool    `json:"shareActivity"`        // others may see what this user is watching
 	LiveTV        bool    `json:"liveTV"`               // may watch Live TV and use the DVR (admins always can)
 	Kid           bool    `json:"kid"`                  // only sees Live TV channels approved for kids (never an admin)
+	MaxRating     int     `json:"maxRating"`            // highest content rating level shown (see rating_limits.go); 0 is no limit, and admins never have one
 	LibraryIDs    []int64 `json:"libraryIds,omitempty"` // only filled by ListUsers
 	Passkeys      int     `json:"passkeys,omitempty"`   // how many; only filled by ListUsers
 	HasPassword   bool    `json:"hasPassword"`          // false for accounts made by single sign-on
@@ -168,13 +169,13 @@ func (s *Store) CreateUser(username, passwordHash string, admin bool) (*User, er
 	return u, nil
 }
 
-const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv, kid, email`
+const userCols = `id, username, is_admin, created_at, all_libraries, profile_public, totp_enabled, share_activity, password_hash, totp_secret, passcode_hash, COALESCE(owner_id, 0), profile_name, avatar, auto_profile_id, live_tv, kid, email, max_rating`
 
 func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var avatar string
 	if err := r.Scan(&u.ID, &u.Username, &u.IsAdmin, &u.CreatedAt, &u.AllLibraries, &u.ProfilePublic, &u.TOTPEnabled, &u.ShareActivity,
-		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV, &u.Kid, &u.Email); err != nil {
+		&u.PasswordHash, &u.TOTPSecret, &u.PasscodeHash, &u.OwnerID, &u.ProfileName, &avatar, &u.AutoProfileID, &u.LiveTV, &u.Kid, &u.Email, &u.MaxRating); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -192,6 +193,9 @@ func scanUser(r interface{ Scan(...any) error }) (*User, error) {
 	}
 	u.LiveTV = u.LiveTV || u.IsAdmin
 	u.Kid = u.Kid && !u.IsAdmin
+	if u.IsAdmin {
+		u.MaxRating = 0
+	}
 	return &u, nil
 }
 

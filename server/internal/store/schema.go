@@ -940,4 +940,7 @@ UPDATE sqlite_master SET sql = replace(sql, 'CHECK (kind IN (''movie'',''show'',
 	WHERE type = 'table' AND name = 'items';
 PRAGMA writable_schema = RESET;
 `,
+	// 55: the highest content rating a user (or profile) may see; 0 is no
+	// limit. The levels are in rating_limits.go.
+	`ALTER TABLE users ADD COLUMN max_rating INTEGER NOT NULL DEFAULT 0;`,
 }
