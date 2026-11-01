@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.42.0, 56 schema migrations._
+_Last updated: 2026-11-01. Latest release v0.43.0, 56 schema migrations._
 
 
 ## Start here
@@ -54,12 +54,11 @@ Most outside services and all hardware were only tested against fakes. These are
 
 - **Devices:** offline downloads on a phone (the whole flow, the foreground service on Android 14+), the TV app on the onn box since the phone work (profile picker onward), the last step of the in-app APK update, any Roku (playback, the guide's preview, audio track switching, drawn subtitles over video and the LAN scan never ran even in the simulator; Watch Together and the Sports Hub only in the simulator), surround passthrough to a receiver, a TV with the internet unplugged, installing from `/tv` (the stamped APK and auto-connect), the Sports Hub against live ESPN (NASCAR's fields especially), Multi-View with four streams (each now ignores Android audio focus) and Game Lights rooms per TV.
 - **Hue:** Hue Sync and Game Lights on a real bridge, pairing a hub from the TV and the TV driving its own lights (Sync colours, Theater, Game Lights cues), Hue Entertainment streaming, CPU use of Hue Sync on 4K HEVC.
-- **Windows app:** a real Windows PC (mpv's named pipe, the NSIS installer), `fetch-mpv` against the live GitHub API.
 - **Casting:** any real Chromecast, Google TV or DLNA TV (only a fake Cast receiver in the tests and `cmd/fakedlna`), the Default Media Receiver taking a growing HLS conversion, DLNA TVs taking the MPEG-TS stream, discovery from Docker in host mode, and the Android phone app's cast screen on a phone.
 - **Windows app:** a real Windows PC (mpv's named pipe, the NSIS installer, the controls with LuaJIT and DirectWrite fonts), `fetch-mpv` against the live GitHub API, an in-app update from one real release to the next, a real Live TV channel in mpv.
 - **Discover in the TV player:** yt-dlp against real YouTube (blocked where it was built); it falls back to offering the YouTube app.
 - **Subtitles:** OpenSubtitles search and download against the real API, Roku thumbnails from the BIF file.
-- **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube.
+- **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube, the CFB Tracker relay and its watch links against the real tracker.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
 - **Media:** intro and credits detection on real seasons (thresholds may need tuning), image subtitle burn-in from a Blu-ray rip, Dolby Vision and Atmos detection, Quick Sync on Intel and NVENC session limits with adaptive streaming.
 
@@ -68,6 +67,17 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Stat Scraps links games to Live TV channels (2026-11-01, #184, no migration)
+
+- **`GET /api/sports/watch-links?network=ESPN2&network=ABC`** (`api/watchlinks.go`, `sportsWatchLinks`): for the CFB Tracker, not signed in, keyed with the same **Sports data** key (`sports_relay_key`) sent as `X-Api-Key` (compared by `sameSecret`), so pairing once covers both directions. 404 while no key is set, 401 for a wrong one. Up to 12 networks; each one with a channel gets `{network, channel: {id, number, name}, path: "/live/{id}"}`. `channelForNetwork` picks the first channel tied to the network under Live TV → Networks, else the lowest-numbered enabled channel named for it ("ESPN2" matches "US: ESPN 2 HD"). The `/live/{id}` page still asks for a sign-in. Documented in docs/API.md and GUIDE.md; the Sports data settings text mentions it.
+- **Tested:** `go test ./...` with new `TestSportsWatchLinks` and `TestNetworkKey` (no key set, missing key, mapped vs named channels, a disabled channel). **Not tried** against the real tracker.
+
+## Android TV: screensaver while paused (2026-11-01, #182, no migration)
+
+- react-native-video 6 turned keep-screen-on back on after a pause, so a paused movie or channel kept the TV awake. `Player.tsx` and `LivePlayer.tsx` now set `preventsDisplaySleepDuringVideoPlayback={!paused && active}`.
+- With the screensaver on, the paused app goes to the background and stops reporting, so the server stops its conversion after 90 s. `Player.tsx` now restarts the conversion from the same spot (`transcode(posRef.current)`) when the app comes back after more than a minute away (`AppState` listener), and retries a converted stream once on error before showing "Playback failed".
+- **Tested:** TV `tsc` and `eslint` in CI. **Not tried** on a real Android TV.
 
 ## Sports data through CFB Tracker (2026-11-01, no migration)
 
