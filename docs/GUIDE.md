@@ -115,6 +115,7 @@ The web player plays a file directly when your browser can, and otherwise conver
 - see a thumbnail of where you'll land while dragging or scrubbing the progress bar (made by the "Make scrub previews" task, or in the background the first time a file plays),
 - move subtitles earlier or later in half-second steps when they're out of sync (Options → Subtitle timing, or G and H on a keyboard),
 - find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
+- jump between chapters when the file has them: the marks on the progress bar, the **Chapters** button (Options → Chapters on the TV and Roku), or `[` and `]` (Page Up and Page Down) on a keyboard,
 - skip intros and credits,
 - carry on to the next episode automatically,
 - start **Watch Together** to watch in sync with someone else on the server.
