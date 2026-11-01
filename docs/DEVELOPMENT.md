@@ -66,6 +66,7 @@ Most outside services have a fake under `server/cmd`, so you can try a feature w
 | `fakeiptv` | `:8585` | An IPTV provider: ffmpeg test channels (MPEG-2, an HLS one, and a flaky one that dies after 20 s with a backup feed), an M3U playlist and an XMLTV guide | Add `http://localhost:8585/playlist.m3u` and `/epg.xml` under Admin → Live TV → Sources |
 | `fakedispatcharr` | `:9191` | Dispatcharr in front of fakeiptv | Admin → Live TV → Sources → Import from Dispatcharr, `admin` / `admin` or key `fake-dispatcharr-key` |
 | `fakeoidc` | `:8686` | An OpenID Connect provider (alice, bob, carol) | Settings → Single sign-on: issuer `http://localhost:8686`, client `bingebandit`, secret `dev-secret` |
+| `fakedlna` | `:1900` (SSDP), `:8200` | A DLNA TV: answers searches, takes play/pause/seek/stop and downloads what it's sent at about playing speed, logging each command | Found by itself (or list `127.0.0.1` under Settings → Casting); cast from a title's cast button |
 | `fakeplex` | `:32400`, `:8181`, `:8282` | Plex (token `fake-plex-token`), Tautulli (key `fake-tautulli-key`) and Trakt (`fake-trakt-client` / `fake-trakt-secret`) | Admin → Import; for Trakt start the server with `-trakt-api http://localhost:8282`. `-makedb path` writes a `tautulli.db` |
 
 Hue bridges, Cinemask, ESPN, TMDB, TheTVDB, Wikidata, YouTube and the chart sites are faked inside the Go tests (`httptest` servers) rather than as commands.

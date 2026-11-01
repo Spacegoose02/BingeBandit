@@ -273,3 +273,28 @@ export interface RequestableTitle {
   onServer?: boolean
   request?: TitleRequest
 }
+
+/** A Chromecast, Google TV or DLNA TV the server can play on. */
+export interface CastDevice {
+  id: string
+  name: string
+  kind: 'chromecast' | 'dlna'
+  model?: string
+  host: string
+}
+
+/** Something the server is playing on a TV; this app is its remote. */
+export interface CastSession {
+  id: string
+  device: CastDevice
+  itemId: number
+  title: string
+  subtitle?: string
+  poster?: string
+  duration: number
+  position: number
+  state: 'loading' | 'playing' | 'paused' | 'idle' | 'finished'
+  volume: number // 0-1, -1 when unknown
+  mode: 'direct' | 'transcode'
+  error?: string
+}

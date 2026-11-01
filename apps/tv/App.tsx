@@ -4,6 +4,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
 import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
+import CastScreen from './src/screens/Cast'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import { CollectionScreen } from './src/screens/Library'
@@ -236,6 +237,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <YouTubeScreen id={r.id} title={r.title} />
     case 'multiview':
       return <MultiView channels={r.channels} />
+    case 'cast':
+      return <CastScreen id={r.id} start={r.start} session={r.session} />
   }
 }
 

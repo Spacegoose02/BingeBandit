@@ -999,6 +999,9 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
                   />
                 )}
                 <Button small label={roomId ? `Options · Together (${tg.room?.members.length ?? 1})` : 'Options'} onPress={() => setMenu(true)} />
+                {isPhone && !roomId && (
+                  <Button small label="Play on a TV" onPress={() => nav.replace({ name: 'cast', id, start: posRef.current })} />
+                )}
                 {isPhone && (
                   <Button
                     small
@@ -1153,7 +1156,7 @@ function MediaPlayer({ id, start = 0, together }: { id: number; start?: number; 
 }
 
 /** A touch progress bar: drag or tap to pick a time; the video seeks when the finger lifts. */
-function SeekBar({ pct, duration, onSeek, onDrag }: { pct: number; duration: number; onSeek: (t: number) => void; onDrag: (t: number | null) => void }) {
+export function SeekBar({ pct, duration, onSeek, onDrag }: { pct: number; duration: number; onSeek: (t: number) => void; onDrag: (t: number | null) => void }) {
   const bar = useRef<View>(null)
   const box = useRef({ x: 0, width: 1 }) // the bar's position on screen
   const [drag, setDrag] = useState<number | null>(null) // 0..1 while the finger is down

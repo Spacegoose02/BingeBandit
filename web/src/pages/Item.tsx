@@ -11,6 +11,7 @@ import { locationPath, MoveDialog, type ItemLocation } from '../components/MoveI
 import { MetaLine } from '../components/Hero'
 import { RecommendButton } from '../components/Recommend'
 import { KidsApproveButton } from '../components/KidsApprove'
+import { CastButton } from '../components/Cast'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
@@ -136,6 +137,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
                   <Icon name="replay10" size={18} /> From start
                 </button>
               )}
+              {playable && <CastButton itemId={item.id} fileId={file?.id} start={resumeAt} disabled={!file} />}
               {item.kind === 'show' && upNext && (
                 <Link className="btn btn-primary" to={`/play/${upNext.id}${upNext.watch.position > 15 ? `?t=${Math.floor(upNext.watch.position)}` : ''}`}>
                   <Icon name="play" fill size={18} />
