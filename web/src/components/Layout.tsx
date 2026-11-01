@@ -64,10 +64,12 @@ export default function Layout() {
             <Icon name="search" />
             <span>Search</span>
           </NavLink>
-          <NavLink to="/discover" className="nav-item">
-            <Icon name="compass" />
-            <span>Discover</span>
-          </NavLink>
+          {!user?.kid && (
+            <NavLink to="/discover" className="nav-item">
+              <Icon name="compass" />
+              <span>Discover</span>
+            </NavLink>
+          )}
           <NavLink to="/sports" className="nav-item">
             <Icon name="trophy" />
             <span>Sports</span>

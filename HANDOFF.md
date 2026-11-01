@@ -69,6 +69,14 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Kid filters: rating limits per profile, no Discover for kids (2026-11-01, migration 55)
+
+- **Rating limits** (`store/rating_limits.go`): `users.max_rating` (migration 55; 0 = no limit, admins never limited). Levels, lowest first: 1 G/TV-Y/TV-G, 2 TV-Y7, 3 PG/TV-PG, 4 PG-13/TV-14, 5 R/TV-MA, 6 NC-17 (`RatingLevels`; the web keeps the same list as `ratingLevels` in `types.ts`). `ratingAllowed` is ANDed into the library-access branch of `visible` (`store/items.go`), so libraries, search, home rows, Continue Watching, lists and item lookups all follow it. Seasons and episodes use their own rating, else the show's. Under a limit, unrated movies and shows (or a non-US rating) are hidden; "Rated PG-13" and "US:PG-13" are understood. Titles a parent approved for a kid (one by one or by collection) skip the limit. Music, audiobooks and photos aren't affected. A profile is held to the lower of its own and its account's limit, in SQL and when saving (`updateProfile` clamps).
+- **API:** `PUT /api/household/{id}` takes `maxRating`; admins use `PUT /api/admin/users/{id}/max-rating {level}`; `/api/me`, admin users and `/api/household` return it.
+- **Discover** is turned away for kid profiles (`noKids` in `api/auth.go`, 403 on all `/api/discover*` routes); hidden from the web sidebar and the TV app's tabs, More and Settings. Roku has no Discover.
+- **Web:** a Ratings picker in Account → Profiles → Edit (capped at the account's limit) and per user in Admin → Users.
+- **Tested:** `TestRatingLimits` (each level, episodes via the show, unrated hidden, approved titles shown, library listing, account limit capping profiles), `TestDiscoverHiddenFromKids`, full `go vet`/`go test`, web build, TV app `tsc`. **Not tried** in a browser or on a TV, or for speed on a big library (the check is a CASE over the rating per row).
+- **Not done:** genre or tag blocks; Watch Together doesn't check the limit when a profile joins someone else's room; the Roku and TV apps have no picker (set it on the web).
 ## Install the web app on phones (2026-11-01, no migration, web only)
 
 Michael asked whether the web app can be installed on phones. It mostly could already (the manifest and service worker came with push notifications); this fills the gaps.

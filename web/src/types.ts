@@ -21,6 +21,7 @@ export interface User {
   shareActivity: boolean
   liveTV: boolean // may watch Live TV and use the DVR
   kid: boolean // only sees Live TV channels approved for kids, and gets Approved Movies and Approved Shows
+  maxRating: number // highest rating level shown (ratingLevels); 0 is no limit
   hasPassword: boolean
   hasPasscode: boolean
   ownerId?: number // set for a profile: the account it belongs to
@@ -42,9 +43,21 @@ export interface Member {
   auto?: boolean
   /** Only sees Live TV channels approved for kids, and gets Approved Movies and Approved Shows. */
   kid?: boolean
+  /** Highest rating level shown (ratingLevels); missing is no limit. */
+  maxRating?: number
   allLibraries: boolean
   libraryIds?: number[]
 }
+
+/**
+ * Rating limits, lowest first; a level's number is its index + 1 (the server
+ * keeps the same list in store/rating_limits.go). Under a limit, unrated
+ * movies and shows are hidden unless a parent approved them for a kid.
+ */
+export const ratingLevels = ['G / TV-Y', 'TV-Y7', 'PG / TV-PG', 'PG-13 / TV-14', 'R / TV-MA', 'NC-17']
+
+/** Describes a rating limit level for people. */
+export const ratingLimitName = (level?: number) => (level ? `Up to ${ratingLevels[level - 1]}` : 'Any rating')
 
 export interface OIDCProvider {
   id: number

@@ -78,6 +78,29 @@ func (s *Server) setUserKid(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// setUserMaxRating sets the highest rating level a user (or profile) sees;
+// 0 removes the limit. Profiles under an account are also held to the
+// account's limit.
+func (s *Server) setUserMaxRating(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		Level int `json:"level"`
+	}
+	if err := readJSON(r, &req); err != nil || req.Level < 0 || req.Level > len(store.RatingLevels) {
+		writeErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := s.Store.SetMaxRating(id, req.Level); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // kidTitles lists the movies (?kind=movie) or shows (?kind=show) approved
 // for the signed-in kid: their Approved Movies and Approved Shows.
 func (s *Server) kidTitles(w http.ResponseWriter, r *http.Request) {

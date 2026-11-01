@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { useApi } from '../hooks'
 import type { Library, Member } from '../types'
+import { ratingLevels, ratingLimitName } from '../types'
 import { Avatar, AvatarPicker } from './Avatar'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
@@ -77,6 +78,7 @@ export function Profiles() {
                 <div className="muted small">
                   {p.allLibraries ? 'All your libraries' : `${p.libraryIds?.length ?? 0} libraries`}
                   {p.kid ? ' · Kid: Live TV channels for kids only' : ''}
+                  {p.maxRating ? ` · ${ratingLimitName(p.maxRating)}` : ''}
                 </div>
               </div>
               <button type="button" className="btn btn-glass btn-sm" onClick={() => setEditing(p)}>
@@ -109,7 +111,7 @@ export function Profiles() {
       )}
       <StayHere members={members} />
       {error && <div className="form-error">{error}</div>}
-      {editing && <EditProfile profile={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} onPicture={reload} />}
+      {editing && <EditProfile profile={editing} accountLimit={account?.maxRating ?? 0} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload() }} onPicture={reload} />}
     </div>
   )
 }
@@ -172,13 +174,14 @@ function DisplayName({ onSaved }: { onSaved: () => void }) {
   )
 }
 
-function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member; onClose: () => void; onSaved: () => void; onPicture: () => void }) {
+function EditProfile({ profile, accountLimit, onClose, onSaved, onPicture }: { profile: Member; accountLimit: number; onClose: () => void; onSaved: () => void; onPicture: () => void }) {
   const [avatar, setAvatar] = useState(profile.avatar)
   const { data: libraries } = useApi<Library[]>('/api/libraries')
   const [name, setName] = useState(profile.name)
   const [all, setAll] = useState(profile.allLibraries)
   const [ids, setIds] = useState<Set<number>>(new Set(profile.libraryIds ?? []))
   const [kid, setKid] = useState(!!profile.kid)
+  const [maxRating, setMaxRating] = useState(profile.maxRating ?? 0)
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
 
@@ -186,7 +189,7 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
     e.preventDefault()
     setError('')
     try {
-      await api.put(`/api/household/${profile.id}`, { name, allLibraries: all, libraryIds: [...ids], kid })
+      await api.put(`/api/household/${profile.id}`, { name, allLibraries: all, libraryIds: [...ids], kid, maxRating })
       if (pin) await api.put(`/api/household/${profile.id}/pin`, { pin })
       onSaved()
     } catch (err) {
@@ -242,6 +245,23 @@ function EditProfile({ profile, onClose, onSaved, onPicture }: { profile: Member
         <label className="check">
           <input type="checkbox" checked={kid} onChange={(e) => setKid(e.target.checked)} />
           Kid: only Live TV channels approved for kids, plus Approved Movies and Approved Shows you pick (the smiley button on a movie or show)
+        </label>
+        <label>
+          Ratings
+          <select value={maxRating} onChange={(e) => setMaxRating(Number(e.target.value))}>
+            {!accountLimit && <option value={0}>Any rating</option>}
+            {ratingLevels.map((name, i) =>
+              !accountLimit || i + 1 <= accountLimit ? (
+                <option key={name} value={i + 1}>
+                  Up to {name}
+                </option>
+              ) : null,
+            )}
+          </select>
+          <span className="muted small">
+            Movies and shows rated higher, or not rated at all, are hidden everywhere: libraries, search, home and Continue Watching. Titles you approve
+            for a kid show whatever their rating.
+          </span>
         </label>
         <label>
           {profile.hasPin ? 'New PIN (leave empty to keep it)' : 'PIN (optional, 4 to 8 digits)'}

@@ -25,17 +25,18 @@ import (
 const maxProfiles = 10
 
 type member struct {
-	ID      int64   `json:"id"`
-	Name    string  `json:"name"`
-	IsOwner bool    `json:"isOwner"`
-	HasPIN  bool    `json:"hasPin"`
-	Current bool    `json:"current"`
-	Avatar  string  `json:"avatar,omitempty"`
-	Custom  bool    `json:"avatarCustom,omitempty"` // an uploaded picture, not a built-in one
-	Auto    bool    `json:"auto,omitempty"`         // the account opens as this member without asking
-	Kid     bool    `json:"kid,omitempty"`          // only sees Live TV channels approved for kids
-	AllLibs bool    `json:"allLibraries"`
-	LibIDs  []int64 `json:"libraryIds,omitempty"`
+	ID        int64   `json:"id"`
+	Name      string  `json:"name"`
+	IsOwner   bool    `json:"isOwner"`
+	HasPIN    bool    `json:"hasPin"`
+	Current   bool    `json:"current"`
+	Avatar    string  `json:"avatar,omitempty"`
+	Custom    bool    `json:"avatarCustom,omitempty"` // an uploaded picture, not a built-in one
+	Auto      bool    `json:"auto,omitempty"`         // the account opens as this member without asking
+	Kid       bool    `json:"kid,omitempty"`          // only sees Live TV channels approved for kids
+	MaxRating int     `json:"maxRating,omitempty"`    // highest rating level shown, 0 for no limit
+	AllLibs   bool    `json:"allLibraries"`
+	LibIDs    []int64 `json:"libraryIds,omitempty"`
 }
 
 // memberName is the name others see: a profile's name or an account's
@@ -63,7 +64,7 @@ func (s *Server) household(w http.ResponseWriter, r *http.Request) {
 	out := make([]member, 0, len(users))
 	for _, m := range users {
 		mem := member{ID: m.ID, Name: memberName(m), IsOwner: m.OwnerID == 0, HasPIN: m.HasPasscode, Current: m.ID == u.ID,
-			Avatar: m.Avatar, Custom: m.AvatarCustom, Auto: m.ID == auto, Kid: m.Kid, AllLibs: m.IsAdmin || m.AllLibraries}
+			Avatar: m.Avatar, Custom: m.AvatarCustom, Auto: m.ID == auto, Kid: m.Kid, MaxRating: m.MaxRating, AllLibs: m.IsAdmin || m.AllLibraries}
 		// Only the account sees what each profile may browse.
 		if u.OwnerID == 0 && m.OwnerID != 0 && !m.AllLibraries {
 			mem.LibIDs, _ = s.Store.UserLibraryIDs(m.ID)
@@ -150,7 +151,7 @@ func (s *Server) createProfile(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateProfile renames a profile, sets which libraries it sees (never more
-// than the account itself sees) and whether it's a kid.
+// than the account itself sees), whether it's a kid and its rating limit.
 func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 	owner, p := s.ownProfile(w, r)
 	if p == nil {
@@ -161,6 +162,7 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		AllLibraries *bool   `json:"allLibraries"`
 		LibraryIDs   []int64 `json:"libraryIds"`
 		Kid          *bool   `json:"kid"`
+		MaxRating    *int    `json:"maxRating"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -205,6 +207,21 @@ func (s *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		if *req.Kid {
 			s.Live.KickUser(p.ID)
+		}
+	}
+	if req.MaxRating != nil {
+		level := *req.MaxRating
+		if level < 0 || level > len(store.RatingLevels) {
+			writeErr(w, http.StatusBadRequest, "unknown rating level")
+			return
+		}
+		// Never looser than the account's own limit.
+		if owner.MaxRating > 0 && (level == 0 || level > owner.MaxRating) {
+			level = owner.MaxRating
+		}
+		if err := s.Store.SetMaxRating(p.ID, level); err != nil {
+			writeStoreErr(w, err)
+			return
 		}
 	}
 	s.recheckTranscodes()
