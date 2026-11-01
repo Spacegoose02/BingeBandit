@@ -940,7 +940,10 @@ UPDATE sqlite_master SET sql = replace(sql, 'CHECK (kind IN (''movie'',''show'',
 	WHERE type = 'table' AND name = 'items';
 PRAGMA writable_schema = RESET;
 `,
-	// 55: more for title requests. Shows can ask for some seasons (seasons
+	// 55: the highest content rating a user (or profile) may see; 0 is no
+	// limit. The levels are in rating_limits.go.
+	`ALTER TABLE users ADD COLUMN max_rating INTEGER NOT NULL DEFAULT 0;`,
+	// 56: more for title requests. Shows can ask for some seasons (seasons
 	// "1,2"; empty is the whole show), and anyone can ask for the 4K copy.
 	// The plugin fetching a request reports its stage, progress (0-1) and
 	// ETA. Kids' requests can wait for a parent (status "parent"); people

@@ -47,6 +47,17 @@ func requireLiveTV(next http.Handler) http.Handler {
 	})
 }
 
+// noKids turns away kid profiles.
+func noKids(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if u := currentUser(r); u == nil || u.Kid {
+			writeErr(w, http.StatusForbidden, "this isn't available on kid profiles")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // requireAuth accepts a bearer token (apps), the session cookie (web UI), or a
 // ?token= query parameter on GET (players that cannot set headers).
 // Cookie-authenticated writes must carry X-Requested-With to block CSRF.

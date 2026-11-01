@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.41.1, 55 schema migrations._
+_Last updated: 2026-11-01. Latest release v0.41.1, 56 schema migrations._
 
 
 ## Start here
@@ -69,11 +69,11 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
-## Requests that beat Overseerr: seasons, 4K, progress, rules, kids, problem reports, discovery, Sonarr & Radarr (2026-11-01, migration 55)
+## Requests that beat Overseerr: seasons, 4K, progress, rules, kids, problem reports, discovery, Sonarr & Radarr (2026-11-01, migration 56)
 
 Michael asked for the request flow to replace Overseerr/Jellyseerr and beat it. All nine ideas from the review were built at once.
 
-- **Migration 55:** `title_requests` gains `seasons` ("1,2"; empty is the whole show), `four_k`, `stage`, `progress`, `eta`, `release_date`, `available_at`; `title_request_people` gains `source` ("" or "watchlist"). New `request_rules` (per person: `auto_approve`, `movie_limit`/`show_limit` with -1 = server default, `watchlist`), `request_offers` (next-season offers made once) and `problem_reports`. Renumber if another branch takes 55.
+- **Migration 56:** `title_requests` gains `seasons` ("1,2"; empty is the whole show), `four_k`, `stage`, `progress`, `eta`, `release_date`, `available_at`; `title_request_people` gains `source` ("" or "watchlist"). New `request_rules` (per person: `auto_approve`, `movie_limit`/`show_limit` with -1 = server default, `watchlist`), `request_offers` (next-season offers made once) and `problem_reports`. (Kid filters took 55.)
 - **Store** (`store/requests.go`, `store/problems.go`): `RequestTitle` merges seasons and 4K into the one request per title and starts it over (`reopened`) when someone wants more of one that came in, was sent, failed or was declined. `ArrivedRequests` now needs every requested season (`ShowSeasons`) and, for 4K, a ≥2000-line file (`Has4K`). `UnwatchedRequests` uses `plays` (movie or show id) since `available_at`.
 - **API** (`api/requests.go`, `api/problems.go`): `placeRequest` is shared by the web and the watchlist job: validation, `serverCovers` (409), weekly limits (429, own asks only, not joins of your own or watchlist ones), status by `statusFor` (kid with a household → `parent`; admin or auto-approve → `approved`; else `pending`). Parents (`isParentOf`: the account or a grown-up profile of the kid's household) answer with `POST /requests/{id}/parent`. New: `/requests/discover`, `/requests/title/{kind}/{tmdb}`, `/requests/similar/…`, `/requests/person`, `/requests/collection/{id}`, `/requests/settings`, `/admin/requests/rules`, `/admin/requests/unwatched`, problem routes; plugin API `/problems`; the plugin's `PUT /requests/{id}` takes `stage/progress/eta`. Approving now notifies the people who asked. `offerNextSeason` runs on `playback.finished` for an episode that's the last one here. `requestWatchlists` runs from `RunNotifications` every 6 hours (25 new per person per run). Settings: `request_movie_limit`, `request_show_limit`, `request_kids`, `request_4k`, `request_cleanup_days`. Events `problem.created`, `problem.refetch` (also webhooks).
 - **TMDB** (`metadata/requestable.go`): trending, popular, upcoming, on the air, recommendations, a person's combined credits (talk and news shows dropped), and a title with its seasons; all cached an hour in memory.
@@ -84,6 +84,15 @@ Michael asked for the request flow to replace Overseerr/Jellyseerr and beat it. 
 - **TV app:** search's requestable titles show progress and take Me too (kids too, when allowed); show pages have a Request season N button; player options → Report a problem. **Roku:** Search appends requestable titles (`build: "requestable"`), OK asks; player options → Report a problem.
 - **Tested:** `go test ./...` (new `TestRequestsBeyondTheBasics`: seasons, joining, reopening, plugin progress, arrival needing every season, 4K off, weekly limits, auto-approve, kids and parents, problem reports, the Never watched list; `TestTitleRequests` updated for the approval notification), `go test ./plugins/arr-requests` against a fake Sonarr/Radarr, new Cinemask plugin tests (seasons, 4K profile, progress, refetch), web `tsc` and build, TV `tsc` and `eslint`, Roku `brighterscript`. The web pages were looked at in Chromium against a fake TMDB (Discover rows, all requests, your requests, People & limits, the seasons dialog). **Not tested:** real TMDB, a real Sonarr/Radarr or Cinemask, Trakt's watchlist endpoint, the TV and Roku parts on a device.
 
+
+## Kid filters: rating limits per profile, no Discover for kids (2026-11-01, migration 55)
+
+- **Rating limits** (`store/rating_limits.go`): `users.max_rating` (migration 55; 0 = no limit, admins never limited). Levels, lowest first: 1 G/TV-Y/TV-G, 2 TV-Y7, 3 PG/TV-PG, 4 PG-13/TV-14, 5 R/TV-MA, 6 NC-17 (`RatingLevels`; the web keeps the same list as `ratingLevels` in `types.ts`). `ratingAllowed` is ANDed into the library-access branch of `visible` (`store/items.go`), so libraries, search, home rows, Continue Watching, lists and item lookups all follow it. Seasons and episodes use their own rating, else the show's. Under a limit, unrated movies and shows (or a non-US rating) are hidden; "Rated PG-13" and "US:PG-13" are understood. Titles a parent approved for a kid (one by one or by collection) skip the limit. Music, audiobooks and photos aren't affected. A profile is held to the lower of its own and its account's limit, in SQL and when saving (`updateProfile` clamps).
+- **API:** `PUT /api/household/{id}` takes `maxRating`; admins use `PUT /api/admin/users/{id}/max-rating {level}`; `/api/me`, admin users and `/api/household` return it.
+- **Discover** is turned away for kid profiles (`noKids` in `api/auth.go`, 403 on all `/api/discover*` routes); hidden from the web sidebar and the TV app's tabs, More and Settings. Roku has no Discover.
+- **Web:** a Ratings picker in Account → Profiles → Edit (capped at the account's limit) and per user in Admin → Users.
+- **Tested:** `TestRatingLimits` (each level, episodes via the show, unrated hidden, approved titles shown, library listing, account limit capping profiles), `TestDiscoverHiddenFromKids`, full `go vet`/`go test`, web build, TV app `tsc`. **Not tried** in a browser or on a TV, or for speed on a big library (the check is a CASE over the rating per row).
+- **Not done:** genre or tag blocks; Watch Together doesn't check the limit when a profile joins someone else's room; the Roku and TV apps have no picker (set it on the web).
 ## Install the web app on phones (2026-11-01, no migration, web only)
 
 Michael asked whether the web app can be installed on phones. It mostly could already (the manifest and service worker came with push notifications); this fills the gaps.

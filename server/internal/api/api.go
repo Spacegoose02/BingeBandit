@@ -243,12 +243,17 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/plugins", s.pluginPages)
 			r.HandleFunc("/plugins/{id}/*", s.pluginProxy)
 
-			r.Get("/discover", s.discoverRows)
-			r.Get("/discover/videos/{vid}", s.discoverVideo)
-			r.Post("/discover/videos/{vid}/prepare", s.discoverPrepare)
-			r.Get("/discover/videos/{vid}/index.m3u8", s.discoverVideoPlaylist)
-			r.Get("/discover/videos/{vid}/s/{n}", s.discoverVideoSegment)
-			r.Get("/discover/videos/{vid}/video.mp4", s.discoverVideoFile)
+			// Discover plays whatever the admin's YouTube sources post, which
+			// nobody approved for kids.
+			r.Group(func(r chi.Router) {
+				r.Use(noKids)
+				r.Get("/discover", s.discoverRows)
+				r.Get("/discover/videos/{vid}", s.discoverVideo)
+				r.Post("/discover/videos/{vid}/prepare", s.discoverPrepare)
+				r.Get("/discover/videos/{vid}/index.m3u8", s.discoverVideoPlaylist)
+				r.Get("/discover/videos/{vid}/s/{n}", s.discoverVideoSegment)
+				r.Get("/discover/videos/{vid}/video.mp4", s.discoverVideoFile)
+			})
 			r.Get("/watchlist", s.watchlist)
 			r.Get("/kids/titles", s.kidTitles)
 			r.Get("/items/{id}/kids", s.itemKids)
@@ -493,6 +498,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/users/{id}/passcode", s.clearUserPasscode)
 				r.Put("/users/{id}/live-tv", s.setUserLiveTV)
 				r.Put("/users/{id}/kid", s.setUserKid)
+				r.Put("/users/{id}/max-rating", s.setUserMaxRating)
 				r.Get("/webhooks", s.webhooks)
 				r.Post("/webhooks", s.saveWebhook)
 				r.Put("/webhooks/{id}", s.saveWebhook)

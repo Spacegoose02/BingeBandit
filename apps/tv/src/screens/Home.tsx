@@ -236,9 +236,13 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
         setKid(!!me.kid)
         if (me.liveTV === false && lastTab === 'live') setTab('home')
         if (!me.kid && (lastTab === 'kidsMovies' || lastTab === 'kidsShows')) setTab('home')
+        if (me.kid && lastTab === 'discover') setTab('home') // the server turns kids away from Discover
       })
       .catch(() => undefined)
   }, [])
+  // Tabs that can be pinned or kept under More: Live TV only for those who
+  // have it, and no Discover for kids.
+  const moreTabs = (['sports', 'live', 'discover', 'favorites'] as HideableTab[]).filter((t) => (t !== 'live' || liveTV) && (t !== 'discover' || !kid))
   const names: Record<string, string> = { ...fixedNames }
   const icons: Record<string, IconName> = { ...fixedIcons }
   for (const l of libraries) {
@@ -258,7 +262,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
     ...libraries.filter((l) => l.pinned || l === library).map((l) => `lib:${l.id}` as Tab),
     ...(shows('sports') ? (['sports'] as Tab[]) : []),
     ...(liveTV && shows('live') ? (['live'] as Tab[]) : []),
-    ...(shows('discover') ? (['discover'] as Tab[]) : []),
+    ...(!kid && shows('discover') ? (['discover'] as Tab[]) : []),
     ...(shows('favorites') ? (['favorites'] as Tab[]) : []),
     ...(libraries.length && shows('more') ? (['more'] as Tab[]) : []),
     // Phones: titles saved to watch offline.
@@ -367,14 +371,14 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
       {tab === 'more' && (
         <More
           libraries={libraries}
-          tabs={(liveTV ? (['sports', 'live', 'discover', 'favorites'] as HideableTab[]) : (['sports', 'discover', 'favorites'] as HideableTab[])).map((t) => ({ tab: t, ...pinTab(t) }))}
+          tabs={moreTabs.map((t) => ({ tab: t, ...pinTab(t) }))}
           onOpen={(t) => setTab(t)}
           onHold={setPinMenu}
           pinLibrary={pinLibrary}
         />
       )}
       {tab === 'sports' && <Sports />}
-      {tab === 'discover' && <Discover />}
+      {tab === 'discover' && !kid && <Discover />}
       {tab === 'favorites' && <Favorites />}
       {tab === 'downloads' && <Downloads />}
       {tab === 'live' && liveTV && <LiveGuide />}
@@ -384,7 +388,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
           menu={{
             libraries,
             hidden,
-            tabs: liveTV ? ['sports', 'live', 'discover', 'favorites', 'more'] : ['sports', 'discover', 'favorites', 'more'],
+            tabs: [...moreTabs, 'more'],
             togglePin,
             toggleTab,
             position,
