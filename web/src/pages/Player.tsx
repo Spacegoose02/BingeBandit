@@ -5,7 +5,7 @@ import { api, img } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { PreRoll } from '../components/PreRoll'
-import { desktop } from '../desktop'
+import { desktop, desktopCan } from '../desktop'
 import DesktopPlayer from './DesktopPlayer'
 import { roomPosition, TogetherPanel, useTogether, type TogetherRoom } from '../components/Together'
 import { hueArea, hueSyncOn } from '../devicePrefs'
@@ -83,16 +83,18 @@ export default function Player() {
   if (error) return <div className="player"><div className="player-error">{error}</div></div>
   if (!data || !prefs || !joined || (isMovie && !preRoll)) return <div className="player"><div className="spinner" /></div>
   if (isMovie && preRoll && preRoll !== 'done') return <PreRoll data={preRoll} movieTitle={data.item.title} onDone={preRollDone} />
-  // In the Windows app, mpv plays the file (not in a watch party, which needs the web player).
-  if (desktop && !joined.roomId) {
+  // In the Windows app, mpv plays the file. Watch parties too, unless the app
+  // is older than Watch Together in mpv.
+  if (desktop && (!joined.roomId || desktopCan('together'))) {
     return (
       <DesktopPlayer
         key={id}
         detail={data}
         prefs={prefs}
-        startAt={startAt}
+        startAt={joined.roomId ? joined.start : startAt}
         fileId={Number(params.get('file')) || 0}
         playlistId={playlistId}
+        together={joined}
       />
     )
   }

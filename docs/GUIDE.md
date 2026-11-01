@@ -219,6 +219,8 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 <p align="center"><img src="screenshots/mobile-home.webp" alt="BingeBandit on a phone" width="300"></p>
 
+**Push notifications** bring your notifications to your phone or computer when BingeBandit is closed: a request that's ready, your team's game starting, an invitation to watch together, and anything else under the bell. Turn them on under **Account → Push notifications** in each browser you want them in, pick what each device gets, and press **Send a test**. Browsers only allow this on an `https://` address, so open BingeBandit through its public address (a reverse proxy with a certificate) rather than `http://192.168…`. On an iPhone or iPad, add BingeBandit to the Home Screen first (Share → Add to Home Screen) and turn them on from there. Signing out of a browser turns its notifications off. The Windows, TV and Roku apps don't get push notifications; their alerts still show while they're open.
+
 ### Android TV, Google TV, Fire TV and Android phones
 
 The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
@@ -291,7 +293,7 @@ Admins get an alert in their notifications when:
 - a drive drops below the "nearly full" level (5% free unless you change it),
 - a recording fails.
 
-To get them on your phone too, fill in any of **Discord** (a channel webhook URL), **ntfy** (a topic URL, plus a token for a private server) or **email** (an SMTP server; for Gmail use an app password) under **Server → Settings → Admin alerts**, and press **Send a test alert**. Each kind of alert can be turned off there. Folders are checked every five minutes; a folder that is already offline when the server starts is reported once it has been up for a minute.
+Admins with **push notifications** on (see Browsers and phones) get these on their phone as well. To send them somewhere else too, fill in any of **Discord** (a channel webhook URL), **ntfy** (a topic URL, plus a token for a private server) or **email** (an SMTP server; for Gmail use an app password) under **Server → Settings → Admin alerts**, and press **Send a test alert**. Each kind of alert can be turned off there. Folders are checked every five minutes; a folder that is already offline when the server starts is reported once it has been up for a minute.
 
 ### Scheduled tasks and backups
 

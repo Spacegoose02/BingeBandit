@@ -21,17 +21,49 @@
     "appId": "app.bingebandit.desktop",
     "productName": "BingeBandit",
     "artifactName": "BingeBandit-Windows-${version}-${arch}.${ext}",
-    "publish": null,
-    "files": ["src/**/*", "setup/**/*", "package.json"],
+    "publish": {
+      "provider": "github",
+      "owner": "Spacegoose02",
+      "repo": "BingeBandit",
+      "releaseType": "release"
+    },
+    "files": [
+      "src/**/*",
+      "setup/**/*",
+      "package.json"
+    ],
     "extraResources": [
-      { "from": "mpv", "to": "mpv", "filter": ["**/*"] },
-      { "from": "mpv-config", "to": "mpv-config" }
+      {
+        "from": "mpv",
+        "to": "mpv",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "mpv-config",
+        "to": "mpv-config"
+      },
+      {
+        "from": "mpv-scripts",
+        "to": "mpv-scripts"
+      }
     ],
     "win": {
       "icon": "../../Brand/13_App_Icon_Tile_1024x1024.png",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -42,5 +74,8 @@
     "portable": {
       "artifactName": "BingeBandit-Windows-Portable-${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

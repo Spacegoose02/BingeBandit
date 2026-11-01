@@ -6,6 +6,7 @@ import { IPTVLinks } from '../components/IPTVLinks'
 import { Icon } from '../components/Icon'
 import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
+import { PushSettings } from '../components/PushSettings'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
 import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
@@ -936,6 +937,7 @@ export default function Account() {
       </p>
       <Profiles />
       <PlaybackPrefs />
+      <PushSettings />
       <Sharing />
       <Trakt />
       <PluginPages />

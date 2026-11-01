@@ -2,7 +2,7 @@
 // Picking the server: type an address, or pick one found on the network.
 // window.bbSetup comes from src/preload.js.
 
-/** @type {{ probe(input: string): Promise<any>, scan(): Promise<any[]>, use(url: string): Promise<void> }} */
+/** @type {{ probe(input: string): Promise<any>, scan(): Promise<any[]>, use(url: string): Promise<void>, updates: any }} */
 const setup = /** @type {any} */ (window).bbSetup
 const $ = (id) => /** @type {any} */ (document.getElementById(id))
 
@@ -54,3 +54,16 @@ async function scan() {
 
 $('rescan').addEventListener('click', scan)
 scan()
+
+// The app's version, and a new one when it's ready (src/updates.js).
+$('version').textContent = `BingeBandit for Windows ${setup.updates.version}`
+function showUpdate(u) {
+  const ready = u?.status === 'ready'
+  const available = u?.status === 'available'
+  $('update').hidden = !ready && !available
+  $('update-text').textContent = ready ? `Version ${u.version} is ready.` : available ? `Version ${u.version} is out.` : ''
+  $('update-go').textContent = ready ? 'Restart now' : 'Download'
+}
+$('update-go').addEventListener('click', () => setup.updates.install())
+setup.updates.state().then(showUpdate)
+setup.updates.onChange(showUpdate)

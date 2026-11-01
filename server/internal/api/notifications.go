@@ -72,7 +72,7 @@ func (s *Server) notifyEvent(event string, data any) {
 		n.Title = "Recording failed: " + r.Title
 		n.Body = firstNonEmptyStr(r.Error, r.ChannelName)
 	}
-	if err := s.Store.AddNotification(n); err != nil {
+	if err := s.notify(n); err != nil {
 		slog.Warn("notification", "err", err)
 	}
 }
@@ -163,7 +163,7 @@ func (s *Server) notifyLiveShows(now time.Time) {
 				n.Title = pr.Title + " is starting"
 			}
 			n.Body = strings.TrimPrefix(strings.Join([]string{pr.Subtitle, "On " + c.Name}, " · "), " · ")
-			if err := s.Store.AddNotification(n); err != nil {
+			if err := s.notify(n); err != nil {
 				slog.Warn("notification", "err", err)
 			}
 		}
@@ -234,7 +234,7 @@ func (s *Server) notifyNewEpisodes() {
 				n.Title = fmt.Sprintf("%d new episodes of %s", len(fresh), show.Title)
 				n.Body = episodeLabel(fresh[0]) + " to " + episodeLabel(fresh[len(fresh)-1])
 			}
-			if err := s.Store.AddNotification(n); err != nil {
+			if err := s.notify(n); err != nil {
 				slog.Warn("notification", "err", err)
 			}
 		}

@@ -357,6 +357,7 @@ func (s *Server) inviteTogether(w http.ResponseWriter, r *http.Request) {
 		rm.invited[id] = time.Now()
 	}
 	rm.inviter = displayName(currentUser(r))
+	go s.pushTogetherInvite(rm.inviter, rm.id, rm.state.ItemID, req.UserIDs)
 	w.WriteHeader(http.StatusNoContent)
 }
 
