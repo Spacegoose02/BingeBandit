@@ -540,6 +540,24 @@ export default function AdminSettings() {
           </label>
         </section>
 
+        <section className="panel form">
+          <h3>Sports data</h3>
+          <p className="muted small">
+            The Sports pages read scores, schedules and box scores from ESPN. If you run CFB Tracker, point this at it and both apps share one copy of
+            ESPN's data instead of each asking ESPN. If the tracker stops answering, the server reads ESPN directly until it's back.
+          </p>
+          <label>
+            CFB Tracker address
+            <input className="mono" value={s.sports_relay_url ?? ''} onChange={set('sports_relay_url')} placeholder="e.g. http://192.168.1.10:3000 (optional)" spellCheck={false} />
+            <span className="muted small">Leave empty to read ESPN directly.</span>
+          </label>
+          <label>
+            CFB Tracker key
+            <input type="password" className="mono" value={s.sports_relay_key ?? ''} onChange={set('sports_relay_key')} autoComplete="new-password" spellCheck={false} />
+            <span className="muted small">The tracker's RELAY_API_KEY (its relay stays off until that's set).</span>
+          </label>
+        </section>
+
         <AdminAlerts s={s} set={set} />
 
         {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}

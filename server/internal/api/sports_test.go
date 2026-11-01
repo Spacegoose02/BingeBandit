@@ -270,3 +270,25 @@ func TestScoreBugOnChannel(t *testing.T) {
 		t.Errorf("watching the news: %+v", g[0].Channels)
 	}
 }
+
+func TestSportsRelaySetting(t *testing.T) {
+	for _, tc := range []struct {
+		in, want string
+		ok       bool
+	}{
+		{"http://192.168.1.10:3000/", "http://192.168.1.10:3000", true},
+		{"https://cfb.example.com/tracker", "https://cfb.example.com/tracker", true},
+		{"", "", true},
+		{"192.168.1.10:3000", "", false},
+		{"http://x?y=1", "", false},
+	} {
+		in := map[string]string{"sports_relay_url": tc.in}
+		err := validSportsSettings(in)
+		if (err == nil) != tc.ok {
+			t.Errorf("%q: %v", tc.in, err)
+		}
+		if tc.ok && in["sports_relay_url"] != tc.want {
+			t.Errorf("%q became %q", tc.in, in["sports_relay_url"])
+		}
+	}
+}

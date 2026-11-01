@@ -139,7 +139,7 @@ func (c *Client) Summary(ctx context.Context, league, id string) (*Summary, erro
 	}
 	c.mu.Unlock()
 	var body espnSummary
-	if err := c.get(ctx, BaseURL+"/"+l.path+"/summary?event="+url.QueryEscape(id), &body); err != nil {
+	if err := c.get(ctx, "/"+l.path+"/summary?event="+url.QueryEscape(id), &body); err != nil {
 		return nil, err
 	}
 	out := body.summary(league)

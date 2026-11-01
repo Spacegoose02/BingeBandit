@@ -113,6 +113,12 @@ const (
 	// can't (Docker in bridge mode).
 	SettingCastURL     = "cast_url"     // the address TVs reach the server at, e.g. http://192.168.1.10:8484; empty = worked out
 	SettingCastDevices = "cast_devices" // TV and Chromecast addresses to look for besides the ones found, one per line
+
+	// Sports data from a CFB Tracker (or another server that relays ESPN's
+	// site API under /espn/site/v2/sports), so ESPN is read once for both
+	// apps. Empty = read ESPN directly.
+	SettingSportsRelayURL = "sports_relay_url" // e.g. http://192.168.1.10:3000
+	SettingSportsRelayKey = "sports_relay_key" // the tracker's RELAY_API_KEY (required by it), sent as X-Api-Key
 )
 
 var SettingDefaults = map[string]string{
@@ -211,6 +217,8 @@ var SettingDefaults = map[string]string{
 	SettingUpdateCheck:       "true",
 	SettingCastURL:           "",
 	SettingCastDevices:       "",
+	SettingSportsRelayURL:    "",
+	SettingSportsRelayKey:    "",
 }
 
 func (s *Store) Setting(key string) string {

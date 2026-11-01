@@ -33,7 +33,7 @@
 | `server/internal/trakt` | Trakt device sign-in and history sync |
 | `server/internal/webpush` | Web Push to browsers: aes128gcm encryption (RFC 8291) and VAPID signing (RFC 8292), standard library only. `api/push.go` stores subscriptions and sends every notification through `Server.notify` |
 | `server/internal/plugins` | Plugin host: runs, pairs and proxies out-of-process plugins, and the plugin catalogue |
-| `server/internal/sports` | ESPN scoreboards and the tracker that sends game events |
+| `server/internal/sports` | ESPN scoreboards (read through a CFB Tracker relay when `sports_relay_url` is set) and the tracker that sends game events |
 | `server/internal/discover` | YouTube playlists and channels for the Discover page |
 | `server/internal/overlay` | Draws Kometa-style badges onto posters |
 | `server/internal/s3` | S3-compatible backup upload and download |
