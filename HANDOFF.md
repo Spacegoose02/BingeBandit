@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.39.0, 52 schema migrations (52 ships in v0.40.0)._
+_Last updated: 2026-11-01. Latest release v0.40.0, 52 schema migrations._
 
 
 ## Start here
@@ -67,7 +67,7 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
-## Sports: games on the right local channel, Admin → Live TV → Networks (2026-11-01, migration 52, for v0.40.0)
+## Sports: games on the right local channel, Admin → Live TV → Networks (2026-11-01, migration 52, v0.40.0)
 
 Michael reported Sports games landing on the wrong channels: CBS games not on WDBJ, NBC not on WSLS (Roanoke locals). Cause: `findChannels` (`api/sports.go`) never used the network ESPN lists (`Game.Broadcasts`). It only looked for a guide programme near kick-off naming both teams, so a local whose guide says "SEC on CBS" never matched, while other cities' CBS stations, replays or preview shows that named the teams did, and the first six matches by channel number filled the list.
 
