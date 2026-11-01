@@ -1,12 +1,17 @@
 {
+  "id": "/",
   "name": "BingeBandit",
   "short_name": "BingeBandit",
+  "description": "Your movies, shows, live TV and music from your BingeBandit server.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0b0d10",
   "theme_color": "#0b0d10",
   "icons": [
-    { "src": "/brand/favicon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/brand/app-icon.png", "sizes": "1024x1024", "type": "image/png" }
+    { "src": "/brand/favicon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/app-icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

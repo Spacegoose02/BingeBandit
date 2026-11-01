@@ -77,6 +77,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 - **Web:** a Ratings picker in Account → Profiles → Edit (capped at the account's limit) and per user in Admin → Users.
 - **Tested:** `TestRatingLimits` (each level, episodes via the show, unrated hidden, approved titles shown, library listing, account limit capping profiles), `TestDiscoverHiddenFromKids`, full `go vet`/`go test`, web build, TV app `tsc`. **Not tried** in a browser or on a TV, or for speed on a big library (the check is a CASE over the rating per row).
 - **Not done:** genre or tag blocks; Watch Together doesn't check the limit when a profile joins someone else's room; the Roku and TV apps have no picker (set it on the web).
+## Install the web app on phones (2026-11-01, no migration, web only)
+
+Michael asked whether the web app can be installed on phones. It mostly could already (the manifest and service worker came with push notifications); this fills the gaps.
+
+- **Manifest** (`web/public/manifest.webmanifest`): `id`, `scope`, `description`, a 512 px icon (`brand/app-icon-512.png`) and a `maskable` one (`brand/maskable-512.png`: the mascot on the icon's slate gradient, inside the safe zone) so Android's adaptive icons don't show the tile inside a tile.
+- **iPhone** (`web/index.html`): a 180 px full-bleed `apple-touch-icon.png` (the 1024 tile has its own rounded border, which iOS would round again), `apple-mobile-web-app-capable`, title and status bar style `black` (the header doesn't pad for the notch, so not `black-translucent`).
+- **Server** (`internal/web/web.go`, `handlerFor`): `manifest.webmanifest` is sent as `application/manifest+json` (Go didn't know the extension), and it and `sw.js` are `no-cache` so a changed worker is picked up.
+- **Account → Install the app** (`components/InstallApp.tsx`, `install.ts`): keeps Chrome's `beforeinstallprompt` from startup (`listenForInstallPrompt` in `main.tsx`) for an **Install app** button; otherwise Safari's Share → Add to Home Screen steps on iOS, Chrome's menu on Android, or an https notice. Hidden when running installed or in the Windows app.
+- **Tested:** `go test ./internal/web` (content type and caching), web build, Chrome DevTools' installability check on a Pixel 7 profile against a local server (no errors), and the panel's iPhone and Android text in Chromium. **Not tried** on a real phone, so the Install button itself (Chromium headless never offers it) and iOS's home-screen icon haven't been seen.
 
 ## Maintenance tasks: Optimize database and Detect intros stop failing (2026-11-01, no migration, v0.41.1)
 

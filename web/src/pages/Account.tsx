@@ -4,6 +4,7 @@ import { api } from '../api'
 import { useAuth } from '../auth'
 import { IPTVLinks } from '../components/IPTVLinks'
 import { Icon } from '../components/Icon'
+import { InstallApp } from '../components/InstallApp'
 import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
 import { PushSettings } from '../components/PushSettings'
@@ -937,6 +938,7 @@ export default function Account() {
       </p>
       <Profiles />
       <PlaybackPrefs />
+      <InstallApp />
       <PushSettings />
       <Sharing />
       <Trakt />

@@ -20,8 +20,10 @@ const notBuilt = `<!doctype html><meta charset="utf-8"><title>BingeBandit</title
 <h1>BingeBandit server is running</h1><p>The web UI has not been built into this binary. Run <code>npm run build</code> in <code>web/</code>, then rebuild the server.</p>`
 
 // Handler serves static assets and falls back to index.html for client-side routes.
-func Handler() http.Handler {
-	sub, _ := fs.Sub(dist, "dist")
+func Handler() http.Handler { return handlerFor(dist) }
+
+func handlerFor(root fs.FS) http.Handler {
+	sub, _ := fs.Sub(root, "dist")
 	files := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
@@ -30,8 +32,16 @@ func Handler() http.Handler {
 				st, _ := f.Stat()
 				f.Close()
 				if st != nil && !st.IsDir() {
-					if strings.HasPrefix(p, "assets/") {
+					switch {
+					case strings.HasPrefix(p, "assets/"):
 						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					case p == "manifest.webmanifest":
+						// Go doesn't know this extension; phones want the manifest's own type.
+						w.Header().Set("Content-Type", "application/manifest+json")
+						w.Header().Set("Cache-Control", "no-cache")
+					case p == "sw.js":
+						// A cached service worker would keep an old one installed.
+						w.Header().Set("Cache-Control", "no-cache")
 					}
 					files.ServeHTTP(w, r)
 					return
