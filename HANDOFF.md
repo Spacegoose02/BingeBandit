@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-10-31. Latest release v0.39.0, 51 schema migrations._
+_Last updated: 2026-11-01. Latest release v0.39.0, 52 schema migrations (52 ships in v0.40.0)._
 
 
 ## Start here
@@ -66,6 +66,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Sports: games on the right local channel, Admin → Live TV → Networks (2026-11-01, migration 52, for v0.40.0)
+
+Michael reported Sports games landing on the wrong channels: CBS games not on WDBJ, NBC not on WSLS (Roanoke locals). Cause: `findChannels` (`api/sports.go`) never used the network ESPN lists (`Game.Broadcasts`). It only looked for a guide programme near kick-off naming both teams, so a local whose guide says "SEC on CBS" never matched, while other cities' CBS stations, replays or preview shows that named the teams did, and the first six matches by channel number filled the list.
+
+- **Migration 52:** `network_channels (network COLLATE NOCASE, channel_id → channels ON DELETE CASCADE, position)`. Store: `Networks`, `SetNetworks` (`store/networks.go`; replaces the whole mapping, drops blank names and unknown channels).
+- **API** (`api/networks.go`): `GET /api/admin/live/networks` → `{networks: [{network, channels}], known}`; `PUT` takes the list and returns the same. `known` is `commonNetworks` plus every broadcast name `findChannels` has seen since start (`Server.networksSeen`), spelled as ESPN lists them.
+- **Matching** (`findChannels`): for each of a game's networks with mapped channels, `carriesGame` checks the channel's guide at kick-off. It counts when there's no guide, nothing at kick-off, a programme naming either team (or the race series), or a sports programme (`isSportsProgram`: category/genres "sport" or a sports word in the title) that names no other match-up (`reMatchup`: "X at Y", "vs", "@"). If any mapped channel carries it, those are the game's channels and the guide-title search is skipped, so other cities' stations stay out. Otherwise, as before, the guide-title search (now `namesGame`). Duplicates are dropped; still at most six. This feeds the Sports page, the hub, the score bug and the "starts soon" alert link.
+- **Web:** `pages/admin/Networks.tsx`, a **Networks** tab on Admin → Live TV: add a network (suggestions from `known`), add channels by typing number or name, remove either. Saves on each change. `NetworkChannels` in `types.ts`. GUIDE.md mentions it.
+- **Tested:** `TestNetworkChannels` (unmapped CBS goes to another city's station; mapped CBS → WDBJ with a generic "SEC on CBS" title and the other city dropped; NBC → WSLS showing "Alabama at Georgia" falls back to the guide; a channel with no guide is trusted; non-admin PUT is 403; deleting a channel removes it from the mapping; seen networks are offered), `TestCarriesGame` (title cases), the existing sports tests, `go vet`, `go test ./internal/...`, the web build. Ran the server locally with test channels and used the tab in Chromium (add ESPN and a channel, remove FOX, reload). **Not tried with a real guide or live ESPN broadcast names**, so the sports-word list and match-up check may need tuning on real Roanoke listings. The TV and Roku apps use the same API answers, so they pick this up with no app change.
 
 ## TV app: fixes from testing on the onn box (2026-10-31, no migration)
 

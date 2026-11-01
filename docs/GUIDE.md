@@ -159,6 +159,7 @@ Other things on the Live TV page:
 - **New custom channel** builds a 24/7 channel from your own movies and shows, like ErsatzTV.
 - **Logos** holds channel logos and can match them to channels automatically.
 - **Kids** picks which channels kid profiles can watch (see [Kid mode](#9-kid-mode)).
+- **Networks** ties TV networks to your channels (CBS → your local CBS station, NBC → your NBC), so the Sports page, the score bug and game alerts send each game to your own station rather than another city's. Networks you haven't listed are still found by the guide's titles.
 - **Activity** shows who's watching and how each stream is doing.
 - **Use these channels in other apps** gives you M3U and XMLTV addresses for other players, and a tuner address for Plex's Live TV.
 

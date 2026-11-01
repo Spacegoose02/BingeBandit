@@ -74,7 +74,10 @@ type Server struct {
 	dispatcharr livetv.DispatcharrJob
 	// ratingFetches holds items whose external ratings are being looked up.
 	ratingFetches sync.Map
-	overlays      overlayState
+	// networksSeen holds the TV network names ESPN has listed for games
+	// (lowercase → as listed), offered on Admin → Live TV → Networks.
+	networksSeen sync.Map
+	overlays     overlayState
 	// discoverStreams holds Discover videos resolved for the TV app.
 	discoverStreams discoverStreams
 	ctx             context.Context // server lifetime, for work that outlives a request
@@ -397,6 +400,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/live/channels/{id}", s.deleteChannel)
 				r.Get("/live/epg-channels", s.epgChannels)
 				r.Get("/live/epg-preview", s.epgPreview)
+				r.Get("/live/networks", s.adminNetworks)
+				r.Put("/live/networks", s.saveNetworks)
 				r.Get("/live/kids", s.kidChannels)
 				r.Put("/live/kids/channels", s.setKidChannels)
 				r.Put("/live/kids/group", s.setKidGroup)

@@ -12,9 +12,10 @@ import { CustomChannelEditor, StepButtons, type StepProps } from './CustomChanne
 import { DispatcharrImport } from './DispatcharrImport'
 import { KidChannels } from './KidChannels'
 import { Logos } from './Logos'
+import { Networks } from './Networks'
 import { LogoField } from '../../components/ChannelLogos'
 
-type Tab = 'channels' | 'kids' | 'logos' | 'sources' | 'activity'
+type Tab = 'channels' | 'kids' | 'logos' | 'networks' | 'sources' | 'activity'
 
 export default function AdminLiveTV() {
   useDocumentTitle('Live TV')
@@ -28,9 +29,9 @@ export default function AdminLiveTV() {
           <div className="muted">Playlists and guides from your IPTV providers, the channels built from them, and who's watching.</div>
         </div>
         <div className="segmented">
-          {(['activity', 'channels', 'kids', 'logos', 'sources'] as Tab[]).map((t) => (
+          {(['activity', 'channels', 'kids', 'logos', 'networks', 'sources'] as Tab[]).map((t) => (
             <button key={t} className={tab === t ? 'active' : ''} onClick={() => setParams({ tab: t }, { replace: true })}>
-              {({ activity: 'Activity', channels: 'Channels', kids: 'Kids', logos: 'Logos', sources: 'Sources' } as Record<Tab, string>)[t]}
+              {({ activity: 'Activity', channels: 'Channels', kids: 'Kids', logos: 'Logos', networks: 'Networks', sources: 'Sources' } as Record<Tab, string>)[t]}
             </button>
           ))}
         </div>
@@ -39,6 +40,7 @@ export default function AdminLiveTV() {
       {tab === 'channels' && <Channels />}
       {tab === 'kids' && <KidChannels />}
       {tab === 'logos' && <Logos />}
+      {tab === 'networks' && <Networks />}
       {tab === 'activity' && <Activity />}
     </div>
   )

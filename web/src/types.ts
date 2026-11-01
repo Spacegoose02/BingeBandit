@@ -891,3 +891,9 @@ export interface RequestableTitle {
   onServer?: boolean
   request?: TitleRequest
 }
+
+/** Channels an admin says carry a TV network (Admin → Live TV → Networks). */
+export interface NetworkChannels {
+  network: string
+  channels: number[]
+}
