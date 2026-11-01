@@ -138,14 +138,28 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Code signing, once there's a certificate: a base64 .pfx in the
+          # WIN_CSC_LINK secret and its password in WIN_CSC_KEY_PASSWORD.
+          # Without them the build is unsigned, as now.
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
+          if [ -n "$WIN_CSC_LINK" ]; then
+            export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"
+          else
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
           npm ci
           npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
           npm run fetch-mpv
           npm run dist
+      # latest.yml and the blockmap are what installed apps read to update themselves.
       - uses: softprops/action-gh-release@v2
         with:
-          files: apps/desktop/dist/BingeBandit-Windows-*.exe
+          files: |
+            apps/desktop/dist/BingeBandit-Windows-*.exe
+            apps/desktop/dist/BingeBandit-Windows-Setup-*.exe.blockmap
+            apps/desktop/dist/latest.yml
 
   # The Roku channel, as a zip to sideload in developer mode (apps/roku/README.md).
   roku:
