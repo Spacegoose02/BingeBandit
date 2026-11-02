@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { absolute, api, authHeaders, cached, current, request, trackWrite } from '../api'
+import { absolute, api, ApiError, authHeaders, cached, current, request, trackWrite } from '../api'
 import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
@@ -23,12 +23,18 @@ import { delayLabel, ScrubThumb, SubtitleSearch, THUMB_WIDTH, useTrickplay } fro
 const REPORT_EVERY = 10 // seconds
 const STALL_MS = 8000 // direct play with no progress this long falls back to the transcoder
 const FIRST_FRAME_MS = 20000 // the same before the first frame: a big remux over Wi-Fi can be slow to start
+const RECONNECT_MS = 120000 // how long to wait for a restarting server before giving up
 const SEEK_SETTLE_MS = 600 // while converting, seeks wait for the presses to stop
 const LADDER = [2160, 1080, 720, 480]
 const DISCOVER_RESOLVE_MS = 100000 // longer than the server's own 90s limit on finding a Discover video
 
 // What ExoPlayer plays everywhere without extra decoders. Containers are the
 // file extension; the rest are ffprobe codec names.
+// No answer at all, or the proxy in front saying the server is down.
+function serverGone(e: unknown): boolean {
+  return e instanceof ApiError && (e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504)
+}
+
 const DIRECT_CONTAINERS = new Set(['mp4', 'm4v', 'mov', 'mkv', 'webm', 'ts', 'm2ts', 'mts'])
 const DIRECT_VIDEO = new Set(['h264', 'hevc', 'vp9', 'av1'])
 // Audio Android decodes in software on every device.
@@ -501,11 +507,77 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       } catch (e) {
         if (req === transcodeReq.current) {
           answeredReq.current = req
-          setError((e as Error).message)
+          // The server is restarting or out of reach: wait for it rather than give up.
+          if (serverGone(e)) reconnectRef.current('transcode', at)
+          else setError((e as Error).message)
         }
       }
     },
     [file, offline],
+  )
+
+  // Direct play again from `at`, with a fresh player (the query makes the
+  // source new, so a player that lost its connection isn't reused).
+  const directLoads = useRef(0)
+  const playDirect = useCallback(
+    (at: number) => {
+      if (!file) return
+      if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
+      answeredReq.current = ++transcodeReq.current
+      if (seekTimer.current) clearTimeout(seekTimer.current)
+      seekTimer.current = undefined
+      transcodeId.current = ''
+      offset.current = 0
+      lastTime.current = 0
+      setMode('direct')
+      setBuffering(true)
+      setSrc({ uri: absolute(`/api/files/${file.id}/direct?n=${++directLoads.current}`), startPosition: at * 1000 })
+    },
+    [file],
+  )
+
+  // A server restart ends every conversion and cuts direct play's connection.
+  // While the server doesn't answer, check again with growing gaps for up to
+  // two minutes, then carry on from the same spot the way it was playing
+  // (as the screensaver case below does for a conversion the server stopped).
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const reconnectUntil = useRef(0) // 0: not reconnecting
+  const reconnect = useCallback(
+    (how: 'direct' | 'transcode', at: number, tries = 0) => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+      if (!reconnectUntil.current) reconnectUntil.current = Date.now() + RECONNECT_MS
+      if (Date.now() > reconnectUntil.current) {
+        reconnectUntil.current = 0
+        setNotice('')
+        setBuffering(false)
+        setError("Lost the server. Try again once it's back on.")
+        return
+      }
+      setError('')
+      setBuffering(true)
+      setNotice('Lost the server. Reconnecting…')
+      reconnectTimer.current = setTimeout(() => {
+        reconnectTimer.current = undefined
+        api.get('/api/health').then(
+          () => {
+            setNotice('')
+            retried.current = false
+            if (how === 'direct') playDirect(at)
+            else transcode(at)
+          },
+          () => reconnect(how, at, tries + 1),
+        )
+      }, Math.min(2000 * 2 ** tries, 15000))
+    },
+    [playDirect, transcode],
+  )
+  const reconnectRef = useRef(reconnect)
+  reconnectRef.current = reconnect
+  useEffect(
+    () => () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current)
+    },
+    [],
   )
 
   // Burned-in subtitles chosen up front: start converting once the file is known.
@@ -522,16 +594,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     qualityRef.current = q
     setMenu(false)
     if (q < 0 && file && burnRef.current < 0 && canDirectPlay(file, audioRef.current)) {
-      if (transcodeId.current) api.del(`/api/transcode/${transcodeId.current}`).catch(() => undefined)
-      answeredReq.current = ++transcodeReq.current
-      if (seekTimer.current) clearTimeout(seekTimer.current)
-      seekTimer.current = undefined
-      transcodeId.current = ''
-      offset.current = 0
-      lastTime.current = 0
-      setMode('direct')
-      setBuffering(true)
-      setSrc({ uri: absolute(`/api/files/${file.id}/direct`), startPosition: posRef.current * 1000 })
+      playDirect(posRef.current)
     } else {
       transcode(posRef.current)
     }
@@ -578,15 +641,37 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // The server stops a conversion that hasn't been fetched or reported on for
   // 90 s, which happens when the screensaver backgrounds a paused app (Android
   // stops its timers). Its segments are gone, so start a new one from here.
+  // Before blaming the file, check the server is there: if it isn't (a
+  // restart), wait for it and carry on as before instead.
   const retried = useRef(false)
+  const directRetryAt = useRef(-Infinity) // where direct play last started over after an error
   const onError = useCallback(() => {
-    if (offline) setError("This download didn't play. Remove it and download it again.")
-    else if (mode === 'direct') transcode(posRef.current)
-    else if (!retried.current) {
-      retried.current = true
-      transcode(posRef.current)
-    } else setError('Playback failed. The server could not convert this file.')
-  }, [mode, transcode, offline])
+    if (offline) {
+      setError("This download didn't play. Remove it and download it again.")
+      return
+    }
+    const at = posRef.current
+    const how = mode
+    const wasPlaying = advanced.current
+    setBuffering(true)
+    api.get('/api/health').then(
+      () => {
+        if (how === 'direct') {
+          // A file that had been playing fine most likely lost its
+          // connection (the server came back already): try it as it was once.
+          // One that won't play, or fails again soon, gets converted.
+          if (wasPlaying && at > directRetryAt.current + 30) {
+            directRetryAt.current = at
+            playDirect(at)
+          } else transcode(at)
+        } else if (!retried.current) {
+          retried.current = true
+          transcode(at)
+        } else setError('Playback failed. The server could not convert this file.')
+      },
+      () => reconnect(how, at),
+    )
+  }, [mode, transcode, playDirect, reconnect, offline])
   const awayAt = useRef(0)
   const modeRef = useRef(mode)
   modeRef.current = mode
@@ -654,6 +739,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       lastAdvance.current = Date.now()
       advanced.current = true
       retried.current = false
+      reconnectUntil.current = 0
     }
     lastTime.current = p.currentTime
     if (!paused && step > 0 && step < 2) played.current += step

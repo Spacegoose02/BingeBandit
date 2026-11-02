@@ -81,6 +81,7 @@
     <Timer id="nextTimer" duration="1" repeat="true" />
     <!-- Watch Together: the room is read this often (no server-sent events on Roku). -->
     <Timer id="togetherTimer" duration="1.5" repeat="true" />
+    <Timer id="reconnectTimer" duration="2" repeat="false" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/common/tracks.brs" />
