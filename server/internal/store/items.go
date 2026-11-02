@@ -49,7 +49,9 @@ type Item struct {
 	TMDBID        int64    `json:"tmdbId,omitempty"`
 	TVDBID        int64    `json:"tvdbId,omitempty"`
 	IMDbID        string   `json:"imdbId,omitempty"`
-	// MetadataSource is "" (TMDB, else TheTVDB), "tvdb" or "none" (kept unmatched).
+	// MetadataSource is "" (TMDB, else TheTVDB), "tvdb", "youtube" (a
+	// YouTube channel, described by the .nfo files next to it) or "none"
+	// (kept unmatched).
 	MetadataSource string `json:"metadataSource,omitempty"`
 	// Unmatched: a movie or show no source knows (or left unmatched on purpose).
 	Unmatched      bool       `json:"unmatched,omitempty"`
@@ -167,7 +169,7 @@ func scanItem(r interface{ Scan(...any) error }) (*Item, error) {
 	}
 	it.Watch.Watched = watched == 1
 	it.Unmatched = it.MetadataSource == "none" ||
-		((it.Kind == "movie" || it.Kind == "show") && it.MetadataAt > 0 && it.TMDBID == 0 && it.MetadataSource != "tvdb")
+		((it.Kind == "movie" || it.Kind == "show") && it.MetadataAt > 0 && it.TMDBID == 0 && it.MetadataSource != "tvdb" && it.MetadataSource != "youtube")
 	json.Unmarshal([]byte(genres), &it.Genres)
 	json.Unmarshal([]byte(credits), &it.Credits)
 	json.Unmarshal([]byte(labels), &it.Labels)
@@ -662,6 +664,21 @@ func (s *Store) RawArtwork(id int64, kind string) (string, error) {
 	var ref string
 	err := s.db.QueryRow(`SELECT `+kind+` FROM items WHERE id = ?`, id).Scan(&ref)
 	return ref, err
+}
+
+// MarkYouTubeShow says a show is a YouTube channel, so its details come from
+// the .nfo files next to its videos rather than TMDB, even when TMDB matched
+// it to something before. One left unmatched or on TheTVDB keeps that.
+func (s *Store) MarkYouTubeShow(id int64) error {
+	_, err := s.db.Exec(`UPDATE items SET metadata_source = 'youtube' WHERE id = ? AND kind = 'show' AND metadata_source = ''`, id)
+	return err
+}
+
+// SetEpisodeNumber renumbers an episode (YouTube seasons number their videos
+// by upload date, so a video found later can move the ones after it).
+func (s *Store) SetEpisodeNumber(id int64, n int) error {
+	_, err := s.db.Exec(`UPDATE items SET episode_number = ? WHERE id = ? AND kind = 'episode'`, n, id)
+	return err
 }
 
 // MarkMetadataChecked records a lookup that found nothing so it is not retried every scan.

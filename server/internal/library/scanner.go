@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,35 @@ type Scanner struct {
 
 	mu     sync.Mutex
 	status map[int64]*Status
+
+	ytMu   sync.Mutex
+	ytDirs map[string]ytDir // show folder → whether it's a YouTube channel
+}
+
+type ytDir struct {
+	mtime int64
+	yes   bool
+}
+
+// youTubeChannel says whether a show folder is a YouTube channel (see
+// metadata.IsYouTubeShowDir), remembered until its tvshow.nfo changes.
+func (s *Scanner) youTubeChannel(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, "tvshow.nfo"))
+	if err != nil {
+		return false
+	}
+	m := info.ModTime().UnixNano()
+	s.ytMu.Lock()
+	defer s.ytMu.Unlock()
+	if d, ok := s.ytDirs[dir]; ok && d.mtime == m {
+		return d.yes
+	}
+	if s.ytDirs == nil {
+		s.ytDirs = map[string]ytDir{}
+	}
+	yes := metadata.IsYouTubeShowDir(dir)
+	s.ytDirs[dir] = ytDir{m, yes}
+	return yes
 }
 
 func NewScanner(st *store.Store, meta *metadata.Service, ffprobe string) *Scanner {
@@ -427,7 +457,27 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 	parts := strings.Split(filepath.ToSlash(rel), "/")
 	name := strings.TrimSuffix(parts[len(parts)-1], filepath.Ext(f.path))
 
+	// A YouTube channel's videos are dated and end in their video id. They
+	// go by that id, so videos from one day stay apart, and the metadata
+	// step numbers them by date.
+	ytID := ""
+	if len(parts) >= 2 && s.youTubeChannel(filepath.Join(f.root, parts[0])) {
+		if m := metadata.ReYouTubeID.FindStringSubmatch(name); m != nil {
+			ytID = m[1]
+		}
+	}
 	season, episode, prefix, rest, ok := parseEpisode(name)
+	if ytID != "" {
+		if d := metadata.YouTubeDate(name); d != "" {
+			ok, prefix = true, ""
+			season, _ = strconv.Atoi(d[:4])
+			month, _ := strconv.Atoi(d[5:7])
+			day, _ := strconv.Atoi(d[8:10])
+			episode = month*1000000 + day*10000
+			// "Channel - 2024-05-03 - Title [id]": the title follows the date.
+			rest = name[strings.Index(name, d)+len(d):]
+		}
+	}
 	if !ok && len(parts) >= 3 {
 		if sn, sok := parseSeasonDir(parts[len(parts)-2]); sok {
 			if en, eok := parseLeadingNumber(name); eok {
@@ -440,7 +490,7 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 		return 0, nil, fmt.Errorf("cannot find season/episode in %s", f.path)
 	}
 	last := episode
-	if season < 1900 { // not date-named
+	if season < 1900 && ytID == "" { // not date-named
 		last, rest = lastEpisode(season, episode, rest)
 	}
 
@@ -462,6 +512,11 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 	})
 	if err != nil {
 		return 0, nil, err
+	}
+	if ytID != "" {
+		if err := s.st.MarkYouTubeShow(showID); err != nil {
+			return 0, nil, err
+		}
 	}
 	seasonTitle := fmt.Sprintf("Season %d", season)
 	if season == 0 {
@@ -486,9 +541,13 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 		}
 	}
 	upsert := func(n int, title string) (int64, error) {
+		key := fmt.Sprintf("%s:s%d:e%d", showKey, season, n)
+		if ytID != "" {
+			key = fmt.Sprintf("%s:yt:%s", showKey, ytID)
+		}
 		return s.st.UpsertItem(&store.Item{
 			LibraryID: lib.ID, Kind: "episode", ParentID: seasonID, ShowID: showID, Title: title,
-			SeasonNumber: &season, EpisodeNumber: &n, MatchKey: fmt.Sprintf("%s:s%d:e%d", showKey, season, n),
+			SeasonNumber: &season, EpisodeNumber: &n, MatchKey: key,
 		})
 	}
 	if id, err = upsert(episode, epTitle); err != nil {
@@ -508,7 +567,8 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 
 func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Status, force bool) error {
 	// Music, audiobooks and photos get their details from their own tags.
-	if !store.IsVideoLibrary(lib.Kind) || !s.meta.AnyEnabled() {
+	// Without a TMDB or TheTVDB key only YouTube channels get details.
+	if !store.IsVideoLibrary(lib.Kind) {
 		return nil
 	}
 	s.update(st, func(st *Status) { st.Phase, st.Processed, st.Found = "metadata", 0, 0 })
@@ -517,6 +577,9 @@ func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Sta
 	}
 	if err := s.meta.RefreshLibrary(ctx, lib.ID, force, progress); err != nil {
 		return err
+	}
+	if !s.meta.AnyEnabled() {
+		return nil
 	}
 	merged, err := s.st.MergeDuplicates(lib.ID)
 	if err != nil {

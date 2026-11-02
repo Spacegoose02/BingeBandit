@@ -67,6 +67,22 @@ Other options when adding a library:
 - **Detect intros and end credits** powers the **Skip Intro** and **Skip Credits** buttons.
 - **Collections on the Library tab** decides whether a collection shows as its own poster, its movies show separately, or both.
 
+### YouTube channels
+
+Point a **TV Shows** library at the YouTube folder [Cinemask](https://github.com/Spacegoose02/cinemask) downloads into, and each channel becomes a show. No TMDB key is needed: everything comes from the files Cinemask saves next to the videos.
+
+```
+YouTube/Channel/tvshow.nfo                                   name and description
+YouTube/Channel/poster.jpg                                   the channel's picture
+YouTube/Channel/Season 2024/Channel - 2024-05-03 - Title [videoId].mkv
+YouTube/Channel/Season 2024/… [videoId].nfo / .jpg           title, description, date, length / thumbnail
+```
+
+- Seasons are upload years. Episodes are numbered 1, 2, 3… by upload date within each year, oldest first, so two videos from the same day stay separate. A video downloaded later from earlier in the year moves the ones after it along.
+- The channel's background is its newest video's thumbnail (or a `fanart.jpg` in its folder).
+- A folder counts as a channel when its `tvshow.nfo` has a YouTube id (`<uniqueid type="youtube">`), which is how Cinemask writes it. Other shows in the same library are matched on TMDB as usual.
+- To see newest videos first, open the channel, **Edit → Advanced**, and set **Episode order** to **Newest first**.
+
 ### Music, audiobooks and photos
 
 These open in the web app and the Windows app (the TV and Roku apps don't show them yet). Nothing is looked up online: details come from the files' own tags, with the folders as a fallback.
