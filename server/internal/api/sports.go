@@ -80,7 +80,8 @@ func (s *Server) sportsHome(w http.ResponseWriter, r *http.Request) {
 	if u.LiveTV {
 		s.findChannels(u.ID, games)
 	}
-	resp := map[string]any{"leagues": sports.Leagues, "teams": teams, "games": orEmpty(games)}
+	shown, all := s.myLeagues(u.ID)
+	resp := map[string]any{"leagues": shown, "allLeagues": all, "teams": teams, "games": orEmpty(games)}
 	if len(problems) > 0 {
 		sort.Strings(problems)
 		resp["error"] = "Couldn't reach ESPN for " + strings.Join(problems, "; ")
@@ -122,7 +123,7 @@ func (s *Server) myTeams(uid int64) ([]sports.Team, error) {
 	}
 	out := teams[:0]
 	for _, t := range teams {
-		if sports.LeagueByID(t.League) != nil {
+		if s.leagueAllowed(t.League) {
 			out = append(out, t)
 		}
 	}
@@ -415,6 +416,10 @@ func isWordByte(b byte) bool {
 }
 
 func (s *Server) sportsTeams(w http.ResponseWriter, r *http.Request) {
+	if !s.leagueAllowed(chi.URLParam(r, "league")) {
+		writeErr(w, http.StatusNotFound, sports.ErrUnknownLeague.Error())
+		return
+	}
 	teams, err := s.sportsClient().Teams(r.Context(), chi.URLParam(r, "league"))
 	if errors.Is(err, sports.ErrUnknownLeague) {
 		writeErr(w, http.StatusNotFound, err.Error())
@@ -437,6 +442,10 @@ func (s *Server) sportsScores(w http.ResponseWriter, r *http.Request) {
 	}
 	if !reDay.MatchString(day) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYYMMDD")
+		return
+	}
+	if !s.leagueAllowed(chi.URLParam(r, "league")) {
+		writeErr(w, http.StatusNotFound, sports.ErrUnknownLeague.Error())
 		return
 	}
 	games, err := s.sportsClient().Scoreboard(r.Context(), chi.URLParam(r, "league"), day)
@@ -465,17 +474,17 @@ func (s *Server) sportsHub(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYYMMDD")
 		return
 	}
-	var leagues []sports.League
+	u := currentUser(r)
+	shown, all := s.myLeagues(u.ID)
+	leagues := shown
 	if want := q.Get("leagues"); want != "" {
-		for _, id := range strings.Split(want, ",") {
-			if l := sports.LeagueByID(strings.TrimSpace(id)); l != nil {
-				leagues = append(leagues, *l)
+		leagues = nil
+		for _, id := range splitLeagues(want) {
+			if i := slices.IndexFunc(all, func(l sports.League) bool { return l.ID == id }); i >= 0 {
+				leagues = append(leagues, all[i])
 			}
 		}
-	} else {
-		leagues = sports.Leagues
 	}
-	u := currentUser(r)
 	teams, err := s.myTeams(u.ID)
 	if err != nil {
 		writeStoreErr(w, err)
@@ -523,7 +532,7 @@ func (s *Server) sportsHub(w http.ResponseWriter, r *http.Request) {
 	if u.LiveTV {
 		s.findChannels(u.ID, games)
 	}
-	resp := map[string]any{"date": day, "leagues": leagues, "teams": teams, "games": games}
+	resp := map[string]any{"date": day, "leagues": leagues, "allLeagues": all, "teams": teams, "games": games}
 	if len(problems) > 0 {
 		resp["error"] = "Couldn't reach ESPN for " + strings.Join(problems, ", ")
 	}
@@ -533,6 +542,10 @@ func (s *Server) sportsHub(w http.ResponseWriter, r *http.Request) {
 // sportsGameSummary is one game's box score, team and player stats,
 // leaders and standings.
 func (s *Server) sportsGameSummary(w http.ResponseWriter, r *http.Request) {
+	if !s.leagueAllowed(chi.URLParam(r, "league")) {
+		writeErr(w, http.StatusNotFound, sports.ErrUnknownLeague.Error())
+		return
+	}
 	sum, err := s.sportsClient().Summary(r.Context(), chi.URLParam(r, "league"), chi.URLParam(r, "id"))
 	if errors.Is(err, sports.ErrUnknownLeague) {
 		writeErr(w, http.StatusNotFound, err.Error())
@@ -572,6 +585,10 @@ func (s *Server) setSportsTeams(w http.ResponseWriter, r *http.Request) {
 	}
 	teams := make([]sports.Team, 0, len(req))
 	for _, x := range req {
+		if !s.leagueAllowed(x.League) {
+			writeErr(w, http.StatusBadRequest, "the Sports section doesn't have "+x.League)
+			return
+		}
 		t, ok := known[x.League+"/"+x.ID]
 		if !ok {
 			if t, err = s.sportsClient().Team(r.Context(), x.League, x.ID); err != nil {
@@ -621,6 +638,9 @@ func (s *Server) sportsFollows() (map[string]map[string]bool, error) {
 	}
 	out := map[string]map[string]bool{}
 	for _, f := range fans {
+		if !s.leagueAllowed(f.League) {
+			continue
+		}
 		if out[f.League] == nil {
 			out[f.League] = map[string]bool{}
 		}

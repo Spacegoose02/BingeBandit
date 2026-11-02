@@ -58,6 +58,12 @@ type Prefs struct {
 	// MultiViewLayouts are Sports Multi-View screens saved by name: up to
 	// four Live TV channels each.
 	MultiViewLayouts []MultiViewLayout `json:"multiViewLayouts"`
+	// SportsOrder are league ids this person moved to the top of the Sports
+	// section, in order; the rest follow in the usual order. SportsHidden
+	// are leagues whose rows they turned off (their teams' games still show
+	// under Your teams).
+	SportsOrder  []string `json:"sportsOrder"`
+	SportsHidden []string `json:"sportsHidden"`
 }
 
 // MultiViewLayout is a saved Multi-View: its channels in screen order.
@@ -138,6 +144,16 @@ func (p *Prefs) Validate() error {
 		}
 		if len(l.Channels) == 0 || len(l.Channels) > 4 {
 			return fmt.Errorf("a Multi-View layout has 1 to 4 channels")
+		}
+	}
+	for _, list := range [][]string{p.SportsOrder, p.SportsHidden} {
+		if len(list) > 100 {
+			return fmt.Errorf("sports rows name at most 100 leagues")
+		}
+		for _, id := range list {
+			if id == "" || len(id) > 64 {
+				return fmt.Errorf("league ids are 1 to 64 characters")
+			}
 		}
 	}
 	if len(p.AudioLanguage) > 8 || len(p.SubtitleLanguage) > 8 {

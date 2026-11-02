@@ -333,6 +333,9 @@ export interface Prefs {
   scoreBug: boolean
   spoilerFree?: boolean // the TV Sports Hub hides scores, the score bug too
   multiViewLayouts?: { name: string; channels: number[] }[] | null
+  /** Leagues moved to the top of Sports, in order, and leagues whose rows are off. */
+  sportsOrder?: string[] | null
+  sportsHidden?: string[] | null
   liveFollows: string[] | null
   liveAlertMinutes: number
   quietWhilePlaying: boolean
@@ -360,6 +363,18 @@ export interface SportsSide extends SportsTeam {
   score?: string
   winner?: boolean
   record?: string
+  /** The score in each period (quarter, inning, half). */
+  lines?: string[]
+  /** The side's standout player so far, or its probable starter. */
+  leader?: SportsLeader
+}
+
+export interface SportsLeader {
+  name: string
+  shortName: string
+  position?: string
+  /** What they've done: "1 REC, 16 YDS". */
+  value?: string
 }
 
 export interface SportsGame {
@@ -385,10 +400,27 @@ export interface SportsGame {
 }
 
 export interface SportsHome {
+  /** This profile's league rows, in its order (rows it turned off are left out). */
   leagues: SportsLeague[]
+  /** Every league the server shows, in this profile's order: for picking teams and rows. */
+  allLeagues?: SportsLeague[]
   teams: SportsTeam[]
   games: SportsGame[]
   error?: string
+}
+
+/** /api/sports/scores: every league's games on a day. */
+export interface SportsDay extends SportsHome {
+  date: string
+}
+
+/** /api/sports/{league}/games/{id}: one game's box score and the rest. */
+export interface SportsSummary {
+  game: SportsGame
+  stats: { label: string; away: string; home: string }[]
+  players: { team: string; title: string; labels: string[]; rows: { name: string; position?: string; stats: string[] }[] }[]
+  leaders: { title: string; away?: SportsLeader; home?: SportsLeader }[]
+  standings: { title: string; labels: string[]; rows: { id: string; name: string; logo?: string; stats: string[] }[] }[]
 }
 
 export interface PreRoll {

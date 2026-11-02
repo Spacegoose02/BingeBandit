@@ -176,6 +176,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validSportsLeagues(in); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := validCastSettings(in); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return

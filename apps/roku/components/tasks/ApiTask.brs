@@ -745,7 +745,8 @@ function loadSports(req as object) as object
         end if
     end for
     m.top.content = root
-    out = { ok: true, status: 200, data: data, teams: teams, sports: sportsSeen, leagues: leagues }
+    ' The team picker lists every league, even ones whose rows this profile turned off.
+    out = { ok: true, status: 200, data: data, teams: teams, sports: sportsSeen, leagues: getOr(data, "allLeagues", leagues) }
     if prefs.ok and type(prefs.data) = "roAssociativeArray" then out.prefs = prefs.data
     return out
 end function

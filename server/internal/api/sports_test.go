@@ -292,3 +292,103 @@ func TestSportsRelaySetting(t *testing.T) {
 		}
 	}
 }
+
+func TestSportsRows(t *testing.T) {
+	espn := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"events":[]}`)
+	}))
+	defer espn.Close()
+	old := sports.BaseURL
+	sports.BaseURL = espn.URL
+	defer func() { sports.BaseURL = old }()
+
+	st, err := store.Open(filepath.Join(t.TempDir(), "bb.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret-password"), bcrypt.MinCost)
+	dana, _ := st.CreateUser("dana", string(hash), true)
+	sam, _ := st.CreateUser("sam", string(hash), false)
+	st.CreateSession("dana", dana.ID, "Web", "")
+	st.CreateSession("sam", sam.ID, "Web", "")
+	h := (&Server{Store: st}).Router(context.Background())
+	call := func(token, method, path, body string, out any) int {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if out != nil {
+			json.Unmarshal(rec.Body.Bytes(), out)
+		}
+		return rec.Code
+	}
+	ids := func(ls []sports.League) string {
+		var out []string
+		for _, l := range ls {
+			out = append(out, l.ID)
+		}
+		return strings.Join(out, ",")
+	}
+
+	// Bad settings are refused.
+	for _, bad := range []string{`{"sports_hidden_leagues":"nfl,cricket"}`, `{"sports_hidden_leagues":"` + ids(sports.Leagues) + `"}`} {
+		if code := call("dana", "PUT", "/api/admin/settings", bad, nil); code != 400 {
+			t.Errorf("%s: %d", bad, code)
+		}
+	}
+	if code := call("sam", "PUT", "/api/admin/settings", `{"sports_hidden_leagues":"ufl"}`, nil); code != 403 {
+		t.Errorf("non-admin: %d", code)
+	}
+	// The admin hides two leagues for everyone.
+	if code := call("dana", "PUT", "/api/admin/settings", `{"sports_hidden_leagues":" ufl , cfl,ufl"}`, nil); code != 204 && code != 200 {
+		t.Fatalf("hide: %d", code)
+	}
+	if v := st.Setting(store.SettingSportsHiddenLeagues); v != "ufl,cfl" {
+		t.Errorf("stored %q", v)
+	}
+	var list []struct {
+		ID     string `json:"id"`
+		Hidden bool   `json:"hidden"`
+	}
+	call("sam", "GET", "/api/sports/leagues", "", &list)
+	if len(list) != len(sports.Leagues) || !list[2].Hidden || list[0].Hidden {
+		t.Errorf("league list: %+v", list)
+	}
+	// Sam moves MLB and the NHL up and turns college football off.
+	p, _ := st.UserPrefs(sam.ID)
+	p.SportsOrder, p.SportsHidden = []string{"mlb", "ufl", "nhl"}, []string{"college-football"}
+	st.SetUserPrefs(sam.ID, p)
+
+	var hub struct {
+		Leagues    []sports.League `json:"leagues"`
+		AllLeagues []sports.League `json:"allLeagues"`
+	}
+	if code := call("sam", "GET", "/api/sports/scores", "", &hub); code != 200 {
+		t.Fatalf("hub: %d", code)
+	}
+	if got := ids(hub.Leagues); !strings.HasPrefix(got, "mlb,nhl,nfl,nba,") || strings.Contains(got, "ufl") || strings.Contains(got, "college-football,") {
+		t.Errorf("sam's rows: %s", got)
+	}
+	if got := ids(hub.AllLeagues); !strings.HasPrefix(got, "mlb,nhl,nfl,college-football,nba,") || strings.Contains(got, "cfl") {
+		t.Errorf("sam's leagues: %s", got)
+	}
+	if code := call("sam", "GET", "/api/sports/scores?leagues=ufl,nfl", "", &hub); code != 200 || ids(hub.Leagues) != "nfl" {
+		t.Errorf("asked for a hidden league: %d %s", code, ids(hub.Leagues))
+	}
+	// Dana keeps the usual order, without the hidden leagues.
+	call("dana", "GET", "/api/sports", "", &hub)
+	if got := ids(hub.Leagues); !strings.HasPrefix(got, "nfl,college-football,nba,") {
+		t.Errorf("dana's rows: %s", got)
+	}
+	// A hidden league can't be read or followed.
+	for _, path := range []string{"/api/sports/ufl/teams", "/api/sports/ufl/scores", "/api/sports/ufl/games/1"} {
+		if code := call("dana", "GET", path, "", nil); code != 404 {
+			t.Errorf("%s: %d", path, code)
+		}
+	}
+	if code := call("dana", "PUT", "/api/sports/teams", `[{"league":"cfl","id":"1"}]`, nil); code != 400 {
+		t.Errorf("follow in a hidden league: %d", code)
+	}
+}

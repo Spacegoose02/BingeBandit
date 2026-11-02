@@ -230,7 +230,10 @@ export interface SportsGame {
 }
 
 export interface SportsHome {
+  /** This profile's league rows, in its order (leagues it turned off are left out). */
   leagues: SportsLeague[]
+  /** Every league the server shows, in this profile's order: for picking teams and rows. */
+  allLeagues?: SportsLeague[]
   teams: SportsTeam[]
   games: SportsGame[]
   error?: string

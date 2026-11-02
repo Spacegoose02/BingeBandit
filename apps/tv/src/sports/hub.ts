@@ -117,6 +117,9 @@ export interface SportsPrefs {
   spoilerFree?: boolean
   scoreBug?: boolean
   multiViewLayouts?: MultiViewLayout[] | null
+  /** Leagues moved to the top of the Scores tab, in order, and leagues whose rows are off. */
+  sportsOrder?: string[] | null
+  sportsHidden?: string[] | null
   [key: string]: unknown
 }
 
