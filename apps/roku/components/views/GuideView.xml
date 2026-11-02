@@ -45,6 +45,8 @@
     <!-- The whole screen, from inside Home's panel. -->
     <OptionsMenu id="menu" translation="[-400, 0]" visible="false" />
     <Timer id="reload" duration="300" repeat="true" />
+    <!-- Starts the preview over a moment after it errors or stops. -->
+    <Timer id="previewRetry" duration="3" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/views/GuideView.brs" />

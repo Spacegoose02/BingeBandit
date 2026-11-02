@@ -22,6 +22,8 @@ sub init()
     m.reload = m.top.findNode("reload")
     m.reload.observeField("fire", "load")
     m.reload.control = "start"
+    m.previewRetry = m.top.findNode("previewRetry")
+    m.previewRetry.observeField("fire", "onPreviewRetry")
 
     m.guide = invalid ' the last answer: recordings, canRecord, ...
     m.shown = [] ' channels in grid order
@@ -285,6 +287,20 @@ end sub
 sub onPreviewState()
     s = m.preview.state
     if s = "playing" or s = "error" or s = "stopped" then stopSpinner()
+    ' A live channel shouldn't end: an error (or a playlist that looked
+    ' finished) leaves the channel and joins it again shortly, so the preview
+    ' doesn't just sit there stopped.
+    if (s = "error" or s = "finished") and m.previewOn and m.viewerId <> ""
+        apiSend("DELETE", "/api/live/viewers/" + m.viewerId, invalid)
+        m.viewerId = ""
+        m.joinCount = m.joinCount + 1
+        m.previewRetry.control = "stop"
+        m.previewRetry.control = "start"
+    end if
+end sub
+
+sub onPreviewRetry()
+    if m.previewOn then startPreview()
 end sub
 
 sub stopSpinner()
@@ -294,6 +310,7 @@ end sub
 
 sub stopPreview()
     m.previewOn = false
+    m.previewRetry.control = "stop"
     m.joinCount = m.joinCount + 1
     m.preview.control = "stop"
     m.preview.content = invalid
