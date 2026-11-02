@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-02. Latest release v0.43.1, 56 schema migrations._
+_Last updated: 2026-11-02. Latest release v0.44.0, 56 schema migrations._
 
 
 ## Start here
@@ -77,6 +77,14 @@ Michael asked how to manage the TV apps' Sports section and why the web Sports p
 - **TV:** the hub's gear has **Sports rows** (`sports/Rows.tsx`: OK turns a row on or off, ▲ moves it up); the team picker uses `allLeagues`. **Roku:** the team picker uses `allLeagues` (`ApiTask.brs` `loadSports`); no rows editor on Roku, it follows the profile's choice.
 - **Tested:** `TestSportsRows` (bad settings, non-admin 403, profile order and hidden rows, `leagues=` on a hidden league, hidden league routes and follow) and `go test ./...`; web `tsc` and build; TV `tsc` and eslint. Ran the server against a fake ESPN relay and used the web page in Chromium (scores rows, rows editor saving NHL first and NBA off, game details, admin ticks, phone width). **Not tried:** the TV rows editor on a device, Roku at all, live ESPN.
 - Still open from the old list: favorite teams grouped by division.
+
+## Guide preview keeps playing (2026-11-02, #188, no migration, apps only)
+
+The Live TV guide's corner preview (and the Sports screen's) had none of the full-screen player's recovery, so the first gap in the stream left it buffering or errored for good after a minute or so.
+
+- **Android TV:** new `LivePreview` component (`apps/tv/src/screens/LivePreview.tsx`) replaces `usePreview` in `LiveGuide.tsx` and the copy in `Sports.tsx`. It sits the server's buffer behind live (`liveBuffer`), pings the viewer (a 410 restarts it), reports long buffering (`reportBuffering`), and leaves and rejoins the channel on an error, an end or a stall, quickly at first and then every 15 s.
+- **Roku:** `GuideView.brs` leaves the channel on a preview `error` or `finished` and rejoins it 3 s later (`previewRetry` timer).
+- **Tested:** TV `tsc` and `eslint`, Roku build in CI. **Not tried** on a real TV against a stream that drops.
 
 ## Playback rides out a server restart (2026-11-02, no migration, apps only)
 
