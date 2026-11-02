@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useTVEventHandler } from 'react-native'
-import Video from 'react-native-video'
-import { api, authHeaders } from '../api'
+import { api } from '../api'
 import { refreshGameLights } from '../hue'
 import { fetchGameLightsSetup, saveGameLights, type GameLightsSetup } from '../lights'
 import { Button, Center, Focusable } from '../components'
@@ -30,8 +29,7 @@ import {
   useSpoilers,
   type SportsPrefs,
 } from '../sports/hub'
-import { usePreview } from './LiveGuide'
-import { NO_LIVE_BADGE } from './Player'
+import { LivePreview } from './LivePreview'
 
 type View3 = 'scores' | 'teams' | 'channels'
 const viewNames: Record<View3, string> = { scores: 'Scores', teams: 'My Teams', channels: 'Channels' }
@@ -129,7 +127,6 @@ export default function Sports() {
     if (evt?.eventType === 'playPause' && focusedRef.current) addToMultiView(focusedRef.current.channels?.[0]?.id)
   })
 
-  const previewSrc = usePreview(active && preview?.channels?.length ? preview.channels[0].id : undefined)
   const leagues = useMemo(() => day?.leagues ?? home?.leagues ?? [], [day, home])
   const leagueOf = useCallback((id: string) => leagues.find((l) => l.id === id), [leagues])
   const followed = home?.teams ?? day?.teams ?? []
@@ -263,20 +260,8 @@ export default function Sports() {
 
         <View style={st.top}>
           <Pressable style={st.preview} focusable={false} onPress={preview?.channels?.length ? () => nav.push({ name: 'live', channelId: preview.channels![0].id }) : undefined}>
-            {preview && previewSrc ? (
-              <View style={StyleSheet.absoluteFill} pointerEvents="none">
-                <Video
-                  key={previewSrc}
-                  source={{ uri: previewSrc, type: 'm3u8', headers: authHeaders() }}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="cover"
-                  muted={isPhone}
-                  controlsStyles={NO_LIVE_BADGE}
-                  focusable={false}
-                />
-              </View>
-            ) : preview ? (
-              <ActivityIndicator color={colors.accent} />
+            {preview ? (
+              <LivePreview channelId={active && preview.channels?.length ? preview.channels[0].id : undefined} muted={isPhone} />
             ) : (
               <>
                 <Text style={st.previewIcon}>📺</Text>

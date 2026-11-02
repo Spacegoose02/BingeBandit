@@ -1,15 +1,14 @@
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, FlatList, Image, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useWindowDimensions } from 'react-native'
 import { SvgXml } from 'react-native-svg'
-import Video from 'react-native-video'
 import { absolute, api, authHeaders } from '../api'
 import { Button, Center } from '../components'
-import { clock, episodeLabel, joinChannel, leaveChannel } from '../live'
+import { clock, episodeLabel } from '../live'
 import { FocusMemoryContext, useNav, useScreen, type FocusTarget } from '../nav'
 import { colors, font, gutter, isPhone, px, scaled, units, quietPress } from '../theme'
 import type { ChannelCategory, GuideProgram, LiveChannel } from '../types'
 import { lastChannel } from './LivePlayer'
-import { NO_LIVE_BADGE } from './Player'
+import { LivePreview } from './LivePreview'
 
 const FETCH = 6 * 3600
 const HALF = 1800
@@ -80,30 +79,6 @@ function segments(c: LiveChannel, progs: GuideProgram[] | undefined, from: numbe
   }
   if (to - t >= 60) out.push({ key: `g${t}`, start: t, stop: to })
   return out.length ? out : [{ key: 'none', start: from, stop: to }]
-}
-
-/** Joins a channel's stream for the preview; leaves on change. */
-export function usePreview(channelId?: number): string | null {
-  const [src, setSrc] = useState<string | null>(null)
-  useEffect(() => {
-    setSrc(null)
-    if (!channelId) return
-    let cancelled = false
-    let viewer = ''
-    joinChannel(channelId).then(
-      (r) => {
-        viewer = r.viewerId
-        if (cancelled) leaveChannel(viewer)
-        else setSrc(r.playlist)
-      },
-      () => undefined,
-    )
-    return () => {
-      cancelled = true
-      leaveChannel(viewer)
-    }
-  }, [channelId])
-  return src
 }
 
 /** The cable-box style guide: what's selected up top, then channels against a timeline. */
@@ -249,7 +224,6 @@ export default function LiveGuide() {
       if (!isPhone) setFocusSel(returns)
     }
   }, [active, guide, returns, clampStart, setFilter, shown])
-  const preview = usePreview(active ? tuned?.id : undefined)
   // Built once per load so the memoized rows only redraw when something they show changes.
   // Bring the selected row into view so its block can take focus.
   const list = useRef<FlatList<LiveChannel>>(null)
@@ -288,22 +262,8 @@ export default function LiveGuide() {
           <Text style={st.desc} numberOfLines={wide ? 1 : isPhone ? 2 : 3}>{p ? p.description ?? '' : 'No guide information for this time.'}</Text>
         </View>
         <Pressable android_disableSound={quietPress} style={[st.preview, wide && st.previewWide]} focusable={false} onPress={tuned ? () => watch(tuned) : undefined}>
-          {preview ? (
-            // The video surface would swallow taps meant for the preview (tap to watch).
-            <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              <Video
-                key={preview}
-                source={{ uri: preview, type: 'm3u8', headers: authHeaders() }}
-                style={StyleSheet.absoluteFill}
-                resizeMode="cover"
-                muted={isPhone} // a TV plays the preview's sound, as a cable box does
-                controlsStyles={NO_LIVE_BADGE}
-                focusable={false}
-              />
-            </View>
-          ) : (
-            <ActivityIndicator color={colors.accent} />
-          )}
+          {/* A TV plays the preview's sound, as a cable box does. */}
+          <LivePreview channelId={active ? tuned?.id : undefined} muted={isPhone} />
           <Text style={st.liveTag}>{isPhone ? 'LIVE · TAP TO WATCH' : 'LIVE'}</Text>
           {tuned && <Text style={st.tunedTag} numberOfLines={1}>{tuned.number}  {tuned.name}</Text>}
         </Pressable>
