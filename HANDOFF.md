@@ -78,6 +78,16 @@ Michael asked how to manage the TV apps' Sports section and why the web Sports p
 - **Tested:** `TestSportsRows` (bad settings, non-admin 403, profile order and hidden rows, `leagues=` on a hidden league, hidden league routes and follow) and `go test ./...`; web `tsc` and build; TV `tsc` and eslint. Ran the server against a fake ESPN relay and used the web page in Chromium (scores rows, rows editor saving NHL first and NBA off, game details, admin ticks, phone width). **Not tried:** the TV rows editor on a device, Roku at all, live ESPN.
 - Still open from the old list: favorite teams grouped by division.
 
+## Live TV stops restarting a slow channel (2026-11-02, no migration)
+
+A web viewer on WWBT (passthrough, ~5 Mbps) was dropped and rejoined every 10–20 s. After 12 s of buffering every player asked `/buffering`, and anything but "switched" made it start over. With one stream (or switching on slowness off) that was every report, even when the server could see the stream itself was late; and a viewer whose connection is just slower than the channel's bitrate got restarted at the live edge with less buffered, which only made it worse.
+
+- **Server** (`livetv.ReportBuffering`, `api.viewerBuffering`): judges the stream first, then whether it can switch. Answers `{switched, upstream, reason}`; `upstream` is true when the stream is behind real time or the HLS output stopped, whether or not there was anything to switch to. Logs a viewer buffering on a late channel with no other stream.
+- **Web** (`web/src/pages/LivePlayer.tsx`): no restart when `upstream` is true, or when video arrived within the last stall period (hls.js `FRAG_LOADED` or the video's `progress`); shows "The channel is sending video slowly…" or "Your connection is slow for this channel…" under the spinner instead. It still restarts when nothing has arrived and the stream is keeping up.
+- **Android TV / phone** (`apps/tv/src/live.ts` `reportBuffering` now returns `'switched' | 'upstream' | 'player'`): `LivePlayer`, `LivePreview` and `MultiView` restart only on `'player'` (ExoPlayer can really get stuck there, so no download check). Roku never restarted on a report; unchanged.
+- **Not changed:** passthrough channels have no lower quality, so a connection slower than the channel's bitrate will still buffer, just without the restarts.
+- **Tested:** `go test ./internal/livetv` (`TestSlowSwitchingOff` now checks `upstream`, `TestBufferingReport` checks it stays false), web `tsc` and build, TV `tsc` and `eslint`. **Not tried** against the real slow viewer.
+
 ## Guide preview keeps playing (2026-11-02, #188, no migration, apps only)
 
 The Live TV guide's corner preview (and the Sports screen's) had none of the full-screen player's recovery, so the first gap in the stream left it buffering or errored for good after a minute or so.

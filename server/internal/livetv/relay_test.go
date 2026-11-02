@@ -222,8 +222,14 @@ func TestSlowSwitchingOff(t *testing.T) {
 	if goodConns.Load() != 0 {
 		t.Error("switched for slowness with switching on slowness turned off")
 	}
-	if ok, _ := m.ReportBuffering(v.ID, 30); ok {
+	ok, up, why := m.ReportBuffering(v.ID, 30)
+	if ok {
 		t.Error("a buffering report switched with switching on slowness turned off")
+	}
+	// The stream is the problem and there's nothing to switch to: the player
+	// should hear that, so it waits rather than restarting over and over.
+	if !up {
+		t.Errorf("a stream at 30%% speed should be reported as the cause: %s", why)
 	}
 }
 
@@ -250,11 +256,11 @@ func TestBufferingReport(t *testing.T) {
 		}
 	}()
 	time.Sleep(1500 * time.Millisecond)
-	if ok, why := m.ReportBuffering(v.ID, 5); ok {
+	if ok, _, why := m.ReportBuffering(v.ID, 5); ok {
 		t.Errorf("5s of buffering is under the 12s default but switched: %s", why)
 	}
-	if ok, why := m.ReportBuffering(v.ID, 13); ok {
-		t.Errorf("the stream keeps up, so one viewer's buffering shouldn't switch it: %s", why)
+	if ok, up, why := m.ReportBuffering(v.ID, 13); ok || up {
+		t.Errorf("the stream keeps up, so one viewer's buffering shouldn't switch it or blame it: %s", why)
 	}
 	if bConns.Load() != 0 {
 		t.Error("switched to the second stream without cause")

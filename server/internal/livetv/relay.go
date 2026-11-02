@@ -1429,7 +1429,12 @@ func (r *Relay) lastErrorOr(def string) string {
 // moves to it, but only if the server sees the problem too (the upstream is
 // behind real time, or the HLS output has stopped producing segments): a
 // viewer on bad Wi-Fi shouldn't switch the stream for everyone else.
-func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) {
+//
+// upstream reports whether the server sees the stream itself as the problem.
+// When it does and there's nothing to switch to, restarting the player can't
+// help (it would rejoin the same late stream at its live edge, where there's
+// even less video), so players keep waiting instead.
+func (m *Manager) ReportBuffering(viewerID string, secs float64) (switched, upstream bool, reason string) {
 	var r *Relay
 	for _, rr := range m.snapshot() {
 		rr.mu.Lock()
@@ -1441,24 +1446,15 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 		}
 	}
 	if r == nil {
-		return false, "not watching"
+		return false, false, "not watching"
 	}
 	stall := m.stallTimeout()
 	if secs < stall.Seconds() {
-		return false, "not long enough"
+		return false, false, "not long enough"
 	}
 	switchSlow, buffer := m.switchSlow(), float64(m.BufferSeconds())
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.canLeaveSlow(switchSlow) {
-		return false, "no other stream to switch to"
-	}
-	if r.skip == nil {
-		return false, "already switching"
-	}
-	if time.Since(r.switched) < stall {
-		return false, "just switched"
-	}
 	behind, measured := 0.0, false
 	if r.pace != nil {
 		behind, measured = r.pace.behind()
@@ -1480,9 +1476,20 @@ func (m *Manager) ReportBuffering(viewerID string, secs float64) (bool, string) 
 		// network; switching would make everyone else replay what they saw.
 		log.Printf("live tv: channel %v %q: a viewer reports %.0fs of buffering, but the stream is keeping up (likely the viewer's network)",
 			r.channel.Number, r.channel.Name, secs)
-		return false, "stream is keeping up"
+		return false, false, "stream is keeping up"
+	}
+	if !r.canLeaveSlow(switchSlow) {
+		log.Printf("live tv: channel %v %q: a viewer reports %.0fs of buffering (%s) and there's no other stream to switch to",
+			r.channel.Number, r.channel.Name, secs, why)
+		return false, true, "no other stream to switch to; " + why
+	}
+	if r.skip == nil {
+		return false, true, "already switching"
+	}
+	if time.Since(r.switched) < stall {
+		return false, true, "just switched"
 	}
 	r.switched = time.Now()
 	r.skip(slowError{why})
-	return true, why
+	return true, true, why
 }
