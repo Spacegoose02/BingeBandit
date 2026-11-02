@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-02. Latest release v0.44.0, 56 schema migrations._
+_Last updated: 2026-11-02. Latest release v0.44.1, 56 schema migrations._
 
 
 ## Start here
@@ -68,16 +68,6 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
-## Sports: admin and profile league rows, web Sports in the TV layout (2026-11-02, no migration)
-
-Michael asked how to manage the TV apps' Sports section and why the web Sports page looked behind. There was no way: the 15 leagues and their order were fixed in `sports.Leagues`. He chose: an admin hides leagues for everyone, each profile reorders or hides more of the rest.
-
-- **Server** (`api/sportsrows.go`): setting `sports_hidden_leagues` (comma-separated ids, checked by `validSportsLeagues`: known leagues, at least one left). `leagueAllowed`, `serverLeagues`, `myLeagues` (applies prefs `sportsOrder`, leagues moved to the top in order, and `sportsHidden`, rows turned off; both in `store.Prefs`). `/api/sports` and `/api/sports/scores` now send `leagues` = the profile's rows in its order and `allLeagues` = every league the server shows in that order; `leagues=` on the hub is limited to allowed leagues. Admin-hidden leagues: per-league routes 404, `PUT /sports/teams` 400, `myTeams` and `sportsFollows` (the tracker) skip them. New `GET /api/sports/leagues` (with `hidden`) for the admin page. The TV and Roku already drew a row per entry of `leagues` in order, so they follow with no change there.
-- **Web:** Server → Settings → Sports data has **Leagues in the Sports section** ticks. `pages/Sports.tsx` rewritten in the TV hub's layout: Scores / My Teams / Channels tabs, a day picker (-3..+7), the hovered game up top with its line score and leaders, sport chips and "With a channel", rows (Live now, Your teams, a row per league, scrolling sideways), click for box score / stats / leaders / standings with Follow, Watch, Multi-View and Show the score. The gear has spoiler-free, score bug, teams and **Sports rows** (tick and move leagues). The team picker uses a league dropdown and `allLeagues`.
-- **TV:** the hub's gear has **Sports rows** (`sports/Rows.tsx`: OK turns a row on or off, ▲ moves it up); the team picker uses `allLeagues`. **Roku:** the team picker uses `allLeagues` (`ApiTask.brs` `loadSports`); no rows editor on Roku, it follows the profile's choice.
-- **Tested:** `TestSportsRows` (bad settings, non-admin 403, profile order and hidden rows, `leagues=` on a hidden league, hidden league routes and follow) and `go test ./...`; web `tsc` and build; TV `tsc` and eslint. Ran the server against a fake ESPN relay and used the web page in Chromium (scores rows, rows editor saving NHL first and NBA off, game details, admin ticks, phone width). **Not tried:** the TV rows editor on a device, Roku at all, live ESPN.
-- Still open from the old list: favorite teams grouped by division.
-
 ## Live TV stops restarting a slow channel (2026-11-02, no migration)
 
 A web viewer on WWBT (passthrough, ~5 Mbps) was dropped and rejoined every 10–20 s. After 12 s of buffering every player asked `/buffering`, and anything but "switched" made it start over. With one stream (or switching on slowness off) that was every report, even when the server could see the stream itself was late; and a viewer whose connection is just slower than the channel's bitrate got restarted at the live edge with less buffered, which only made it worse.
@@ -87,6 +77,16 @@ A web viewer on WWBT (passthrough, ~5 Mbps) was dropped and rejoined every 10–
 - **Android TV / phone** (`apps/tv/src/live.ts` `reportBuffering` now returns `'switched' | 'upstream' | 'player'`): `LivePlayer`, `LivePreview` and `MultiView` restart only on `'player'` (ExoPlayer can really get stuck there, so no download check). Roku never restarted on a report; unchanged.
 - **Not changed:** passthrough channels have no lower quality, so a connection slower than the channel's bitrate will still buffer, just without the restarts.
 - **Tested:** `go test ./internal/livetv` (`TestSlowSwitchingOff` now checks `upstream`, `TestBufferingReport` checks it stays false), web `tsc` and build, TV `tsc` and `eslint`. **Not tried** against the real slow viewer.
+
+## Sports: admin and profile league rows, web Sports in the TV layout (2026-11-02, no migration)
+
+Michael asked how to manage the TV apps' Sports section and why the web Sports page looked behind. There was no way: the 15 leagues and their order were fixed in `sports.Leagues`. He chose: an admin hides leagues for everyone, each profile reorders or hides more of the rest.
+
+- **Server** (`api/sportsrows.go`): setting `sports_hidden_leagues` (comma-separated ids, checked by `validSportsLeagues`: known leagues, at least one left). `leagueAllowed`, `serverLeagues`, `myLeagues` (applies prefs `sportsOrder`, leagues moved to the top in order, and `sportsHidden`, rows turned off; both in `store.Prefs`). `/api/sports` and `/api/sports/scores` now send `leagues` = the profile's rows in its order and `allLeagues` = every league the server shows in that order; `leagues=` on the hub is limited to allowed leagues. Admin-hidden leagues: per-league routes 404, `PUT /sports/teams` 400, `myTeams` and `sportsFollows` (the tracker) skip them. New `GET /api/sports/leagues` (with `hidden`) for the admin page. The TV and Roku already drew a row per entry of `leagues` in order, so they follow with no change there.
+- **Web:** Server → Settings → Sports data has **Leagues in the Sports section** ticks. `pages/Sports.tsx` rewritten in the TV hub's layout: Scores / My Teams / Channels tabs, a day picker (-3..+7), the hovered game up top with its line score and leaders, sport chips and "With a channel", rows (Live now, Your teams, a row per league, scrolling sideways), click for box score / stats / leaders / standings with Follow, Watch, Multi-View and Show the score. The gear has spoiler-free, score bug, teams and **Sports rows** (tick and move leagues). The team picker uses a league dropdown and `allLeagues`.
+- **TV:** the hub's gear has **Sports rows** (`sports/Rows.tsx`: OK turns a row on or off, ▲ moves it up); the team picker uses `allLeagues`. **Roku:** the team picker uses `allLeagues` (`ApiTask.brs` `loadSports`); no rows editor on Roku, it follows the profile's choice.
+- **Tested:** `TestSportsRows` (bad settings, non-admin 403, profile order and hidden rows, `leagues=` on a hidden league, hidden league routes and follow) and `go test ./...`; web `tsc` and build; TV `tsc` and eslint. Ran the server against a fake ESPN relay and used the web page in Chromium (scores rows, rows editor saving NHL first and NBA off, game details, admin ticks, phone width). **Not tried:** the TV rows editor on a device, Roku at all, live ESPN.
+- Still open from the old list: favorite teams grouped by division.
 
 ## Guide preview keeps playing (2026-11-02, #188, no migration, apps only)
 
