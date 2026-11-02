@@ -1,7 +1,7 @@
 import Hls from 'hls.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, img } from '../api'
+import { api, ApiError, img } from '../api'
 import { useAuth } from '../auth'
 import { Icon } from '../components/Icon'
 import { ReportProblemDialog } from '../components/ReportProblem'
@@ -20,6 +20,21 @@ import { ScoreBug } from '../components/ScoreBug'
 import { CastPicker } from '../components/Cast'
 
 const LADDER = [2160, 1080, 720, 480]
+
+const RECONNECT_MS = 120000 // how long to wait for a restarting server before giving up
+
+// Whether the server answers at all (it says nothing about this stream).
+function serverUp(): Promise<boolean> {
+  return fetch('/api/health', { cache: 'no-store' }).then(
+    (r) => r.ok,
+    () => false,
+  )
+}
+
+// No answer at all (fetch throws), or the proxy in front saying the server is down.
+function serverGone(e: unknown): boolean {
+  return e instanceof TypeError || (e instanceof ApiError && [502, 503, 504].includes(e.status))
+}
 
 export default function Player() {
   const { id } = useParams()
@@ -330,6 +345,47 @@ function PlayerView({
     [file, item.id, duration, mode],
   )
 
+  // A server restart ends every conversion and cuts direct play's
+  // connection. While the server doesn't answer, check again with growing
+  // gaps for up to two minutes, then carry on from the same spot.
+  const reconnectTimer = useRef<number | undefined>(undefined)
+  const reconnectUntil = useRef(0) // 0: not reconnecting
+  const netReloads = useRef(0) // fresh loads after a lost stream, since playback last ran
+  const waitForServer = useCallback((then: () => void, tries = 0) => {
+    window.clearTimeout(reconnectTimer.current)
+    if (!reconnectUntil.current) reconnectUntil.current = Date.now() + RECONNECT_MS
+    if (Date.now() > reconnectUntil.current) {
+      reconnectUntil.current = 0
+      setBuffering(false)
+      setError("Lost the server. Try again once it's back on.")
+      return
+    }
+    setBuffering(true)
+    setToast('Lost the server. Reconnecting…')
+    reconnectTimer.current = window.setTimeout(
+      () =>
+        serverUp().then((up) => {
+          if (!up) return waitForServer(then, tries + 1)
+          setToast('')
+          then()
+        }),
+      Math.min(2000 * 2 ** tries, 15000),
+    )
+  }, [])
+  useEffect(() => () => window.clearTimeout(reconnectTimer.current), [])
+
+  // A stream that lost its connection: the same again from `at` once the
+  // server answers, a few times at most before playback has run again.
+  const lostStream = useCallback(
+    (again: () => void) =>
+      serverUp().then((up) => {
+        if (!up) waitForServer(again)
+        else if (netReloads.current++ < 3) again()
+        else setError('Playback failed. The server stopped sending this video.')
+      }),
+    [waitForServer],
+  )
+
   const load = useCallback(
     async (at: number, c: Choice) => {
       const video = videoRef.current
@@ -382,7 +438,12 @@ function PlayerView({
             let mediaErrors = 0
             hls.on(Hls.Events.ERROR, (_e, d) => {
               if (!d.fatal) return
-              if (d.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad()
+              if (d.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                // Most often the server restarted, taking this conversion
+                // with it: start a new one from here.
+                const resumeAt = startedRef.current ? offsetRef.current + (video.currentTime || 0) : at
+                lostStream(() => hlsRef.current === hls && load(resumeAt, choiceRef.current))
+              }
               // A second decode failure starts over (with stereo audio, in case surround was the problem).
               else if (d.type === Hls.ErrorTypes.MEDIA_ERROR && mediaErrors++ === 0) hls.recoverMediaError()
               else retry('Playback failed. The server could not convert this file.')
@@ -394,13 +455,15 @@ function PlayerView({
             video.src = res.playlist // Safari plays HLS natively
           }
         } catch (e) {
-          retry((e as Error).message)
+          // The server is restarting or out of reach: wait for it rather than give up.
+          if (serverGone(e)) waitForServer(() => load(at, choiceRef.current))
+          else retry((e as Error).message)
           return
         }
       }
       video.play().catch(() => setPaused(true))
     },
-    [file, stopTranscode],
+    [file, stopTranscode, waitForServer, lostStream],
   )
 
   const apply = (c: Choice) => {
@@ -841,6 +904,8 @@ function PlayerView({
           startedRef.current = true
           settlingRef.current = false
           retries.current = 0
+          netReloads.current = 0
+          reconnectUntil.current = 0
           setBuffering(false)
         }}
         onWaiting={onStall}
@@ -869,6 +934,13 @@ function PlayerView({
         onEmptied={() => (lastTick.current = null)}
         onEnded={onEnded}
         onError={() => {
+          // The stream lost its connection (a server restart, most often):
+          // carry on as it was, from the same spot.
+          if (videoRef.current?.error?.code === MediaError.MEDIA_ERR_NETWORK) {
+            const at = position()
+            lostStream(() => load(at, choiceRef.current))
+            return
+          }
           // The browser couldn't decode the file after all: let the server convert it.
           // A converted stream that fails once gets another go with stereo audio.
           if (mode === 'direct') forceTranscode.current = true

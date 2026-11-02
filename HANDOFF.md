@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-01. Latest release v0.43.0, 56 schema migrations._
+_Last updated: 2026-11-02. Latest release v0.43.0, 56 schema migrations._
 
 
 ## Start here
@@ -67,6 +67,18 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Playback rides out a server restart (2026-11-02, no migration, apps only)
+
+Michael asked whether a server restart would go unnoticed by people watching. It didn't: conversions live only in the server's memory (their folders are wiped at shutdown and start), so a restart left the web player retrying a dead stream forever, Roku and Android TV showing "Playback failed" if the server wasn't back yet, and the Windows app possibly counting a cut connection as the end of the file.
+
+- **All players:** on an error they first check `GET /api/health`. If the server doesn't answer (or a proxy says 502/503/504), they show "Lost the server. Reconnecting…" and check again after 2, 4, 8, 15, 15… s for up to two minutes, then carry on from the same spot the same way (direct play again, or a new conversion). The two-minute window resets once playback runs again. A failed conversion request with no answer does the same.
+- **Android TV / phone** (`apps/tv/src/screens/Player.tsx`): `reconnect`, `playDirect` (now shared with the quality menu; adds `?n=` so the player is rebuilt), `serverGone`. With the server up, a direct-play error on a file that had played is tried direct once more (at most once per 30 s of the file) before converting; a conversion still gets one restart as in #182.
+- **Web** (`web/src/pages/Player.tsx`): `waitForServer`, `lostStream`. A fatal hls.js network error now starts a new conversion from the current spot (at most 3 times before playback runs again) instead of `startLoad()` on the dead session; a `MEDIA_ERR_NETWORK` on the video element reloads the same way.
+- **Roku** (`PlayerScreen.brs`, new `reconnectTimer`): `onErrorHealth`, `lostServer`, `onReconnectHealth`, same rules as Android TV.
+- **Windows** (`apps/desktop/src/mpv.js`, `web/src/pages/DesktopPlayer.tsx`): mpv gets `--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=60`, so ffmpeg reconnects from the same byte for about two minutes. If the file still ends or fails more than 2 minutes before its end after playing, `lostServer` waits for the server and reloads from there instead of marking it watched.
+- **Not changed:** the server still loses conversions on restart (sessions are in memory); viewers on a conversion get a few seconds of buffering while a new one starts. Live TV players already rejoin on their own.
+- **Tested:** TV `tsc` and `eslint`, web `tsc` and build, Roku `brighterscript`, desktop `npm test`. **Not tried** against a real restart on any device.
 
 ## Stat Scraps links games to Live TV channels (2026-11-01, #184, no migration)
 

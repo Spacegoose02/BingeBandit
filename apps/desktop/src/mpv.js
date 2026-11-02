@@ -43,6 +43,9 @@ function mpvArgs(req, o) {
     '--keep-open=no',
     '--no-terminal',
     '--user-agent=BingeBandit-Desktop',
+    // A dropped connection (the server restarting) is picked up again from
+    // the same byte, retrying for about two minutes, instead of ending the file.
+    '--stream-lavf-o=reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=60',
     `--title=${req.title}`,
     `--start=${startArg(req)}`,
     `--aid=${req.audio}`,

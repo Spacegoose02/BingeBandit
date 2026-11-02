@@ -30,6 +30,8 @@ sub init()
     m.nextTimer.observeField("fire", "onNextTick")
     m.toastTimer.observeField("fire", "hideToast")
     m.togetherTimer = m.top.findNode("togetherTimer")
+    m.reconnectTimer = m.top.findNode("reconnectTimer")
+    m.reconnectTimer.observeField("fire", "onReconnectTimer")
     m.togetherTimer.observeField("fire", "pollRoom")
     m.menu.observeField("chosen", "onMenuChosen")
     m.menu.observeField("closed", "onMenuClosed")
@@ -47,6 +49,14 @@ sub init()
     m.mode = ""
     m.offset = 0.0 ' a conversion starts this many seconds into the file
     m.transcodeId = ""
+    ' Riding out a server restart: how to carry on, from where, the attempts
+    ' so far and when to give up (0 when not reconnecting).
+    m.reconnectHow = ""
+    m.reconnectAt = 0.0
+    m.reconnectTries = 0
+    m.reconnectUntil = 0
+    m.transcodeRetried = false ' a failed conversion was started over once
+    m.directRetryAt = -1000.0 ' where direct play last started over after an error
     m.pos = 0.0
     m.played = 0.0
     m.duration = 0.0
@@ -298,7 +308,8 @@ sub onTranscode(event as object)
     if m.top.closing then return
     res = event.getData()
     if not res.ok
-        showError(res.error)
+        ' The server is restarting or out of reach: wait for it.
+        if serverGone(res) then lostServer("transcode", m.pendingAt) else showError(res.error)
         return
     end if
     m.transcodeId = res.data.session.id
@@ -394,6 +405,8 @@ sub onState()
         m.stallTimer.control = "start"
     else if s = "playing"
         m.stallTimer.control = "stop"
+        m.reconnectUntil = 0
+        m.transcodeRetried = false
         hideBusy()
         ' Some firmware joins a growing playlist near its end like a live
         ' stream; go back to where the conversion started.
@@ -428,15 +441,92 @@ sub onState()
         finish()
     else if s = "error"
         m.stallTimer.control = "stop"
-        if m.mode = "direct"
-            ' A profile or level this Roku can't decode after all: convert.
-            transcode(m.pos)
-        else if m.mode = "trailer" and m.trailerFormat = "mp4"
+        if m.mode = "trailer" and m.trailerFormat = "mp4"
             playTrailer("mkv")
+        else if m.mode = "direct" or m.mode = "transcode"
+            ' Check the server is there before blaming the file: a restart
+            ' ends every conversion and cuts direct play's connection.
+            m.errorMode = m.mode
+            m.errorAt = m.pos
+            m.errorMsg = m.video.errorMsg
+            showBusy("")
+            api("GET", "/api/health", invalid, "onErrorHealth", { timeout: 5000 })
         else
             showError("Playback failed: " + m.video.errorMsg)
         end if
     end if
+end sub
+
+sub onErrorHealth(event as object)
+    doneTask(event.getRoSGNode())
+    if m.top.closing then return
+    res = event.getData()
+    at = m.errorAt
+    if not res.ok
+        lostServer(m.errorMode, at)
+    else if m.errorMode = "direct"
+        ' A file that had been playing most likely lost its connection (the
+        ' server is already back): try it as it was, once. One that won't
+        ' play, a profile or level this Roku can't decode, gets converted.
+        if at > 5 and at > m.directRetryAt + 30
+            m.directRetryAt = at
+            playDirect(at)
+        else
+            transcode(at)
+        end if
+    else if not m.transcodeRetried
+        ' The server lost this conversion (a restart): start a new one here.
+        m.transcodeRetried = true
+        transcode(at)
+    else
+        showError("Playback failed: " + m.errorMsg)
+    end if
+end sub
+
+' No answer at all, or the proxy in front saying the server is down.
+function serverGone(res as object) as boolean
+    code = getOr(res, "status", 0)
+    return code = 0 or code = 502 or code = 503 or code = 504
+end function
+
+' The server doesn't answer: check again with growing gaps for up to two
+' minutes, then carry on from the same spot the way it was playing.
+sub lostServer(how as string, at as dynamic)
+    now = CreateObject("roDateTime").AsSeconds()
+    if m.reconnectUntil = 0
+        m.reconnectUntil = now + 120
+        m.reconnectTries = 0
+    end if
+    if now > m.reconnectUntil
+        m.reconnectUntil = 0
+        showError("Lost the server. Try again once it's back on.")
+        return
+    end if
+    m.reconnectHow = how
+    m.reconnectAt = at
+    m.video.control = "stop"
+    showBusy("Lost the server. Reconnecting...")
+    delay = 2 * (2 ^ m.reconnectTries)
+    if delay > 15 then delay = 15
+    m.reconnectTries = m.reconnectTries + 1
+    m.reconnectTimer.duration = delay
+    m.reconnectTimer.control = "start"
+end sub
+
+sub onReconnectTimer()
+    if m.top.closing then return
+    api("GET", "/api/health", invalid, "onReconnectHealth", { timeout: 5000 })
+end sub
+
+sub onReconnectHealth(event as object)
+    doneTask(event.getRoSGNode())
+    if m.top.closing then return
+    if not event.getData().ok
+        lostServer(m.reconnectHow, m.reconnectAt)
+        return
+    end if
+    m.transcodeRetried = false
+    if m.reconnectHow = "direct" then playDirect(m.reconnectAt) else transcode(m.reconnectAt)
 end sub
 
 ' The end, or Skip credits: report it watched and offer the next episode.
@@ -476,6 +566,7 @@ sub onClosing()
     m.reportTimer.control = "stop"
     m.nextTimer.control = "stop"
     m.togetherTimer.control = "stop"
+    m.reconnectTimer.control = "stop"
     if not m.finished then report(true, false, true)
     m.video.control = "stop"
     if m.transcodeId <> ""

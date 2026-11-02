@@ -16,6 +16,8 @@ import type { Item, ItemDetail, Prefs } from '../types'
  * credits skipping, the next episode, and Watch Together. mpv stays open
  * between episodes.
  */
+const RECONNECT_MS = 120000 // how long to wait for a restarting server before giving up
+
 export default function DesktopPlayer({
   detail,
   prefs,
@@ -129,6 +131,60 @@ export default function DesktopPlayer({
       )
       .catch(() => undefined)
   }
+
+  // Play the file from `at` (mpv reuses its window when it's still open).
+  const playFrom = (at: number) => {
+    if (!file) return
+    const { audio, sub } = pickTracks(file, prefs)
+    const audioStream = audio >= 0 ? file.streams.find((s) => s.index === audio) : undefined
+    bridge
+      .play({
+        url: `/api/files/${file.id}/direct`,
+        title,
+        start: at,
+        audio: audioStream ? mpvTrackId(file, audioStream) : 0,
+        sub: sub && !sub.external ? mpvTrackId(file, sub) : 0,
+        subUrl: sub?.external
+          ? { url: `/api/files/${file.id}/subtitles/${sub.index}.vtt`, title: sub.title ?? '', lang: sub.language ?? '' }
+          : undefined,
+      })
+      .catch((e: Error) => setError(e.message))
+  }
+
+  // mpv rides out a short cut itself (it reconnects for about two minutes),
+  // but a server restart can still end the file early. Then wait for the
+  // server, checking with growing gaps for up to two minutes, and carry on
+  // from the same spot.
+  const reconnectUntil = useRef(0) // 0: not reconnecting
+  const reconnects = useRef(0) // times started over since playback last ran on
+  const reconnectTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(reconnectTimer.current), [])
+  const lostServer = (at: number, tries = 0): void => {
+    if (!reconnectUntil.current) reconnectUntil.current = Date.now() + RECONNECT_MS
+    if (Date.now() > reconnectUntil.current || reconnects.current >= 3) {
+      reconnectUntil.current = 0
+      failed.current = true
+      setError("Lost the server. Try again once it's back on.")
+      bridge.command('stop')
+      return
+    }
+    bridge.command('osd', 'Lost the server. Reconnecting…')
+    reconnectTimer.current = window.setTimeout(
+      () =>
+        fetch('/api/health', { cache: 'no-store' })
+          .then((r) => r.ok, () => false)
+          .then((up) => {
+            if (closed.current) return
+            if (!up) return lostServer(at, tries + 1)
+            reconnects.current++
+            playFrom(at)
+          }),
+      Math.min(2000 * 2 ** tries, 15000),
+    )
+  }
+  // Ended or failed this far from the end, after playing: the connection
+  // was cut rather than the file being over or unplayable.
+  const cutShort = () => started.current && duration > 0 && duration - pos.current > 120
 
   // Finished (the end, or skipping the credits): on to the next episode, or out.
   const onEnded = async () => {
@@ -250,7 +306,11 @@ export default function DesktopPlayer({
     switch (e.type) {
       case 'time': {
         const step = e.position - pos.current
-        if (!paused.current && !e.paused && step > 0 && step < 3) played.current += step
+        if (!paused.current && !e.paused && step > 0 && step < 3) {
+          played.current += step
+          reconnects.current = 0
+          reconnectUntil.current = 0
+        }
         const pauseChanged = started.current && e.paused !== paused.current
         const seeked = started.current && Math.abs(step) > 3
         pos.current = e.position
@@ -267,7 +327,9 @@ export default function DesktopPlayer({
         break
       }
       case 'end':
-        if (!finished.current) onEnded()
+        if (finished.current) break
+        if (cutShort()) lostServer(pos.current)
+        else onEnded()
         break
       case 'key':
         if (e.name === 'bb-pick') onPick(e.arg ?? '')
@@ -289,6 +351,10 @@ export default function DesktopPlayer({
         else nav(-1)
         break
       case 'error':
+        if (cutShort() && !finished.current) {
+          lostServer(pos.current)
+          break
+        }
         // mpv sits on a black screen after a failure; close it to show the message.
         failed.current = true
         setError(e.message)
@@ -300,20 +366,7 @@ export default function DesktopPlayer({
   useEffect(() => {
     if (!file) return
     const off = bridge.onEvent((e) => handler.current(e))
-    const { audio, sub } = pickTracks(file, prefs)
-    const audioStream = audio >= 0 ? file.streams.find((s) => s.index === audio) : undefined
-    bridge
-      .play({
-        url: `/api/files/${file.id}/direct`,
-        title,
-        start: startAt,
-        audio: audioStream ? mpvTrackId(file, audioStream) : 0,
-        sub: sub && !sub.external ? mpvTrackId(file, sub) : 0,
-        subUrl: sub?.external
-          ? { url: `/api/files/${file.id}/subtitles/${sub.index}.vtt`, title: sub.title ?? '', lang: sub.language ?? '' }
-          : undefined,
-      })
-      .catch((e: Error) => setError(e.message))
+    playFrom(startAt)
     if (together.error) bridge.command('osd', `Couldn't join the watch party: ${together.error}`)
     const t = window.setInterval(() => !paused.current && report(), 10000)
     return () => {
