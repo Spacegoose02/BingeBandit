@@ -68,6 +68,14 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## YouTube channels as shows, from Cinemask's files (2026-11-02, no migration)
+
+Michael asked for a YouTube library with proper shows. He downloads with Cinemask (yt-dlp) and chose seasons by year. Cinemask already writes `Channel/Season YYYY/Channel - YYYY-MM-DD - Title [id].mkv` with a `.jpg` thumbnail and an episode `.nfo`, plus `tvshow.nfo` (with `<uniqueid type="youtube">`) and `poster.jpg` per channel (`src/server/youtube/service.ts` there), so this is a TV Shows library feature, not a new library kind: every app already shows it.
+
+- **Scanner** (`library/scanner.go`, `episodeItems`): a show folder whose `tvshow.nfo` has a YouTube id (`metadata.IsYouTubeShowDir`, cached by the nfo's mtime) marks the show `metadata_source = 'youtube'` (`Store.MarkYouTubeShow`, only from ''). Its videos take season and date from the date in the name, before `S01E02` markers (a title can contain one), and their match key is `<show>:yt:<videoId>`, so two uploads on one day aren't one episode with two versions. A Shows library that already held these files gets new episode items (watch state on the old ones is lost).
+- **Metadata** (`metadata/youtube.go`): `refresh` sends `youtube` shows to `refreshYouTube`, which reads `tvshow.nfo`, `poster.jpg`/`folder.jpg`, `fanart.jpg`, each video's `.nfo` and thumbnail (copied into the artwork folder through the new `Service.Artwork`), renumbers each season 1..N by aired date then file name (`Store.SetEpisodeNumber`), and sets the newest thumbnail as the show background when there's no fanart. `RefreshLibrary`/`RefreshItem` now run for `youtube` shows without a TMDB/TheTVDB key; other items are still skipped then, and duplicate merging still needs a key. `youtube` shows are never `unmatched`.
+- **Tested:** `go test ./...`, new `TestYouTubeChannelFromCinemaskFolder` (a Cinemask-style folder plus a normal show: titles, plots, dates, thumbnails, avatar, numbering of same-day videos, a later download renumbering, Bluey left on TMDB). **Not tried** against a real Cinemask folder or in the apps.
+
 ## Live TV stops restarting a slow channel (2026-11-02, no migration)
 
 A web viewer on WWBT (passthrough, ~5 Mbps) was dropped and rejoined every 10–20 s. After 12 s of buffering every player asked `/buffering`, and anything but "switched" made it start over. With one stream (or switching on slowness off) that was every report, even when the server could see the stream itself was late; and a viewer whose connection is just slower than the channel's bitrate got restarted at the live edge with less buffered, which only made it worse.

@@ -13,6 +13,9 @@ import (
 
 type Service struct {
 	st *store.Store
+	// Artwork keeps images found next to the videos (YouTube channels'
+	// avatars and thumbnails); nil skips them.
+	Artwork *Artwork
 
 	tvMu  sync.Mutex
 	tv    *TVDB // kept so its login token is reused
@@ -57,9 +60,6 @@ func (s *Service) AnyEnabled() bool { return s.Enabled() || s.TVDBEnabled() }
 // progress is called after each top-level item.
 func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force bool, progress func(done, total int)) error {
 	c, tv := s.client(), s.tvdb()
-	if c == nil && tv == nil {
-		return nil
-	}
 	items, err := s.st.ItemsNeedingMetadata(0, libraryID, force)
 	if err != nil {
 		return err
@@ -67,6 +67,10 @@ func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force boo
 	for i, it := range items {
 		if ctx.Err() != nil {
 			return ctx.Err()
+		}
+		// Without a key only YouTube channels, read from their files, are done.
+		if c == nil && tv == nil && it.MetadataSource != "youtube" {
+			continue
 		}
 		if err := s.refresh(ctx, c, tv, it); err != nil {
 			log.Printf("metadata: %s %q: %v", it.Kind, it.Title, err)
@@ -81,9 +85,6 @@ func (s *Service) RefreshLibrary(ctx context.Context, libraryID int64, force boo
 // RefreshItem re-fetches one movie or show (seasons and episodes resolve to their show).
 func (s *Service) RefreshItem(ctx context.Context, id int64) error {
 	c, tv := s.client(), s.tvdb()
-	if c == nil && tv == nil {
-		return nil
-	}
 	it, err := s.st.Item(0, id)
 	if err != nil {
 		return err
@@ -92,6 +93,9 @@ func (s *Service) RefreshItem(ctx context.Context, id int64) error {
 		if it, err = s.st.Item(0, it.ShowID); err != nil {
 			return err
 		}
+	}
+	if c == nil && tv == nil && it.MetadataSource != "youtube" {
+		return nil
 	}
 	return s.refresh(ctx, c, tv, it)
 }
@@ -183,6 +187,9 @@ func (s *Service) refresh(ctx context.Context, c *TMDB, tv *TVDB, it *store.Item
 	if it.MetadataSource == "none" {
 		s.markTree(it.ID)
 		return nil
+	}
+	if it.MetadataSource == "youtube" && it.Kind == "show" {
+		return s.refreshYouTube(ctx, it)
 	}
 	if it.Kind == "show" {
 		if tvdbID, order, err := s.st.ShowTVDB(it.ID); err == nil && tvdbID > 0 && tv != nil {

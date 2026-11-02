@@ -52,7 +52,9 @@ func main() {
 	}
 	defer st.Close()
 
+	artwork := metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork"))
 	meta := metadata.NewService(st)
+	meta.Artwork = artwork
 	scanner := library.NewScanner(st, meta, cfg.FFprobe)
 	transcoder := stream.NewManager(st, cfg.FFmpeg, cfg.DataDir)
 	defer transcoder.Shutdown()
@@ -70,7 +72,6 @@ func main() {
 	recorder := livetv.NewRecorder(st, live, cfg.DataDir)
 	go recorder.Run(ctx)
 
-	artwork := metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork"))
 	importRunner := importer.NewRunner(st)
 	importRunner.Images = artwork
 

@@ -150,11 +150,13 @@ export function MatchDialog({
       </div>
       <div className="match-unmatch">
         <span className="muted small">
-          {item.metadataSource === 'none'
+          {item.metadataSource === 'youtube'
+            ? 'A YouTube channel: its details come from the .nfo files and pictures next to its videos.'
+            : item.metadataSource === 'none'
             ? 'Left unmatched: refreshes keep the details you entered.'
             : 'Not on TMDB or TheTVDB yet, or a home video? Keep it unmatched and refreshes leave it alone.'}
         </span>
-        {item.metadataSource !== 'none' && (
+        {item.metadataSource !== 'none' && item.metadataSource !== 'youtube' && (
           <button type="button" className="btn btn-sm" onClick={unmatch} disabled={busy !== null}>
             {busy === -1 ? <Icon name="refresh" size={16} className="spin" /> : null} Leave unmatched
           </button>
