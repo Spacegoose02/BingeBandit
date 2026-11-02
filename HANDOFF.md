@@ -43,7 +43,7 @@ Before changing code, know these:
 
 Several of these are being worked on in parallel; check open pull requests before starting one. Done in v0.35.0 and now in the log: Hue Sync and Game Lights per profile and per device on the TV, a profile's own Hue hub, the Sports Hub, the single OK click, the Roku settings passcode and the /tv install link.
 
-- **Sports on the web:** Multi-View, Sports channels and spoiler-free are on the web now (#149, #155). Still missing: box scores and game details, Sports rows and favorite teams by division.
+- **Sports on the web:** now in the TV hub's layout with game details and Sports rows (admin and per profile). Still missing: favorite teams grouped by division.
 - **Windows app:** code signing, once there's a certificate (Michael chose to stay unsigned for now; the release build signs when the `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` secrets exist).
 - **An admin switch for recommendations on the web.** (`recommendations_enabled` already exists in admin Settings, from the third feature board; check what the card still wants.)
 - **Bugs and security:** a review pass is in progress.
@@ -67,6 +67,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Sports: admin and profile league rows, web Sports in the TV layout (2026-11-02, no migration)
+
+Michael asked how to manage the TV apps' Sports section and why the web Sports page looked behind. There was no way: the 15 leagues and their order were fixed in `sports.Leagues`. He chose: an admin hides leagues for everyone, each profile reorders or hides more of the rest.
+
+- **Server** (`api/sportsrows.go`): setting `sports_hidden_leagues` (comma-separated ids, checked by `validSportsLeagues`: known leagues, at least one left). `leagueAllowed`, `serverLeagues`, `myLeagues` (applies prefs `sportsOrder`, leagues moved to the top in order, and `sportsHidden`, rows turned off; both in `store.Prefs`). `/api/sports` and `/api/sports/scores` now send `leagues` = the profile's rows in its order and `allLeagues` = every league the server shows in that order; `leagues=` on the hub is limited to allowed leagues. Admin-hidden leagues: per-league routes 404, `PUT /sports/teams` 400, `myTeams` and `sportsFollows` (the tracker) skip them. New `GET /api/sports/leagues` (with `hidden`) for the admin page. The TV and Roku already drew a row per entry of `leagues` in order, so they follow with no change there.
+- **Web:** Server → Settings → Sports data has **Leagues in the Sports section** ticks. `pages/Sports.tsx` rewritten in the TV hub's layout: Scores / My Teams / Channels tabs, a day picker (-3..+7), the hovered game up top with its line score and leaders, sport chips and "With a channel", rows (Live now, Your teams, a row per league, scrolling sideways), click for box score / stats / leaders / standings with Follow, Watch, Multi-View and Show the score. The gear has spoiler-free, score bug, teams and **Sports rows** (tick and move leagues). The team picker uses a league dropdown and `allLeagues`.
+- **TV:** the hub's gear has **Sports rows** (`sports/Rows.tsx`: OK turns a row on or off, ▲ moves it up); the team picker uses `allLeagues`. **Roku:** the team picker uses `allLeagues` (`ApiTask.brs` `loadSports`); no rows editor on Roku, it follows the profile's choice.
+- **Tested:** `TestSportsRows` (bad settings, non-admin 403, profile order and hidden rows, `leagues=` on a hidden league, hidden league routes and follow) and `go test ./...`; web `tsc` and build; TV `tsc` and eslint. Ran the server against a fake ESPN relay and used the web page in Chromium (scores rows, rows editor saving NHL first and NBA off, game details, admin ticks, phone width). **Not tried:** the TV rows editor on a device, Roku at all, live ESPN.
+- Still open from the old list: favorite teams grouped by division.
 
 ## Playback rides out a server restart (2026-11-02, no migration, apps only)
 

@@ -5,7 +5,7 @@ import { useAuth } from '../../auth'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
 import { useApi, useDocumentTitle } from '../../hooks'
-import type { OIDCProvider, Webhook } from '../../types'
+import type { OIDCProvider, SportsLeague, Webhook } from '../../types'
 
 type Settings = Record<string, string>
 
@@ -559,6 +559,7 @@ export default function AdminSettings() {
               pages link straight to your channel (“Watch on BingeBandit”).
             </span>
           </label>
+          <SportsLeagues value={s.sports_hidden_leagues ?? ''} onChange={(v) => setS({ ...s, sports_hidden_leagues: v })} />
         </section>
 
         <AdminAlerts s={s} set={set} />
@@ -962,5 +963,37 @@ function WebhookEditor({ hook, events, onClose, onSaved }: { hook: Partial<Webho
         </div>
       </form>
     </Modal>
+  )
+}
+
+/**
+ * Which leagues the Sports section shows on every TV, Roku and the web.
+ * Unticked leagues are left out for everyone; each profile can still turn
+ * off or reorder the rest (Sports → Rows on the web, the hub's gear on a TV).
+ */
+function SportsLeagues({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { data: leagues } = useApi<SportsLeague[]>('/api/sports/leagues')
+  if (!leagues) return null
+  const hidden = new Set(value.split(',').map((x) => x.trim()).filter(Boolean))
+  const toggle = (id: string, show: boolean) => {
+    if (show) hidden.delete(id)
+    else hidden.add(id)
+    onChange(leagues.filter((l) => hidden.has(l.id)).map((l) => l.id).join(','))
+  }
+  return (
+    <fieldset className="sports-league-picks">
+      <legend>Leagues in the Sports section</legend>
+      <span className="muted small">
+        Untick a league to take it out of Sports for everyone: its row, its scores and following its teams. Each profile can turn off or reorder the
+        rest for itself.
+      </span>
+      <div className="sports-league-grid">
+        {leagues.map((l) => (
+          <label key={l.id} className="check">
+            <input type="checkbox" checked={!hidden.has(l.id)} onChange={(e) => toggle(l.id, e.target.checked)} /> {l.name}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   )
 }

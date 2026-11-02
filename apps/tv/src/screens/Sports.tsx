@@ -11,6 +11,7 @@ import type { LiveChannel, SportsDay, SportsGame, SportsHome, SportsLeague, Spor
 import GameDetails from '../sports/GameDetails'
 import GameLights from '../sports/GameLights'
 import TeamPicker from '../sports/TeamPicker'
+import SportsRows from '../sports/Rows'
 import { ChannelCard, GameCard, Logo, leaderText } from '../sports/parts'
 import {
   MAX_SCREENS,
@@ -60,6 +61,7 @@ export default function Sports() {
   const [details, setDetails] = useState<SportsGame | null>(null)
   const [picking, setPicking] = useState(false)
   const [settings, setSettings] = useState(false)
+  const [rowsPanel, setRowsPanel] = useState(false)
   const [dayMenu, setDayMenu] = useState(false)
   const [lightsPanel, setLightsPanel] = useState(false)
   // Game Lights as Settings → This TV keeps it: null when the plugin isn't running.
@@ -128,7 +130,9 @@ export default function Sports() {
   })
 
   const leagues = useMemo(() => day?.leagues ?? home?.leagues ?? [], [day, home])
-  const leagueOf = useCallback((id: string) => leagues.find((l) => l.id === id), [leagues])
+  // Every league the server shows, for picking teams and rows: `leagues` leaves out rows this profile turned off.
+  const allLeagues = useMemo(() => day?.allLeagues ?? home?.allLeagues ?? leagues, [day, home, leagues])
+  const leagueOf = useCallback((id: string) => allLeagues.find((l) => l.id === id), [allLeagues])
   const followed = home?.teams ?? day?.teams ?? []
 
   const press = (g: SportsGame) => {
@@ -171,7 +175,7 @@ export default function Sports() {
   if (picking && (day || home)) {
     return (
       <TeamPicker
-        leagues={leagues}
+        leagues={allLeagues}
         chosen={followed}
         onDone={(teams) => {
           setPicking(false)
@@ -408,6 +412,12 @@ export default function Sports() {
             setSettings(false)
             setPicking(true)
           }}
+          rows={leagues.length}
+          allRows={allLeagues.length}
+          onRows={() => {
+            setSettings(false)
+            setRowsPanel(true)
+          }}
           onSwitchLights={switchLights}
           onToggleLights={toggleLights}
           onLightsSettings={() => {
@@ -415,6 +425,18 @@ export default function Sports() {
             setLightsPanel(true)
           }}
           onClose={() => setSettings(false)}
+        />
+      )}
+      {rowsPanel && (
+        <SportsRows
+          leagues={allLeagues}
+          hidden={prefs.sportsHidden ?? []}
+          onSave={async (sportsOrder, sportsHidden) => {
+            setPrefs(await patchPrefs({ sportsOrder, sportsHidden }))
+            load()
+            say('Sports rows saved.')
+          }}
+          onClose={() => setRowsPanel(false)}
         />
       )}
       {lightsPanel && (
@@ -586,7 +608,7 @@ function ChannelsView({
 }
 
 /**
- * The hub's gear: spoiler-free mode, the score bug, your teams, and Game
+ * The hub's gear: spoiler-free mode, the score bug, your teams, your rows, and Game
  * Lights (start and stop it, and its settings) once it's on for this profile.
  */
 function SportsSettings({
@@ -595,6 +617,9 @@ function SportsSettings({
   followed,
   onPrefs,
   onTeams,
+  rows,
+  allRows,
+  onRows,
   onSwitchLights,
   onToggleLights,
   onLightsSettings,
@@ -605,6 +630,9 @@ function SportsSettings({
   followed: number
   onPrefs: (patch: Partial<SportsPrefs>) => void
   onTeams: () => void
+  rows: number
+  allRows: number
+  onRows: () => void
   onSwitchLights: () => void
   onToggleLights: () => void
   onLightsSettings: () => void
@@ -627,6 +655,12 @@ function SportsSettings({
           <Focusable onPress={onTeams} style={st.option}>
             <Text style={st.optionName}>Favorite teams: {followed}</Text>
             <Text style={st.muted}>Follow and unfollow teams in any league.</Text>
+          </Focusable>
+          <Focusable onPress={onRows} style={st.option}>
+            <Text style={st.optionName}>
+              Sports rows: {rows === allRows ? 'all' : `${rows} of ${allRows}`}
+            </Text>
+            <Text style={st.muted}>Choose which leagues get a row under Scores, and put your favorites first.</Text>
           </Focusable>
           {lights ? (
             <>
