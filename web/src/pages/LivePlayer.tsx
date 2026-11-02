@@ -33,9 +33,11 @@ function BrowserLivePlayer() {
   const failures = useRef(0)
   const viewerRef = useRef('')
   const stallSecs = useRef(12)
+  const lastData = useRef(0) // when video last arrived from the server
   const [attempt, setAttempt] = useState(0) // bumped to rejoin after a failure
   const [error, setError] = useState('')
   const [reconnecting, setReconnecting] = useState(false)
+  const [waitNote, setWaitNote] = useState('') // why a long buffer isn't being restarted
   const [buffering, setBuffering] = useState(true)
   const [paused, setPaused] = useState(false)
   const [behind, setBehind] = useState(0) // seconds behind live
@@ -113,6 +115,7 @@ function BrowserLivePlayer() {
             } else if (d.type === Hls.ErrorTypes.MEDIA_ERROR) hls?.recoverMediaError()
             else fail('Playback failed.')
           })
+          hls.on(Hls.Events.FRAG_LOADED, () => (lastData.current = Date.now()))
           hls.loadSource(res.playlist)
           hls.attachMedia(video)
         } else {
@@ -137,11 +140,17 @@ function BrowserLivePlayer() {
 
   // Buffering for longer than the server's stall time: tell it, so it can
   // move the channel to its next stream (it checks the stream really is the
-  // problem first). If it didn't switch, the stream is fine and the player is
-  // what's stuck, so start the player over; if it did, give the new stream
-  // one more stall period before doing the same.
+  // problem first). If it switched, give the new stream one more stall period.
+  // If it didn't, only start the player over when it really is stuck: when
+  // the server says the stream itself is late (with nothing to switch to), or
+  // video is still arriving but slower than it plays (a slow connection),
+  // starting over would only rejoin at the live edge with less buffered and
+  // turn a slow channel into one that restarts every few seconds.
   useEffect(() => {
-    if (!buffering || paused || reconnecting) return
+    if (!buffering || paused || reconnecting) {
+      setWaitNote('')
+      return
+    }
     const started = Date.now()
     let next = stallSecs.current
     let switched = false
@@ -157,8 +166,14 @@ function BrowserLivePlayer() {
       next += stallSecs.current
       if (switched) return reload()
       api
-        .post<{ switched?: boolean }>(`/api/live/viewers/${viewerRef.current}/buffering`, { seconds: Math.round(secs) })
-        .then((r) => (r?.switched ? (switched = true) : reload()), () => undefined)
+        .post<{ switched?: boolean; upstream?: boolean }>(`/api/live/viewers/${viewerRef.current}/buffering`, { seconds: Math.round(secs) })
+        .then((r) => {
+          if (done) return
+          if (r?.switched) switched = true
+          else if (r?.upstream) setWaitNote('The channel is sending video slowly. Waiting for it…')
+          else if (Date.now() - lastData.current < stallSecs.current * 1000) setWaitNote('Your connection is slow for this channel. Waiting for video…')
+          else reload()
+        }, () => undefined)
     }, 1000)
     return () => {
       done = true
@@ -318,6 +333,7 @@ function BrowserLivePlayer() {
           playsInline
           autoPlay
           onPlaying={onPlaying}
+          onProgress={() => (lastData.current = Date.now())}
           onWaiting={() => setBuffering(true)}
           onPause={() => setPaused(true)}
           onPlay={() => setPaused(false)}
@@ -325,6 +341,7 @@ function BrowserLivePlayer() {
           onClick={() => setGuide((g) => !g)}
         />
         {(buffering || reconnecting) && !error && !paused && <div className="spinner" />}
+        {buffering && waitNote && !error && !paused && <div className="player-wait-note muted small">{waitNote}</div>}
         {error && (
           <div className="player-error">
             <div>{error}</div>

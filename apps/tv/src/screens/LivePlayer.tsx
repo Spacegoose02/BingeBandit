@@ -374,7 +374,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
       if (secs < next) return
       next += stallSecs.current
       if (switched) return reload()
-      reportBuffering(viewer.current, secs).then((s) => (s ? (switched = true) : reload()))
+      reportBuffering(viewer.current, secs).then((s) => {
+        if (s === 'switched') switched = true
+        else if (s === 'player') reload() // a late stream: keep waiting, a restart can't help
+      })
     }, 1000)
     return () => {
       done = true

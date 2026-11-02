@@ -15,15 +15,17 @@ export async function joinChannel(channelId: number): Promise<{ viewerId: string
 
 /**
  * Tells the server this viewer has been buffering for `seconds`; past the
- * stall time it may move the channel to its next stream.
+ * stall time it may move the channel to its next stream. Resolves to
+ * `switched` (it moved the channel), `upstream` (the stream itself is late and
+ * there's nothing to switch to, so restarting the player wouldn't help) or
+ * `player` (the stream is keeping up, so the player may be what's stuck).
  */
-/** Tells the server the player has been buffering; resolves to whether it moved the channel to another stream. */
-export async function reportBuffering(viewerId: string, seconds: number): Promise<boolean> {
-  if (!viewerId) return false
+export async function reportBuffering(viewerId: string, seconds: number): Promise<'switched' | 'upstream' | 'player'> {
+  if (!viewerId) return 'player'
   const r = await api
-    .post<{ switched?: boolean }>(`/api/live/viewers/${viewerId}/buffering`, { seconds: Math.round(seconds) })
+    .post<{ switched?: boolean; upstream?: boolean }>(`/api/live/viewers/${viewerId}/buffering`, { seconds: Math.round(seconds) })
     .catch(() => undefined)
-  return !!r?.switched
+  return r?.switched ? 'switched' : r?.upstream ? 'upstream' : 'player'
 }
 
 export function leaveChannel(viewerId: string) {

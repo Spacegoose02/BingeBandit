@@ -311,8 +311,8 @@ function useTileStream(channelId: Tile) {
       const secs = (now - since.current) / 1000
       if (secs >= stall.current) {
         since.current = now
-        reportBuffering(viewer.current, secs).then((switched) => {
-          if (!switched) rejoin()
+        reportBuffering(viewer.current, secs).then((s) => {
+          if (s === 'player') rejoin() // a late stream: keep waiting, a rejoin can't help
         })
       }
     },

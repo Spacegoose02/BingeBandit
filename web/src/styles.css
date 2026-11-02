@@ -972,6 +972,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   pointer-events: none;
 }
 .player-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(23, 27, 33, 0.95); padding: 18px 24px; border-radius: 12px; border: 1px solid var(--border-strong); max-width: 80%; text-align: center; }
+.player-wait-note { position: absolute; top: calc(50% + 48px); left: 50%; transform: translateX(-50%); max-width: 80%; text-align: center; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); pointer-events: none; }
 .subtitle-cue {
   position: absolute;
   left: 50%;

@@ -287,7 +287,9 @@ func (s *Server) pingViewer(w http.ResponseWriter, r *http.Request) {
 }
 
 // viewerBuffering is a player reporting that it has been buffering for a
-// while; the relay may move the channel to its next stream.
+// while; the relay may move the channel to its next stream. "upstream" says
+// the server sees the stream itself stalling, so restarting the player
+// wouldn't help.
 func (s *Server) viewerBuffering(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Seconds float64 `json:"seconds"`
@@ -296,8 +298,8 @@ func (s *Server) viewerBuffering(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	switched, reason := s.Live.ReportBuffering(chi.URLParam(r, "viewer"), req.Seconds)
-	writeJSON(w, http.StatusOK, map[string]any{"switched": switched, "reason": reason})
+	switched, upstream, reason := s.Live.ReportBuffering(chi.URLParam(r, "viewer"), req.Seconds)
+	writeJSON(w, http.StatusOK, map[string]any{"switched": switched, "upstream": upstream, "reason": reason})
 }
 
 // testEncoder tries the hardware encoder (the saved one, or ?encoder=) the

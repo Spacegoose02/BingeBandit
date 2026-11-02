@@ -186,7 +186,7 @@ An admin can turn Live TV off for a user (`PUT /api/admin/users/{id}/live-tv {on
 | GET | `/live/channels/{id}/stream.ts` | Raw MPEG-TS for IPTV players. |
 | DELETE | `/live/viewers/{viewer}` | Stop watching. |
 | POST | `/live/viewers/{viewer}/ping` | Keep a paused viewer counted (every 10 s). 410 once the viewer is gone. |
-| POST | `/live/viewers/{viewer}/buffering` | `{seconds}`: the player has been buffering this long. Past `stallSecs` (from `/watch`) the server may move the channel to its next stream → `{switched, reason}`. |
+| POST | `/live/viewers/{viewer}/buffering` | `{seconds}`: the player has been buffering this long. Past `stallSecs` (from `/watch`) the server may move the channel to its next stream → `{switched, upstream, reason}`. `upstream` is true when the server sees the stream itself late or stalled; with nothing to switch to, players should keep waiting rather than restart. |
 | GET | `/live/playlist.m3u`, `/live/epg.xml` | M3U and XMLTV for other IPTV apps. Use `?token=<API key>`. |
 | GET | `/live/tuner/<API key>/…` | HDHomeRun-style tuner for Plex, Emby and Jellyfin: `discover.json`, `lineup.json`, `lineup_status.json`, `device.xml`, plus `epg.xml` and `playlist.m3u`. The key is in the path because Plex can't send one any other way. |
 | GET | `/items/{id}/preroll` | What to play before a movie, from the viewer's settings: `{trailers: [{itemId, title, year, youtube}], intro?: {url, name}}`. Empty for anything but a movie. |

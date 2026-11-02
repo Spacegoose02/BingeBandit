@@ -88,7 +88,11 @@ export function LivePreview({ channelId, muted }: { channelId?: number; muted?: 
       if (secs < next) return
       next += stallSecs.current
       if (switched) return restartRef.current()
-      reportBuffering(viewer.current, secs).then((s) => !done && (s ? (switched = true) : restartRef.current()))
+      reportBuffering(viewer.current, secs).then((s) => {
+        if (done) return
+        if (s === 'switched') switched = true
+        else if (s === 'player') restartRef.current() // a late stream: keep waiting
+      })
     }, 1000)
     return () => {
       done = true
