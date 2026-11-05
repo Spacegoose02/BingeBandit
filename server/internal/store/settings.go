@@ -158,7 +158,7 @@ var SettingDefaults = map[string]string{
 	SettingRequestCleanup:      "0",
 	SettingWatchedPercent:      "90",
 	SettingContinueDays:        "0",
-	SettingRecentDays:          "90",
+	SettingRecentDays:          "100",
 	SettingWatchFolders:        "true",
 	SettingMaintenanceStart:    "2",
 	SettingMaintenanceEnd:      "5",

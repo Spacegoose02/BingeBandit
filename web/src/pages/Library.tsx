@@ -414,7 +414,7 @@ function RecommendedTab({ library }: { library: Library }) {
           <Row
             key={row.id}
             title={row.title}
-            to={row.collectionId ? `/collection/${row.collectionId}` : undefined}
+            to={row.collectionId ? `/collection/${row.collectionId}` : row.seeAll ? `/rows?${row.seeAll}` : undefined}
           >
             {row.items.map((it) => (
               <PosterCard key={it.id} item={it} />

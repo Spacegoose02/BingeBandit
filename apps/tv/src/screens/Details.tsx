@@ -4,7 +4,7 @@ import { api, cached, image, writesDone } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { ItemMenuContext, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
-import type { Credit, Item, ItemDetail, MediaFile } from '../types'
+import type { Credit, Item, ItemDetail, MediaFile, Quality } from '../types'
 import { addDownloads, downloaded, downloadFor, downloadsSupported, estimateBytes, formatBytes, useDownloads } from '../downloads'
 import { canDirectPlay } from './Player'
 
@@ -21,6 +21,26 @@ function fmtDuration(min?: number) {
   if (!min) return ''
   const h = Math.floor(min / 60)
   return h ? `${h}h ${min % 60}m` : `${min}m`
+}
+
+const resolutionText: Record<string, string> = { '4k': '4K', '1080': '1080p', '720': '720p', sd: 'SD' }
+const rangeText: Record<string, string> = { dv: 'Dolby Vision', hdr10: 'HDR10', hlg: 'HLG', hdr: 'HDR' }
+const audioText: Record<string, string> = { atmos: 'Atmos', dtsx: 'DTS:X', truehd: 'TrueHD', dtshd: 'DTS-HD MA', '7.1': '7.1', '5.1': '5.1' }
+
+/**
+ * The best copy's badges: 4K, Dolby Vision, Atmos. The server works them out
+ * (a show's from its best episode); an older server only sends the files, so
+ * a movie or episode falls back to its first file's size and HDR flag.
+ */
+function qualityBadges(q: Quality | undefined, file: MediaFile | undefined): string[] {
+  if (!q && file) {
+    const w = file.width, h = file.height
+    const resolution = w >= 3200 || h >= 1800 ? '4k' : w >= 1700 || h >= 1000 ? '1080' : w >= 1200 || h >= 700 ? '720' : w > 0 ? 'sd' : undefined
+    const audio = file.audioChannels >= 8 ? '7.1' : file.audioChannels >= 6 ? '5.1' : undefined
+    q = { resolution, range: file.hdr ? 'hdr' : undefined, audio }
+  }
+  if (!q) return []
+  return [q.resolution && resolutionText[q.resolution], q.range && rangeText[q.range], q.audio && audioText[q.audio]].filter((b): b is string => !!b)
 }
 
 /** A movie, show, season or episode, with Play and its seasons/episodes. */
@@ -74,6 +94,7 @@ export default function Details({ id }: { id: number }) {
   const meta = [it.year, it.contentRating, fmtDuration(it.runtime), it.rating ? `★ ${it.rating.toFixed(1)}` : '', it.genres?.slice(0, 3).join(', ')]
     .filter(Boolean)
     .join('   ·   ')
+  const badges = qualityBadges(d.quality, playable ? d.files?.[0] : undefined)
   // Older servers leave out unwatchedCount when it is 0.
   const fullyWatched = playable ? !!it.watch?.watched : !!it.childCount && !it.unwatchedCount
   // Seasons and episodes show their show's cast.
@@ -96,6 +117,13 @@ export default function Details({ id }: { id: number }) {
           {it.kind === 'episode' ? `S${it.seasonNumber} E${it.episodeNumber} · ${it.title}` : it.title}
         </Text>
         {!!meta && <Text style={st.meta}>{meta}</Text>}
+        {badges.length > 0 && (
+          <View style={st.badges}>
+            {badges.map((b) => (
+              <View key={b} style={st.badge}><Text style={st.badgeText}>{b}</Text></View>
+            ))}
+          </View>
+        )}
         {!!it.tagline && <Text style={st.tagline}>{it.tagline}</Text>}
         {!!it.overview && <Text style={st.overview} numberOfLines={5}>{it.overview}</Text>}
         <View style={st.buttons}>
@@ -282,6 +310,9 @@ const st = StyleSheet.create(scaled({
   heading: { color: colors.muted, fontSize: font.heading, fontWeight: '700', marginBottom: 6 },
   title: { color: colors.text, fontSize: font.hero, fontWeight: '900', maxWidth: 1600 },
   meta: { color: colors.muted, fontSize: font.body, marginTop: 10 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 14 },
+  badge: { borderWidth: 2, borderColor: colors.muted, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 3, marginRight: 12, marginBottom: 6 },
+  badgeText: { color: colors.text, fontSize: font.small, fontWeight: '800', letterSpacing: 1 },
   tagline: { color: colors.text, fontSize: font.body, fontStyle: 'italic', marginTop: 14, opacity: 0.85 },
   overview: { color: colors.text, fontSize: font.body, lineHeight: 40, marginTop: 16, maxWidth: 1500, opacity: 0.9 },
   buttons: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 30, marginBottom: 20 },

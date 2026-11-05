@@ -773,6 +773,8 @@ export interface HubRow {
   items: Item[]
   collectionId?: number
   libraryId?: number
+  /** A built-in row's query for every title of it: /rows?<seeAll> here, GET /api/rows?<seeAll>. */
+  seeAll?: string
 }
 
 export interface HomeData {

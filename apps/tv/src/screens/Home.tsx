@@ -5,7 +5,7 @@ import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../com
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { refreshGameLights } from '../hue'
 import { Icon, type IconName } from '../icons'
-import { favoritesChanged, homeBack, showLiveGuide, useNav, useScreen } from '../nav'
+import { favoritesChanged, homeBack, seeAll, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
 import type { HomeData, Item, Library, RequestableTitle, TitleRequest, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -817,7 +817,7 @@ function HomeRows() {
                 onPress={() => open(it)}
               />
             )}
-            onSeeAll={row.collectionId ? () => nav.push({ name: 'collection', id: row.collectionId! }) : undefined}
+            onSeeAll={seeAll(nav, row)}
           />
         ))}
       </ScrollView>

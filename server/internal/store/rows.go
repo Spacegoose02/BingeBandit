@@ -167,14 +167,14 @@ func (s *Store) SetRowVisibility(lib *Library, key string, v Visibility) error {
 
 // RowItems fills a built-in row from the given libraries (all of one kind).
 // For "genres" pass the genre; TopGenres picks which.
-func (s *Store) RowItems(uid int64, libs []int64, libraryKind, key, genre string, limit int) ([]*Item, error) {
+func (s *Store) RowItems(uid int64, libs []int64, libraryKind, key, genre string, offset, limit int) ([]*Item, error) {
 	kind := "movie"
 	if libraryKind == "shows" {
 		kind = "show"
 	}
 	ids, _ := json.Marshal(libs)
 	where := `i.kind = @kind AND i.library_id IN (SELECT value FROM json_each(@libs)) AND ` + visible
-	args := []any{uidArg(uid), sql.Named("kind", kind), sql.Named("libs", string(ids)), sql.Named("limit", limit), sql.Named("offset", 0)}
+	args := []any{uidArg(uid), sql.Named("kind", kind), sql.Named("libs", string(ids)), sql.Named("limit", limit), sql.Named("offset", offset)}
 	var q, order string
 	switch key {
 	case "recent":
