@@ -2,7 +2,9 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"bingebandit/internal/store"
@@ -18,6 +20,22 @@ type libRow struct {
 	Items        []*store.Item `json:"items"`
 	CollectionID int64         `json:"collectionId,omitempty"`
 	LibraryID    int64         `json:"libraryId,omitempty"`
+	// SeeAll is the query for every title of a built-in row (GET
+	// /api/rows?<seeAll>), so apps can end the row with "See all".
+	SeeAll string `json:"seeAll,omitempty"`
+}
+
+// seeAllQuery is the /api/rows query for a built-in row from libs.
+func seeAllQuery(key, genre string, libs []int64) string {
+	ids := make([]string, len(libs))
+	for i, id := range libs {
+		ids[i] = strconv.FormatInt(id, 10)
+	}
+	v := url.Values{"key": {key}, "libraries": {strings.Join(ids, ",")}}
+	if genre != "" {
+		v.Set("genre", genre)
+	}
+	return v.Encode()
 }
 
 // isFriend is true for people outside the admin's household: they get the
@@ -170,14 +188,59 @@ func (s *Server) fillRow(uid int64, row libRow, key, kind string, libs []int64) 
 			r := row
 			r.ID += "-" + strings.ToLower(g)
 			r.Title = strings.Replace(row.Title, "(Genre)", g, 1)
-			items, err := s.Store.RowItems(uid, libs, kind, key, g, rowSize)
+			r.SeeAll = seeAllQuery(key, g, libs)
+			items, err := s.Store.RowItems(uid, libs, kind, key, g, 0, rowSize)
 			add(r, items, err)
 		}
 	default:
-		items, err := s.Store.RowItems(uid, libs, kind, key, "", rowSize)
+		row.SeeAll = seeAllQuery(key, "", libs)
+		items, err := s.Store.RowItems(uid, libs, kind, key, "", 0, rowSize)
 		add(row, items, err)
 	}
 	return out
+}
+
+// rowPage is a built-in row's "See all": its titles a page at a time, from
+// the libraries in ?libraries= the user can see (all of one kind), going as
+// far back as the row does (Recently Added: recently_added_days).
+func (s *Server) rowPage(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	key, genre := q.Get("key"), q.Get("genre")
+	u := currentUser(r)
+	var libs []int64
+	kind := ""
+	for _, p := range strings.Split(q.Get("libraries"), ",") {
+		id, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64)
+		if err != nil {
+			continue
+		}
+		lib, err := s.Store.Library(id)
+		if err != nil || !store.IsVideoLibrary(lib.Kind) || !s.Store.CanSeeLibrary(u, id) || (kind != "" && lib.Kind != kind) {
+			continue
+		}
+		kind = lib.Kind
+		libs = append(libs, id)
+	}
+	title := store.RowTitle(key, kind)
+	if len(libs) == 0 || title == "" || (key == "genres") != (genre != "") {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	title = strings.Replace(title, "(Genre)", genre, 1)
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 120
+	}
+	items, err := s.Store.RowItems(u.ID, libs, kind, key, genre, offset, limit)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"title": title, "items": items})
 }
 
 // libraryHubs are the rows on a library's Recommended tab.

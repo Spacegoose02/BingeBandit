@@ -357,7 +357,7 @@ export default function AdminSettings() {
           </p>
           <label>
             Recently Added goes back (days)
-            <input type="number" min={0} max={3650} value={s.recently_added_days ?? '90'} onChange={set('recently_added_days')} />
+            <input type="number" min={0} max={3650} value={s.recently_added_days ?? '100'} onChange={set('recently_added_days')} />
           </label>
           <p className="muted small">
             Recently Added rows on Home and in each library only show titles added this many days ago or later. 0 shows everything, newest first.

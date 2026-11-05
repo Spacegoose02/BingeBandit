@@ -9,7 +9,7 @@ import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import Downloads from './src/screens/Downloads'
 import { startDownloads } from './src/downloads'
-import { CollectionScreen } from './src/screens/Library'
+import { CollectionScreen, RowScreen } from './src/screens/Library'
 import PersonScreen from './src/screens/Person'
 import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
@@ -232,6 +232,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <Details id={r.id} />
     case 'collection':
       return <CollectionScreen id={r.id} />
+    case 'row':
+      return <RowScreen query={r.query} title={r.title} />
     case 'person':
       return <PersonScreen name={r.person} />
     case 'player':

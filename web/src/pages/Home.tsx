@@ -128,7 +128,7 @@ export default function Home() {
             <Row
               key={row.id}
               title={row.title}
-              to={row.collectionId ? `/collection/${row.collectionId}` : row.id === 'favorites' ? '/favorites' : row.id === 'watchlist' ? '/watchlist' : undefined}
+              to={row.collectionId ? `/collection/${row.collectionId}` : row.seeAll ? `/rows?${row.seeAll}` : row.id === 'favorites' ? '/favorites' : row.id === 'watchlist' ? '/watchlist' : undefined}
             >
               {row.items.map((it) => (
                 <PosterCard key={it.id} item={it} />

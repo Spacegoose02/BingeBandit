@@ -988,4 +988,9 @@ CREATE TABLE problem_reports (
 );
 CREATE INDEX problem_reports_status ON problem_reports(status, created_at);
 `,
+	// 57: Recently Added goes back 100 days, not 90, on servers that still
+	// had the old default saved.
+	`
+UPDATE settings SET value = '100' WHERE key = 'recently_added_days' AND value = '90';
+`,
 }

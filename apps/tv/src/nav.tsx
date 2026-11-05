@@ -5,6 +5,7 @@ export type Route =
   | { name: 'home' }
   | { name: 'details'; id: number }
   | { name: 'collection'; id: number }
+  | { name: 'row'; query: string; title: string } // a built-in row's See all (Recently Added, Top Rated…): GET /api/rows?<query>
   | { name: 'person'; person: string } // a cast or crew member's titles, by name
   | { name: 'player'; id: number; start?: number; together?: string; offline?: boolean } // together: a Watch Together room to join; offline: play the downloaded copy
   | { name: 'downloads' } // phones: the downloaded titles, also reachable with no connection
@@ -18,6 +19,13 @@ export interface Nav {
   push: (r: Route) => void
   replace: (r: Route) => void
   back: () => void
+}
+
+/** Where a row's "See all" poster goes: its collection, or every title of a built-in row. */
+export function seeAll(nav: Nav, row: { title: string; collectionId?: number; seeAll?: string }): (() => void) | undefined {
+  if (row.collectionId) return () => nav.push({ name: 'collection', id: row.collectionId! })
+  if (row.seeAll) return () => nav.push({ name: 'row', query: row.seeAll!, title: row.title })
+  return undefined
 }
 
 export const NavContext = createContext<Nav>({ push: () => {}, replace: () => {}, back: () => {} })

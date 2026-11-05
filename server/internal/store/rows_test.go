@@ -50,12 +50,12 @@ func TestLibraryRows(t *testing.T) {
 		t.Errorf("after reorder: %+v %+v", rows[0], rows[1])
 	}
 
-	items, err := s.RowItems(0, []int64{lib.ID}, "movies", "recent", "", 10)
+	items, err := s.RowItems(0, []int64{lib.ID}, "movies", "recent", "", 0, 10)
 	if err != nil || len(items) != 2 {
 		t.Errorf("recent: %d items, %v", len(items), err)
 	}
 	for _, key := range []string{"released", "top-rated", "unwatched", "genres", "watched", "continue"} {
-		if _, err := s.RowItems(0, []int64{lib.ID}, "movies", key, "Animation", 10); err != nil {
+		if _, err := s.RowItems(0, []int64{lib.ID}, "movies", key, "Animation", 0, 10); err != nil {
 			t.Errorf("%s: %v", key, err)
 		}
 	}

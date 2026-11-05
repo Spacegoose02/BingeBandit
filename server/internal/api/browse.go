@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"bingebandit/internal/overlay"
 	"bingebandit/internal/store"
 )
 
@@ -24,6 +25,27 @@ type homeRow struct {
 	Items        []*store.Item `json:"items"`
 	CollectionID int64         `json:"collectionId,omitempty"`
 	LibraryID    int64         `json:"libraryId,omitempty"`
+	SeeAll       string        `json:"seeAll,omitempty"` // see libRow
+}
+
+// quality is a title's best picture and sound, for the apps' "4K · Dolby
+// Vision · Atmos" badges: resolution 4k|1080|720|sd, range dv|hdr10|hlg|hdr
+// (SDR is left out), audio atmos|dtsx|truehd|dtshd|7.1|5.1.
+type quality struct {
+	Resolution string `json:"resolution,omitempty"`
+	Range      string `json:"range,omitempty"`
+	Audio      string `json:"audio,omitempty"`
+}
+
+func qualityOf(f overlay.Facts) *quality {
+	q := quality{Resolution: f.Resolution, Range: f.Range, Audio: f.Audio}
+	if q.Range == "sdr" {
+		q.Range = ""
+	}
+	if q == (quality{}) {
+		return nil
+	}
+	return &q
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +83,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	rows = append(rows, s.mediaHomeRows(r, uid)...)
 	libRows := s.homeLibraryRows(currentUser(r))
 	for _, lr := range libRows {
-		rows = append(rows, homeRow{ID: lr.ID, Title: lr.Title, Items: lr.Items, CollectionID: lr.CollectionID, LibraryID: lr.LibraryID})
+		rows = append(rows, homeRow{ID: lr.ID, Title: lr.Title, Items: lr.Items, CollectionID: lr.CollectionID, LibraryID: lr.LibraryID, SeeAll: lr.SeeAll})
 	}
 
 	// Hero carousel: the newest titles that have artwork to show off.
@@ -322,6 +344,9 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		resp["files"] = files
+		if q := qualityOf(overlay.FactsFrom(&store.OverlayFacts{Item: it, Files: files})); q != nil {
+			resp["quality"] = q
+		}
 		if ms, err := s.Store.Markers(it.ID); err == nil {
 			resp["markers"] = ms
 		}
@@ -365,6 +390,12 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if it.Kind == "show" {
+		// The best copy of any episode, as the poster badges count it.
+		if facts, err := s.Store.OverlayFacts(u.ID, it.ID); err == nil {
+			if q := qualityOf(overlay.FactsFrom(facts)); q != nil {
+				resp["quality"] = q
+			}
+		}
 		if id, order, err := s.Store.ShowTVDB(it.ID); err == nil && id > 0 {
 			resp["tvdbId"], resp["tvdbOrder"] = id, order
 		}

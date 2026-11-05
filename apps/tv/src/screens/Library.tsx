@@ -3,7 +3,7 @@ import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, 
 import { api, cached } from '../api'
 import { Icon } from '../icons'
 import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, Row } from '../components'
-import { useNav } from '../nav'
+import { seeAll, useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, units, quietPress } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
 
@@ -117,7 +117,7 @@ function Recommended({ library }: { library: Library }) {
           title={row.title}
           items={row.items}
           renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />}
-          onSeeAll={row.collectionId ? () => nav.push({ name: 'collection', id: row.collectionId! }) : undefined}
+          onSeeAll={seeAll(nav, row)}
         />
       ))}
     </ScrollView>
@@ -528,6 +528,64 @@ export function CollectionScreen({ id }: { id: number }) {
           <View style={st.collectionHead}>
             <Text style={st.title}>{data.collection.name}</Text>
             {!!data.collection.overview && <Text style={st.overview} numberOfLines={3}>{data.collection.overview}</Text>}
+          </View>
+        }
+        renderTile={(t) => (
+          <View>
+            <PosterCard item={t.item} preferFocus={t.index === 0} onPress={() => nav.push({ name: 'details', id: t.item.id })} onFocus={() => t.index >= items.length - cols * 3 && next()} />
+            <Text style={st.gridTitle} numberOfLines={1}>{t.item.title}</Text>
+          </View>
+        )}
+      />
+    </View>
+  )
+}
+
+/** Every title of a built-in row (Recently Added, Top Rated, a genre…), from its "See all" poster; a page at a time. */
+export function RowScreen({ query, title }: { query: string; title: string }) {
+  const nav = useNav()
+  const cols = useColumns(false)
+  const { data, error, load } = useLoad<{ title: string; items: Item[] }>(`/api/rows?${query}&limit=${PAGE}`)
+  const [more, setMore] = useState<Item[]>([])
+  const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const ended = useRef(false)
+  useEffect(() => {
+    setMore([])
+    ended.current = !!data && data.items.length < PAGE
+  }, [data])
+  if (error) return <View style={st.screen}><Problem error={error} retry={load} /></View>
+  if (!data) return <View style={st.screen}><Center><ActivityIndicator color={colors.accent} size="large" /></Center></View>
+  const items = [...data.items, ...more]
+  const next = () => {
+    if (busyRef.current || ended.current) return
+    busyRef.current = true
+    setBusy(true)
+    api.get<{ items: Item[] }>(`/api/rows?${query}&offset=${items.length}&limit=${PAGE}`).then(
+      (p) => {
+        if (p.items.length < PAGE) ended.current = true
+        const have = new Set(items.map((it) => it.id))
+        setMore((m) => [...m, ...p.items.filter((it) => !have.has(it.id))])
+      },
+      () => {
+        ended.current = true
+      },
+    ).finally(() => {
+      busyRef.current = false
+      setBusy(false)
+    })
+  }
+  const indexed = items.map((item, index) => ({ item, index }))
+  return (
+    <View style={st.screen}>
+      <Grid
+        rows={chunk(indexed, cols)}
+        keyOf={(t) => String(t.item.id)}
+        busy={busy}
+        onEnd={next}
+        header={
+          <View style={st.collectionHead}>
+            <Text style={st.title}>{data.title || title}</Text>
           </View>
         }
         renderTile={(t) => (

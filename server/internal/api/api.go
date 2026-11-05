@@ -334,6 +334,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/images/poster/{file}", s.overlayPoster)
 			r.Get("/libraries/{id}/collections", s.libraryCollections)
 			r.Get("/libraries/{id}/hubs", s.libraryHubs)
+			r.Get("/rows", s.rowPage)
 			r.Get("/collections/{id}", s.collection)
 
 			r.Post("/progress", s.progress)

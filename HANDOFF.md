@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-02. Latest release v0.45.0, 56 schema migrations._
+_Last updated: 2026-11-05. Latest release v0.45.0, 57 schema migrations (57 not released yet)._
 
 
 ## Start here
@@ -67,6 +67,15 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Bugs board: quality badges on the TV, See all on every row, Recently Added 100 days (2026-11-05, migration 57)
+
+Three cards from Michael's bugs board.
+
+- **Quality on the TV app:** item details now carry `quality` (`{resolution, range, audio}`, worked out by `overlay.FactsFrom` like the poster badges; a show's from its best episode, SDR left out). The TV details screen shows them as badges under the meta line (4K, Dolby Vision, Atmos…). With an older server it falls back to the first file's size, HDR flag and channels for movies and episodes. Web details already showed the file's quality and are unchanged.
+- **See all on every row:** collection rows already had it. Built-in rows (Recently Added, Recently Released, Top Rated, Top Unwatched, each genre, Recently Watched, Continue Watching on a library) now carry `seeAll`, a query for the new `GET /api/rows?key=&libraries=&genre=&offset=&limit=`, which pages through every title of the row from the libraries the person can see (all of one kind; none left is a 404). Home's merged rows pass every pinned library of that kind. Web opens `/rows?<seeAll>` (new `RowPage`, a poster grid that loads as you scroll); the TV app pushes a new `row` screen (`RowScreen` in `screens/Library.tsx`). Both put the "See all" poster at the end of the row and the web also links the heading. Roku wasn't changed.
+- **Recently Added 100 days:** the `recently_added_days` default is 100, and migration 57 moves servers that still have the old default of 90 saved to 100 (a different number an admin chose is kept). The cutoff applies to See all too, so it lists everything added in the window.
+- **Tested:** `go test ./...` with new `TestRowSeeAll` (Home's merged row and a library's row, paging, a person without one library, bad keys) and `TestItemQuality` (a 4K Dolby Vision Atmos movie, an SD one, a show from its episode); the web build; TV typecheck and eslint. **Not tried** in a browser or on a TV.
 
 ## YouTube channels as shows, from Cinemask's files (2026-11-02, no migration)
 
