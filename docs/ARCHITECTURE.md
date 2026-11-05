@@ -140,6 +140,7 @@ Besides the scheduler's tasks (`tasks/builtin.go`: scans, metadata, ratings, Liv
    - H.264 8-bit SDR within the requested height is copied (`-c:v copy`, cheap remux); otherwise it's re-encoded with the configured hardware encoder.
    - HDR is tone mapped with zscale + hable when enabled.
    - `encodeVideo` forces a re-encode of H.264 that would otherwise be copied, for slow devices that stutter on direct play.
+   - `audioDelayMs` (±5000) moves the sound against the picture: the file is opened a second time for the audio with `-itsoffset`, so the video and the audio can both still be copied. Converted audio always goes through `aresample=async=1` (here, in Live TV, custom channels and downloads), which fills gaps in the source with silence so players that clock by the samples they've played don't drift.
    - Audio follows what the client says it can play (`audioCodecs`, `maxAudioChannels`): a track it can take is copied; a surround track it can't is turned into `surroundCodec` (AC-3 or E-AC-3) or AAC 5.1; anything else becomes AAC stereo (`audioArgs` in `stream/transcode.go`).
 4. Seeking inside the transcoded range is a normal seek. Seeking past it starts a new session at that offset (`replace` kills the old one). The player tracks `offset + video.currentTime` as file time.
    - Image subtitles (`burnSubtitle`) switch the video chain to a `-filter_complex` graph: `[0:v:0]<tonemap>[base];[base][0:N]overlay[ov];[ov]<scale,format>[vout]`.

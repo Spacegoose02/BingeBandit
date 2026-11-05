@@ -49,6 +49,14 @@ function surroundCaps(): { audioCodecs: string[]; surroundCodec?: string } {
   return { audioCodecs: ['aac', ...dolby], surroundCodec: dolby[0] }
 }
 
+const AUDIO_DELAY_STEP = 100 // ms
+const AUDIO_DELAY_MAX = 5000 // the server's limit
+
+function audioDelayLabel(ms: number): string {
+  if (ms === 0) return 'in sync'
+  return `${(Math.abs(ms) / 1000).toFixed(1)}s ${ms > 0 ? 'later' : 'earlier'}`
+}
+
 /** Whether this device can play the file as is with the chosen audio track. */
 export function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
@@ -265,6 +273,11 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [menu, setMenu] = useState(false)
   const [subSearch, setSubSearch] = useState(false)
   const [subDelay, setSubDelay] = useState(0) // seconds; positive shows subtitles later
+  // Milliseconds the server moves the sound against the picture (positive:
+  // later). Anything but 0 means converting, since direct play can't shift it.
+  const [audioDelay, setAudioDelay] = useState(0)
+  const audioDelayRef = useRef(0)
+  const audioDelayTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [subLang, setSubLang] = useState<string | undefined>()
   // -1: play the file as is when this device can; 0: have the server convert
   // it at its own size; otherwise the converted height.
@@ -493,6 +506,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           // ARC takes Dolby but not 5.1 PCM).
           ...surroundCaps(),
           maxAudioChannels: 6,
+          audioDelayMs: audioDelayRef.current,
         })
         if (req !== transcodeReq.current) {
           api.del(`/api/transcode/${res.session.id}`).catch(() => undefined)
@@ -593,7 +607,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     setQuality(q)
     qualityRef.current = q
     setMenu(false)
-    if (q < 0 && file && burnRef.current < 0 && canDirectPlay(file, audioRef.current)) {
+    if (q < 0 && file && burnRef.current < 0 && audioDelayRef.current === 0 && canDirectPlay(file, audioRef.current)) {
       playDirect(posRef.current)
     } else {
       transcode(posRef.current)
@@ -625,6 +639,25 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     else if (file && !canDirectPlay(file, index)) transcode(posRef.current) // no decoder for that track here
   }
 
+  // Each change restarts the stream from here, so nudges in a row are sent
+  // together once they stop.
+  const nudgeAudioDelay = (ms: number) => {
+    const next = ms === 0 ? 0 : Math.max(-AUDIO_DELAY_MAX, Math.min(AUDIO_DELAY_MAX, audioDelayRef.current + ms))
+    audioDelayRef.current = next
+    setAudioDelay(next)
+    if (audioDelayTimer.current) clearTimeout(audioDelayTimer.current)
+    audioDelayTimer.current = setTimeout(() => {
+      audioDelayTimer.current = undefined
+      if (!file) return
+      // Back in sync: back to direct play when that's what was playing before.
+      if (next === 0 && qualityRef.current < 0 && burnRef.current < 0 && canDirectPlay(file, audioRef.current)) playDirect(posRef.current)
+      else if (next !== 0 || mode === 'transcode') transcode(posRef.current)
+    }, 800)
+  }
+  useEffect(() => () => {
+    if (audioDelayTimer.current) clearTimeout(audioDelayTimer.current)
+  }, [])
+
   const chooseSub = (s?: MediaStream) => {
     setSub(s)
     setSubDelay(0) // another file, another timing
@@ -633,7 +666,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     if (burn !== burnRef.current) {
       burnRef.current = burn
       // Burned-in subtitles turned off: back to direct play when that's what was playing before.
-      if (burn < 0 && qualityRef.current < 0 && file && canDirectPlay(file, audioRef.current)) chooseQuality(-1)
+      if (burn < 0 && qualityRef.current < 0 && audioDelayRef.current === 0 && file && canDirectPlay(file, audioRef.current)) chooseQuality(-1)
       else transcode(posRef.current)
     }
   }
@@ -1293,7 +1326,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
             <>
               <Text style={st.menuTitle}>Quality</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
-                {canDirectPlay(file, audioRef.current) && burnRef.current < 0 && (
+                {canDirectPlay(file, audioRef.current) && burnRef.current < 0 && audioDelay === 0 && (
                   <Button small primary={mode === 'direct'} preferFocus={menuFocus && mode === 'direct'} label={`Original · Direct play`} onPress={() => chooseQuality(-1)} />
                 )}
                 <Button
@@ -1316,6 +1349,16 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
                   const on = audio === a.index || (audio === -1 && (a.default || (i === 0 && !audios.some((x) => x.default))))
                   return <Button key={a.index} small primary={on} label={streamLabel(a)} onPress={() => chooseAudio(a.default || (i === 0 && !audios.some((x) => x.default)) ? -1 : a.index)} />
                 })}
+              </ScrollView>
+            </>
+          )}
+          {file && !offline && audios.length > 0 && (
+            <>
+              <Text style={st.menuTitle}>Audio timing · {audioDelayLabel(audioDelay)}</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small label="Sound earlier  −0.1s" onPress={() => nudgeAudioDelay(-AUDIO_DELAY_STEP)} />
+                <Button small label="Sound later  +0.1s" onPress={() => nudgeAudioDelay(AUDIO_DELAY_STEP)} />
+                {audioDelay !== 0 && <Button small label="Reset" onPress={() => nudgeAudioDelay(0)} />}
               </ScrollView>
             </>
           )}

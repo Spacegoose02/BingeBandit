@@ -1192,7 +1192,7 @@ func (r *Relay) ensureHLSAfter(prev *hlsOutput, sameVideo bool) {
 		args = append(args, "-fflags", "+genpts+discardcorrupt", "-analyzeduration", "3000000", "-probesize", "3000000",
 			"-f", "mpegts", "-i", "pipe:0", "-map", "0:v:0?", "-map", "0:a:0?")
 		args = append(args, videoArgs...)
-		args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k",
+		args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k", "-af", "aresample=async=1", // fill gaps in the feed so the sound stays with the picture
 			"-f", "hls", "-hls_time", fmt.Sprint(hlsSegmentSecs), "-hls_list_size", fmt.Sprint(r.m.playlistSegments()),
 			"-hls_flags", "delete_segments+independent_segments+omit_endlist+append_list",
 			"-hls_segment_filename", filepath.Join(dir, "s%06d.ts"), filepath.Join(dir, "live.m3u8"))

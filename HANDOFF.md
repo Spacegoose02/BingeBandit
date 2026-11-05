@@ -68,6 +68,14 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Audio out of sync: an audio timing control and gap-filling for converted audio (2026-11-05, no migration)
+
+Michael: "sometimes the audio seems out of sync from the picture and no way to fix it on the TV app or web".
+
+- **Root cause hunt:** reproduced with real ffmpeg (6.1) what the transcoder does when seeking, switching tracks and copying video with converted audio: the timestamps stay correct in every case (a copied picture starts at the keyframe before the seek point, the sound at the point itself, and they line up by timestamp). The one weakness found: converted audio kept any gaps in the source (TV recordings, IPTV, broken muxes) as gaps in the timestamps. Browsers follow timestamps, but players that clock by the samples they've played (ExoPlayer on Android TV, Roku, Chromecast) only resync on a big jump, so small gaps add up to drift. Converted audio now goes through `aresample=async=1` in `stream.buildArgs`, the Live TV relay, custom channels and downloads, which fills gaps with silence. That's the most likely cause; not proven on a device. A file whose audio is copied (or a source that's simply muxed out of step) still needs the control below.
+- **Audio timing control:** `Options.AudioDelayMs` (±`MaxAudioDelayMs` = 5000) on `POST /api/files/{id}/transcode`. `buildArgs` opens the file a second time for the audio with `-ss` and `-itsoffset`, so video and audio can both still be copied. Web player: Options → Audio timing (−0.1s / +0.1s / reset, keys − and + or =). TV app: Audio timing row in the player menu (hidden for downloads). A non-zero delay means converting (direct play can't shift the sound); going back to 0 returns to direct play when that's what was playing. Nudges are sent together 0.8s after the last one, and the timing lasts until the player closes. The Windows app already had it from mpv (Ctrl+− / Ctrl++). Roku wasn't changed.
+- **Tested:** `go test ./...`, with new `TestAudioDelayWithFFmpeg` (a clip that beeps every second, started mid-file: the beep lands on its frame, and ±200 to ±400ms delays move it by that much, audio copied and converted) and `TestBuildArgsAudioDelay`; the web build; TV typecheck and eslint. **Not tried** in a browser or on a TV.
+
 ## Bugs board: quality badges on the TV, See all on every row, Recently Added 100 days (2026-11-05, migration 57)
 
 Three cards from Michael's bugs board.

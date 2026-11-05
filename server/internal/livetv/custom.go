@@ -232,7 +232,7 @@ func (r *Relay) pullCustom() error {
 		args := append([]string{"-hide_banner", "-loglevel", "error", "-nostdin"}, vin...)
 		args = append(args, "-re", "-ss", fmt.Sprintf("%.3f", offset), "-i", f.Path, "-map", "0:v:0", "-map", "0:a:0?")
 		args = append(args, vout...)
-		args = append(args, "-c:a", "aac", "-ac", "2", "-ar", "48000", "-b:a", "160k",
+		args = append(args, "-c:a", "aac", "-ac", "2", "-ar", "48000", "-b:a", "160k", "-af", "aresample=async=1",
 			"-t", fmt.Sprintf("%.3f", remaining),
 			"-output_ts_offset", fmt.Sprintf("%.3f", time.Since(r.started).Seconds()),
 			"-f", "mpegts", "pipe:1")
