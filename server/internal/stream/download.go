@@ -322,7 +322,7 @@ func DownloadArgs(f *store.MediaFile, o DownloadOptions, encoder, device string,
 	} else {
 		args = append(args, "-b:v", fmt.Sprintf("%dk", kbps*3/4))
 	}
-	args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k",
+	args = append(args, "-c:a", "aac", "-ac", "2", "-b:a", "160k", "-af", "aresample=async=1",
 		"-sn", "-dn", "-map_metadata", "-1", "-map_chapters", "-1", "-movflags", "+faststart", "-f", "mp4", out)
 	return args
 }

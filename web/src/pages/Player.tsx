@@ -182,6 +182,7 @@ interface Choice {
   convert: boolean // at original quality: have the server convert the video instead of playing the file as is
   audio: number // stream index; -1 = file default
   burn: number // image subtitle stream burned in by the server; -1 = none
+  audioDelay: number // ms the server moves the sound (positive: later); not 0 means converting
 }
 
 interface Cue {
@@ -269,6 +270,7 @@ function PlayerView({
     convert: false,
     audio: initial.current.audio,
     burn: initialSub && IMAGE_SUBS.has(initialSub.codec) ? initialSub.index : -1,
+    audioDelay: 0,
   })
   const choiceRef = useRef(choice)
   choiceRef.current = choice
@@ -404,7 +406,7 @@ function PlayerView({
           window.setTimeout(() => load(resumeAt, choiceRef.current), 1500)
         } else setError(why)
       }
-      if (c.quality === 0 && !c.convert && c.audio < 0 && c.burn < 0 && !forceTranscode.current && canDirectPlay(file, video)) {
+      if (c.quality === 0 && !c.convert && c.audio < 0 && c.burn < 0 && c.audioDelay === 0 && !forceTranscode.current && canDirectPlay(file, video)) {
         stopTranscode()
         offsetRef.current = 0
         setMode('direct')
@@ -426,6 +428,7 @@ function PlayerView({
             // H.264 at its own size would otherwise be copied, which doesn't
             // help a device that can't keep up with the file itself.
             encodeVideo: c.convert,
+            audioDelayMs: c.audioDelay,
             ...audioCaps(video, stereoOnly.current),
           })
           transcodeRef.current = res.session.id
@@ -557,6 +560,25 @@ function PlayerView({
     const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width))
     setHover({ t: f * duration, x: f * r.width, width: r.width })
   }
+  // Audio timing is done by the server (it shifts the sound against the
+  // picture), so each change restarts the stream from here. Nudges are
+  // shown at once and sent together once they stop.
+  const [audioDelay, setAudioDelay] = useState(0)
+  const audioDelayTimer = useRef<number>()
+  const setAudioTiming = (ms: number) => {
+    const next = Math.max(-AUDIO_DELAY_MAX, Math.min(AUDIO_DELAY_MAX, ms))
+    setAudioDelay(next)
+    setToast(`Audio: ${audioDelayLabel(next)}`)
+    window.clearTimeout(audioDelayTimer.current)
+    audioDelayTimer.current = window.setTimeout(() => {
+      if (choiceRef.current.audioDelay === next) return
+      const c = { ...choiceRef.current, audioDelay: next }
+      setChoice(c)
+      load(position(), c)
+    }, 800)
+  }
+  useEffect(() => () => window.clearTimeout(audioDelayTimer.current), [])
+
   const nudgeSubDelay = (d: number) => {
     const next = Math.round((subDelay + d) * 10) / 10
     setSubDelay(next)
@@ -741,6 +763,10 @@ function PlayerView({
         // As in VLC: G shows subtitles earlier, H later.
         g: () => nudgeSubDelay(-0.5),
         h: () => nudgeSubDelay(0.5),
+        // Audio timing: - plays the sound earlier, + (or =) later.
+        '-': () => setAudioTiming(audioDelay - AUDIO_DELAY_STEP),
+        '+': () => setAudioTiming(audioDelay + AUDIO_DELAY_STEP),
+        '=': () => setAudioTiming(audioDelay + AUDIO_DELAY_STEP),
         m: () => setMuted((m) => !m),
         ArrowUp: () => setVolume((v) => Math.min(1, v + 0.1)),
         ArrowDown: () => setVolume((v) => Math.max(0, v - 0.1)),
@@ -1153,6 +1179,21 @@ function PlayerView({
                       {streamLabel(s)}
                     </button>
                   ))}
+                {audioStreams.length > 0 && (
+                  <>
+                    <div className="menu-section">Audio timing</div>
+                    <div className="menu-stepper">
+                      <button onClick={() => setAudioTiming(audioDelay - AUDIO_DELAY_STEP)} aria-label="Play the sound earlier" title="Earlier (−)">
+                        −0.1s
+                      </button>
+                      <span>{audioDelayLabel(audioDelay)}</span>
+                      <button onClick={() => setAudioTiming(audioDelay + AUDIO_DELAY_STEP)} aria-label="Play the sound later" title="Later (+)">
+                        +0.1s
+                      </button>
+                    </div>
+                    {audioDelay !== 0 && <button onClick={() => setAudioTiming(0)}>Reset audio timing</button>}
+                  </>
+                )}
                 <div className="menu-section">Subtitles</div>
                 {subStreams.length > 0 && (
                   <button className={subIndex === -1 && choice.burn === -1 ? 'active' : ''} onClick={() => changeSubtitle(null)}>
@@ -1243,6 +1284,14 @@ function PlayerView({
       )}
     </div>
   )
+}
+
+const AUDIO_DELAY_STEP = 100 // ms
+const AUDIO_DELAY_MAX = 5000 // the server's limit
+
+function audioDelayLabel(ms: number): string {
+  if (ms === 0) return 'In sync'
+  return `${(Math.abs(ms) / 1000).toFixed(1)}s ${ms > 0 ? 'later' : 'earlier'}`
 }
 
 function delayLabel(d: number): string {

@@ -144,6 +144,7 @@ The web player plays a file directly when your browser can, and otherwise conver
 - switch quality, audio track and subtitles,
 - see a thumbnail of where you'll land while dragging or scrubbing the progress bar (made by the "Make scrub previews" task, or in the background the first time a file plays),
 - move subtitles earlier or later in half-second steps when they're out of sync (Options → Subtitle timing, or G and H on a keyboard),
+- move the sound earlier or later in tenth-of-a-second steps when it's out of step with the picture (Options → Audio timing on the web and TV app, or − and + on a keyboard; in the Windows app it's mpv's own Ctrl+− and Ctrl++). The server does the shifting, so a file that was playing directly starts converting (the picture is usually copied as is, so it costs little) and the timing lasts until you leave the player,
 - find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
 - jump between chapters when the file has them: the marks on the progress bar, the **Chapters** button (Options → Chapters on the TV and Roku), or `[` and `]` (Page Up and Page Down) on a keyboard,
 - skip intros and credits,

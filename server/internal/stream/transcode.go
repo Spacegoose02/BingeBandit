@@ -57,6 +57,10 @@ type Options struct {
 	// picked "Convert", or direct play stuttered (a high bitrate, level or
 	// profile the device can't keep up with).
 	EncodeVideo bool `json:"encodeVideo"`
+	// AudioDelayMs moves the sound against the picture, for a file (or a
+	// TV and soundbar) where they're out of step: positive plays the audio
+	// later, negative earlier. Clamped to ±MaxAudioDelayMs.
+	AudioDelayMs int `json:"audioDelayMs"`
 	// CapKbps is the most video this viewer may be sent (the admin's cap
 	// for streams outside the home network); 0 = no cap. Set by the
 	// server, never by the client.
@@ -88,6 +92,8 @@ type Session struct {
 	AudioCodec    string `json:"audioCodec"`
 	AudioChannels int    `json:"audioChannels"`
 	AudioCopy     bool   `json:"audioCopy"`
+	// AudioDelayMs is the audio offset applied (see Options).
+	AudioDelayMs int `json:"audioDelayMs,omitempty"`
 	// Remote is set when the viewer is outside the home network.
 	Remote bool `json:"-"`
 
@@ -170,8 +176,8 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
-	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v audio=%s/%dch copy=%v",
-		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled, s.AudioCodec, s.AudioChannels, s.AudioCopy)
+	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v audio=%s/%dch copy=%v delay=%dms",
+		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled, s.AudioCodec, s.AudioChannels, s.AudioCopy, s.AudioDelayMs)
 
 	go func() {
 		err := s.cmd.Wait()
@@ -269,11 +275,26 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	args = append(args, "-i", f.Path)
 
 	audio := pickAudio(f.Streams, o.AudioStream)
-	audioMap := "0:a:0?"
-	if audio != nil {
-		audioMap = fmt.Sprintf("0:%d", audio.Index)
-	}
 	hasAudio := audio != nil || len(f.Streams) == 0 // probed files with no audio track have none to map
+	// An audio delay opens the file a second time for the sound, with its
+	// timestamps shifted; the picture is untouched (and can still be
+	// copied), and so can the audio.
+	input := "0"
+	if delay := clampAudioDelay(o.AudioDelayMs); delay != 0 && hasAudio {
+		s.AudioDelayMs = delay
+		input = "1"
+		if s.Throttled {
+			args = append(args, "-readrate", "2", "-readrate_initial_burst", "60")
+		}
+		if o.Start > 0 {
+			args = append(args, "-ss", fmt.Sprintf("%.3f", o.Start))
+		}
+		args = append(args, "-itsoffset", fmt.Sprintf("%.3f", float64(delay)/1000), "-i", f.Path)
+	}
+	audioMap := input + ":a:0?"
+	if audio != nil {
+		audioMap = fmt.Sprintf("%s:%d", input, audio.Index)
+	}
 
 	// The quality ladder: the target, then up to two lower rungs. Only when
 	// converting anyway (a copied stream can't be lined up with encoded
@@ -395,6 +416,15 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	args = append(args, videoArgs...)
 	if hasAudio {
 		args = append(args, audioArgs(s, audio, o)...)
+		if !s.AudioCopy {
+			// Keep converted audio continuous: fill gaps in the source
+			// (common in TV recordings and broken muxes) with silence and
+			// drop overlaps, so the sound follows its timestamps. Players
+			// that clock playback by the samples they've played (Android
+			// TV, Roku, Chromecast) otherwise drift a little at every gap
+			// too small for them to notice and correct.
+			args = append(args, "-af", "aresample=async=1")
+		}
 	}
 	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
 		"-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
@@ -413,6 +443,13 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		args = append(args, "-hls_segment_filename", filepath.Join(s.dir, "seg%05d.ts"), filepath.Join(s.dir, "index.m3u8"))
 	}
 	return args
+}
+
+// MaxAudioDelayMs is the largest audio offset a player may ask for.
+const MaxAudioDelayMs = 5000
+
+func clampAudioDelay(ms int) int {
+	return max(-MaxAudioDelayMs, min(MaxAudioDelayMs, ms))
 }
 
 // adaptiveLadder are the lower qualities an adaptive session adds below its
