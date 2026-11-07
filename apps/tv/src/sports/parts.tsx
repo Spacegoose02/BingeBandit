@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { memo } from 'react'
 import { Image, StyleSheet, Text, View } from 'react-native'
-import { Focusable } from '../components'
+import { Focusable, useLatest } from '../components'
 import { scaled, colors, font, isPhone } from '../theme'
 import type { LiveChannel, SportsGame, SportsLeader, SportsSide, SportsTeam } from '../types'
 import { scoreShown, sportColors, startLabel } from './hub'
@@ -43,16 +43,11 @@ export function gameStatus(g: SportsGame): string {
  * plays, both teams with records and scores (hidden while spoiler-free), the
  * standout players and where it's on.
  */
-export function GameCard({
-  game: g,
-  league,
-  sport,
-  previewing,
-  preferFocus,
-  onPress,
-  onLongPress,
-  onFocus,
-}: {
+export function GameCard({ onPress, onLongPress, onFocus, ...props }: GameCardProps) {
+  return <GameCardView {...props} onPress={useLatest(onPress)} onLongPress={useLatest(onLongPress)} onFocus={useLatest(onFocus)} />
+}
+
+interface GameCardProps {
   game: SportsGame
   league: string
   sport?: string
@@ -61,7 +56,10 @@ export function GameCard({
   onPress: () => void
   onLongPress: () => void
   onFocus?: () => void
-}) {
+}
+
+// The hub re-renders on every focus move, so a card only redraws when what it shows changes.
+const GameCardView = memo(function Game({ game: g, league, sport, previewing, preferFocus, onPress, onLongPress, onFocus }: GameCardProps) {
   const shown = scoreShown(g)
   const live = g.state === 'in'
   const side = (s: SportsSide) => (
@@ -120,7 +118,7 @@ export function GameCard({
       </View>
     </Focusable>
   )
-}
+})
 
 /** A Live TV channel in the Channels tab or the Multi-View picker, with what's on. */
 export function ChannelCard({

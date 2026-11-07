@@ -119,7 +119,7 @@ function Art(props: ImageProps) {
  * arrow functions on every render (a focus move re-renders the whole grid),
  * so the memoized inner card only redraws when what it shows changes.
  */
-function useLatest<A extends unknown[]>(fn: ((...a: A) => void) | undefined) {
+export function useLatest<A extends unknown[]>(fn: ((...a: A) => void) | undefined) {
   const ref = useRef(fn)
   ref.current = fn
   return useCallback((...a: A) => ref.current?.(...a), [])
