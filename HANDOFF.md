@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-05. Latest release v0.46.0, 57 schema migrations._
+_Last updated: 2026-11-07. Latest release v0.47.0, 57 schema migrations._
 
 
 ## Start here
