@@ -68,6 +68,10 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## TV app: Audio timing no longer strands the remote (2026-11-07, no migration)
+
+Michael on the TV app: after one press of "Sound earlier" nothing else could be pressed until leaving the menu. Each press restarts the conversion, which mounts a new `Video` (it's keyed by source), and the player's `Video` was the only one in the app without `focusable={false}`, so ExoPlayer's surface took focus from the open menu and the arrows went nowhere (the menu ignores keys in JS). Fixed in `screens/Player.tsx`: the `Video` isn't focusable, and when the restarted stream loads with the menu open the timing button that was pressed takes focus back for a second (`timingFocus`). Reset also hands focus to its neighbour, since it removes itself. **Typechecked and linted only; not tried on a device.**
+
 ## Audio out of sync: an audio timing control and gap-filling for converted audio (2026-11-05, no migration)
 
 Michael: "sometimes the audio seems out of sync from the picture and no way to fix it on the TV app or web".

@@ -278,6 +278,19 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [audioDelay, setAudioDelay] = useState(0)
   const audioDelayRef = useRef(0)
   const audioDelayTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // The Audio timing button to hand focus back to (for about a second) when
+  // the stream restarts under the open menu, or when Reset disappears.
+  const [timingFocus, setTimingFocus] = useState<'earlier' | 'later' | null>(null)
+  const timingPressed = useRef<'earlier' | 'later' | null>(null)
+  const timingFocusTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => {
+    if (!menu) timingPressed.current = null
+  }, [menu])
+  const focusTiming = (which: 'earlier' | 'later') => {
+    setTimingFocus(which)
+    if (timingFocusTimer.current) clearTimeout(timingFocusTimer.current)
+    timingFocusTimer.current = setTimeout(() => setTimingFocus(null), 1000)
+  }
   const [subLang, setSubLang] = useState<string | undefined>()
   // -1: play the file as is when this device can; 0: have the server convert
   // it at its own size; otherwise the converted height.
@@ -642,6 +655,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // Each change restarts the stream from here, so nudges in a row are sent
   // together once they stop.
   const nudgeAudioDelay = (ms: number) => {
+    timingPressed.current = ms < 0 ? 'earlier' : ms > 0 ? 'later' : (timingPressed.current ?? 'earlier')
+    // Reset takes itself away, and Android drops focus with it: move it next door.
+    if (ms === 0) focusTiming(timingPressed.current)
     const next = ms === 0 ? 0 : Math.max(-AUDIO_DELAY_MAX, Math.min(AUDIO_DELAY_MAX, audioDelayRef.current + ms))
     audioDelayRef.current = next
     setAudioDelay(next)
@@ -656,6 +672,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   }
   useEffect(() => () => {
     if (audioDelayTimer.current) clearTimeout(audioDelayTimer.current)
+    if (timingFocusTimer.current) clearTimeout(timingFocusTimer.current)
   }, [])
 
   const chooseSub = (s?: MediaStream) => {
@@ -1077,6 +1094,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           // surface can stay black even though the converted stream plays.
           key={src.uri}
           ref={video}
+          // The app's own views hold focus (a full-screen Pressable, or the
+          // menu); a focusable video surface took it from the open menu each
+          // time the stream restarted, leaving the remote's arrows dead.
+          focusable={false}
           // The server's conversion stream is an HLS "event" playlist, which ExoPlayer badges as LIVE.
           controlsStyles={NO_LIVE_BADGE}
           source={{ ...src, headers: authHeaders() }}
@@ -1103,6 +1124,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
             }
             setBuffering(false)
             showControls('seek') // a glimpse of the title and position
+            // Restarted for a new audio timing with the menu still open: keep
+            // the remote on the button that was being pressed.
+            if (menu && timingPressed.current) focusTiming(timingPressed.current)
           }}
           onBuffer={({ isBuffering }) => {
             if (isBuffering && !buffering) lastAdvance.current = Date.now() // each stall gets its own 8 s
@@ -1356,8 +1380,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
             <>
               <Text style={st.menuTitle}>Audio timing · {audioDelayLabel(audioDelay)}</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
-                <Button small label="Sound earlier  −0.1s" onPress={() => nudgeAudioDelay(-AUDIO_DELAY_STEP)} />
-                <Button small label="Sound later  +0.1s" onPress={() => nudgeAudioDelay(AUDIO_DELAY_STEP)} />
+                <Button small label="Sound earlier  −0.1s" preferFocus={timingFocus === 'earlier'} onPress={() => nudgeAudioDelay(-AUDIO_DELAY_STEP)} />
+                <Button small label="Sound later  +0.1s" preferFocus={timingFocus === 'later'} onPress={() => nudgeAudioDelay(AUDIO_DELAY_STEP)} />
                 {audioDelay !== 0 && <Button small label="Reset" onPress={() => nudgeAudioDelay(0)} />}
               </ScrollView>
             </>
