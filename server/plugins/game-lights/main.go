@@ -26,8 +26,8 @@ var manifest = bbplugin.Manifest{
 	Events:      []string{"sports.game.start", "sports.game.live", "sports.score", "sports.game.end"},
 	Settings: []bbplugin.Setting{
 		{Key: "users", Label: "Follow the teams of these people (comma-separated; empty for everyone)", Type: "text"},
-		{Key: "delay_seconds", Label: "Delay (seconds): how far your TV runs behind ESPN", Type: "number", Default: "25",
-			Help: "Raise it until the lights flash with the picture, not before."},
+		{Key: "delay_seconds", Label: "Default delay (seconds): how far a TV runs behind ESPN", Type: "number", Default: "25",
+			Help: "Only for people who haven't set their own delay (My Game Lights, the TV app's Sports tab or its Live TV options), which always wins."},
 		{Key: "brightness", Label: "Maximum brightness (%)", Type: "number", Default: "100"},
 		{Key: "reduced_flashing", Label: "Reduced flashing", Type: "select", Options: []string{"off", "on"}, Default: "off",
 			Help: "on: slower, gentler flashes for anyone sensitive to flashing lights"},
