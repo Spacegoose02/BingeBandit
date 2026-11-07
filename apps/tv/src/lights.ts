@@ -35,12 +35,28 @@ export interface GameLightsPerson {
   [key: string]: unknown
 }
 
-/** This profile's Game Lights settings; null when the plugin isn't running or the profile hasn't turned it on. */
-export function fetchGameLights(): Promise<GameLightsPerson | null> {
-  return api.get<{ person?: GameLightsPerson }>('/api/plugins/game-lights/me/state').then(
-    (s) => (s.person?.enabled ? s.person : null),
+/** The source BingeBandit's own Live TV counts as for Game Lights' delay. */
+export const LIVE_TV_SOURCE = 'BingeBandit Live TV'
+
+/** This profile's Game Lights with its delays; null when the plugin isn't running or the profile hasn't turned it on. */
+export interface GameLightsDelays {
+  person: GameLightsPerson & { source?: string; delays: Record<string, number> }
+  defaultDelay: number
+}
+
+export function fetchGameLightsDelays(): Promise<GameLightsDelays | null> {
+  return api.get<{ person?: GameLightsPerson & { source?: string; delays?: Record<string, number> }; defaultDelay?: number }>('/api/plugins/game-lights/me/state').then(
+    (s) => (s.person?.enabled ? { person: { ...s.person, delays: s.person.delays ?? {} }, defaultDelay: s.defaultDelay ?? 25 } : null),
     () => null,
   )
+}
+
+/** How many seconds Game Lights waits for this source (the admin's default when it has none of its own). */
+export const delayFor = (g: GameLightsDelays, source: string) => g.person.delays[source] ?? g.defaultDelay
+
+/** Sets the profile's newest play as just seen on this TV; returns the delay that makes. */
+export function calibrateGameLights(): Promise<{ delay: number; source: string }> {
+  return api.post<{ delay: number; source: string }>('/api/plugins/game-lights/me/calibrate')
 }
 
 export function saveGameLights(person: GameLightsPerson): Promise<unknown> {

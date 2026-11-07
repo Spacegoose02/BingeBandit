@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, authHeaders, type ApiError } from '../api'
 import { Button, useFocusOnce } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
-import { fetchGameLights, saveGameLights, type GameLightsPerson } from '../lights'
+import { calibrateGameLights, delayFor, fetchGameLightsDelays, LIVE_TV_SOURCE, saveGameLights, type GameLightsDelays } from '../lights'
 import { useLock } from '../lock'
 import { refreshScoreBug, scoreBugChannel } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav, useScreen } from '../nav'
@@ -42,10 +42,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const { active } = useScreen()
   const [info, setInfo] = useState(true)
   const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
-  // Options: Game Lights and the score bug for an easy on / off, and the
+  // Options: Game Lights (on / off and its delay) and the score bug, and the
   // channel's sound and caption tracks when it has more than one.
   const [menu, setMenu] = useState(false)
-  const [lights, setLights] = useState<GameLightsPerson | null>(null)
+  const [lights, setLights] = useState<GameLightsDelays | null>(null)
   const [scoreBug, setScoreBug] = useState<boolean | null>(null)
   const [audios, setAudios] = useState<AudioTrack[]>([])
   const [texts, setTexts] = useState<TextTrack[]>([])
@@ -111,21 +111,54 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const openMenu = () => {
     setMenu(true)
     setControls(false)
-    fetchGameLights().then(setLights)
+    fetchGameLightsDelays().then(setLights)
     api.get<{ scoreBug?: boolean }>('/api/me/prefs').then((p) => setScoreBug(p.scoreBug !== false), () => setScoreBug(null))
   }
   const setLightsRunning = (run: boolean) => {
     if (!lights) return
     const was = lights
-    const next = { ...lights, off: !run }
+    const next = { ...lights, person: { ...lights.person, off: !run } }
     setLights(next)
-    saveGameLights(next).then(
+    saveGameLights(next.person).then(
       () => say(run ? 'Game Lights on' : 'Game Lights stopped'),
       (e: Error) => {
         setLights(was)
         say(e.message)
       },
     )
+  }
+  // Watching here means watching BingeBandit Live TV, so the delay set here is
+  // that source's (the same one as Sports → Game Lights and My Game Lights),
+  // and nudging it makes it the source the lights follow.
+  const lightsDelay = lights ? delayFor(lights, LIVE_TV_SOURCE) : 0
+  const nudgeLightsDelay = (d: number) => {
+    if (!lights) return
+    const was = lights
+    const delay = Math.max(0, Math.min(300, lightsDelay + d))
+    const next = { ...lights, person: { ...lights.person, source: LIVE_TV_SOURCE, delays: { ...lights.person.delays, [LIVE_TV_SOURCE]: delay } } }
+    setLights(next)
+    saveGameLights(next.person).then(
+      () => say(`Game Lights wait ${delay} s`),
+      (e: Error) => {
+        setLights(was)
+        say(e.message)
+      },
+    )
+  }
+  // The moment a play shows on screen: the server measures the delay from ESPN's newest play.
+  const calibrateLights = () => {
+    if (!lights) return
+    const person = { ...lights.person, source: LIVE_TV_SOURCE }
+    const ready = lights.person.source === LIVE_TV_SOURCE ? Promise.resolve() : saveGameLights(person)
+    ready
+      .then(calibrateGameLights)
+      .then(
+        (r) => {
+          setLights((l) => (l ? { ...l, person: { ...l.person, source: r.source, delays: { ...l.person.delays, [r.source]: r.delay } } } : l))
+          say(`Game Lights wait ${r.delay} s`)
+        },
+        (e: Error) => say(e.message),
+      )
   }
   const pickScoreBug = (on: boolean) => {
     setScoreBug(on)
@@ -506,8 +539,16 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
             <>
               <Text style={st.menuTitle}>Game Lights</Text>
               <ScrollView horizontal contentContainerStyle={st.menuRow}>
-                <Button small primary={!lights.off} preferFocus label="On" onPress={() => setLightsRunning(true)} />
-                <Button small primary={!!lights.off} label="Stopped" onPress={() => setLightsRunning(false)} />
+                <Button small primary={!lights.person.off} preferFocus label="On" onPress={() => setLightsRunning(true)} />
+                <Button small primary={!!lights.person.off} label="Stopped" onPress={() => setLightsRunning(false)} />
+              </ScrollView>
+              <Text style={st.menuTitle}>Game Lights delay · {lightsDelay} s</Text>
+              <ScrollView horizontal contentContainerStyle={st.menuRow}>
+                <Button small label="−5" onPress={() => nudgeLightsDelay(-5)} />
+                <Button small label="−1" onPress={() => nudgeLightsDelay(-1)} />
+                <Button small label="+1" onPress={() => nudgeLightsDelay(1)} />
+                <Button small label="+5" onPress={() => nudgeLightsDelay(5)} />
+                <Button small label="A play just showed" onPress={calibrateLights} />
               </ScrollView>
             </>
           )}
