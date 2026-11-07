@@ -69,6 +69,14 @@ export default function Sports() {
   const [notice, setNotice] = useState('')
   const [picks, setPicks] = useState(multiViewPicks.length)
   const focusedRef = useRef<SportsGame | null>(null)
+  const featureTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (featureTimer.current) clearTimeout(featureTimer.current)
+  }, [])
+  // The first game takes focus only when the hub opens. Once you've moved,
+  // the half-minute refresh or a sport filter bringing a new first game
+  // must not pull focus back to it (or bounce it off the side menu).
+  const landed = useRef(false)
   const say = useCallback((t: string) => {
     setNotice(t)
     setTimeout(() => setNotice((n) => (n === t ? '' : n)), 4000)
@@ -194,12 +202,15 @@ export default function Sports() {
         league={l?.name ?? g.league}
         sport={l?.sport}
         previewing={preview?.id === g.id}
-        preferFocus={first && i === 0}
+        preferFocus={first && i === 0 && !landed.current}
         onPress={() => press(g)}
         onLongPress={() => setDetails(g)}
         onFocus={() => {
+          landed.current = true
           focusedRef.current = g
-          setFocused(g)
+          // The big score panel follows once you stop on a game, not on every card you pass.
+          if (featureTimer.current) clearTimeout(featureTimer.current)
+          featureTimer.current = setTimeout(() => setFocused(g), 200)
         }}
       />
     )
@@ -386,6 +397,8 @@ export default function Sports() {
                   preferFocus={d === offset}
                   onPress={() => {
                     setDayMenu(false)
+                    // A new day's games are all new: land on the first one again.
+                    landed.current = false
                     setDay(null)
                     setOffset(d)
                   }}
