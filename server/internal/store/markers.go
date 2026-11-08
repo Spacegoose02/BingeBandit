@@ -2,7 +2,7 @@ package store
 
 // Marker is a skippable section of an episode or movie, in seconds.
 type Marker struct {
-	Kind   string  `json:"kind"` // intro | credits
+	Kind   string  `json:"kind"` // intro | credits | recap | commercial (several to a recording)
 	Start  float64 `json:"start"`
 	End    float64 `json:"end"`
 	Source string  `json:"source"` // detected | manual
@@ -28,20 +28,53 @@ func (s *Store) Markers(itemID int64) ([]Marker, error) {
 // SetDetectedMarker stores a detection result unless an admin set that marker by hand.
 func (s *Store) SetDetectedMarker(itemID int64, kind string, start, end float64) error {
 	_, err := s.db.Exec(`INSERT INTO markers (item_id, kind, start_at, end_at, source) VALUES (?, ?, ?, ?, 'detected')
-		ON CONFLICT (item_id, kind) DO UPDATE SET start_at = excluded.start_at, end_at = excluded.end_at
+		ON CONFLICT (item_id, kind) WHERE kind != 'commercial' DO UPDATE SET start_at = excluded.start_at, end_at = excluded.end_at
 		WHERE markers.source != 'manual'`, itemID, kind, start, end)
 	return err
 }
 
+// SetDetectedCommercials replaces a recording's detected ad breaks. Breaks an
+// admin set by hand are kept, and while there are any, detection leaves the
+// file alone.
+func (s *Store) SetDetectedCommercials(itemID int64, breaks [][2]float64) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var manual int
+	tx.QueryRow(`SELECT COUNT(*) FROM markers WHERE item_id = ? AND kind = 'commercial' AND source = 'manual'`, itemID).Scan(&manual)
+	if manual > 0 {
+		return nil
+	}
+	if _, err := tx.Exec(`DELETE FROM markers WHERE item_id = ? AND kind = 'commercial'`, itemID); err != nil {
+		return err
+	}
+	for _, b := range breaks {
+		if _, err := tx.Exec(`INSERT INTO markers (item_id, kind, start_at, end_at, source) VALUES (?, 'commercial', ?, ?, 'detected')`,
+			itemID, b[0], b[1]); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // SetManualMarkers replaces an item's markers with admin-entered ones. Kinds
-// left out are cleared and the item is queued for detection again.
+// left out are cleared (ad breaks only when the list has some) and the item
+// is queued for detection again.
 func (s *Store) SetManualMarkers(itemID int64, ms []Marker) error {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM markers WHERE item_id = ?`, itemID); err != nil {
+	// Ad breaks are kept unless the edit lists its own (the intro and credits
+	// editor doesn't show them).
+	keepAds := true
+	for _, m := range ms {
+		keepAds = keepAds && m.Kind != "commercial"
+	}
+	if _, err := tx.Exec(`DELETE FROM markers WHERE item_id = ? AND (? = 0 OR kind != 'commercial')`, itemID, boolInt(keepAds)); err != nil {
 		return err
 	}
 	for _, m := range ms {
@@ -123,4 +156,41 @@ func (s *Store) SeasonIDs(id int64) ([]int64, error) {
 		out = append(out, sid)
 	}
 	return out, rows.Err()
+}
+
+// RecordingToScan is a finished DVR recording, as the library knows it,
+// whose ad breaks haven't been looked for.
+type RecordingToScan struct {
+	RecordingID int64
+	ItemID      int64
+	Path        string
+	Duration    float64
+}
+
+// RecordingsNeedingCommercials lists finished recordings that a library has
+// picked up and whose ad breaks haven't been looked for, oldest first.
+func (s *Store) RecordingsNeedingCommercials(limit int) ([]RecordingToScan, error) {
+	rows, err := s.db.Query(`SELECT r.id, f.item_id, f.path, f.duration FROM recordings r
+		JOIN media_files f ON f.path = r.path
+		WHERE r.status = 'completed' AND r.commercials_at = 0 AND r.path != ''
+		ORDER BY r.stop_at LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RecordingToScan
+	for rows.Next() {
+		var r RecordingToScan
+		if err := rows.Scan(&r.RecordingID, &r.ItemID, &r.Path, &r.Duration); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// MarkCommercialsChecked records that a recording's ad breaks were looked for.
+func (s *Store) MarkCommercialsChecked(recordingID int64) error {
+	_, err := s.db.Exec(`UPDATE recordings SET commercials_at = ? WHERE id = ?`, now(), recordingID)
+	return err
 }

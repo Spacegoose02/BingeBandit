@@ -283,6 +283,34 @@ export default function AdminSettings() {
             . The account is optional, but OpenSubtitles allows more downloads a day with one. Downloaded subtitles are saved
             beside the video as .srt files, so the media folder must be writable. Kid profiles can't download.
           </p>
+          <label>
+            Whisper model (for “Make subtitles from the sound”)
+            <select
+              value={['tiny', 'base', 'small', 'medium', 'large-v3-turbo'].includes(s.whisper_model ?? 'base') ? s.whisper_model ?? 'base' : 'path'}
+              onChange={(e) => setS({ ...s, whisper_model: e.target.value === 'path' ? '' : e.target.value })}
+            >
+              <option value="tiny">Tiny (75 MB, fastest)</option>
+              <option value="base">Base (140 MB)</option>
+              <option value="small">Small (460 MB)</option>
+              <option value="medium">Medium (1.5 GB)</option>
+              <option value="large-v3-turbo">Large v3 Turbo (1.6 GB, best)</option>
+              <option value="path">A model file on the server…</option>
+            </select>
+          </label>
+          {!['tiny', 'base', 'small', 'medium', 'large-v3-turbo'].includes(s.whisper_model ?? 'base') && (
+            <label>
+              Model file
+              <input value={s.whisper_model ?? ''} onChange={set('whisper_model')} placeholder="/models/ggml-large-v3.bin" spellCheck={false} />
+            </label>
+          )}
+          <p className="muted small">
+            Admins can make subtitles from a video's own sound in the players' Find subtitles, with{' '}
+            <a href="https://github.com/ggml-org/whisper.cpp" target="_blank" rel="noreferrer">
+              whisper.cpp
+            </a>{' '}
+            on this server (install it so whisper-cli is on the PATH, or set BB_WHISPER). The model downloads once. Bigger models are more
+            accurate and slower; on a CPU, Base takes a few minutes for a film.
+          </p>
         </section>
 
         <section className="panel form">
@@ -304,6 +332,14 @@ export default function AdminSettings() {
             Let people recommend movies and shows to each other
           </label>
           <p className="muted small">Off hides the Recommend buttons, the opt-in under Account and the “Recommended for You” row on Home, on the web and in the TV app.</p>
+          <label className="check">
+            <input type="checkbox" checked={s.because_rows_enabled !== 'false'} onChange={set('because_rows_enabled')} />
+            Show “Because you watched” and “Because you liked” rows on Home
+          </label>
+          <p className="muted small">
+            Picked from TMDB’s recommendations for what each person finished or gave a thumbs up lately, keeping only what the server has. Titles
+            someone marked “Not interested” stay out of them.
+          </p>
           <label className="check">
             <input type="checkbox" checked={s.requests_enabled !== 'false'} onChange={set('requests_enabled')} />
             Let people request movies and shows the server doesn’t have
@@ -434,6 +470,14 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.dvr_priority === 'true'} onChange={set('dvr_priority')} />
             Recordings come first: when a provider is at its connection limit, stop a live channel someone is watching to record
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_detect_ads !== 'false'} onChange={set('dvr_detect_ads')} />
+            Find the ad breaks in recordings, for a Skip Ad button
+          </label>
+          <p className="muted small">
+            Uses Comskip when it's installed on the server, otherwise the black, silent moments broadcasters cut to ads on. Runs as the “Find ad breaks
+            in recordings” task, hourly. Each person chooses under Account whether ads show a button or are skipped by themselves.
+          </p>
           <label>
             Recordings folder
             <input className="mono" value={s.dvr_folder ?? ''} onChange={set('dvr_folder')} placeholder="Default: recordings inside the data folder" />
@@ -507,6 +551,7 @@ export default function AdminSettings() {
               </label>
             </div>
           )}
+          <RemoteTunnel s={s} set={set} />
           <label>
             Extra local networks
             <input className="mono" value={s.lan_networks ?? ''} onChange={set('lan_networks')} placeholder="e.g. 100.64.0.0/10 for Tailscale" spellCheck={false} />
@@ -995,5 +1040,87 @@ function SportsLeagues({ value, onChange }: { value: string; onChange: (v: strin
         ))}
       </div>
     </fieldset>
+  )
+}
+
+interface TunnelStatus {
+  mode?: string
+  state: 'off' | 'starting' | 'running' | 'failed'
+  url?: string
+  error?: string
+  port?: number
+}
+
+/** Remote access without opening a port on the router: a Cloudflare tunnel
+ *  (a quick one at a random address, or the admin's own) or Tailscale Funnel. */
+function RemoteTunnel({ s, set }: { s: Settings; set: (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void }) {
+  const { data: status, reload } = useApi<TunnelStatus>('/api/admin/tunnel')
+  // Starting takes a few seconds: look again until it settles.
+  useEffect(() => {
+    if (status?.state !== 'starting' && (status?.mode ?? '') === (s.remote_tunnel ?? '')) return
+    const t = window.setTimeout(reload, 2000)
+    return () => window.clearTimeout(t)
+  }, [status, s.remote_tunnel, reload])
+  const mode = s.remote_tunnel ?? ''
+  return (
+    <div className="form">
+      <label>
+        Remote access without port forwarding
+        <select value={mode} onChange={set('remote_tunnel')}>
+          <option value="">Off (use port forwarding, a reverse proxy or a VPN)</option>
+          <option value="cloudflare-quick">Cloudflare quick tunnel (no account; the address changes on each restart)</option>
+          <option value="cloudflare">My Cloudflare tunnel (a fixed address on my domain)</option>
+          <option value="tailscale">Tailscale Funnel (a fixed *.ts.net address)</option>
+        </select>
+        <span className="muted small">
+          The server connects out to Cloudflare or Tailscale, which hand it visitors over HTTPS, so nothing on your router changes. People who come in this
+          way always count as outside the home network. cloudflared is downloaded the first time if it isn't installed.
+        </span>
+      </label>
+      {mode === 'cloudflare' && (
+        <div className="field-grid">
+          <label>
+            Tunnel token
+            <input className="mono" type="password" value={s.remote_tunnel_token ?? ''} onChange={set('remote_tunnel_token')} autoComplete="new-password" spellCheck={false} />
+            <span className="muted small">In Cloudflare: Zero Trust → Networks → Tunnels → Create a tunnel → copy the token from the install command.</span>
+          </label>
+          <label>
+            Public hostname
+            <input className="mono" value={s.remote_tunnel_hostname ?? ''} onChange={set('remote_tunnel_hostname')} placeholder="tv.example.com" spellCheck={false} />
+            <span className="muted small">
+              Add it under the tunnel's Public hostnames with the service <code>http://localhost:{s.remote_tunnel_port || '8485'}</code>.
+            </span>
+          </label>
+        </div>
+      )}
+      {mode === 'tailscale' && (
+        <p className="muted small">
+          Install Tailscale on this machine and sign in, then allow Funnel for it in the tailnet's access controls (the Tailscale admin page offers a button).
+        </p>
+      )}
+      {mode !== '' && (
+        <label>
+          Port the tunnel reaches the server on (on this machine only)
+          <input type="number" min={1024} max={65535} value={s.remote_tunnel_port ?? '8485'} onChange={set('remote_tunnel_port')} />
+        </label>
+      )}
+      {status && status.state !== 'off' && (
+        <p className={status.state === 'failed' ? 'form-error' : 'muted small'}>
+          {status.state === 'running' && status.url ? (
+            <>
+              Running at{' '}
+              <a href={status.url} target="_blank" rel="noreferrer" className="mono">{status.url}</a>
+              {!s.public_url && '. Until you set a Public URL above, apps and links use this address.'}
+            </>
+          ) : status.state === 'running' ? (
+            'Running.'
+          ) : status.state === 'starting' ? (
+            'Starting…'
+          ) : (
+            `Not working: ${status.error ?? 'unknown error'}. Trying again shortly.`
+          )}
+        </p>
+      )}
+    </div>
   )
 }

@@ -30,7 +30,7 @@ export interface WatchState {
 
 export interface Item {
   id: number
-  kind: 'movie' | 'show' | 'season' | 'episode'
+  kind: 'movie' | 'show' | 'season' | 'episode' | 'artist' | 'album' | 'track'
   title: string
   tmdbId?: number
   sortTitle?: string
@@ -96,7 +96,25 @@ export interface ItemDetail {
   collections?: { collection: Collection; items: Item[] }[] // movies and shows: the collections they're in
   canDownload?: boolean // movies and episodes: the viewer may download them (offline downloads, phones)
   quality?: Quality // the best copy's picture and sound (a show's: its best episode); older servers leave it out
+  myRating?: number // movies and shows: the viewer's thumbs (-1 not for me, 1 like, 2 love); older servers leave it out
+  markers?: Marker[] // movies and episodes: what can be skipped
 }
+
+/** A skippable stretch of a movie or episode, in seconds. Recordings can have several ad breaks. */
+export interface Marker {
+  kind: 'intro' | 'credits' | 'recap' | 'commercial'
+  start: number
+  end: number
+}
+
+/** The skip settings under Account; older servers leave the newer ones out. */
+export interface SkipPrefs {
+  skipIntro?: SkipMode
+  skipCredits?: SkipMode
+  skipRecap?: SkipMode
+  skipAds?: SkipMode
+}
+export type SkipMode = 'button' | 'auto' | 'off'
 
 /** A title's best picture and sound, for the 4K · Dolby Vision · Atmos badges. */
 export interface Quality {
@@ -123,7 +141,7 @@ export interface HomeData {
 export interface Library {
   id: number
   name: string
-  kind: 'movies' | 'shows'
+  kind: 'movies' | 'shows' | 'music'
   pinned: boolean // in this user's menu and on their Home
   itemCount: number
 }
@@ -318,4 +336,11 @@ export interface CastSession {
   volume: number // 0-1, -1 when unknown
   mode: 'direct' | 'transcode'
   error?: string
+}
+
+/** A music track with the file it plays (GET /api/items/{id}/tracks). */
+export interface Track {
+  item: Item & { studio?: string; parentId?: number }
+  file: { fileId: number; duration: number; container: string; audioCodec?: string; size: number }
+  album?: string
 }

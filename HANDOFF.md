@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-08. Latest release v0.47.2, 57 schema migrations._
+_Last updated: 2026-11-08. Latest release v0.47.2, 57 schema migrations (58 on the feature-gaps branch, not released yet)._
 
 
 ## Start here
@@ -60,6 +60,7 @@ Most outside services and all hardware were only tested against fakes. These are
 - **Subtitles:** OpenSubtitles search and download against the real API, Roku thumbnails from the BIF file.
 - **Live TV:** a real IPTV provider or HDHomeRun, a real Dispatcharr, YouTube Live and Discover against real YouTube, the CFB Tracker relay and its watch links against the real tracker.
 - **Services:** TMDB and TheTVDB matching on a real library, Trakt, Plex and Tautulli import, chart lists (TMDB, Trakt, IMDb, Yamtrack, MDBList), Wikidata award collections, ThePosterDB scraping, real OIDC providers (Google, Authelia), passkeys on a phone, S3 on AWS or Backblaze, Cinemask with real indexers.
+- **Feature-gaps branch (2026-11-08):** Watch Next on a real Google TV, Cloudflare and Tailscale tunnels against the real services (and the cloudflared download), Comskip and the ffmpeg ad-break fallback on real recordings, recap detection on real seasons, YouTube trailers in the Home spotlight, a real HDHomeRun and Schedules Direct account, whisper.cpp itself (only a stand-in script), the TV app's music player and screen-time stops on a device, the Samsung/LG apps on any TV, and the Apple TV build (only in CI, if that ran).
 - **Media:** intro and credits detection on real seasons (thresholds may need tuning), image subtitle burn-in from a Blu-ray rip, Dolby Vision and Atmos detection, Quick Sync on Intel and NVENC session limits with adaptive streaming.
 
 ### Keeping this file useful
@@ -67,6 +68,22 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Features from the Netflix / Apple TV comparison (2026-11-08, migration 58)
+
+Michael asked which top-tier features BingeBandit was missing compared with Netflix, Apple TV and the like, then said "add everything". One commit per feature on `claude/project-thread-4r21ou`:
+
+- **Recommendations and thumbs** (`api/foryou.go`, `store/thumbs.go`): `title_ratings` (−1, 1, 2). Home gets "Because you watched/liked X" rows built from TMDB's recommendations for the title, kept to what the person can see (`ownedLike`, a 2.5s TMDB budget), then genre matches (`SimilarByGenre`); setting `because_rows_enabled`. `GET /items/{id}/similar` (More like this), `PUT /items/{id}/rating`, `myRating` on item detail; thumbs-down titles leave the hero and recommendations. Web: `Thumbs.tsx`, More like this, Not interested in `CardMenu`. TV app: the same on Details and the item menu. `TestRecommendationsFromTheLibrary`.
+- **Android TV Watch Next** (`WatchNextModule.kt`, `src/watchNext.ts`): Continue Watching goes into the TV's Play Next row (androidx.tvprovider), with a `bingebandit://play/<id>?t=` deep link handled in `App.tsx`; cleared on sign-out.
+- **Remote access without port forwarding** (`internal/tunnel`): Cloudflare quick tunnel, named Cloudflare tunnel (token) or Tailscale Funnel, run as a child process aimed at a loopback-only listener (`remote_tunnel_port`, 8485) so tunnel traffic can never count as LAN (`api/network.go` `TunnelHandler`/`viaTunnel`). cloudflared from `BB_CLOUDFLARED`, the PATH, or downloaded from GitHub. The quick tunnel's address is used as the public URL when none is set. `GET /api/admin/tunnel`; web Settings → Network. `tunnel_test.go`.
+- **Skip Ad and Skip Recap**: migration 58 rebuilds `markers` (kinds intro/credits/recap/commercial, several ads per file) and adds `recordings.commercials_at`. `markers/commercials.go`: Comskip (`BB_COMSKIP` or PATH, EDL) or ffmpeg blackdetect + silencedetect (`FindAdBreaks`); task `detect_commercials` hourly; setting `dvr_detect_ads`. `markers/recap.go`: clips shared with earlier episodes near the start (`FindClips`/`RecapFrom`), setting `detect_recaps`; migration 58 resets `markers_at` for episodes so seasons are looked at again. Prefs `skipRecap`/`skipAds` (`button`/`auto`/`off`). Buttons in the web player, Roku, and (new) the Android TV player, which had no skip buttons before. Tests with real ffmpeg.
+- **Hero trailers** (web `Hero.tsx`): a muted youtube-nocookie trailer after a few seconds, off under Account → Playback and with reduced motion.
+- **HDHomeRun and Schedules Direct** (`livetv/hdhomerun.go`, `schedulesdirect.go`): `hdhomerun://<ip>` playlist and guide sources, `schedulesdirect://user:pass` guide sources; antenna channels keyed by number so they match by themselves. `GET /api/admin/live/hdhomerun` finds tuners through SiliconDust. `tuners_test.go` against fakes.
+- **Next-episode downloads, sleep timer, screen time**: phone app Downloads → Next episodes (`autoDownloads` in `downloads.ts`; `/api/offline/check` now returns `watched`). Sleep timer in the web, TV and Live TV players (`sleepTimer.ts`, app-wide). Screen time: migration 58 adds `screen_time` (weekday/weekend minutes, bedtime/wake) and `screen_time_used` (seconds per day); `api/screentime.go` counts time between a player's progress reports or Live TV pings (capped at 30s a gap) and refuses direct play, transcodes, Live TV and progress with a 403 "Screen time…" message the players show. Set by the account for its profiles (`/household/{id}/screen-time`, Account → Profiles) or by admins (`/admin/users/{id}/screen-time`). `TestScreenTime`.
+- **Music in the TV app**: it sends `X-BB-Media: music`; Albums/Artists sections, `MusicDetails` and Now Playing (`screens/NowPlaying.tsx`), a root `MusicHost` (`src/music.tsx`) with a corner tag and the Play/Pause key; videos pause it.
+- **Whisper subtitles** (`internal/whisper`, `api/whisper.go`): admin-only background job per file, `GET/POST /api/admin/files/{id}/whisper`; whisper.cpp from `BB_WHISPER` or the PATH, model from `whisper_model` (downloaded from Hugging Face into `<data>/whisper/`); saved as `Name.<lang>.whisper.srt`. Web and TV Find subtitles. Not in the Docker image yet (nor is Comskip): building whisper.cpp for arm64 under QEMU would slow releases a lot. `whisper_test.go` uses a stand-in script.
+- **Samsung, LG and Apple TV**: `apps/smarttv` (shared `shell/index.html`, Tizen `config.xml`, webOS `appinfo.json`, `build.sh`). The web app's TV mode now turns on by itself on those TVs and maps their Back and media keys (`tvKey` in `tvNav.ts`), including Back out of the player. The existing tvOS template got a bundle id, ATS for http servers and the local network prompt; `.github/workflows/tv-apple.yml` builds it for the simulator on macOS when `apps/tv/ios` changes. No iPhone target yet (iPhone users have the web app).
+- **Tested:** `go test ./...`, `go vet`, gofmt; the web build; TV app typecheck and eslint; Roku's brighterscript check; the smart-TV page in headless Chromium. **Not tried** on any device or against the real services (see Never tried for real). The Android build (Watch Next's Kotlin) only builds in CI.
 
 ## TV app: Audio timing no longer strands the remote (2026-11-07, no migration)
 

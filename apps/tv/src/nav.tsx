@@ -14,6 +14,7 @@ export type Route =
   | { name: 'youtube'; id: string; title: string } // a Discover video, played through the server
   | { name: 'multiview'; channels: number[] } // Sports Multi-View: up to four channels at once
   | { name: 'cast'; id?: number; start?: number; session?: string } // play on a TV in the house (phones)
+  | { name: 'music' } // Now Playing: the music player
 
 export interface Nav {
   push: (r: Route) => void

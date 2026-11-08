@@ -318,6 +318,9 @@ export interface Prefs {
   autoPlayNext: boolean
   skipIntro: 'button' | 'auto' | 'off'
   skipCredits: 'button' | 'auto' | 'off'
+  /** Older servers leave these out. */
+  skipRecap?: 'button' | 'auto' | 'off'
+  skipAds?: 'button' | 'auto' | 'off'
   /** Trailers of other movies before a movie (0 = none). */
   preRollTrailers: number
   /** The server's intro video before a movie, when an admin has set one. */
@@ -612,7 +615,8 @@ export interface RecordingRule {
 }
 
 export interface Marker {
-  kind: 'intro' | 'credits'
+  /** recap: "Previously on"; commercial: an ad break in a recording (there can be several). */
+  kind: 'intro' | 'credits' | 'recap' | 'commercial'
   start: number
   end: number
   source: 'detected' | 'manual'
@@ -697,6 +701,8 @@ export interface ItemDetail {
   collectionNames?: string[] // admin only: explicit collection links
   markers?: Marker[]
   externalRatings?: ExternalRatings // movies and shows, when a ratings provider is set up
+  /** Movies and shows: the viewer's thumbs (-1 not for me, 1 like, 2 love, 0 none). */
+  myRating?: number
   tvdbId?: number // shows that take their metadata from TheTVDB
   tvdbOrder?: string // '' (aired) | dvd | absolute
   trailers?: LocalTrailer[] // movies: trailer files from the movie's folder

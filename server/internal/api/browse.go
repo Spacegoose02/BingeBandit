@@ -80,6 +80,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	recommended, recommendedBy := s.recommendedRow(uid)
 	add("recommended", "Recommended for You", recommended, nil)
+	rows = append(rows, s.becauseRows(r.Context(), uid)...)
 	rows = append(rows, s.mediaHomeRows(r, uid)...)
 	libRows := s.homeLibraryRows(currentUser(r))
 	for _, lr := range libRows {
@@ -88,10 +89,11 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 
 	// Hero carousel: the newest titles that have artwork to show off.
 	hero := []*store.Item{}
+	disliked := s.Store.Disliked(uid)
 	for _, lr := range libRows {
 		if strings.HasSuffix(lr.ID, "-recent") {
 			for _, it := range lr.Items {
-				if it.Backdrop != "" {
+				if it.Backdrop != "" && !disliked[it.ID] {
 					hero = append(hero, it)
 				}
 			}
@@ -381,6 +383,7 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if it.Kind == "movie" || it.Kind == "show" {
+		resp["myRating"] = s.Store.TitleRating(u.ID, it.ID)
 		if er, err := s.Store.ExternalRatings(it.ID); err == nil {
 			if !er.Empty() {
 				resp["externalRatings"] = er

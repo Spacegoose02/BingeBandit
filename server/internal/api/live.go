@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/xml"
@@ -204,6 +205,10 @@ func (s *Server) watchChannel(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusTooManyRequests, msg)
 		return
 	}
+	if msg := s.screenTimeBlocked(currentUser(r)); msg != "" {
+		writeErr(w, http.StatusForbidden, msg)
+		return
+	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "hls")
 	if err != nil {
 		log.Printf("live tv: %s couldn't start channel %v %q: %v", currentUser(r).Username, ch.Number, ch.Name, err)
@@ -279,8 +284,18 @@ func (s *Server) liveHLS(w http.ResponseWriter, r *http.Request) {
 // pingViewer keeps a web or app viewer counted while its player is paused
 // and not fetching the playlist.
 func (s *Server) pingViewer(w http.ResponseWriter, r *http.Request) {
-	if !s.Live.Ping(chi.URLParam(r, "viewer")) {
+	viewer := chi.URLParam(r, "viewer")
+	if !s.Live.Ping(viewer) {
+		screenTimeForget("live:" + viewer)
 		writeErr(w, http.StatusGone, "this viewing session ended; start the channel again")
+		return
+	}
+	u := currentUser(r)
+	s.screenTimeTick(u, "live:"+viewer, true)
+	if msg := s.screenTimeBlocked(u); msg != "" {
+		screenTimeForget("live:" + viewer)
+		s.Live.Leave(viewer)
+		writeErr(w, http.StatusGone, msg)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -334,6 +349,10 @@ func (s *Server) liveTS(w http.ResponseWriter, r *http.Request) {
 	}
 	if msg := s.streamLimitHit(currentUser(r), clientIP(r), 0); msg != "" {
 		writeErr(w, http.StatusTooManyRequests, msg)
+		return
+	}
+	if msg := s.screenTimeBlocked(currentUser(r)); msg != "" {
+		writeErr(w, http.StatusForbidden, msg)
 		return
 	}
 	v, err := s.Live.Join(ch, currentUser(r), clientIP(r), "ts")
@@ -617,6 +636,14 @@ func (s *Server) saveLiveSource(w http.ResponseWriter, r *http.Request) {
 	}
 	if src.RefreshHours <= 0 {
 		src.RefreshHours = 24
+	}
+	// An HDHomeRun's own tuner count is its connection limit, unless the admin set one.
+	if src.Kind == "m3u" && livetv.IsHDHomeRun(&src) && src.MaxStreams <= 0 {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		if dev, err := livetv.DiscoverHDHomeRun(ctx, src.URL); err == nil && dev.TunerCount > 0 {
+			src.MaxStreams = dev.TunerCount
+		}
+		cancel()
 	}
 	isNew := src.ID == 0
 	if err := s.Store.SaveLiveSource(&src); err != nil {
@@ -916,4 +943,18 @@ func (s *Server) stopRelay(w http.ResponseWriter, r *http.Request) {
 func (s *Server) kickViewer(w http.ResponseWriter, r *http.Request) {
 	s.Live.Leave(chi.URLParam(r, "viewer"))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// findHDHomeRuns lists HDHomeRun tuners on this network (SiliconDust's
+// discovery service matches them by the network's public address), for
+// adding one as a source with a click.
+func (s *Server) findHDHomeRuns(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	found, err := livetv.FindHDHomeRuns(ctx)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "couldn't ask SiliconDust which tuners are on this network ("+err.Error()+"); add yours by its address instead")
+		return
+	}
+	writeJSON(w, http.StatusOK, found)
 }

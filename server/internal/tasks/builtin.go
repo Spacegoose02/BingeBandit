@@ -106,6 +106,12 @@ func Builtin(d Deps) []*Task {
 			Run: d.Markers.Pending,
 		},
 		{
+			ID: "detect_commercials", Name: "Find ad breaks in recordings",
+			Description:    "Look for the ad breaks in new DVR recordings (with Comskip when it's installed, otherwise from the black, silent moments around ads), for the Skip Ad button. Up to 20 recordings a run.",
+			DefaultEnabled: true, DefaultHours: 1,
+			Run: d.Markers.PendingCommercials,
+		},
+		{
 			ID: "make_scrub_previews", Name: "Make scrub previews",
 			Description: "Make the thumbnails players show while you drag or scrub through a movie or episode, from each file's keyframes (one every 10 seconds). Files played before they have any get them in the background too.",
 			Maintenance: true, StopAtWindowEnd: true, DefaultEnabled: true, DefaultHours: 24,

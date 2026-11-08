@@ -75,6 +75,10 @@ func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusTooManyRequests, msg)
 			return
 		}
+		if msg := s.screenTimeBlocked(currentUser(r)); msg != "" {
+			writeErr(w, http.StatusForbidden, msg)
+			return
+		}
 	}
 	f, err := os.Open(mf.Path)
 	if err != nil {
@@ -181,6 +185,10 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 	if opts.Replace == "" {
 		if msg := s.streamLimitHit(currentUser(r), ip, mf.ID); msg != "" {
 			writeErr(w, http.StatusTooManyRequests, msg)
+			return
+		}
+		if msg := s.screenTimeBlocked(currentUser(r)); msg != "" {
+			writeErr(w, http.StatusForbidden, msg)
 			return
 		}
 	}
@@ -358,7 +366,8 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	watched, err := s.saveProgress(currentUser(r), req, clientIP(r))
+	u := currentUser(r)
+	watched, err := s.saveProgress(u, req, clientIP(r))
 	if err != nil {
 		var limit streamLimitErr
 		if errors.As(err, &limit) {
@@ -367,6 +376,21 @@ func (s *Server) progress(w http.ResponseWriter, r *http.Request) {
 		}
 		writeStoreErr(w, err)
 		return
+	}
+	// Screen time: the position is saved either way; a player still going
+	// when the time is up is told to stop.
+	clock := "play:" + req.PlaySessionID
+	if req.PlaySessionID == "" {
+		clock = fmt.Sprintf("play:%d:%d", u.ID, req.ItemID)
+	}
+	if req.Stopped {
+		screenTimeForget(clock)
+	} else {
+		s.screenTimeTick(u, clock, !req.Paused)
+		if msg := s.screenTimeBlocked(u); msg != "" && !req.Paused {
+			writeErr(w, http.StatusForbidden, msg)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"watched": watched})
 }

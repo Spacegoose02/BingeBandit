@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<title>BingeBandit</title>
+<!--
+  The Samsung and LG app: it asks for the BingeBandit server's address once,
+  then opens the server's own web app in TV mode (?tv=1), which is driven by
+  the remote. Everything after this page comes from the server, so the app
+  never needs updating for new features.
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d10; color: #f2f4f7; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; }
+  img { width: 160px; height: 160px; }
+  h1 { margin: 0; font-size: 56px; }
+  p { margin: 0; font-size: 28px; color: #98a1ad; max-width: 1100px; text-align: center; line-height: 1.4; }
+  input { width: 900px; font-size: 36px; padding: 18px 24px; border-radius: 14px; border: 3px solid #262c35; background: #14181d; color: #f2f4f7; }
+  button { font-size: 30px; padding: 16px 36px; border-radius: 40px; border: 3px solid transparent; background: #1c2128; color: #f2f4f7; }
+  button.primary { background: #2dd4bf; color: #04211d; font-weight: 700; }
+  input:focus, button:focus { outline: none; border-color: #f2f4f7; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .bad { color: #f87171; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <img src="logo.png" alt="">
+  <h1>BingeBandit</h1>
+  <section id="auto" hidden>
+    <p>Opening <span id="autoName"></span>…</p>
+    <div class="row" style="margin-top:24px"><button id="change">Use another server</button></div>
+  </section>
+  <section id="form" hidden>
+    <div class="row"><input id="address" placeholder="192.168.1.50 or bingebandit.example.com" autocomplete="off" spellcheck="false" inputmode="url"></div>
+    <p style="margin-top:20px">The address your BingeBandit server shows under Settings → Network (port 8484 is added when you leave it out).</p>
+    <div class="row" style="margin-top:24px"><button id="connect" class="primary">Connect</button></div>
+    <div class="row" id="recent" style="margin-top:24px"></div>
+    <p id="error" class="bad" style="margin-top:20px"></p>
+  </section>
+</main>
+<script>
+(function () {
+  var KEY = 'bb.servers'
+  function saved() {
+    try { return JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { return [] }
+  }
+  function remember(server) {
+    var list = saved().filter(function (s) { return s !== server })
+    list.unshift(server)
+    try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, 5))) } catch (e) {}
+  }
+  function normalize(input) {
+    var s = input.trim().replace(/\/+$/, '')
+    if (!/^https?:\/\//i.test(s)) s = 'http://' + s
+    if (!/:\d+$/.test(s.replace(/^https?:\/\//, '').split('/')[0]) && /^http:\/\//i.test(s)) s += ':8484'
+    return s
+  }
+  var $ = function (id) { return document.getElementById(id) }
+  function open(server) {
+    // The server's web app, in TV mode; Back on its home screen returns here.
+    location.href = server + '/?tv=1'
+  }
+  // A quick check that something answers there, so a typo doesn't leave
+  // the TV on a browser error page.
+  function check(server, done) {
+    var finished = false
+    var timer = setTimeout(function () { if (!finished) { finished = true; done(false) } }, 8000)
+    fetch(server + '/api/health', { mode: 'no-cors', cache: 'no-store' }).then(function () {
+      if (!finished) { finished = true; clearTimeout(timer); done(true) }
+    }, function () {
+      if (!finished) { finished = true; clearTimeout(timer); done(false) }
+    })
+  }
+  function connect(server) {
+    $('error').textContent = 'Connecting to ' + server + '…'
+    $('error').className = ''
+    check(server, function (ok) {
+      if (!ok) {
+        $('error').textContent = 'Nothing answered at ' + server + '. Check the address, and that the TV is on the same network (or the server allows remote access).'
+        $('error').className = 'bad'
+        return
+      }
+      remember(server)
+      open(server)
+    })
+  }
+  function showForm() {
+    clearTimeout(autoTimer)
+    $('auto').hidden = true
+    $('form').hidden = false
+    var list = saved()
+    $('address').value = list[0] ? list[0].replace(/^http:\/\//, '').replace(/:8484$/, '') : ''
+    var recent = $('recent')
+    recent.innerHTML = ''
+    list.forEach(function (s) {
+      var b = document.createElement('button')
+      b.textContent = s.replace(/^https?:\/\//, '')
+      b.onclick = function () { connect(s) }
+      recent.appendChild(b)
+    })
+    $('address').focus()
+  }
+  $('connect').onclick = function () {
+    if ($('address').value.trim()) connect(normalize($('address').value))
+  }
+  $('address').onkeydown = function (e) {
+    if (e.key === 'Enter' || e.keyCode === 13 || e.keyCode === 65376) $('connect').click()
+  }
+  $('change').onclick = showForm
+
+  // Arrow keys move between the controls (TV browsers don't always do it themselves).
+  document.addEventListener('keydown', function (e) {
+    var dir = { 37: -1, 38: -1, 39: 1, 40: 1 }[e.keyCode]
+    if (!dir || (document.activeElement && document.activeElement.tagName === 'INPUT' && (e.keyCode === 37 || e.keyCode === 39))) return
+    var all = Array.prototype.filter.call(document.querySelectorAll('input, button'), function (el) { return el.offsetParent !== null })
+    var i = all.indexOf(document.activeElement)
+    var next = all[Math.max(0, Math.min(all.length - 1, i + dir))]
+    if (next) { next.focus(); e.preventDefault() }
+  })
+
+  // With a server already chosen, open it after a moment (time to pick another).
+  var autoTimer
+  var last = saved()[0]
+  if (last && !/[?&]change=1/.test(location.search)) {
+    $('autoName').textContent = last.replace(/^https?:\/\//, '')
+    $('auto').hidden = false
+    $('change').focus()
+    autoTimer = setTimeout(function () { connect(last) }, 2500)
+  } else {
+    showForm()
+  }
+})()
+</script>
+</body>
+</html>

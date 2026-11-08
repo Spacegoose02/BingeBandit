@@ -30,7 +30,9 @@ import (
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
 	"bingebandit/internal/trickplay"
+	"bingebandit/internal/tunnel"
 	"bingebandit/internal/web"
+	"bingebandit/internal/whisper"
 )
 
 type Server struct {
@@ -44,22 +46,26 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
-	Trickplay  *trickplay.Generator
-	OpenSubs   *opensubs.Client
-	Live       *livetv.Manager
-	Logos      *livetv.LogoCache
-	LogoLib    *livetv.LogoLibrary
-	DVR        *livetv.Recorder
-	Importer   *importer.Runner
-	Trakt      *trakt.Syncer
-	Plugins    *plugins.Host
-	Logs       *logs.Buffer
-	Version    string
-	DataDir    string
-	FFmpeg     string
-	FFprobe    string
-	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
-	ListenAddr string // where the server listens (":8484"), for the address TVs are sent
+
+	whisper     *whisper.Runner // made on first use
+	whisperOnce sync.Once
+	Tunnel      *tunnel.Manager // remote access without port forwarding; nil in tests
+	Trickplay   *trickplay.Generator
+	OpenSubs    *opensubs.Client
+	Live        *livetv.Manager
+	Logos       *livetv.LogoCache
+	LogoLib     *livetv.LogoLibrary
+	DVR         *livetv.Recorder
+	Importer    *importer.Runner
+	Trakt       *trakt.Syncer
+	Plugins     *plugins.Host
+	Logs        *logs.Buffer
+	Version     string
+	DataDir     string
+	FFmpeg      string
+	FFprobe     string
+	UpdateRepo  string // GitHub "owner/repo" whose releases carry the TV app
+	ListenAddr  string // where the server listens (":8484"), for the address TVs are sent
 
 	updates     appUpdates
 	tvApp       tvApp
@@ -151,6 +157,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Post("/household", s.createProfile)
 			r.Put("/household/{id}", s.updateProfile)
 			r.Put("/household/{id}/pin", s.setProfilePIN)
+			r.Get("/household/{id}/screen-time", s.profileScreenTime)
+			r.Put("/household/{id}/screen-time", s.profileScreenTime)
 			r.Delete("/household/{id}", s.deleteProfile)
 			r.Post("/household/{id}/switch", s.switchProfile)
 			r.Put("/household/autoselect", s.setAutoProfile)
@@ -205,6 +213,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Delete("/push/devices/{id}", s.deletePushDevice)
 			r.Post("/push/test", s.testPush)
 			r.Get("/me/prefs", s.getPrefs)
+			r.Get("/me/screen-time", s.myScreenTime)
 			r.Get("/me/pins", s.pins)
 			r.Put("/me/pins", s.setPins)
 			r.Put("/me/prefs", s.putPrefs)
@@ -321,6 +330,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Get("/items/{id}", s.item)
 			r.Get("/items/{id}/trailers/{n}", s.trailerFile)
 			r.Get("/items/{id}/next", s.nextEpisode)
+			r.Get("/items/{id}/similar", s.similarItems)
+			r.Put("/items/{id}/rating", s.rateItem)
 			r.Get("/items/{id}/tracks", s.itemTracks)
 			r.Get("/items/{id}/cover", s.cover)
 			r.Get("/files/{id}/audio", s.audioStream)
@@ -386,6 +397,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/overlays/{id}", s.saveOverlay)
 				r.Delete("/overlays/{id}", s.deleteOverlay)
 				r.Put("/settings", s.putSettings)
+				r.Get("/tunnel", s.tunnelStatus)
 				r.Get("/browse", s.browse)
 
 				r.Get("/libraries", s.libraries)
@@ -411,6 +423,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/items/{id}/unmatch", s.unmatchItem)
 				r.Put("/items/{id}/markers", s.setMarkers)
 				r.Post("/items/{id}/detect-markers", s.detectMarkers)
+				r.Get("/files/{id}/whisper", s.whisperState)
+				r.Post("/files/{id}/whisper", s.startWhisper)
 				r.Get("/items/{id}/location", s.itemLocation)
 				r.Post("/items/{id}/move", s.moveItem)
 				r.Get("/items/{id}/delete", s.deletePlan)
@@ -433,6 +447,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/collections/{id}", s.deleteCollection)
 
 				r.Get("/live/sources", s.liveSources)
+				r.Get("/live/hdhomerun", s.findHDHomeRuns)
 				r.Post("/live/sources", s.saveLiveSource)
 				r.Put("/live/sources/{id}", s.saveLiveSource)
 				r.Delete("/live/sources/{id}", s.deleteLiveSource)
@@ -502,6 +517,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/users/{id}/passcode", s.clearUserPasscode)
 				r.Put("/users/{id}/live-tv", s.setUserLiveTV)
 				r.Put("/users/{id}/kid", s.setUserKid)
+				r.Get("/users/{id}/screen-time", s.adminScreenTime)
+				r.Put("/users/{id}/screen-time", s.adminScreenTime)
 				r.Put("/users/{id}/max-rating", s.setUserMaxRating)
 				r.Get("/webhooks", s.webhooks)
 				r.Post("/webhooks", s.saveWebhook)

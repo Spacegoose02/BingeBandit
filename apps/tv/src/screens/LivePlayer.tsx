@@ -7,6 +7,8 @@ import { Button, useFocusOnce } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { calibrateGameLights, delayFor, fetchGameLightsDelays, LIVE_TV_SOURCE, saveGameLights, type GameLightsDelays } from '../lights'
 import { useLock } from '../lock'
+import { pauseMusic } from '../music'
+import { setSleep, SLEEP_MINUTES, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { refreshScoreBug, scoreBugChannel } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav, useScreen } from '../nav'
 import { useLandscape } from '../screen'
@@ -40,6 +42,9 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const nav = useNav()
   // Hidden under another screen: stay paused and leave the remote alone.
   const { active } = useScreen()
+  useEffect(() => {
+    if (active) pauseMusic() // music stops for Live TV
+  }, [active])
   const [info, setInfo] = useState(true)
   const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
   // Options: Game Lights (on / off and its delay) and the score bug, and the
@@ -52,6 +57,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const [audio, setAudio] = useState(-1) // -1: the stream's own choice
   const [text, setText] = useState(-2) // -2: as the device's caption setting says; -1: off
   const [notice, setNotice] = useState('')
+  const sleeping = useSleepTimer()
   const say = (t: string) => {
     setNotice(t)
     setTimeout(() => setNotice((n) => (n === t ? '' : n)), 4000)
@@ -215,7 +221,7 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
         stallSecs.current = r.stallSecs
         setSrc(r.playlist)
         ping = setInterval(() => {
-          pingViewer(r.viewerId).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
+          pingViewer(r.viewerId).catch((e: ApiError) => e.status === 410 && fail(/^Screen time/.test(e.message) ? e.message : 'This channel stopped.'))
         }, 10000)
       },
       (e: Error) => fail(e.message || 'This channel is unavailable right now.'),
@@ -265,6 +271,10 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
     progress.current = { pos: p.currentTime, window: p.seekableDuration }
     const b = p.seekableDuration - p.currentTime - offset
     setBehind(b < 4 ? 0 : Math.round(b))
+    if (!paused && active && sleepDue()) {
+      setPaused(true)
+      say('Sleep timer: paused')
+    }
   }
 
   const seekBy = (secs: number) => {
@@ -588,6 +598,13 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
               </ScrollView>
             </>
           )}
+          <Text style={st.menuTitle}>Sleep timer · {sleepLabel()}</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button small primary={!sleeping} label="Off" onPress={() => setSleep(0)} />
+            {SLEEP_MINUTES.map((m) => (
+              <Button key={m} small label={`${m} min`} onPress={() => { setSleep(m); say(`Pausing in ${m} minutes`) }} />
+            ))}
+          </ScrollView>
           <Text style={st.menuTitle}>Guide</Text>
           <ScrollView horizontal contentContainerStyle={st.menuRow}>
             <Button small preferFocus={!lights && scoreBug === null} label="Open the guide" onPress={openGuide} />

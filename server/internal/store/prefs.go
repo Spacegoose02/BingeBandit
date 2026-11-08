@@ -21,6 +21,10 @@ type Prefs struct {
 	// SkipIntro and SkipCredits: "button" (offer it), "auto" (just do it) or "off".
 	SkipIntro   string `json:"skipIntro"`
 	SkipCredits string `json:"skipCredits"`
+	// SkipRecap ("Previously on…") and SkipAds (ad breaks found in DVR
+	// recordings) work the same way.
+	SkipRecap string `json:"skipRecap"`
+	SkipAds   string `json:"skipAds"`
 	// Before a movie that starts from the beginning: up to this many trailers
 	// of other movies, then the server's intro video when PreRollIntro is on
 	// and an admin has set one.
@@ -87,7 +91,7 @@ var HideableTabs = []string{"sports", "live", "more"}
 
 var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
-	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button",
+	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button", SkipRecap: "button", SkipAds: "button",
 	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true, GameAlertMinutes: 15,
 	NotifyTogether: true, LiveAlertMinutes: 10, ScoreBug: true,
 }
@@ -103,7 +107,7 @@ func (p *Prefs) Validate() error {
 	default:
 		return fmt.Errorf("subtitle size must be small, medium or large")
 	}
-	for _, v := range []string{p.SkipIntro, p.SkipCredits} {
+	for _, v := range []string{p.SkipIntro, p.SkipCredits, p.SkipRecap, p.SkipAds} {
 		if v != "button" && v != "auto" && v != "off" {
 			return fmt.Errorf("skip settings must be button, auto or off")
 		}

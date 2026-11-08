@@ -62,3 +62,25 @@ func TestFindCommonRejectsUnrelatedAudio(t *testing.T) {
 		t.Errorf("unrelated audio matched: %+v", m)
 	}
 }
+
+// A recap: three clips of the last episode's body, with new scenes around.
+func TestRecapClips(t *testing.T) {
+	clipA, clipB, clipC := tune(6), noise(5, 31), noise(7, 32)
+	// The last episode: clips A, B and C at 100, 300 and 500 s, among other noise.
+	prev := Fingerprint(pcm(noise(100, 40), clipA, noise(194, 41), clipB, noise(195, 42), clipC, noise(60, 43)))
+	// This one: "Previously on" (new), the three clips (ending near 23.5 s), a
+	// cold open, then the intro at 40 s and the episode.
+	cur := Fingerprint(pcm(noise(3, 50), clipC, noise(1, 51), clipA, noise(1, 52), clipB, noise(17, 53), noise(80, 54)))
+	clips := FindClips(cur, prev, recapClipMin, recapMaxClips)
+	if len(clips) < 3 {
+		t.Fatalf("clips: %+v", clips)
+	}
+	s, e, ok := RecapFrom(clips, 40, 70)
+	if !ok || s != 0 || math.Abs(e-23.5) > 1 {
+		t.Fatalf("recap %v %v %v from %+v", s, e, ok, clips)
+	}
+	// Unrelated openings have no recap.
+	if _, _, ok := RecapFrom(FindClips(Fingerprint(pcm(noise(60, 60))), prev, recapClipMin, recapMaxClips), 0, 0); ok {
+		t.Fatal("recap found in unrelated audio")
+	}
+}

@@ -394,8 +394,9 @@ func (s *Server) setMarkers(w http.ResponseWriter, r *http.Request) {
 	}
 	seen := map[string]bool{}
 	for _, m := range req.Markers {
-		if (m.Kind != "intro" && m.Kind != "credits") || seen[m.Kind] || m.Start < 0 || m.End <= m.Start {
-			writeErr(w, http.StatusBadRequest, "each marker needs kind intro or credits and an end after its start")
+		known := m.Kind == "intro" || m.Kind == "credits" || m.Kind == "recap" || m.Kind == "commercial"
+		if !known || (m.Kind != "commercial" && seen[m.Kind]) || m.Start < 0 || m.End <= m.Start {
+			writeErr(w, http.StatusBadRequest, "each marker needs kind intro, credits, recap or commercial (only ad breaks may repeat) and an end after its start")
 			return
 		}
 		seen[m.Kind] = true

@@ -18,7 +18,29 @@ const DIRS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft:
 
 let last: HTMLElement | null = null
 
+/** Samsung (Tizen) and LG (webOS) TVs: their apps open the web app in TV mode. */
+export const smartTV = /Tizen|Web0S|webOS|NetCast/i.test(navigator.userAgent)
+
+// What TV remotes' keys send where browsers leave e.key unset (or say
+// "Unidentified"): Samsung's Return is 10009, LG's Back 461; the media keys.
+const TV_KEYS: Record<number, string> = {
+  10009: 'Escape',
+  461: 'Escape',
+  10252: 'MediaPlayPause',
+  415: 'MediaPlay',
+  19: 'MediaPause',
+  413: 'MediaStop',
+  417: 'MediaFastForward',
+  412: 'MediaRewind',
+}
+
+/** The key pressed, with TV remotes' keys named. */
+export function tvKey(e: KeyboardEvent): string {
+  return TV_KEYS[e.keyCode] ?? e.key
+}
+
 export function tvModeOn(): boolean {
+  if (smartTV) return true
   const p = new URLSearchParams(location.search).get('tv')
   try {
     if (p === '1') localStorage.setItem('bb.tv', '1')
@@ -118,10 +140,17 @@ const typing = (el: Element | null) =>
 
 function onKey(e: KeyboardEvent) {
   if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
-  // The browser players have their own keys.
-  if (document.querySelector('.player')) return
+  const key = tvKey(e)
+  // The browser players have their own keys; Back leaves them (unless a menu is open).
+  if (document.querySelector('.player')) {
+    if (key === 'Escape' && !document.querySelector('.player-menu, [role="menu"], [role="dialog"]') && !document.fullscreenElement) {
+      e.preventDefault()
+      history.back()
+    }
+    return
+  }
   const active = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null
-  const dir = DIRS[e.key]
+  const dir = DIRS[key]
   if (dir) {
     // Left and right move the cursor in a text box; up and down leave it.
     if (typing(active) && (dir === 'left' || dir === 'right' || active instanceof HTMLSelectElement)) return
@@ -152,8 +181,8 @@ function onKey(e: KeyboardEvent) {
     if (next) focus(next)
     return
   }
-  if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'BrowserBack' || e.key === 'GoBack') {
-    if (e.key === 'Backspace' && typing(active)) return
+  if (key === 'Escape' || key === 'Backspace' || key === 'BrowserBack' || key === 'GoBack') {
+    if (key === 'Backspace' && typing(active)) return
     // Open menus and dialogs close themselves on Escape.
     if (document.querySelector('[role="menu"], [role="dialog"]')) return
     if (location.pathname === '/') return
@@ -161,8 +190,8 @@ function onKey(e: KeyboardEvent) {
     history.back()
     return
   }
-  if (e.key === 'ContextMenu' || e.key === 'm') {
-    if (e.key === 'm' && typing(active)) return
+  if (key === 'ContextMenu' || key === 'm' || key === 'ColorF0Red') {
+    if (key === 'm' && typing(active)) return
     const btn = active?.closest('.has-menu')?.querySelector<HTMLButtonElement>('.card-menu-btn:not(.card-edit-btn), [data-menu]')
     if (btn) {
       e.preventDefault()
@@ -213,6 +242,13 @@ function onPage() {
 
 export function enableTvMode() {
   document.documentElement.classList.add('tv')
+  // Samsung's remote sends its media keys only to apps that ask for them.
+  const tizen = (window as unknown as { tizen?: { tvinputdevice?: { registerKeyBatch?: (keys: string[]) => void } } }).tizen
+  try {
+    tizen?.tvinputdevice?.registerKeyBatch?.(['MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaStop', 'MediaFastForward', 'MediaRewind', 'ColorF0Red'])
+  } catch {
+    // An older Tizen without registerKeyBatch: the arrows, OK and Return still work.
+  }
   window.addEventListener('keydown', onKey)
   // react-router moves with pushState/replaceState; Back is popstate.
   for (const m of ['pushState', 'replaceState'] as const) {

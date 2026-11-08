@@ -1,0 +1,34 @@
+# Builds the Apple TV app for the tvOS simulator (no signing) when the Xcode
+# project changes, so it keeps compiling while it isn't released.
+name: TV Apple build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/tv/ios/**'
+      - '.github/workflows/tv-apple.yml'
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/tv/package-lock.json
+      - name: Install JS dependencies
+        working-directory: apps/tv
+        run: npm ci
+      - name: Install pods
+        working-directory: apps/tv/ios
+        run: pod install
+      - name: Build for the tvOS simulator
+        working-directory: apps/tv/ios
+        run: |
+          set -o pipefail
+          xcodebuild -workspace BingeBanditTV.xcworkspace -scheme BingeBanditTV -configuration Release \
+            -sdk appletvsimulator -destination 'generic/platform=tvOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 80

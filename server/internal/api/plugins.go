@@ -136,7 +136,7 @@ func (s *Server) pluginProxy(w http.ResponseWriter, r *http.Request) {
 
 // ---- the plugin API (/api/plugin/v1), called by plugins with their key ----
 
-const pluginKey ctxKey = 2
+const pluginKey ctxKey = 11
 
 func currentPlugin(r *http.Request) *store.Plugin {
 	p, _ := r.Context().Value(pluginKey).(*store.Plugin)

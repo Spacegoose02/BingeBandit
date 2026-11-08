@@ -17,6 +17,8 @@ import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
 import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
+import { tvKey } from '../tvNav'
+import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { CastPicker } from '../components/Cast'
 
 const LADDER = [2160, 1080, 720, 480]
@@ -341,7 +343,13 @@ function PlayerView({
           },
           { keepalive: true },
         )
-        .catch(() => undefined)
+        .catch((e) => {
+          // Screen time ran out (or it's bedtime): the server says so in words.
+          if (e instanceof ApiError && e.status === 403 && /^Screen time/.test(e.message)) {
+            videoRef.current?.pause()
+            setError(e.message)
+          }
+        })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [file, item.id, duration, mode],
@@ -775,8 +783,15 @@ function PlayerView({
         PageDown: nextChapter,
         '[': prevChapter,
         ']': nextChapter,
+        // TV remotes (Samsung, LG, and media keys on keyboards).
+        MediaPlayPause: togglePlay,
+        MediaPlay: () => videoRef.current?.paused && togglePlay(),
+        MediaPause: () => !videoRef.current?.paused && togglePlay(),
+        MediaFastForward: () => seek(position() + 30),
+        MediaRewind: () => seek(position() - 10),
+        MediaStop: () => history.back(),
       }
-      const fn = actions[e.key]
+      const fn = actions[tvKey(e)]
       if (fn) {
         e.preventDefault()
         fn()
@@ -794,6 +809,10 @@ function PlayerView({
 
   const onEnded = async () => {
     report(false, true)
+    if (sleepAtEpisodeEnd()) {
+      setSleep(0)
+      return nav(playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`, { replace: true })
+    }
     const done = playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`
     if (!playlistId && item.kind !== 'episode') return nav(done, { replace: true })
     try {
@@ -826,6 +845,7 @@ function PlayerView({
   const inIntro = !!intro && time >= intro.start && time < intro.end - 1
   const inCredits = !!credits && time >= credits.start && time < Math.min(credits.end, duration) - 1 && !upNext
   const hasNext = item.kind === 'episode' || !!playlistId
+  const sleeping = useSleepTimer()
   const skipIntro = () => {
     introDone.current = true
     if (intro) seek(intro.end)
@@ -837,6 +857,36 @@ function PlayerView({
     if (afterCredits && credits) seek(credits.end)
     else onEnded()
   }
+  // A recap ("Previously on…") and the ad breaks of a recording, the same way.
+  // Older servers' prefs leave the settings out: offer the button.
+  const recap = detail.markers?.find((m) => m.kind === 'recap')
+  const recapDone = useRef(false)
+  const inRecap = !!recap && time >= recap.start && time < recap.end - 1
+  const ad = detail.markers?.find((m) => m.kind === 'commercial' && time >= m.start && time < m.end - 1)
+  const adsSkipped = useRef(new Set<number>())
+  const skipRecapPref = prefs.skipRecap ?? 'button'
+  const skipAdsPref = prefs.skipAds ?? 'button'
+  const skipRecap = () => {
+    recapDone.current = true
+    if (recap) seek(recap.end)
+  }
+  const skipAd = () => {
+    if (!ad) return
+    adsSkipped.current.add(ad.start)
+    seek(ad.end)
+  }
+  useEffect(() => {
+    if (inRecap && skipRecapPref === 'auto' && !recapDone.current) {
+      setToast('Skipped the recap')
+      skipRecap()
+    }
+    if (ad && skipAdsPref === 'auto' && !adsSkipped.current.has(ad.start)) {
+      setToast('Skipped an ad break')
+      skipAd()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inRecap, ad?.start])
+
   useEffect(() => {
     if (inIntro && prefs.skipIntro === 'auto' && !introDone.current) {
       introDone.current = true
@@ -937,6 +987,10 @@ function PlayerView({
         onWaiting={onStall}
         onTimeUpdate={() => {
           const v = videoRef.current
+          if (v && !v.paused && sleepDue()) {
+            v.pause()
+            setToast('Sleep timer: paused')
+          }
           if (v && !v.paused) {
             const now = v.currentTime
             const step = lastTick.current === null ? 0 : now - lastTick.current
@@ -984,6 +1038,16 @@ function PlayerView({
       {buffering && !error && <div className="spinner" />}
       {error && <div className="player-error">{error}</div>}
       {toast && <div className="player-toast">{toast}</div>}
+      {inRecap && skipRecapPref === 'button' && (
+        <button className="skip-btn" onClick={skipRecap}>
+          Skip Recap <Icon name="next" size={18} />
+        </button>
+      )}
+      {ad && skipAdsPref === 'button' && (
+        <button className="skip-btn" onClick={skipAd}>
+          Skip Ad <Icon name="next" size={18} />
+        </button>
+      )}
       {inIntro && prefs.skipIntro === 'button' && (
         <button className="skip-btn" onClick={skipIntro}>
           Skip Intro <Icon name="next" size={18} />
@@ -1194,6 +1258,18 @@ function PlayerView({
                     {audioDelay !== 0 && <button onClick={() => setAudioTiming(0)}>Reset audio timing</button>}
                   </>
                 )}
+                <div className="menu-section">Sleep timer · {sleepLabel()}</div>
+                <div className="menu-chips">
+                  <button className={!sleeping ? 'active' : ''} onClick={() => setSleep(0)}>Off</button>
+                  {SLEEP_MINUTES.map((m) => (
+                    <button key={m} onClick={() => setSleep(m)}>{m} min</button>
+                  ))}
+                  {hasNext && (
+                    <button className={sleepAtEpisodeEnd() ? 'active' : ''} onClick={() => setSleep('episode')}>
+                      End of {playlistId ? 'this one' : 'episode'}
+                    </button>
+                  )}
+                </div>
                 <div className="menu-section">Subtitles</div>
                 {subStreams.length > 0 && (
                   <button className={subIndex === -1 && choice.burn === -1 ? 'active' : ''} onClick={() => changeSubtitle(null)}>
@@ -1224,7 +1300,7 @@ function PlayerView({
               </div>
             )}
             {menu === 'subsearch' && (
-              <SubtitleSearch fileId={file.id} language={prefs.subtitleLanguage} onDone={subtitleDownloaded} />
+              <SubtitleSearch fileId={file.id} language={prefs.subtitleLanguage} audioStream={effectiveAudio} isAdmin={!!user?.isAdmin} onDone={subtitleDownloaded} />
             )}
           </div>
           <button className="icon-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
@@ -1343,8 +1419,91 @@ function ChapterTicks({ chapters, duration }: { chapters: Chapter[]; duration: n
   )
 }
 
+interface WhisperJob {
+  status: 'idle' | 'running' | 'done' | 'failed'
+  step?: string
+  progress: number
+  error?: string
+  index?: number
+  streams?: MediaStream[]
+}
+
+/**
+ * Admins: subtitles made from the file's own sound with whisper.cpp on the
+ * server, for files OpenSubtitles doesn't have. It runs in the background;
+ * this asks how it's going every few seconds while open.
+ */
+function WhisperSubtitles({ fileId, audioStream, onDone }: { fileId: number; audioStream: number; onDone: (streams: MediaStream[], index: number) => void }) {
+  const [state, setState] = useState<{ available: boolean; job: WhisperJob } | null>(null)
+  const [translate, setTranslate] = useState(false)
+  const [error, setError] = useState('')
+  const url = `/api/admin/files/${fileId}/whisper`
+  useEffect(() => {
+    let stop = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = () =>
+      api.get<{ available: boolean; job: WhisperJob }>(url).then(
+        (s) => {
+          if (stop) return
+          setState(s)
+          if (s.job.status === 'running') timer = setTimeout(poll, 3000)
+        },
+        () => undefined,
+      )
+    poll()
+    return () => {
+      stop = true
+      clearTimeout(timer)
+    }
+  }, [url, state?.job.status === 'running'])
+  useEffect(() => {
+    const j = state?.job
+    if (j?.status === 'done' && j.streams && j.index !== undefined) onDone(j.streams, j.index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.job.status])
+  if (!state?.available) return null
+  const j = state.job
+  const start = async () => {
+    setError('')
+    try {
+      const job = await api.post<WhisperJob>(url, { translate, audioStream })
+      setState({ available: true, job })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  return (
+    <div className="whisper">
+      {j.status === 'running' ? (
+        <p className="subsearch-note">
+          {j.step || 'Working'}… {j.progress > 0 ? `${Math.round(j.progress * 100)}%` : ''} You can keep watching; they're added when ready.
+        </p>
+      ) : (
+        <>
+          <button onClick={start}>
+            <span className="subsearch-name">
+              Make subtitles from the sound
+              <small>Whisper, on the server. Takes a few minutes; nothing leaves the server.</small>
+            </span>
+          </button>
+          <label className="check subsearch-note">
+            <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} /> In English, whatever is spoken
+          </label>
+        </>
+      )}
+      {(error || j.error) && <p className="subsearch-note bad">{error || j.error}</p>}
+    </div>
+  )
+}
+
 /** Searches OpenSubtitles for the file and adds the one picked. */
-function SubtitleSearch({ fileId, language, onDone }: { fileId: number; language: string; onDone: (streams: MediaStream[], index: number) => void }) {
+function SubtitleSearch({ fileId, language, audioStream, isAdmin, onDone }: {
+  fileId: number
+  language: string
+  audioStream: number
+  isAdmin: boolean
+  onDone: (streams: MediaStream[], index: number) => void
+}) {
   const [lang, setLang] = useState(normLang(language) || 'eng')
   const [results, setResults] = useState<SubtitleResult[] | null>(null)
   const [error, setError] = useState('')
@@ -1388,6 +1547,7 @@ function SubtitleSearch({ fileId, language, onDone }: { fileId: number; language
           ))}
         </select>
       </label>
+      {isAdmin && <WhisperSubtitles fileId={fileId} audioStream={audioStream} onDone={onDone} />}
       {error && <p className="subsearch-note bad">{error}</p>}
       {!results && !error && <p className="subsearch-note">Searching OpenSubtitles…</p>}
       {results?.length === 0 && <p className="subsearch-note">Nothing found in {languageName(lang)}.</p>}

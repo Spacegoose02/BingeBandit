@@ -993,4 +993,45 @@ CREATE INDEX problem_reports_status ON problem_reports(status, created_at);
 	`
 UPDATE settings SET value = '100' WHERE key = 'recently_added_days' AND value = '90';
 `,
+	// 58: thumbs up and down on titles (recommendations leave out the
+	// disliked ones), and markers for recaps and the ad breaks in
+	// recordings, which can come several to a file. Screen time for kids:
+	// a daily allowance and a bedtime, and what each has used per day.
+	`
+CREATE TABLE screen_time (
+	user_id         INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	weekday_minutes INTEGER NOT NULL DEFAULT 0,
+	weekend_minutes INTEGER NOT NULL DEFAULT 0,
+	bedtime         TEXT NOT NULL DEFAULT '',
+	wake            TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE screen_time_used (
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	day     TEXT NOT NULL,
+	seconds INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (user_id, day)
+);
+CREATE TABLE title_ratings (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	rating     INTEGER NOT NULL CHECK (rating IN (-1, 1, 2)),
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+CREATE TABLE markers_new (
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	kind     TEXT NOT NULL CHECK (kind IN ('intro','credits','recap','commercial')),
+	start_at REAL NOT NULL,
+	end_at   REAL NOT NULL,
+	source   TEXT NOT NULL DEFAULT 'detected' CHECK (source IN ('detected','manual'))
+);
+INSERT INTO markers_new (item_id, kind, start_at, end_at, source) SELECT item_id, kind, start_at, end_at, source FROM markers;
+DROP TABLE markers;
+ALTER TABLE markers_new RENAME TO markers;
+CREATE UNIQUE INDEX markers_one ON markers(item_id, kind) WHERE kind != 'commercial';
+CREATE INDEX markers_item ON markers(item_id, start_at);
+ALTER TABLE recordings ADD COLUMN commercials_at INTEGER NOT NULL DEFAULT 0;
+-- Seasons are looked at again for recaps (intro fingerprints are cached).
+UPDATE items SET markers_at = 0 WHERE kind = 'episode';
+`,
 }

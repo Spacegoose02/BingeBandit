@@ -32,6 +32,10 @@ const (
 	SettingOpenSubsUser      = "opensubtitles_username" // an OpenSubtitles account raises the daily download limit
 	SettingOpenSubsPassword  = "opensubtitles_password"
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
+	SettingBecauseRows       = "because_rows_enabled"    // false: no "Because you watched" rows on Home
+	SettingDVRDetectAds      = "dvr_detect_ads"          // false: don't look for ad breaks in recordings
+	SettingWhisperModel      = "whisper_model"           // the whisper.cpp model for subtitles made from the sound: a name (tiny, base, small, medium, large-v3-turbo) or a model file's path
+	SettingDetectRecaps      = "detect_recaps"           // false: don't look for "Previously on" recaps
 	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingRequestMovieLimit = "request_movie_limit"     // movies each person may request per 7 days; 0 = no limit
 	SettingRequestShowLimit  = "request_show_limit"      // shows (or seasons of one) per 7 days; 0 = no limit
@@ -59,16 +63,20 @@ const (
 	SettingDVRNaming         = "dvr_naming" // library (Show/Season 01/…) | folder (one flat folder)
 	SettingDVRApproval       = "dvr_require_approval"
 	SettingDVRAllowUsers     = "dvr_allow_users"
-	SettingDVRPadBefore      = "dvr_padding_before" // minutes
-	SettingDVRPadAfter       = "dvr_padding_after"  // minutes
-	SettingDVRPriority       = "dvr_priority"       // true: a recording may take a provider connection from live viewers
-	SettingPublicURL         = "public_url"         // how people reach the server from outside, e.g. https://tv.example.com
-	SettingTrustedProxies    = "trusted_proxies"    // IPs/CIDRs whose X-Forwarded-* headers are believed
-	SettingLANNetworks       = "lan_networks"       // extra CIDRs treated as local, beyond private ranges
-	SettingRemoteAccess      = "remote_access"      // false = only local networks may connect
-	SettingRemoteMaxStreams  = "remote_max_streams" // streams each account (with its profiles) may watch at once from outside; 0 = any number
-	SettingRemoteMaxKbps     = "remote_max_kbps"    // most video sent outside the home network, kbit/s; 0 = no cap
-	SettingTraktClientID     = "trakt_client_id"    // the server's Trakt API app
+	SettingDVRPadBefore      = "dvr_padding_before"     // minutes
+	SettingDVRPadAfter       = "dvr_padding_after"      // minutes
+	SettingDVRPriority       = "dvr_priority"           // true: a recording may take a provider connection from live viewers
+	SettingPublicURL         = "public_url"             // how people reach the server from outside, e.g. https://tv.example.com
+	SettingTrustedProxies    = "trusted_proxies"        // IPs/CIDRs whose X-Forwarded-* headers are believed
+	SettingLANNetworks       = "lan_networks"           // extra CIDRs treated as local, beyond private ranges
+	SettingRemoteAccess      = "remote_access"          // false = only local networks may connect
+	SettingTunnel            = "remote_tunnel"          // "" | cloudflare-quick | cloudflare | tailscale: remote access without port forwarding
+	SettingTunnelToken       = "remote_tunnel_token"    // a named Cloudflare tunnel's token
+	SettingTunnelHostname    = "remote_tunnel_hostname" // the public hostname the admin gave that tunnel
+	SettingTunnelPort        = "remote_tunnel_port"     // the 127.0.0.1 port the tunnel reaches the server on
+	SettingRemoteMaxStreams  = "remote_max_streams"     // streams each account (with its profiles) may watch at once from outside; 0 = any number
+	SettingRemoteMaxKbps     = "remote_max_kbps"        // most video sent outside the home network, kbit/s; 0 = no cap
+	SettingTraktClientID     = "trakt_client_id"        // the server's Trakt API app
 	SettingTraktSecret       = "trakt_client_secret"
 	SettingLiveTimeshift     = "live_timeshift_minutes" // how far back live TV can be paused or rewound; 0 = just a short buffer
 	SettingLiveBufferSeconds = "live_buffer_seconds"    // how far behind live players sit
@@ -150,6 +158,10 @@ var SettingDefaults = map[string]string{
 	SettingOpenSubsUser:        "",
 	SettingOpenSubsPassword:    "",
 	SettingRecommendations:     "true",
+	SettingBecauseRows:         "true",
+	SettingDVRDetectAds:        "true",
+	SettingWhisperModel:        "base",
+	SettingDetectRecaps:        "true",
 	SettingRequests:            "true",
 	SettingRequestMovieLimit:   "0",
 	SettingRequestShowLimit:    "0",
@@ -183,6 +195,10 @@ var SettingDefaults = map[string]string{
 	SettingTrustedProxies:      "",
 	SettingLANNetworks:         "",
 	SettingRemoteAccess:        "true",
+	SettingTunnel:              "",
+	SettingTunnelToken:         "",
+	SettingTunnelHostname:      "",
+	SettingTunnelPort:          "8485",
 	SettingRemoteMaxStreams:    "0",
 	SettingRemoteMaxKbps:       "0",
 	SettingTraktClientID:       "",

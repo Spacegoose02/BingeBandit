@@ -130,6 +130,7 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
           )}
           <Opt label="Add to playlist…" onPress={() => openPage('playlists')} />
           {top && recommendOn && <Opt label="Recommend to…" onPress={() => openPage('recommend')} />}
+          {top && <Opt label="Not interested" onPress={() => act(api.put(`/api/items/${top.id}/rating`, { rating: -1 }), "Got it. We won't suggest it to you.")} />}
           {admin && top && <Opt label="Add to collection…" onPress={() => openPage('collections')} />}
           {admin && <Opt label="Manage…" onPress={() => openPage('manage')} />}
           <Opt label="Close" onPress={onClose} />

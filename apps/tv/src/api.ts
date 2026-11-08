@@ -87,7 +87,8 @@ export function normalizeServer(input: string): string {
 export async function request<T>(method: string, path: string, body?: unknown, server = session?.server, timeoutMs = 15000): Promise<T> {
   if (!server) throw new ApiError(0, 'No server chosen')
   const signedIn = !!session && server === session.server
-  const headers: Record<string, string> = { Accept: 'application/json' }
+  // Music libraries are listed for this app (it has a music player); audiobooks and photos aren't.
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-BB-Media': 'music' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   const sentToken = signedIn ? session?.token : undefined
   if (sentToken) headers.Authorization = `Bearer ${sentToken}`

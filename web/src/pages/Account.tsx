@@ -819,6 +819,23 @@ function PlaybackPrefs() {
             <option value="off">Don't offer to skip</option>
           </select>
         </label>
+        <label>
+          Recaps (“Previously on…”)
+          <select value={p.skipRecap ?? 'button'} onChange={(e) => set('skipRecap', e.target.value as Prefs['skipRecap'])}>
+            <option value="button">Show a Skip Recap button</option>
+            <option value="auto">Skip automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
+        <label>
+          Ad breaks in recordings
+          <select value={p.skipAds ?? 'button'} onChange={(e) => set('skipAds', e.target.value as Prefs['skipAds'])}>
+            <option value="button">Show a Skip Ad button</option>
+            <option value="auto">Skip automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
+        <HeroTrailersToggle />
       </div>
       <div className="field-grid">
         <label>
@@ -969,5 +986,33 @@ export default function Account() {
         <button className="btn btn-primary">{hasPassword ? 'Update password' : 'Set password'}</button>
       </form>
     </div>
+  )
+}
+
+/** Trailers playing in the spotlight on Home: a choice for this browser. */
+function HeroTrailersToggle() {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem('bb.heroTrailers') !== 'off'
+    } catch {
+      return true
+    }
+  })
+  return (
+    <label className="check" style={{ alignSelf: 'end' }}>
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          setOn(e.target.checked)
+          try {
+            localStorage.setItem('bb.heroTrailers', e.target.checked ? 'on' : 'off')
+          } catch {
+            /* private window */
+          }
+        }}
+      />
+      Play trailers, muted, at the top of Home (this browser)
+    </label>
   )
 }

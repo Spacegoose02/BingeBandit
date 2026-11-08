@@ -1,13 +1,22 @@
 import React from 'react'
 import Svg, { Circle, Path, Rect } from 'react-native-svg'
 
-export type IconName = 'home' | 'search' | 'movies' | 'shows' | 'more' | 'sports' | 'live' | 'settings' | 'pin' | 'pinned' | 'discover' | 'favorites'
+export type IconName = 'home' | 'search' | 'movies' | 'shows' | 'more' | 'sports' | 'live' | 'settings' | 'pin' | 'pinned' | 'discover' | 'favorites' | 'music'
 
 /** Line icons for the side menu, drawn on a 24-unit grid. */
 export function Icon({ name, size, color }: { name: IconName; size: number; color: string }) {
   const line = { stroke: color, strokeWidth: 2, fill: 'none', strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
   let body: React.ReactNode
   switch (name) {
+    case 'music':
+      body = (
+        <>
+          <Path d="M9 18V5l11-2v13" {...line} />
+          <Circle cx={6} cy={18} r={3} {...line} />
+          <Circle cx={17} cy={16} r={3} {...line} />
+        </>
+      )
+      break
     case 'home':
       body = <Path d="M3 11 12 3l9 8M5 9.5V21h5v-6h4v6h5V9.5" {...line} />
       break

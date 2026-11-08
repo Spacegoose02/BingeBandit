@@ -12,11 +12,13 @@ import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
 import { backInterceptor, holdOnReturn, useNav, useScreen } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
+import { pauseMusic } from '../music'
 import { useLandscape } from '../screen'
 import { roomPosition, TogetherPanel, useTogether } from '../together'
+import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
-import type { Item, ItemDetail, MediaFile } from '../types'
+import type { Item, ItemDetail, Marker, MediaFile, SkipMode, SkipPrefs } from '../types'
 import { chapterAt, chapterName, useChapters } from '../chapters'
 import { delayLabel, ScrubThumb, SubtitleSearch, THUMB_WIDTH, useTrickplay } from '../subtitleTools'
 
@@ -255,6 +257,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // Hidden under another screen (it shouldn't be, but an invite or a deep
   // link could push one): stay paused and leave the remote alone.
   const { active } = useScreen()
+  // Music stops for a video.
+  useEffect(() => {
+    if (active) pauseMusic()
+  }, [active])
   const insets = useSafeAreaInsets()
   const lock = useLock()
   const video = useRef<VideoRef>(null)
@@ -297,6 +303,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [quality, setQuality] = useState(-1)
   const qualityRef = useRef(-1)
   const [notice, setNotice] = useState('')
+  const [markers, setMarkers] = useState<Marker[]>([])
+  const [skipPrefs, setSkipPrefs] = useState<SkipPrefs>({})
   const say = (text: string) => {
     setNotice(text)
     setTimeout(() => setNotice((n) => (n === text ? '' : n)), 5000)
@@ -354,6 +362,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     ]).then(
       async ([d, prefs]) => {
         setItem(d.item)
+        setMarkers(d.markers ?? [])
+        setSkipPrefs((prefs ?? {}) as SkipPrefs)
         const f = d.files?.[0]
         if (!f) {
           setError('This item has no playable file.')
@@ -443,7 +453,13 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           played: Math.round(played.current),
         })
         .then(() => offline && offlineProgressSent(item.id))
-        .catch(() => undefined)
+        .catch((e) => {
+          // Screen time ran out (or it's bedtime): the server says so in words.
+          if (e instanceof ApiError && e.status === 403 && /^Screen time/.test(e.message)) {
+            setPaused(true)
+            setError(e.message)
+          }
+        })
       if (stopped) trackWrite(sent)
     },
     [item, file, duration, paused, mode, offline],
@@ -804,6 +820,11 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const onEnd = async () => {
     finished.current = true
     report(false, true)
+    if (sleepAtEpisodeEnd()) {
+      setSleep(0)
+      nav.back()
+      return
+    }
     if (offline && item) {
       const n = nextDownloaded(item)
       if (n) {
@@ -979,6 +1000,50 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     if (item?.kind === 'episode') api.get<Item | undefined>(`/api/items/${item.id}/next`).then((n) => setNext(n ?? null), () => undefined)
   }, [item, offline])
 
+  // Skip Intro / Recap / Ad / Credits: a button (OK presses it while the
+  // controls are down) or done by itself, by the profile's settings, once
+  // per stretch so seeking back into one doesn't skip it again.
+  const skipped = useRef(new Set<string>())
+  const inMarker = markers.find((m) => pos >= m.start && pos < Math.min(m.end, duration || m.end) - 1)
+  const skip = (() => {
+    if (!inMarker || roomId) return null // a watch party moves together; nobody skips for everyone
+    const key = `${inMarker.kind}:${inMarker.start}`
+    const skipMode: SkipMode =
+      (inMarker.kind === 'intro' ? skipPrefs.skipIntro : inMarker.kind === 'credits' ? skipPrefs.skipCredits : inMarker.kind === 'recap' ? skipPrefs.skipRecap : skipPrefs.skipAds) ??
+      'button'
+    if (skipMode === 'off') return null
+    if (inMarker.kind === 'credits') {
+      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: () => playNext(next.id) }
+      if (duration && inMarker.end < duration - 5) return { key, mode: skipMode, label: 'Skip credits', run: () => userSeek(inMarker.end) }
+      return null
+    }
+    const label = inMarker.kind === 'intro' ? 'Skip intro' : inMarker.kind === 'recap' ? 'Skip recap' : 'Skip ad'
+    return { key, mode: skipMode, label, run: () => userSeek(inMarker.end) }
+  })()
+  const doSkip = () => {
+    if (!skip) return
+    skipped.current.add(skip.key)
+    skip.run()
+  }
+  useEffect(() => {
+    if (skip?.mode === 'auto' && !skipped.current.has(skip.key)) {
+      say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
+      doSkip()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip?.key])
+  // The sleep timer: checked as the position moves, so a paused player never trips it.
+  const sleeping = useSleepTimer()
+  useEffect(() => {
+    if (!paused && active && sleepDue()) {
+      setPaused(true)
+      say('Sleep timer: paused')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Math.floor(pos / 5)])
+  const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && !subSearch && !togetherOpen
+
+
   // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
   useEffect(() => {
     if (!active) return
@@ -1024,6 +1089,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
         return
       }
       if (evt.eventType === 'playPause') userPause(!pausedRef.current)
+      return
+    }
+    if (evt.eventType === 'select' && skipButton) {
+      doSkip()
       return
     }
     switch (evt.eventType) {
@@ -1152,6 +1221,11 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
         </View>
       )}
       {buffering && !error && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
+      {skipButton && skip && (
+        <Pressable android_disableSound={quietPress} focusable={false} onPress={doSkip} style={st.skipPill}>
+          <Text style={st.skipText}>{skip.label}{isPhone ? '' : '   ·   OK'}  ▶▶</Text>
+        </Pressable>
+      )}
       {!!error && (
         <View style={st.errorBox}>
           <Text style={st.errorText}>{error}</Text>
@@ -1424,6 +1498,16 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
               </ScrollView>
             </>
           )}
+          <Text style={st.menuTitle}>Sleep timer · {sleepLabel()}</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button small primary={!sleeping} label="Off" onPress={() => setSleep(0)} />
+            {SLEEP_MINUTES.map((m) => (
+              <Button key={m} small label={`${m} min`} onPress={() => { setSleep(m); say(`Pausing in ${m} minutes`) }} />
+            ))}
+            {item?.kind === 'episode' && (
+              <Button small primary={sleepAtEpisodeEnd()} label="End of episode" onPress={() => { setSleep('episode'); say('Stopping after this episode') }} />
+            )}
+          </ScrollView>
           {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} style={st.done} /> : <Text style={st.hint}>Back closes this menu</Text>}
         </View>
       )}
@@ -1495,6 +1579,8 @@ export function SeekBar({ pct, duration, chapters, onSeek, onDrag }: { pct: numb
 const st = StyleSheet.create(scaled({
   flex: { flex: 1 },
   introSkip: { position: 'absolute', right: 60, bottom: 40, flexDirection: 'row' },
+  skipPill: { position: 'absolute', right: 60, bottom: 90, backgroundColor: 'rgba(20,24,29,0.9)', borderColor: colors.text, borderWidth: 2, borderRadius: 10, paddingHorizontal: 28, paddingVertical: 14 },
+  skipText: { color: colors.text, fontSize: font.body, fontWeight: '800' },
   ytError: { justifyContent: 'center', paddingHorizontal: gutter },
   ytErrorTitle: { color: colors.text, fontSize: font.heading, fontWeight: '700' },
   ytErrorText: { color: colors.muted, fontSize: font.body, marginTop: 12, marginBottom: 30, maxWidth: 1300 },

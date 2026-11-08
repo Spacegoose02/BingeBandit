@@ -17,6 +17,7 @@ import { ReportProblemButton } from '../components/ReportProblem'
 import { Icon } from '../components/Icon'
 import { Modal } from '../components/Modal'
 import { Row } from '../components/Row'
+import { ThumbsButtons } from '../components/Thumbs'
 import { useApi, useDocumentTitle } from '../hooks'
 import { channelLabel, episodeLabel, fileSummary, formatBytes, formatClock, formatRuntime, languageName, progressFraction } from '../format'
 import { isMediaKind, type ExternalRatings, type Item, type ItemDetail, type MediaFile } from '../types'
@@ -159,6 +160,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
               {(item.kind === 'movie' || item.kind === 'show') && <WatchlistButton item={item} onChange={reload} />}
               {(item.kind === 'movie' || item.kind === 'show' || item.kind === 'episode') && <FavoriteButton item={item} onChange={reload} />}
               <AddToPlaylist item={item} />
+              {(item.kind === 'movie' || item.kind === 'show') && <ThumbsButtons item={item} rating={detail.myRating ?? 0} />}
               {(item.kind === 'movie' || item.kind === 'show') && <RecommendButton item={item} />}
               {(item.kind === 'movie' || item.kind === 'show') && <KidsApproveButton item={item} />}
               {(item.kind === 'movie' || item.kind === 'episode') && <ReportProblemButton item={item} />}
@@ -273,6 +275,8 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
             ))}
           </Row>
         ))}
+
+        {(item.kind === 'movie' || item.kind === 'show') && <MoreLikeThis id={item.id} />}
 
         {(item.kind === 'movie' || item.kind === 'show') && item.tmdbId ? (
           <RequestRow title="Like this, not here yet" path={`/api/requests/similar/${item.kind}/${item.tmdbId}`} />
@@ -465,5 +469,19 @@ function ExternalScores({ r }: { r: ExternalRatings }) {
         </span>
       )}
     </div>
+  )
+}
+
+/** "More like this": titles on the server like this one (TMDB's picks the
+ *  viewer can play, topped up with ones sharing its genres). */
+function MoreLikeThis({ id }: { id: number }) {
+  const { data } = useApi<Item[]>(`/api/items/${id}/similar`)
+  if (!data || data.length === 0) return null
+  return (
+    <Row title="More like this">
+      {data.map((m) => (
+        <PosterCard key={m.id} item={m} />
+      ))}
+    </Row>
   )
 }

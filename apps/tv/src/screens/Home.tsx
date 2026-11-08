@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, DeviceEventEmitter, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
+import { syncWatchNext } from '../watchNext'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { refreshGameLights } from '../hue'
@@ -247,7 +248,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const icons: Record<string, IconName> = { ...fixedIcons }
   for (const l of libraries) {
     names[`lib:${l.id}`] = l.name
-    icons[`lib:${l.id}`] = l.kind === 'movies' ? 'movies' : 'shows'
+    icons[`lib:${l.id}`] = l.kind === 'movies' ? 'movies' : l.kind === 'music' ? 'music' : 'shows'
   }
   const library = libraries.find((l) => `lib:${l.id}` === tab)
   // Holding OK (or a long tap) on a library, Sports or Live TV drops down Pin/Unpin, like Plex.
@@ -477,7 +478,7 @@ function More({
     ...libraries.map((l) => ({
       key: `lib:${l.id}`,
       label: l.name,
-      hint: l.kind === 'movies' ? 'Movies' : 'Shows',
+      hint: l.kind === 'movies' ? 'Movies' : l.kind === 'music' ? 'Music' : 'Shows',
       open: () => onOpen(`lib:${l.id}`),
       pin: pinLibrary(l),
     })),
@@ -768,7 +769,13 @@ function HomeRows() {
     // Wait for the player's last report so Continue Watching has the new position.
     writesDone()
       .then(() => api.get<HomeData>('/api/home'))
-      .then(setData, (e) => setError(e.message))
+      .then(
+        (d) => {
+          setData(d)
+          syncWatchNext(d.continueWatching)
+        },
+        (e) => setError(e.message),
+      )
   }, [])
   // Again each time Back comes here, for the new Continue Watching.
   const { returns } = useScreen()

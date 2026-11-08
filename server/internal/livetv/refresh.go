@@ -122,6 +122,34 @@ func refresh(ctx context.Context, st *store.Store, src *store.LiveSource) (int, 
 		// A plugin sends its channels itself (SyncPluginChannels).
 		return src.EntryCount, nil
 	}
+	switch {
+	case src.Kind == "m3u" && IsHDHomeRun(src):
+		entries, _, err := hdhrStreams(ctx, src)
+		if err != nil {
+			return 0, err
+		}
+		im, err := st.BeginStreamImport(src.ID)
+		if err != nil {
+			return 0, err
+		}
+		for _, e := range entries {
+			if err := im.Add(e); err != nil {
+				im.Abort()
+				return 0, err
+			}
+		}
+		return im.Finish()
+	case src.Kind == "epg" && (IsHDHomeRun(src) || IsSchedulesDirect(src)):
+		fetch := hdhrGuide
+		if IsSchedulesDirect(src) {
+			fetch = schedulesDirectGuide
+		}
+		g, err := fetch(ctx, src)
+		if err != nil {
+			return 0, err
+		}
+		return g.importInto(st, src.ID)
+	}
 	rc, err := spool(ctx, src.URL, src.UserAgent)
 	if err != nil {
 		return 0, err

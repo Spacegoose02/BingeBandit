@@ -132,6 +132,7 @@ func (d *Detector) Season(ctx context.Context, seasonID int64) (int, error) {
 				}
 			}
 		}
+		found += d.recaps(ctx, eps)
 	}
 	return found, d.st.MarkMarkersScanned(ids)
 }
