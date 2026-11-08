@@ -97,7 +97,24 @@ export interface ItemDetail {
   canDownload?: boolean // movies and episodes: the viewer may download them (offline downloads, phones)
   quality?: Quality // the best copy's picture and sound (a show's: its best episode); older servers leave it out
   myRating?: number // movies and shows: the viewer's thumbs (-1 not for me, 1 like, 2 love); older servers leave it out
+  markers?: Marker[] // movies and episodes: what can be skipped
 }
+
+/** A skippable stretch of a movie or episode, in seconds. Recordings can have several ad breaks. */
+export interface Marker {
+  kind: 'intro' | 'credits' | 'recap' | 'commercial'
+  start: number
+  end: number
+}
+
+/** The skip settings under Account; older servers leave the newer ones out. */
+export interface SkipPrefs {
+  skipIntro?: SkipMode
+  skipCredits?: SkipMode
+  skipRecap?: SkipMode
+  skipAds?: SkipMode
+}
+export type SkipMode = 'button' | 'auto' | 'off'
 
 /** A title's best picture and sound, for the 4K · Dolby Vision · Atmos badges. */
 export interface Quality {

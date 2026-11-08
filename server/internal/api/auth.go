@@ -455,7 +455,12 @@ func (s *Server) getPrefs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) putPrefs(w http.ResponseWriter, r *http.Request) {
-	p := store.DefaultPrefs
+	// Over the stored prefs, so an older app that doesn't know a newer
+	// setting (skipping recaps and ads, say) leaves it as it was.
+	p, err := s.Store.UserPrefs(currentUser(r).ID)
+	if err != nil {
+		p = store.DefaultPrefs
+	}
 	if err := readJSON(r, &p); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return

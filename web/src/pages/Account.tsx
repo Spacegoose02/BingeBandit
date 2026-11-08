@@ -819,6 +819,22 @@ function PlaybackPrefs() {
             <option value="off">Don't offer to skip</option>
           </select>
         </label>
+        <label>
+          Recaps (“Previously on…”)
+          <select value={p.skipRecap ?? 'button'} onChange={(e) => set('skipRecap', e.target.value as Prefs['skipRecap'])}>
+            <option value="button">Show a Skip Recap button</option>
+            <option value="auto">Skip automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
+        <label>
+          Ad breaks in recordings
+          <select value={p.skipAds ?? 'button'} onChange={(e) => set('skipAds', e.target.value as Prefs['skipAds'])}>
+            <option value="button">Show a Skip Ad button</option>
+            <option value="auto">Skip automatically</option>
+            <option value="off">Don't offer to skip</option>
+          </select>
+        </label>
       </div>
       <div className="field-grid">
         <label>

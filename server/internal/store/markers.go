@@ -157,3 +157,40 @@ func (s *Store) SeasonIDs(id int64) ([]int64, error) {
 	}
 	return out, rows.Err()
 }
+
+// RecordingToScan is a finished DVR recording, as the library knows it,
+// whose ad breaks haven't been looked for.
+type RecordingToScan struct {
+	RecordingID int64
+	ItemID      int64
+	Path        string
+	Duration    float64
+}
+
+// RecordingsNeedingCommercials lists finished recordings that a library has
+// picked up and whose ad breaks haven't been looked for, oldest first.
+func (s *Store) RecordingsNeedingCommercials(limit int) ([]RecordingToScan, error) {
+	rows, err := s.db.Query(`SELECT r.id, f.item_id, f.path, f.duration FROM recordings r
+		JOIN media_files f ON f.path = r.path
+		WHERE r.status = 'completed' AND r.commercials_at = 0 AND r.path != ''
+		ORDER BY r.stop_at LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RecordingToScan
+	for rows.Next() {
+		var r RecordingToScan
+		if err := rows.Scan(&r.RecordingID, &r.ItemID, &r.Path, &r.Duration); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// MarkCommercialsChecked records that a recording's ad breaks were looked for.
+func (s *Store) MarkCommercialsChecked(recordingID int64) error {
+	_, err := s.db.Exec(`UPDATE recordings SET commercials_at = ? WHERE id = ?`, now(), recordingID)
+	return err
+}

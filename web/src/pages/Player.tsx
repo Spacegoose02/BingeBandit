@@ -837,6 +837,36 @@ function PlayerView({
     if (afterCredits && credits) seek(credits.end)
     else onEnded()
   }
+  // A recap ("Previously on…") and the ad breaks of a recording, the same way.
+  // Older servers' prefs leave the settings out: offer the button.
+  const recap = detail.markers?.find((m) => m.kind === 'recap')
+  const recapDone = useRef(false)
+  const inRecap = !!recap && time >= recap.start && time < recap.end - 1
+  const ad = detail.markers?.find((m) => m.kind === 'commercial' && time >= m.start && time < m.end - 1)
+  const adsSkipped = useRef(new Set<number>())
+  const skipRecapPref = prefs.skipRecap ?? 'button'
+  const skipAdsPref = prefs.skipAds ?? 'button'
+  const skipRecap = () => {
+    recapDone.current = true
+    if (recap) seek(recap.end)
+  }
+  const skipAd = () => {
+    if (!ad) return
+    adsSkipped.current.add(ad.start)
+    seek(ad.end)
+  }
+  useEffect(() => {
+    if (inRecap && skipRecapPref === 'auto' && !recapDone.current) {
+      setToast('Skipped the recap')
+      skipRecap()
+    }
+    if (ad && skipAdsPref === 'auto' && !adsSkipped.current.has(ad.start)) {
+      setToast('Skipped an ad break')
+      skipAd()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inRecap, ad?.start])
+
   useEffect(() => {
     if (inIntro && prefs.skipIntro === 'auto' && !introDone.current) {
       introDone.current = true
@@ -984,6 +1014,16 @@ function PlayerView({
       {buffering && !error && <div className="spinner" />}
       {error && <div className="player-error">{error}</div>}
       {toast && <div className="player-toast">{toast}</div>}
+      {inRecap && skipRecapPref === 'button' && (
+        <button className="skip-btn" onClick={skipRecap}>
+          Skip Recap <Icon name="next" size={18} />
+        </button>
+      )}
+      {ad && skipAdsPref === 'button' && (
+        <button className="skip-btn" onClick={skipAd}>
+          Skip Ad <Icon name="next" size={18} />
+        </button>
+      )}
       {inIntro && prefs.skipIntro === 'button' && (
         <button className="skip-btn" onClick={skipIntro}>
           Skip Intro <Icon name="next" size={18} />

@@ -442,6 +442,14 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.dvr_priority === 'true'} onChange={set('dvr_priority')} />
             Recordings come first: when a provider is at its connection limit, stop a live channel someone is watching to record
           </label>
+          <label className="check">
+            <input type="checkbox" checked={s.dvr_detect_ads !== 'false'} onChange={set('dvr_detect_ads')} />
+            Find the ad breaks in recordings, for a Skip Ad button
+          </label>
+          <p className="muted small">
+            Uses Comskip when it's installed on the server, otherwise the black, silent moments broadcasters cut to ads on. Runs as the “Find ad breaks
+            in recordings” task, hourly. Each person chooses under Account whether ads show a button or are skipped by themselves.
+          </p>
           <label>
             Recordings folder
             <input className="mono" value={s.dvr_folder ?? ''} onChange={set('dvr_folder')} placeholder="Default: recordings inside the data folder" />

@@ -83,6 +83,9 @@ sub init()
     m.chapters = []
     m.introDone = false
     m.creditsDone = false
+    m.recapDone = false
+    m.adsSkipped = {}
+    m.skipAd = invalid
     m.skipKind = ""
     m.menuLevel = ""
     m.menuActions = []
@@ -719,6 +722,31 @@ sub checkMarkers()
             kind = "intro"
         end if
     end if
+    recap = markerOf("recap")
+    if kind = "" and recap <> invalid and not m.recapDone and t >= recap.start and t < recap["end"] - 1
+        mode = getOr(m.prefs, "skipRecap", "button")
+        if mode = "auto"
+            m.recapDone = true
+            say("Skipped the recap")
+            userSeek(recap["end"])
+        else if mode = "button"
+            kind = "recap"
+        end if
+    end if
+    if kind = ""
+        ad = adAt(t)
+        if ad <> invalid and not m.adsSkipped.doesExist(adKey(ad))
+            mode = getOr(m.prefs, "skipAds", "button")
+            if mode = "auto"
+                m.adsSkipped[adKey(ad)] = true
+                say("Skipped an ad break")
+                userSeek(ad["end"])
+            else if mode = "button"
+                kind = "ad"
+                m.skipAd = ad
+            end if
+        end if
+    end if
     credits = markerOf("credits")
     if credits <> invalid and not m.creditsDone and not m.upNext.visible
         last = credits["end"]
@@ -739,6 +767,10 @@ sub checkMarkers()
     m.skip.visible = kind <> ""
     if kind = "intro"
         m.top.findNode("skipLabel").text = "Skip intro"
+    else if kind = "recap"
+        m.top.findNode("skipLabel").text = "Skip recap"
+    else if kind = "ad"
+        m.top.findNode("skipLabel").text = "Skip ad"
     else if kind = "credits"
         if m.item.kind = "episode" then m.top.findNode("skipLabel").text = "Next episode" else m.top.findNode("skipLabel").text = "Skip credits"
     end if
@@ -752,10 +784,29 @@ sub doSkip()
         m.introDone = true
         intro = markerOf("intro")
         if intro <> invalid then userSeek(intro["end"])
+    else if kind = "recap"
+        m.recapDone = true
+        recap = markerOf("recap")
+        if recap <> invalid then userSeek(recap["end"])
+    else if kind = "ad" and m.skipAd <> invalid
+        m.adsSkipped[adKey(m.skipAd)] = true
+        userSeek(m.skipAd["end"])
     else if kind = "credits"
         skipCredits()
     end if
 end sub
+
+' The ad break (in a DVR recording) playing at t, if any.
+function adAt(t as float) as dynamic
+    for each mk in m.markers
+        if getOr(mk, "kind", "") = "commercial" and t >= mk.start and t < mk["end"] - 1 then return mk
+    end for
+    return invalid
+end function
+
+function adKey(ad as object) as string
+    return Str(ad.start).Trim()
+end function
 
 sub skipCredits()
     m.creditsDone = true
