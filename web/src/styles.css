@@ -957,6 +957,8 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .chapter-name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-stepper { display: flex; align-items: center; gap: 4px; padding: 0 4px; }
 .menu-stepper span { flex: 1; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; }
+.menu-chips { display: flex; flex-wrap: wrap; gap: 2px; }
+.menu-chips button { width: auto; flex: 1 0 auto; text-align: center; }
 .subsearch { width: min(440px, 90vw); }
 .subsearch-lang { display: block; padding: 4px 12px 8px; }
 .subsearch-lang select { width: 100%; }
@@ -1574,3 +1576,10 @@ body:has(.audio-bar) .main { padding-bottom: 96px; }
   .sports-line-team { min-width: 0; }
   .sports-hub-head .sports-actions { margin-left: 0; }
 }
+
+/* Screen time for a profile (Account → Profiles, admin Users). */
+.screen-time { border: 1px solid var(--border, rgba(255, 255, 255, 0.12)); border-radius: 10px; padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.screen-time legend { padding: 0 6px; font-weight: 600; }
+.screen-time-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.screen-time-row label { flex: 1 1 160px; display: flex; flex-direction: column; gap: 4px; }
+.screen-time .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

@@ -8,6 +8,7 @@ import { ratingLevels, ratingLimitName } from '../types'
 import { Avatar, AvatarPicker } from './Avatar'
 import { Icon } from './Icon'
 import { Modal } from './Modal'
+import { ScreenTimeSettings } from './ScreenTime'
 import { setStayingAs, stayingAs } from '../profilePick'
 
 /** Account section: the profiles under this account. */
@@ -263,6 +264,7 @@ function EditProfile({ profile, accountLimit, onClose, onSaved, onPicture }: { p
             for a kid show whatever their rating.
           </span>
         </label>
+        <ScreenTimeSettings url={`/api/household/${profile.id}/screen-time`} />
         <label>
           {profile.hasPin ? 'New PIN (leave empty to keep it)' : 'PIN (optional, 4 to 8 digits)'}
           <input

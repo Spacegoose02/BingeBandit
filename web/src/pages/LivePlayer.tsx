@@ -97,7 +97,7 @@ function BrowserLivePlayer() {
         stallSecs.current = res.stallSecs ?? 12
         // Paused players stop fetching the playlist; this keeps the seat.
         ping = window.setInterval(() => {
-          api.post(`/api/live/viewers/${viewer}/ping`).catch((e: ApiError) => e.status === 410 && fail('This channel stopped.'))
+          api.post(`/api/live/viewers/${viewer}/ping`).catch((e: ApiError) => e.status === 410 && fail(/^Screen time/.test(e.message) ? e.message : 'This channel stopped.'))
         }, 10000)
         if (Hls.isSupported()) {
           // Start behind live (the admin's buffer setting, in 2 s segments) so short

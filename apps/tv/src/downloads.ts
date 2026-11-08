@@ -70,11 +70,16 @@ export interface Download {
   dirty: boolean
   watchedAt: number // unix seconds of the last local change
   retries?: number // connection drops in a row, resumed by themselves
+  auto?: boolean // queued by itself (the next episodes), not by hand
 }
 
 export interface DownloadPrefs {
   wifiOnly: boolean
   limitGB: number // 0: no limit
+  /** Keep this many unwatched episodes ahead of each show you've downloaded (0: off). */
+  autoNext: number
+  /** Delete an episode's download once it's watched. */
+  autoRemove: boolean
 }
 
 const KEY = 'bb.downloads'
@@ -82,7 +87,7 @@ const PREFS_KEY = 'bb.downloadPrefs'
 const POLL_MS = 3000
 
 let list: Download[] = []
-let prefs: DownloadPrefs = { wifiOnly: true, limitGB: 20 }
+let prefs: DownloadPrefs = { wifiOnly: true, limitGB: 20, autoNext: 0, autoRemove: false }
 let loaded: Promise<void> | null = null
 const listeners = new Set<() => void>()
 let activeId = '' // the download the native module is working on
@@ -170,6 +175,7 @@ export async function setDownloadPrefs(p: Partial<DownloadPrefs>) {
   await AsyncStorage.setItem(PREFS_KEY, JSON.stringify(prefs)).catch(() => undefined)
   changed()
   if (p.wifiOnly !== undefined) netChanged()
+  if (p.autoNext || p.autoRemove) syncDownloads().catch(() => undefined)
 }
 
 /** Bytes all downloads take (or will take) on this phone. */
@@ -191,7 +197,7 @@ export function formatBytes(n: number): string {
 }
 
 /** Queues titles (a movie, or a season's episodes) at a quality. */
-export async function addDownloads(items: Item[], height: number) {
+export async function addDownloads(items: Item[], height: number, auto = false) {
   await loadDownloads()
   const s = current()
   if (!s || !Native) return
@@ -205,6 +211,7 @@ export async function addDownloads(items: Item[], height: number) {
       key, server: s.server, userId: s.user.id, itemId: it.id, item: it, height,
       state: 'waiting', done: 0, total: 0, subs: [], addedAt: now - i, // a season keeps its order
       position: it.watch?.position ?? 0, duration: it.watch?.duration ?? 0, watched: !!it.watch?.watched, dirty: false, watchedAt: 0,
+      auto: auto || undefined,
     })
   }
   persist()
@@ -459,6 +466,8 @@ export function saveOfflineProgress(itemId: number, position: number, duration: 
   if (!d) return
   const watched = finished || (duration > 0 && position / duration >= 0.9)
   update(d.key, { position: watched ? 0 : position, duration, watched: d.watched || watched, dirty: true, watchedAt: Math.floor(Date.now() / 1000) })
+  // Finishing an episode lines up the next one, once the server answers.
+  if (watched && !d.watched) syncDownloads().catch(() => undefined)
 }
 
 /** The server took the position: nothing left to send. */
@@ -494,9 +503,14 @@ export async function syncDownloads() {
   if (syncing || !mineNow.length) return
   syncing = true
   try {
-    const check = await api.post<{ canDownload: boolean; allowed: number[] }>('/api/offline/check', { items: mineNow.map((d) => d.itemId) })
+    const check = await api.post<{ canDownload: boolean; allowed: number[]; watched?: number[] }>('/api/offline/check', { items: mineNow.map((d) => d.itemId) })
     const allowed = new Set(check.allowed)
     for (const d of mineNow) if (!allowed.has(d.itemId)) await removeDownload(d.key)
+    // Watched on another device counts too.
+    for (const id of check.watched ?? []) {
+      const d = list.find((x) => mine(x) && x.itemId === id)
+      if (d && !d.watched && !d.dirty) update(d.key, { watched: true, position: 0 })
+    }
     for (const d of list.filter((x) => mine(x) && x.dirty)) {
       const detail = await api.get<ItemDetail>(`/api/items/${d.itemId}`).catch(() => null)
       if (detail && (detail.item.watch?.updatedAt ?? 0) <= d.watchedAt) {
@@ -509,7 +523,46 @@ export async function syncDownloads() {
       }
       update(d.key, { dirty: false })
     }
+    if (check.canDownload) await autoDownloads()
   } finally {
     syncing = false
+  }
+}
+
+const episodeOrder = (x: Item) => (x.seasonNumber ?? 0) * 10000 + (x.episodeNumber ?? 0)
+
+/**
+ * Automatic downloads (Downloads → Settings): for each show with an
+ * episode downloaded, deletes watched episodes (when chosen) and keeps the
+ * next few unwatched ones queued, at the quality of the last one.
+ */
+async function autoDownloads() {
+  if (!prefs.autoNext && !prefs.autoRemove) return
+  const shows = new Map<number, Download[]>()
+  for (const d of list.filter((x) => mine(x) && x.item.kind === 'episode' && x.item.showId)) {
+    shows.set(d.item.showId!, [...(shows.get(d.item.showId!) ?? []), d])
+  }
+  for (const eps of shows.values()) {
+    eps.sort((a, b) => episodeOrder(a.item) - episodeOrder(b.item))
+    const last = eps[eps.length - 1]
+    if (prefs.autoRemove) {
+      // Never the last one: it's where the next episodes are found from.
+      for (const d of eps) if (d !== last && d.watched && !d.dirty && d.state === 'done') await removeDownload(d.key)
+    }
+    if (!prefs.autoNext) continue
+    // Only shows being watched: the newest download is watched or under way.
+    const ahead = eps.filter((d) => !d.watched && d.state !== 'failed').length
+    const watching = eps.some((d) => d.watched || d.position > 60)
+    if (!watching || ahead >= prefs.autoNext) continue
+    const add: Item[] = []
+    let from = last.itemId
+    for (let n = ahead; n < prefs.autoNext; n++) {
+      const next = await api.get<Item | null>(`/api/items/${from}/next`).catch(() => null)
+      if (!next || !next.id) break
+      if (!next.watch?.watched) add.push(next)
+      from = next.id
+    }
+    if (add.length) await addDownloads(add, last.height, true)
+    if (prefs.autoRemove && last.watched && !last.dirty && last.state === 'done' && add.length) await removeDownload(last.key)
   }
 }

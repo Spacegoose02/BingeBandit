@@ -17,6 +17,7 @@ import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
 import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
+import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { CastPicker } from '../components/Cast'
 
 const LADDER = [2160, 1080, 720, 480]
@@ -341,7 +342,13 @@ function PlayerView({
           },
           { keepalive: true },
         )
-        .catch(() => undefined)
+        .catch((e) => {
+          // Screen time ran out (or it's bedtime): the server says so in words.
+          if (e instanceof ApiError && e.status === 403 && /^Screen time/.test(e.message)) {
+            videoRef.current?.pause()
+            setError(e.message)
+          }
+        })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [file, item.id, duration, mode],
@@ -794,6 +801,10 @@ function PlayerView({
 
   const onEnded = async () => {
     report(false, true)
+    if (sleepAtEpisodeEnd()) {
+      setSleep(0)
+      return nav(playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`, { replace: true })
+    }
     const done = playlistId ? `/playlist/${playlistId}` : item.kind === 'episode' ? `/item/${item.showId}` : `/item/${item.id}`
     if (!playlistId && item.kind !== 'episode') return nav(done, { replace: true })
     try {
@@ -826,6 +837,7 @@ function PlayerView({
   const inIntro = !!intro && time >= intro.start && time < intro.end - 1
   const inCredits = !!credits && time >= credits.start && time < Math.min(credits.end, duration) - 1 && !upNext
   const hasNext = item.kind === 'episode' || !!playlistId
+  const sleeping = useSleepTimer()
   const skipIntro = () => {
     introDone.current = true
     if (intro) seek(intro.end)
@@ -967,6 +979,10 @@ function PlayerView({
         onWaiting={onStall}
         onTimeUpdate={() => {
           const v = videoRef.current
+          if (v && !v.paused && sleepDue()) {
+            v.pause()
+            setToast('Sleep timer: paused')
+          }
           if (v && !v.paused) {
             const now = v.currentTime
             const step = lastTick.current === null ? 0 : now - lastTick.current
@@ -1234,6 +1250,18 @@ function PlayerView({
                     {audioDelay !== 0 && <button onClick={() => setAudioTiming(0)}>Reset audio timing</button>}
                   </>
                 )}
+                <div className="menu-section">Sleep timer · {sleepLabel()}</div>
+                <div className="menu-chips">
+                  <button className={!sleeping ? 'active' : ''} onClick={() => setSleep(0)}>Off</button>
+                  {SLEEP_MINUTES.map((m) => (
+                    <button key={m} onClick={() => setSleep(m)}>{m} min</button>
+                  ))}
+                  {hasNext && (
+                    <button className={sleepAtEpisodeEnd() ? 'active' : ''} onClick={() => setSleep('episode')}>
+                      End of {playlistId ? 'this one' : 'episode'}
+                    </button>
+                  )}
+                </div>
                 <div className="menu-section">Subtitles</div>
                 {subStreams.length > 0 && (
                   <button className={subIndex === -1 && choice.burn === -1 ? 'active' : ''} onClick={() => changeSubtitle(null)}>

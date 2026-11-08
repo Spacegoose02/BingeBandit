@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
 import { useLandscape } from '../screen'
 import { roomPosition, TogetherPanel, useTogether } from '../together'
+import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { px, scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import { cueAt, IMAGE_SUBS, parseVtt, pickTracks, streamLabel, TEXT_SUBS, type Cue, type MediaStream, type Prefs } from '../tracks'
 import type { Item, ItemDetail, Marker, MediaFile, SkipMode, SkipPrefs } from '../types'
@@ -447,7 +448,13 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           played: Math.round(played.current),
         })
         .then(() => offline && offlineProgressSent(item.id))
-        .catch(() => undefined)
+        .catch((e) => {
+          // Screen time ran out (or it's bedtime): the server says so in words.
+          if (e instanceof ApiError && e.status === 403 && /^Screen time/.test(e.message)) {
+            setPaused(true)
+            setError(e.message)
+          }
+        })
       if (stopped) trackWrite(sent)
     },
     [item, file, duration, paused, mode, offline],
@@ -808,6 +815,11 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const onEnd = async () => {
     finished.current = true
     report(false, true)
+    if (sleepAtEpisodeEnd()) {
+      setSleep(0)
+      nav.back()
+      return
+    }
     if (offline && item) {
       const n = nextDownloaded(item)
       if (n) {
@@ -996,7 +1008,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       'button'
     if (skipMode === 'off') return null
     if (inMarker.kind === 'credits') {
-      if (next) return { key, mode: skipMode, label: 'Next episode', run: () => playNext(next.id) }
+      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: () => playNext(next.id) }
       if (duration && inMarker.end < duration - 5) return { key, mode: skipMode, label: 'Skip credits', run: () => userSeek(inMarker.end) }
       return null
     }
@@ -1015,6 +1027,15 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip?.key])
+  // The sleep timer: checked as the position moves, so a paused player never trips it.
+  const sleeping = useSleepTimer()
+  useEffect(() => {
+    if (!paused && active && sleepDue()) {
+      setPaused(true)
+      say('Sleep timer: paused')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Math.floor(pos / 5)])
   const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && !subSearch && !togetherOpen
 
 
@@ -1472,6 +1493,16 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
               </ScrollView>
             </>
           )}
+          <Text style={st.menuTitle}>Sleep timer · {sleepLabel()}</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            <Button small primary={!sleeping} label="Off" onPress={() => setSleep(0)} />
+            {SLEEP_MINUTES.map((m) => (
+              <Button key={m} small label={`${m} min`} onPress={() => { setSleep(m); say(`Pausing in ${m} minutes`) }} />
+            ))}
+            {item?.kind === 'episode' && (
+              <Button small primary={sleepAtEpisodeEnd()} label="End of episode" onPress={() => { setSleep('episode'); say('Stopping after this episode') }} />
+            )}
+          </ScrollView>
           {isPhone ? <Button small label="Done" onPress={() => setMenu(false)} style={st.done} /> : <Text style={st.hint}>Back closes this menu</Text>}
         </View>
       )}

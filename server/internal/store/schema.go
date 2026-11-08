@@ -995,8 +995,22 @@ UPDATE settings SET value = '100' WHERE key = 'recently_added_days' AND value = 
 `,
 	// 58: thumbs up and down on titles (recommendations leave out the
 	// disliked ones), and markers for recaps and the ad breaks in
-	// recordings, which can come several to a file.
+	// recordings, which can come several to a file. Screen time for kids:
+	// a daily allowance and a bedtime, and what each has used per day.
 	`
+CREATE TABLE screen_time (
+	user_id         INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+	weekday_minutes INTEGER NOT NULL DEFAULT 0,
+	weekend_minutes INTEGER NOT NULL DEFAULT 0,
+	bedtime         TEXT NOT NULL DEFAULT '',
+	wake            TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE screen_time_used (
+	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	day     TEXT NOT NULL,
+	seconds INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (user_id, day)
+);
 CREATE TABLE title_ratings (
 	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,

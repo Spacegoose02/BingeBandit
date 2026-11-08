@@ -134,7 +134,8 @@ func (s *Server) offlineFile(w http.ResponseWriter, r *http.Request) {
 
 // checkOffline tells the app which of its downloaded titles this profile
 // may still keep: ones it can still see, while downloads are allowed. The
-// app deletes the rest.
+// app deletes the rest. It also says which of them the profile has
+// watched (anywhere), for the app's automatic downloads of next episodes.
 func (s *Server) checkOffline(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Items []int64 `json:"items"`
@@ -144,18 +145,21 @@ func (s *Server) checkOffline(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
-	allowed := []int64{}
+	allowed, watched := []int64{}, []int64{}
 	can := s.canDownload(u)
 	if can {
 		for _, id := range req.Items {
-			_, err := s.Store.Item(u.ID, id)
+			it, err := s.Store.Item(u.ID, id)
 			if err == nil {
 				allowed = append(allowed, id)
+				if it.Watch.Watched {
+					watched = append(watched, id)
+				}
 			} else if !errors.Is(err, store.ErrNotFound) {
 				writeStoreErr(w, err) // never tell the app to delete over a database hiccup
 				return
 			}
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"canDownload": can, "allowed": allowed})
+	writeJSON(w, http.StatusOK, map[string]any{"canDownload": can, "allowed": allowed, "watched": watched})
 }

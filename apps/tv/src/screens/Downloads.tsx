@@ -80,6 +80,19 @@ export default function Downloads({ withBack }: { withBack?: boolean }) {
           <Button key={g} small primary={prefs.limitGB === g} label={g ? `${g} GB` : 'No limit'} onPress={() => setDownloadPrefs({ limitGB: g })} />
         ))}
       </View>
+      <Text style={st.label}>Next episodes</Text>
+      <View style={st.row}>
+        {[0, 1, 3, 5].map((n) => (
+          <Button key={n} small primary={prefs.autoNext === n} label={n ? `Keep ${n} ready` : 'Off'} onPress={() => setDownloadPrefs({ autoNext: n })} />
+        ))}
+      </View>
+      <View style={st.row}>
+        <Button small primary={prefs.autoRemove} label="Delete watched episodes" onPress={() => setDownloadPrefs({ autoRemove: !prefs.autoRemove })} />
+      </View>
+      <Text style={st.hint}>
+        With next episodes on, once you start a show you've downloaded, the episodes after it download by themselves (at the same quality) so that
+        many are always waiting. Deleting watched episodes makes room for them.
+      </Text>
       <Text style={st.hint}>
         Downloads belong to this profile. They're removed if the server stops allowing downloads or this profile can no longer see the title. What you
         watch offline is sent to the server when it can be reached again.

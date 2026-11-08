@@ -4,6 +4,7 @@ import { useAuth } from '../../auth'
 import { Avatar } from '../../components/Avatar'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
+import { ScreenTimeSettings } from '../../components/ScreenTime'
 import { useApi, useDocumentTitle } from '../../hooks'
 import type { Library, User } from '../../types'
 import { ratingLevels } from '../../types'
@@ -19,6 +20,7 @@ export default function AdminUsers() {
   const [linking, setLinking] = useState<User | null>(null)
   const [unlinking, setUnlinking] = useState<User | null>(null)
   const [emailing, setEmailing] = useState<User | null>(null)
+  const [timing, setTiming] = useState<User | null>(null)
   const [naming, setNaming] = useState<User | null>(null)
 
   const remove = async (u: User) => {
@@ -130,6 +132,11 @@ export default function AdminUsers() {
                 ))}
               </select>
             )}
+            {!u.isAdmin && (
+              <button className="btn btn-glass btn-sm" onClick={() => setTiming(u)} title="A daily allowance and a bedtime">
+                <Icon name="clock" size={16} /> Screen time
+              </button>
+            )}
             {u.hasPasscode && (
               <button className="btn btn-glass btn-sm" onClick={() => clearPasscode(u)} title="For someone who forgot their settings passcode">
                 <Icon name="unlock" size={16} /> Clear passcode
@@ -184,6 +191,11 @@ export default function AdminUsers() {
       )}
       {unlinking && <UnlinkUser user={unlinking} onClose={() => setUnlinking(null)} onSaved={() => { setUnlinking(null); reload() }} />}
       {naming && <DisplayName user={naming} onClose={() => setNaming(null)} onSaved={() => { setNaming(null); reload() }} />}
+      {timing && (
+        <Modal title={`Screen time for ${timing.profileName || timing.username}`} onClose={() => setTiming(null)}>
+          <ScreenTimeSettings url={`/api/admin/users/${timing.id}/screen-time`} />
+        </Modal>
+      )}
       {emailing && <UserEmail user={emailing} onClose={() => setEmailing(null)} onSaved={() => { setEmailing(null); reload() }} />}
     </div>
   )
