@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Samsung (Tizen) TV app. Build with ./build.sh, then package and install with Tizen Studio (see README.md). -->
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/spacegoose02/bingebandit" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="BngBndtTV1.BingeBandit" package="BngBndtTV1" required_version="4.0"/>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <name>BingeBandit</name>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <!-- The app opens the server's own web app, wherever it is. -->
+    <access origin="*" subdomains="true"/>
+    <tizen:allow-navigation>*</tizen:allow-navigation>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <tizen:profile name="tv-samsung"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>

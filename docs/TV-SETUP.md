@@ -6,13 +6,17 @@ This guide is for setting up a friend's or family member's TV so it watches from
 
 - **A TV that runs Android apps:** Google TV, Android TV (including Sony, TCL, Hisense and Philips models with Google TV), Nvidia Shield, or an Amazon Fire TV / Fire TV Stick. It needs Android 7 or newer, which covers anything from the last several years.
 - **Roku:** there's an early Roku channel that has to be sideloaded with the Roku in developer mode (see `apps/roku/README.md`). It isn't in the Roku Channel Store yet.
-- **Other TVs** (Samsung, LG, Apple TV, Vizio) can't run the app. Plug in a Google TV Streamer, Chromecast with Google TV or Fire TV Stick and use that instead.
+- **Samsung and LG TVs:** there's a small app for each (`apps/smarttv`) that opens your server's web app in TV mode, driven by the remote. Like the Roku channel, it has to be installed with the TV in developer mode, so it suits your own TVs more than a friend's. See `apps/smarttv/README.md`.
+- **Apple TV:** an Apple TV build of the app is started (`apps/tv/ios`) but isn't released. Until it is, use AirPlay from the web app on an iPhone, or a streaming stick.
+- **Other TVs** (Vizio and the like) can't run an app. Plug in a Google TV Streamer, Chromecast with Google TV or Fire TV Stick and use that instead.
 - **Your phone**, signed in to BingeBandit, to approve the TV.
 - **An account or profile for them** on your server (see step 2).
 
 ## 1. Make your server reachable from outside your home
 
 The TV is on someone else's internet, so it needs an address that works from anywhere. Pick one:
+
+- **Remote access in BingeBandit (easiest).** Under **Server → Settings → Network → Remote access without port forwarding**, choose a Cloudflare quick tunnel and BingeBandit gives you an `https://…trycloudflare.com` address at once, with nothing to set up on your router. The address changes when the server restarts, so for a TV you keep, use a named Cloudflare tunnel with your own domain, or Tailscale Funnel, from the same place.
 
 - **A domain with a reverse proxy (recommended).** Point a hostname such as `tv.example.com` at `http://<server-ip>:8484` with Nginx Proxy Manager, SWAG, Caddy, Traefik or Cloudflare Tunnel, with HTTPS turned on. Then in BingeBandit go to **Server → Settings → Network**:
   - Add the proxy's IP under **Trusted reverse proxies**.

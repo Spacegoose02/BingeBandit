@@ -17,6 +17,7 @@ import { IMAGE_SUBS, TEXT_SUBS, pickTracks } from '../tracks'
 import { chapterAt, chapterName, nextChapterStart, prevChapterStart, useChapters } from '../chapters'
 import type { Chapter, Item, ItemDetail, MediaFile, MediaStream, PreRoll as PreRollData, Prefs, SubtitleResult, TrickplayInfo } from '../types'
 import { ScoreBug } from '../components/ScoreBug'
+import { tvKey } from '../tvNav'
 import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { CastPicker } from '../components/Cast'
 
@@ -782,8 +783,15 @@ function PlayerView({
         PageDown: nextChapter,
         '[': prevChapter,
         ']': nextChapter,
+        // TV remotes (Samsung, LG, and media keys on keyboards).
+        MediaPlayPause: togglePlay,
+        MediaPlay: () => videoRef.current?.paused && togglePlay(),
+        MediaPause: () => !videoRef.current?.paused && togglePlay(),
+        MediaFastForward: () => seek(position() + 30),
+        MediaRewind: () => seek(position() - 10),
+        MediaStop: () => history.back(),
       }
-      const fn = actions[e.key]
+      const fn = actions[tvKey(e)]
       if (fn) {
         e.preventDefault()
         fn()
