@@ -1017,5 +1017,7 @@ ALTER TABLE markers_new RENAME TO markers;
 CREATE UNIQUE INDEX markers_one ON markers(item_id, kind) WHERE kind != 'commercial';
 CREATE INDEX markers_item ON markers(item_id, start_at);
 ALTER TABLE recordings ADD COLUMN commercials_at INTEGER NOT NULL DEFAULT 0;
+-- Seasons are looked at again for recaps (intro fingerprints are cached).
+UPDATE items SET markers_at = 0 WHERE kind = 'episode';
 `,
 }

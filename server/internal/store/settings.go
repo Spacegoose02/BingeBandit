@@ -34,6 +34,7 @@ const (
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
 	SettingBecauseRows       = "because_rows_enabled"    // false: no "Because you watched" rows on Home
 	SettingDVRDetectAds      = "dvr_detect_ads"          // false: don't look for ad breaks in recordings
+	SettingDetectRecaps      = "detect_recaps"           // false: don't look for "Previously on" recaps
 	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingRequestMovieLimit = "request_movie_limit"     // movies each person may request per 7 days; 0 = no limit
 	SettingRequestShowLimit  = "request_show_limit"      // shows (or seasons of one) per 7 days; 0 = no limit
@@ -158,6 +159,7 @@ var SettingDefaults = map[string]string{
 	SettingRecommendations:     "true",
 	SettingBecauseRows:         "true",
 	SettingDVRDetectAds:        "true",
+	SettingDetectRecaps:        "true",
 	SettingRequests:            "true",
 	SettingRequestMovieLimit:   "0",
 	SettingRequestShowLimit:    "0",

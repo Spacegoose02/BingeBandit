@@ -339,6 +339,11 @@ a.person-card:hover .card-title { color: var(--accent); }
   transition: opacity 1.2s ease, transform 9s ease;
 }
 .hero-art.active { opacity: 1; transform: scale(1); }
+.hero-trailer {
+  position: absolute; top: 50%; left: 50%; width: max(100%, calc(min(78vh, 760px) * 16 / 9)); aspect-ratio: 16 / 9;
+  transform: translate(-50%, -50%) scale(1.15); border: 0; pointer-events: none; animation: hero-trailer-in 1.2s ease both;
+}
+@keyframes hero-trailer-in { from { opacity: 0; } to { opacity: 1; } }
 .hero-shade {
   position: absolute;
   inset: 0;
