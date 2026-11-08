@@ -34,6 +34,7 @@ const (
 	SettingRecommendations   = "recommendations_enabled" // false: nobody can recommend titles to anyone
 	SettingBecauseRows       = "because_rows_enabled"    // false: no "Because you watched" rows on Home
 	SettingDVRDetectAds      = "dvr_detect_ads"          // false: don't look for ad breaks in recordings
+	SettingWhisperModel      = "whisper_model"           // the whisper.cpp model for subtitles made from the sound: a name (tiny, base, small, medium, large-v3-turbo) or a model file's path
 	SettingDetectRecaps      = "detect_recaps"           // false: don't look for "Previously on" recaps
 	SettingRequests          = "requests_enabled"        // false: nobody can ask for movies and shows the server doesn't have
 	SettingRequestMovieLimit = "request_movie_limit"     // movies each person may request per 7 days; 0 = no limit
@@ -159,6 +160,7 @@ var SettingDefaults = map[string]string{
 	SettingRecommendations:     "true",
 	SettingBecauseRows:         "true",
 	SettingDVRDetectAds:        "true",
+	SettingWhisperModel:        "base",
 	SettingDetectRecaps:        "true",
 	SettingRequests:            "true",
 	SettingRequestMovieLimit:   "0",

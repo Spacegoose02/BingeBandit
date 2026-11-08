@@ -283,6 +283,34 @@ export default function AdminSettings() {
             . The account is optional, but OpenSubtitles allows more downloads a day with one. Downloaded subtitles are saved
             beside the video as .srt files, so the media folder must be writable. Kid profiles can't download.
           </p>
+          <label>
+            Whisper model (for “Make subtitles from the sound”)
+            <select
+              value={['tiny', 'base', 'small', 'medium', 'large-v3-turbo'].includes(s.whisper_model ?? 'base') ? s.whisper_model ?? 'base' : 'path'}
+              onChange={(e) => setS({ ...s, whisper_model: e.target.value === 'path' ? '' : e.target.value })}
+            >
+              <option value="tiny">Tiny (75 MB, fastest)</option>
+              <option value="base">Base (140 MB)</option>
+              <option value="small">Small (460 MB)</option>
+              <option value="medium">Medium (1.5 GB)</option>
+              <option value="large-v3-turbo">Large v3 Turbo (1.6 GB, best)</option>
+              <option value="path">A model file on the server…</option>
+            </select>
+          </label>
+          {!['tiny', 'base', 'small', 'medium', 'large-v3-turbo'].includes(s.whisper_model ?? 'base') && (
+            <label>
+              Model file
+              <input value={s.whisper_model ?? ''} onChange={set('whisper_model')} placeholder="/models/ggml-large-v3.bin" spellCheck={false} />
+            </label>
+          )}
+          <p className="muted small">
+            Admins can make subtitles from a video's own sound in the players' Find subtitles, with{' '}
+            <a href="https://github.com/ggml-org/whisper.cpp" target="_blank" rel="noreferrer">
+              whisper.cpp
+            </a>{' '}
+            on this server (install it so whisper-cli is on the PATH, or set BB_WHISPER). The model downloads once. Bigger models are more
+            accurate and slower; on a CPU, Base takes a few minutes for a film.
+          </p>
         </section>
 
         <section className="panel form">

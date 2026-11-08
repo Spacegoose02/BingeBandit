@@ -1292,7 +1292,7 @@ function PlayerView({
               </div>
             )}
             {menu === 'subsearch' && (
-              <SubtitleSearch fileId={file.id} language={prefs.subtitleLanguage} onDone={subtitleDownloaded} />
+              <SubtitleSearch fileId={file.id} language={prefs.subtitleLanguage} audioStream={effectiveAudio} isAdmin={!!user?.isAdmin} onDone={subtitleDownloaded} />
             )}
           </div>
           <button className="icon-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
@@ -1411,8 +1411,91 @@ function ChapterTicks({ chapters, duration }: { chapters: Chapter[]; duration: n
   )
 }
 
+interface WhisperJob {
+  status: 'idle' | 'running' | 'done' | 'failed'
+  step?: string
+  progress: number
+  error?: string
+  index?: number
+  streams?: MediaStream[]
+}
+
+/**
+ * Admins: subtitles made from the file's own sound with whisper.cpp on the
+ * server, for files OpenSubtitles doesn't have. It runs in the background;
+ * this asks how it's going every few seconds while open.
+ */
+function WhisperSubtitles({ fileId, audioStream, onDone }: { fileId: number; audioStream: number; onDone: (streams: MediaStream[], index: number) => void }) {
+  const [state, setState] = useState<{ available: boolean; job: WhisperJob } | null>(null)
+  const [translate, setTranslate] = useState(false)
+  const [error, setError] = useState('')
+  const url = `/api/admin/files/${fileId}/whisper`
+  useEffect(() => {
+    let stop = false
+    let timer: ReturnType<typeof setTimeout>
+    const poll = () =>
+      api.get<{ available: boolean; job: WhisperJob }>(url).then(
+        (s) => {
+          if (stop) return
+          setState(s)
+          if (s.job.status === 'running') timer = setTimeout(poll, 3000)
+        },
+        () => undefined,
+      )
+    poll()
+    return () => {
+      stop = true
+      clearTimeout(timer)
+    }
+  }, [url, state?.job.status === 'running'])
+  useEffect(() => {
+    const j = state?.job
+    if (j?.status === 'done' && j.streams && j.index !== undefined) onDone(j.streams, j.index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.job.status])
+  if (!state?.available) return null
+  const j = state.job
+  const start = async () => {
+    setError('')
+    try {
+      const job = await api.post<WhisperJob>(url, { translate, audioStream })
+      setState({ available: true, job })
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+  return (
+    <div className="whisper">
+      {j.status === 'running' ? (
+        <p className="subsearch-note">
+          {j.step || 'Working'}… {j.progress > 0 ? `${Math.round(j.progress * 100)}%` : ''} You can keep watching; they're added when ready.
+        </p>
+      ) : (
+        <>
+          <button onClick={start}>
+            <span className="subsearch-name">
+              Make subtitles from the sound
+              <small>Whisper, on the server. Takes a few minutes; nothing leaves the server.</small>
+            </span>
+          </button>
+          <label className="check subsearch-note">
+            <input type="checkbox" checked={translate} onChange={(e) => setTranslate(e.target.checked)} /> In English, whatever is spoken
+          </label>
+        </>
+      )}
+      {(error || j.error) && <p className="subsearch-note bad">{error || j.error}</p>}
+    </div>
+  )
+}
+
 /** Searches OpenSubtitles for the file and adds the one picked. */
-function SubtitleSearch({ fileId, language, onDone }: { fileId: number; language: string; onDone: (streams: MediaStream[], index: number) => void }) {
+function SubtitleSearch({ fileId, language, audioStream, isAdmin, onDone }: {
+  fileId: number
+  language: string
+  audioStream: number
+  isAdmin: boolean
+  onDone: (streams: MediaStream[], index: number) => void
+}) {
   const [lang, setLang] = useState(normLang(language) || 'eng')
   const [results, setResults] = useState<SubtitleResult[] | null>(null)
   const [error, setError] = useState('')
@@ -1456,6 +1539,7 @@ function SubtitleSearch({ fileId, language, onDone }: { fileId: number; language
           ))}
         </select>
       </label>
+      {isAdmin && <WhisperSubtitles fileId={fileId} audioStream={audioStream} onDone={onDone} />}
       {error && <p className="subsearch-note bad">{error}</p>}
       {!results && !error && <p className="subsearch-note">Searching OpenSubtitles…</p>}
       {results?.length === 0 && <p className="subsearch-note">Nothing found in {languageName(lang)}.</p>}

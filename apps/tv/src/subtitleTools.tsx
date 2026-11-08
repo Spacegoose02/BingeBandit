@@ -1,7 +1,7 @@
 // Scrub thumbnails and subtitle search for the player (web: pages/Player.tsx).
 import React, { useEffect, useState } from 'react'
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { absolute, api, authHeaders } from './api'
+import { absolute, api, authHeaders, current } from './api'
 import { Button } from './components'
 import { colors, font, gutter, px, scaled } from './theme'
 import { languageName, normLang, type MediaStream } from './tracks'
@@ -132,6 +132,7 @@ export function SubtitleSearch({
           <Button key={l} small primary={l === lang} label={languageName(l)} onPress={() => setLang(l)} />
         ))}
       </ScrollView>
+      {!!current()?.user.isAdmin && <WhisperSubtitles fileId={fileId} onDone={onDone} />}
       {!!error && <Text style={[st.note, st.bad]}>{error}</Text>}
       {!results && !error && <Text style={st.note}>Searching OpenSubtitles…</Text>}
       {results?.length === 0 && <Text style={st.note}>Nothing found in {languageName(lang)}.</Text>}
@@ -158,6 +159,63 @@ export function SubtitleSearch({
           )
         })}
       </ScrollView>
+    </View>
+  )
+}
+
+interface WhisperJob {
+  status: 'idle' | 'running' | 'done' | 'failed'
+  step?: string
+  progress: number
+  error?: string
+  index?: number
+  streams?: MediaStream[]
+}
+
+/** Admins: subtitles made from the file's sound with whisper.cpp on the server (the web player has the same). */
+function WhisperSubtitles({ fileId, onDone }: { fileId: number; onDone: (streams: MediaStream[], index: number) => void }) {
+  const [state, setState] = useState<{ available: boolean; job: WhisperJob } | null>(null)
+  const [error, setError] = useState('')
+  const url = `/api/admin/files/${fileId}/whisper`
+  const running = state?.job.status === 'running'
+  useEffect(() => {
+    let stop = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = () =>
+      api.get<{ available: boolean; job: WhisperJob }>(url).then(
+        (x) => {
+          if (stop) return
+          setState(x)
+          if (x.job.status === 'running') timer = setTimeout(poll, 3000)
+        },
+        () => undefined,
+      )
+    poll()
+    return () => {
+      stop = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [url, running])
+  const done = state?.job.status === 'done' ? state.job : undefined
+  useEffect(() => {
+    if (done?.streams && done.index !== undefined) onDone(done.streams, done.index)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!done])
+  if (!state?.available) return null
+  const j = state.job
+  const start = (translate: boolean) =>
+    api.post<WhisperJob>(url, { translate, audioStream: -1 }).then((job) => setState({ available: true, job }), (e: Error) => setError(e.message))
+  return (
+    <View>
+      {running ? (
+        <Text style={st.note}>{j.step || 'Working'}… {j.progress > 0 ? `${Math.round(j.progress * 100)}%` : ''} They're added when ready.</Text>
+      ) : (
+        <ScrollView horizontal contentContainerStyle={st.row}>
+          <Button small label="Make subtitles from the sound (Whisper)" onPress={() => start(false)} />
+          <Button small label="…in English" onPress={() => start(true)} />
+        </ScrollView>
+      )}
+      {!!(error || j.error) && <Text style={[st.note, st.bad]}>{error || j.error}</Text>}
     </View>
   )
 }

@@ -23,6 +23,7 @@ import (
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
 	"bingebandit/internal/tunnel"
+	"bingebandit/internal/whisper"
 )
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +202,10 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := in[store.SettingTunnel]; ok && v != tunnel.Off && v != tunnel.Quick && v != tunnel.Cloudflare && v != tunnel.Tailscale {
 		writeErr(w, http.StatusBadRequest, "remote_tunnel must be empty, cloudflare-quick, cloudflare or tailscale")
+		return
+	}
+	if v, ok := in[store.SettingWhisperModel]; ok && !slices.Contains(whisper.Models, v) && !filepath.IsAbs(v) {
+		writeErr(w, http.StatusBadRequest, "whisper_model must be one of "+strings.Join(whisper.Models, ", ")+", or the full path of a model file")
 		return
 	}
 	if v, ok := in[store.SettingTunnelPort]; ok {

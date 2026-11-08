@@ -32,6 +32,7 @@ import (
 	"bingebandit/internal/trickplay"
 	"bingebandit/internal/tunnel"
 	"bingebandit/internal/web"
+	"bingebandit/internal/whisper"
 )
 
 type Server struct {
@@ -45,23 +46,26 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
-	Tunnel     *tunnel.Manager // remote access without port forwarding; nil in tests
-	Trickplay  *trickplay.Generator
-	OpenSubs   *opensubs.Client
-	Live       *livetv.Manager
-	Logos      *livetv.LogoCache
-	LogoLib    *livetv.LogoLibrary
-	DVR        *livetv.Recorder
-	Importer   *importer.Runner
-	Trakt      *trakt.Syncer
-	Plugins    *plugins.Host
-	Logs       *logs.Buffer
-	Version    string
-	DataDir    string
-	FFmpeg     string
-	FFprobe    string
-	UpdateRepo string // GitHub "owner/repo" whose releases carry the TV app
-	ListenAddr string // where the server listens (":8484"), for the address TVs are sent
+
+	whisper     *whisper.Runner // made on first use
+	whisperOnce sync.Once
+	Tunnel      *tunnel.Manager // remote access without port forwarding; nil in tests
+	Trickplay   *trickplay.Generator
+	OpenSubs    *opensubs.Client
+	Live        *livetv.Manager
+	Logos       *livetv.LogoCache
+	LogoLib     *livetv.LogoLibrary
+	DVR         *livetv.Recorder
+	Importer    *importer.Runner
+	Trakt       *trakt.Syncer
+	Plugins     *plugins.Host
+	Logs        *logs.Buffer
+	Version     string
+	DataDir     string
+	FFmpeg      string
+	FFprobe     string
+	UpdateRepo  string // GitHub "owner/repo" whose releases carry the TV app
+	ListenAddr  string // where the server listens (":8484"), for the address TVs are sent
 
 	updates     appUpdates
 	tvApp       tvApp
@@ -419,6 +423,8 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/items/{id}/unmatch", s.unmatchItem)
 				r.Put("/items/{id}/markers", s.setMarkers)
 				r.Post("/items/{id}/detect-markers", s.detectMarkers)
+				r.Get("/files/{id}/whisper", s.whisperState)
+				r.Post("/files/{id}/whisper", s.startWhisper)
 				r.Get("/items/{id}/location", s.itemLocation)
 				r.Post("/items/{id}/move", s.moveItem)
 				r.Get("/items/{id}/delete", s.deletePlan)
