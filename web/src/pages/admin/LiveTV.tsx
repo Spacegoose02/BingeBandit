@@ -237,7 +237,18 @@ function SourceEditor({ source, onClose, onSaved }: { source: Partial<LiveSource
         <label>
           URL or file path
           <input className="mono" value={s.url ?? ''} onChange={(e) => setS({ ...s, url: e.target.value })} required placeholder={isM3U ? 'http://provider/get.php?username=…&type=m3u_plus' : 'http://provider/xmltv.php or .xml.gz'} />
+          <span className="muted small">
+            {isM3U ? (
+              <>An HDHomeRun antenna or cable tuner: <code>hdhomerun://192.168.1.50</code> (its tuners become the connection limit).</>
+            ) : (
+              <>
+                The free guide for an HDHomeRun: <code>hdhomerun://192.168.1.50</code>. Two weeks from Schedules Direct (any antenna, cable or satellite
+                lineup you add on their site): <code>schedulesdirect://username:password</code>. Antenna channels match their guide by number.
+              </>
+            )}
+          </span>
         </label>
+        {!s.id && <FindTuners onPick={(addr, name) => setS({ ...s, url: `hdhomerun://${addr}`, name: s.name || name })} />}
         <div className="field-grid">
           {isM3U && (
             <label>
@@ -266,6 +277,40 @@ function SourceEditor({ source, onClose, onSaved }: { source: Partial<LiveSource
         </div>
       </form>
     </Modal>
+  )
+}
+
+interface FoundTuner {
+  FriendlyName: string
+  DeviceID: string
+  LocalIP: string
+  TunerCount: number
+}
+
+/** HDHomeRun tuners on this network, picked with a click. */
+function FindTuners({ onPick }: { onPick: (addr: string, name: string) => void }) {
+  const [found, setFound] = useState<FoundTuner[] | null>(null)
+  const [msg, setMsg] = useState('')
+  const look = async () => {
+    setMsg('Looking…')
+    try {
+      const list = await api.get<FoundTuner[]>('/api/admin/live/hdhomerun')
+      setFound(list)
+      setMsg(list.length ? '' : 'No HDHomeRun found on this network. Enter its address instead (it shows in your router or the HDHomeRun app).')
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
+  }
+  return (
+    <div className="actions">
+      <button type="button" className="btn btn-glass btn-sm" onClick={look}>Find HDHomeRun tuners</button>
+      {found?.map((t) => (
+        <button key={t.DeviceID} type="button" className="btn btn-glass btn-sm" onClick={() => onPick(t.LocalIP, t.FriendlyName || 'HDHomeRun')}>
+          {t.FriendlyName || 'HDHomeRun'} · {t.LocalIP} · {t.TunerCount} tuners
+        </button>
+      ))}
+      {msg && <span className="muted small">{msg}</span>}
+    </div>
   )
 }
 

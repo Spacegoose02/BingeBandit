@@ -372,7 +372,7 @@ func (g dEPGSource) usable() string {
 	switch g.SourceType {
 	case "", "xmltv":
 	case "schedules_direct":
-		return "Schedules Direct guides aren't supported yet"
+		return "Dispatcharr doesn't share its Schedules Direct password; add the guide under Sources as schedulesdirect://username:password"
 	case "dummy":
 		return "a placeholder guide made by Dispatcharr"
 	default:

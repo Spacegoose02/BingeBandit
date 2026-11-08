@@ -438,6 +438,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/collections/{id}", s.deleteCollection)
 
 				r.Get("/live/sources", s.liveSources)
+				r.Get("/live/hdhomerun", s.findHDHomeRuns)
 				r.Post("/live/sources", s.saveLiveSource)
 				r.Put("/live/sources/{id}", s.saveLiveSource)
 				r.Delete("/live/sources/{id}", s.deleteLiveSource)
