@@ -221,9 +221,9 @@ func schedulesDirectGuide(ctx context.Context, src *store.LiveSource) (*guideDat
 		dates = append(dates, time.Now().UTC().AddDate(0, 0, d-1).Format("2006-01-02"))
 	}
 	type airing struct {
-		ProgramID    string `json:"programID"`
-		AirDateTime  string `json:"airDateTime"`
-		Duration     int64  `json:"duration"`
+		ProgramID   string `json:"programID"`
+		AirDateTime string `json:"airDateTime"`
+		Duration    int64  `json:"duration"`
 	}
 	var stations []string
 	for id := range ids {
