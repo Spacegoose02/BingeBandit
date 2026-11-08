@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, DeviceEventEmitter, Image, Modal, Pressable, ScrollView, StyleSheet, TVFocusGuideView, Text, TextInput, View } from 'react-native'
 import { api, cached, current, image, saveSession, writesDone } from '../api'
+import { syncWatchNext } from '../watchNext'
 import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../components'
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { refreshGameLights } from '../hue'
@@ -768,7 +769,13 @@ function HomeRows() {
     // Wait for the player's last report so Continue Watching has the new position.
     writesDone()
       .then(() => api.get<HomeData>('/api/home'))
-      .then(setData, (e) => setError(e.message))
+      .then(
+        (d) => {
+          setData(d)
+          syncWatchNext(d.continueWatching)
+        },
+        (e) => setError(e.message),
+      )
   }, [])
   // Again each time Back comes here, for the new Continue Watching.
   const { returns } = useScreen()

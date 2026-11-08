@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, BackHandler, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, AppState, BackHandler, Linking, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
@@ -23,6 +23,7 @@ import { ScoreBug } from './src/scorebug'
 import { Toasts } from './src/toasts'
 import { ItemMenuHost } from './src/itemMenu'
 import { TogetherInvites } from './src/together'
+import { clearWatchNext, parseWatchNextLink } from './src/watchNext'
 
 type Phase =
   | { name: 'loading' }
@@ -80,6 +81,7 @@ export default function App() {
   useEffect(() => {
     onSignedOut((server) => {
       if (!current()) return
+      clearWatchNext()
       saveSession(null).catch(() => undefined)
       setStack(homeStack())
       setPhase({ name: 'signin', server: { url: server, name: 'BingeBandit', version: '' } })
@@ -94,6 +96,31 @@ export default function App() {
     }),
     [],
   )
+
+  // A title chosen in the home screen's Watch Next row: its page, then the
+  // player at the saved position (Back returns to the page). A link that
+  // arrives before sign-in waits for it.
+  const pendingLink = useRef<{ id: number; start: number } | null>(null)
+  useEffect(() => {
+    Linking.getInitialURL().then((u) => {
+      pendingLink.current = parseWatchNextLink(u)
+    }, () => undefined)
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      pendingLink.current = parseWatchNextLink(url)
+      if (phaseRef.current.name === 'app') openLink()
+    })
+    return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const openLink = useCallback(() => {
+    const l = pendingLink.current
+    if (!l) return
+    pendingLink.current = null
+    setStack([...homeStack(), entry({ name: 'details', id: l.id }), entry({ name: 'player', id: l.id, start: l.start })])
+  }, [])
+  useEffect(() => {
+    if (phase.name === 'app') openLink()
+  }, [phase.name, openLink])
 
   // Android keeps the app alive while the TV sleeps, so waking it would
   // resume the player right where it was. After a while away, start over on Home.
@@ -195,7 +222,10 @@ export default function App() {
       screen = stack.map((e, i) => (
         <StackScreen key={e.key} active={i === stack.length - 1}>
           {routeScreen(e.route, {
-            onSignedOut: () => setPhase({ name: 'connect' }),
+            onSignedOut: () => {
+              clearWatchNext()
+              setPhase({ name: 'connect' })
+            },
             onSwitchProfile: () => setPhase({ name: 'profiles', cancelable: true }),
           })}
         </StackScreen>
