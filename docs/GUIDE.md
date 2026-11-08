@@ -107,6 +107,8 @@ Home opens with a spotlight of recent titles, then **Continue Watching** (includ
 
 ![Home](screenshots/home.webp)
 
+When you finish or thumbs-up something, Home adds **Because you watched…** and **Because you liked…** rows of titles like it from your own libraries (TMDB's recommendations for it, then titles of the same genres). Admins can turn these rows off under Settings. The spotlight plays a title's trailer silently after a few seconds (the speaker button turns the sound on); turn that off under **Account → Playback**, and it stays off when your device asks for reduced motion.
+
 Libraries you pin sit in the sidebar and fill your Home. Use **Edit** next to **Pinned** to choose which ones and their order. Unpinned libraries stay under **More**.
 
 ### Libraries
@@ -119,7 +121,7 @@ The **Library** tab can be filtered by genre, decade, rating (6+, 7+ or 8+) and 
 
 ### Movie and show pages
 
-A title's page shows its details, ratings, cast (pick someone to see everything else of theirs in your libraries), the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork.
+A title's page shows its details, ratings, cast (pick someone to see everything else of theirs in your libraries), the file's quality and audio and subtitle tracks, plus buttons to play or resume, mark watched, add to your watchlist or a playlist, and (for admins) edit details and artwork. The thumbs rate it for you (down, up, or two thumbs up for a favourite): a thumbs down leaves it out of your recommendations and the spotlight, and a thumbs up gives you a **Because you liked** row. **More like this** at the bottom lists similar titles you have. **Not interested** on a poster's menu is the same as a thumbs down.
 
 ![A movie page](screenshots/movie.webp)
 
@@ -147,7 +149,9 @@ The web player plays a file directly when your browser can, and otherwise conver
 - move the sound earlier or later in tenth-of-a-second steps when it's out of step with the picture (Options → Audio timing on the web and TV app, or − and + on a keyboard; in the Windows app it's mpv's own Ctrl+− and Ctrl++). The server does the shifting, so a file that was playing directly starts converting (the picture is usually copied as is, so it costs little) and the timing lasts until you leave the player,
 - find subtitles online with **Find subtitles online** in Options, once an admin has added an OpenSubtitles API key under Settings → Scrub previews and subtitles; the one you pick is saved beside the video for everyone,
 - jump between chapters when the file has them: the marks on the progress bar, the **Chapters** button (Options → Chapters on the TV and Roku), or `[` and `]` (Page Up and Page Down) on a keyboard,
-- skip intros and credits,
+- skip intros, recaps ("Previously on…"), credits and, in DVR recordings, ad breaks. Each has a button (OK presses it on a TV) or happens by itself, as you choose under **Account → Playback**. Recaps are found by comparing a season's episodes; ad breaks by Comskip when it's installed on the server, otherwise by the black frames and silence around them,
+- set a **sleep timer** (Options → Sleep timer): pause after 15 to 90 minutes, or at the end of the episode instead of starting the next one,
+- (admins) **make subtitles from the sound** for a file that has none, in Find subtitles online: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) on the server listens to it and writes them, in the language spoken or in English. It takes a few minutes and needs whisper.cpp installed on the server (see Settings → Scrub previews and subtitles),
 - carry on to the next episode automatically,
 - start **Watch Together** to watch in sync with someone else on the server.
 
@@ -184,6 +188,8 @@ BingeBandit can replace Dispatcharr or an HDHomeRun setup. It reads your IPTV pr
 
 ![Live TV channels](screenshots/admin-live.webp)
 
+**An antenna or cable tuner (HDHomeRun):** add a playlist source with the address `hdhomerun://192.168.1.50` (the tuner's IP; **Find HDHomeRun tuners** on the source form looks for them). Its channels come in by number, with the tuner count as the stream limit. For the guide, add a guide source with the same address for SiliconDust's free guide, or `schedulesdirect://username:password` for two weeks of [Schedules Direct](https://www.schedulesdirect.org) (paid; add your lineups on their site first). Antenna channels are matched to either guide by number.
+
 Already using Dispatcharr? **Import from Dispatcharr** on the Live TV page brings over its provider accounts, guides and channels in one go.
 
 Other things on the Live TV page:
@@ -197,7 +203,7 @@ Other things on the Live TV page:
 
 ### Recording
 
-Pick a programme in the guide and choose **Record** or **Record series**. Upcoming, series and finished recordings are on the **Recordings** page. Recording settings, including where files go, are under **Server → Settings → Live TV recording (DVR)**.
+Pick a programme in the guide and choose **Record** or **Record series**. Finished recordings are looked through for ad breaks every hour, so the player can offer **Skip ad** (turn this off under the DVR settings). Upcoming, series and finished recordings are on the **Recordings** page. Recording settings, including where files go, are under **Server → Settings → Live TV recording (DVR)**.
 
 ## 8. People: users, profiles and PINs
 
@@ -240,6 +246,8 @@ A kid sees:
 
 To approve something, open a movie or show and press the smiley **Approve for kids** button, then tick the kids it's for. On a collection's page, **Approve for kids** approves everything in it, including titles added to it later. Kids' channels are picked under **Server → Live TV → Kids**.
 
+**Screen time:** on a profile (your **Account** page) or under **Server → Users → Screen time**, give someone minutes a day for weekdays and weekends, and a bedtime. Movies, shows, music and Live TV count while they play. When the time's up, or at bedtime, nothing new starts and whatever is playing stops with a message; **Start today over** gives more time. Times are the server's clock.
+
 A good setup is a **Kids Movies** and **Kids Shows** library that only the kid profiles can see, plus approvals for anything else you're happy with.
 
 ## 10. TVs, phones and other devices
@@ -256,11 +264,11 @@ The web app works on phones and tablets too, with tabs along the bottom.
 
 ### Android TV, Google TV, Fire TV and Android phones
 
-The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do.
+The BingeBandit app runs on Android TV, Google TV, Fire TV and Android phones. On a TV, install the free **Downloader** app and enter your server's address followed by `/tv` (for example `192.168.1.10:8484/tv`): that installs the app already pointed at your server. The APK is also on the [latest release](https://github.com/Spacegoose02/BingeBandit/releases/latest) as `BingeBandit-TV-<version>.apk`. The app updates itself after that. To set up someone else's TV, see [TV-SETUP.md](TV-SETUP.md), which includes a printable sheet you can send them. See [apps/tv/README.md](../apps/tv/README.md) for what it can do. On Google TV and Android TV, what you're partway through also shows in the TV's own **Continue watching** row (Play Next), and picking it there opens the player where you left off. Music libraries are in the app too: albums and artists, with Now Playing, and music keeps playing while you browse (the remote's Play/Pause key pauses it).
 
 #### Downloads on phones
 
-On a phone or tablet, a movie, an episode or a whole season can be saved to watch with no connection: open it and tap **Download**, then pick a quality. **Original** saves the file as it is (offered when the phone can play it); 1080p, 720p and 480p are smaller copies the server converts first, with the subtitles saved alongside. The **Downloads** tab shows progress, pauses and resumes, and plays what's saved; it also opens from Home when the server can't be reached. Downloads go over Wi-Fi only unless you change that there, and stop at a storage limit you set (20 GB to start). What you watch offline is sent to the server once it can be reached again.
+On a phone or tablet, a movie, an episode or a whole season can be saved to watch with no connection: open it and tap **Download**, then pick a quality. **Original** saves the file as it is (offered when the phone can play it); 1080p, 720p and 480p are smaller copies the server converts first, with the subtitles saved alongside. The **Downloads** tab shows progress, pauses and resumes, and plays what's saved; it also opens from Home when the server can't be reached. Downloads go over Wi-Fi only unless you change that there, and stop at a storage limit you set (20 GB to start). What you watch offline is sent to the server once it can be reached again. Under **Next episodes**, the app can keep one, three or five episodes ahead of the show you're watching downloaded by itself, and **Delete watched episodes** makes room for them.
 
 Downloads follow the **Let users download files** setting in Admin → Settings (admins can always download). A download is deleted from the phone when the server stops allowing downloads, when the profile can no longer see the title (a library taken away, a kid approval removed), or when you sign out on that phone. Converted copies take the server's CPU (or GPU, with hardware encoding) while they're made, one at a time, and are kept in the server's cache for a week.
 
@@ -269,6 +277,10 @@ Downloads follow the **Let users download files** setting in Admin → Settings 
 On a movie or episode, the cast button (web) or **Play on a TV** (Android phones) lists the Chromecasts, Google TVs and DLNA smart TVs on your network. Pick one and the server sends the video straight to the TV; the browser or phone becomes the remote (pause, skip, seek, and the TV's volume for Chromecasts), and the bar at the bottom of the web app shows what's playing on TVs. You can also send something already playing in the web or phone player to a TV from where you are. Watching on a TV this way saves your place and history like any other player.
 
 The server does the casting, not your browser, so it works over plain `http://` and on any phone. It needs to be on the same network as the TV. In Docker, use host networking (`network_mode: host`, or Network Type **Host** on Unraid) so it can find TVs; otherwise list the TVs' IP addresses under **Admin → Settings → Casting** and set the address TVs reach the server at (for example `http://192.168.1.10:8484`). MP4 files with H.264 play on the TV as they are; anything else is converted as it plays. Subtitles aren't sent to the TV yet.
+
+### Samsung, LG and Apple TV
+
+Samsung and LG TVs get a small app that opens your server's web app in TV mode, driven by the remote; it's installed with the TV in developer mode for now (see [apps/smarttv/README.md](../apps/smarttv/README.md)). Opening your server's address in the TV's own browser works much the same. An Apple TV app is being built and isn't available yet.
 
 ### Roku
 
@@ -310,7 +322,7 @@ BingeBandit keeps working on your home network without the internet. Signing in 
 The main sections under **Server → Settings**:
 
 - **Transcoding:** hardware encoding (NVIDIA NVENC, Intel Quick Sync, VAAPI, AMD AMF, VideoToolbox), HDR to SDR tone mapping, and the transcode folder.
-- **Network:** your public URL, trusted reverse proxies, and extra networks that count as home. Here you can also limit streaming away from home: how many streams each account (with its profiles, live TV included) may watch at once from outside, and a quality limit that converts bigger videos down for those viewers. Admin accounts have no stream limit, and live TV isn't quality-limited.
+- **Network:** your public URL, trusted reverse proxies, and extra networks that count as home. Here you can also limit streaming away from home: how many streams each account (with its profiles, live TV included) may watch at once from outside, and a quality limit that converts bigger videos down for those viewers. Admin accounts have no stream limit, and live TV isn't quality-limited. **Remote access without port forwarding** reaches the server from outside with no router changes: a Cloudflare quick tunnel (no account; an `https://…trycloudflare.com` address that changes when the server restarts), a named Cloudflare tunnel on your own domain (paste the tunnel's token from the Cloudflare dashboard), or Tailscale Funnel (on a machine signed in to Tailscale). BingeBandit downloads `cloudflared` itself when it isn't installed. Visitors through a tunnel always count as away from home.
 - **Metadata:** TMDB, TheTVDB, MDBList and the ratings provider.
 - **Sports data:** the address (and key) of a CFB Tracker, if you run one. The Sports pages then read scores, schedules and box scores through it, so ESPN is asked once for both apps. If the tracker doesn't answer, the server reads ESPN directly for a minute and tries the tracker again. The same key lets the tracker (Stat Scraps) ask which of your channels shows a network, so its game pages offer **Watch on BingeBandit** straight to that channel (set `BINGEBANDIT_URL` on the tracker). It uses the channels under **Live TV → Networks** first, then a channel named for the network ("US: ESPN 2 HD" for ESPN2). The tracker only learns channel names and numbers; opening the link still asks for a BingeBandit sign-in. Below it, **Leagues in the Sports section** takes leagues out of Sports for everyone (their rows, scores and team picks); each profile can still turn off or reorder the rest with **Sports rows** in the Sports page's gear (the TV's Sports Hub gear has the same).
 - **Trakt** and **Webhooks:** sync watch history with Trakt, and notify other services (Home Assistant, Discord bots, n8n) when things happen.

@@ -195,6 +195,23 @@ Cards added on the latest board. HANDOFF.md → Open work has more detail.
 | | TV app: the remote's select button sounds like it clicks twice |
 | 🟡 | Bugs and security review |
 
+## Board, 2026-11-08: features from the Netflix / Apple TV comparison
+
+| | Item |
+|---|---|
+| ✅ | Recommendations from your own library ("Because you watched/liked"), thumbs up/down, Not interested, More like this |
+| ✅ | Android TV / Google TV Play Next row (Watch Next) with a deep link into the player |
+| ✅ | Remote access without port forwarding: Cloudflare quick or named tunnel, Tailscale Funnel |
+| ✅ | Skip Ad in DVR recordings (Comskip or black frames and silence), Skip Recap, skip buttons in the Android TV player |
+| ✅ | Muted trailers in the Home spotlight |
+| ✅ | HDHomeRun tuners as a Live TV source; SiliconDust and Schedules Direct guides |
+| ✅ | Phone app: next episodes download by themselves; sleep timer in every player; screen time (daily allowance and bedtime) for profiles |
+| ✅ | Music libraries in the Android TV / phone app |
+| ✅ | Subtitles made from the sound with whisper.cpp (admins) |
+| 🟡 | Samsung (Tizen) and LG (webOS) apps: built, installed in developer mode; not in their stores, not tried on a TV |
+| 🟡 | Apple TV app: the tvOS project builds in CI; no release, no iPhone target |
+| | whisper.cpp and Comskip in the Docker image |
+
 ## Docs
 
 | | Item |
