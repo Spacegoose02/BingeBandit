@@ -28,6 +28,7 @@ import (
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
 	"bingebandit/internal/trickplay"
+	"bingebandit/internal/tunnel"
 )
 
 // version is set at build time: -ldflags "-X main.version=v0.1.0"
@@ -120,7 +121,13 @@ func main() {
 	scheduler.OnDone = srv.TaskDone
 	go scheduler.Start(ctx)
 	recorder.OnEvent = func(event string, r *store.Recording) { srv.Emit(event, r) }
-	httpSrv := &http.Server{Addr: cfg.Addr, Handler: srv.Router(ctx), ReadHeaderTimeout: 10 * time.Second}
+	router := srv.Router(ctx)
+	httpSrv := &http.Server{Addr: cfg.Addr, Handler: router, ReadHeaderTimeout: 10 * time.Second}
+	// Remote access without port forwarding: the tunnel reaches the same
+	// routes through a listener of its own on 127.0.0.1.
+	srv.Tunnel = tunnel.New(st, cfg.DataDir, srv.TunnelHandler(router))
+	srv.Tunnel.OnURL = func(string) { srv.ReloadNetwork() }
+	go srv.Tunnel.Run(ctx)
 
 	go func() {
 		log.Printf("listening on %s", cfg.Addr)

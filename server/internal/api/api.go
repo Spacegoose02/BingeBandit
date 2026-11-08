@@ -30,6 +30,7 @@ import (
 	"bingebandit/internal/tasks"
 	"bingebandit/internal/trakt"
 	"bingebandit/internal/trickplay"
+	"bingebandit/internal/tunnel"
 	"bingebandit/internal/web"
 )
 
@@ -44,6 +45,7 @@ type Server struct {
 	Activity   *stream.Activity
 	Tasks      *tasks.Scheduler
 	Markers    *markers.Detector
+	Tunnel     *tunnel.Manager // remote access without port forwarding; nil in tests
 	Trickplay  *trickplay.Generator
 	OpenSubs   *opensubs.Client
 	Live       *livetv.Manager
@@ -388,6 +390,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Put("/overlays/{id}", s.saveOverlay)
 				r.Delete("/overlays/{id}", s.deleteOverlay)
 				r.Put("/settings", s.putSettings)
+				r.Get("/tunnel", s.tunnelStatus)
 				r.Get("/browse", s.browse)
 
 				r.Get("/libraries", s.libraries)

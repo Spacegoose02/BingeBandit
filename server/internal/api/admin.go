@@ -22,6 +22,7 @@ import (
 	"bingebandit/internal/media"
 	"bingebandit/internal/store"
 	"bingebandit/internal/stream"
+	"bingebandit/internal/tunnel"
 )
 
 func (s *Server) system(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +199,16 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "live_switch_slow must be true or false")
 		return
 	}
+	if v, ok := in[store.SettingTunnel]; ok && v != tunnel.Off && v != tunnel.Quick && v != tunnel.Cloudflare && v != tunnel.Tailscale {
+		writeErr(w, http.StatusBadRequest, "remote_tunnel must be empty, cloudflare-quick, cloudflare or tailscale")
+		return
+	}
+	if v, ok := in[store.SettingTunnelPort]; ok {
+		if n, err := strconv.Atoi(v); err != nil || n < 1024 || n > 65535 {
+			writeErr(w, http.StatusBadRequest, "remote_tunnel_port must be a port from 1024 to 65535")
+			return
+		}
+	}
 	if v, ok := in[store.SettingRemoteAccess]; ok && v != "true" && v != "false" {
 		writeErr(w, http.StatusBadRequest, "remote_access must be true or false")
 		return
@@ -233,6 +244,14 @@ func (s *Server) putSettings(w http.ResponseWriter, r *http.Request) {
 		livetv.SetProxy(v) // already validated
 	}
 	s.reloadNetwork()
+	if s.Tunnel != nil {
+		for _, k := range []string{store.SettingTunnel, store.SettingTunnelToken, store.SettingTunnelHostname, store.SettingTunnelPort} {
+			if _, ok := in[k]; ok {
+				go s.Tunnel.Apply(s.ctx)
+				break
+			}
+		}
+	}
 	s.getSettings(w, r)
 }
 

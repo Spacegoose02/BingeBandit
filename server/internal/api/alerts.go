@@ -159,7 +159,7 @@ func (s *Server) deliverAlert(ctx context.Context, c alertChannels, a alert) map
 	name := s.Store.Setting(store.SettingServerName)
 	link := ""
 	if a.Link != "" {
-		if base := s.Store.Setting(store.SettingPublicURL); base != "" {
+		if base := s.policy().publicURL; base != "" {
 			link = strings.TrimRight(base, "/") + a.Link
 		}
 	}

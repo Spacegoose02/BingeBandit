@@ -90,3 +90,41 @@ func TestSafeNext(t *testing.T) {
 		}
 	}
 }
+
+// Requests through the remote access tunnel are never from home, whatever
+// headers they carry, and are HTTPS.
+func TestTunnelTrafficIsRemote(t *testing.T) {
+	s := netTestServer(t, map[string]string{store.SettingRemoteAccess: "false"})
+	through := func(hdr map[string]string) (int, string, bool) {
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8485/x", nil)
+		req.RemoteAddr = "127.0.0.1:50000"
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		var ip string
+		var https bool
+		s.TunnelHandler(s.network(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip, https = clientIP(r), isHTTPS(r)
+		}))).ServeHTTP(rec, req)
+		return rec.Code, ip, https
+	}
+	for _, hdr := range []map[string]string{nil, {"Cf-Connecting-IP": "192.168.1.5"}, {"X-Forwarded-For": "10.0.0.2"}} {
+		if code, _, _ := through(hdr); code != http.StatusForbidden {
+			t.Fatalf("%v with remote access off: %d", hdr, code)
+		}
+	}
+	s.Store.SetSettings(map[string]string{store.SettingRemoteAccess: "true"})
+	s.reloadNetwork()
+	code, ip, https := through(map[string]string{"Cf-Connecting-IP": "203.0.113.9", "X-Forwarded-For": "198.51.100.1"})
+	if code != http.StatusOK || ip != "203.0.113.9" || !https {
+		t.Fatalf("through the tunnel: %d %s https=%v", code, ip, https)
+	}
+	if _, ip, _ := through(map[string]string{"X-Forwarded-For": "1.2.3.4, 198.51.100.7"}); ip != "198.51.100.7" {
+		t.Fatalf("Funnel's forwarded address: %s", ip)
+	}
+	// The same address on the main listener is still local.
+	if _, ip, _ := serve(s, "127.0.0.1:50000", map[string]string{"Cf-Connecting-IP": "203.0.113.9"}); ip != "127.0.0.1" {
+		t.Fatalf("main listener believed Cf-Connecting-IP: %s", ip)
+	}
+}

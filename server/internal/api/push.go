@@ -199,7 +199,7 @@ func truncateRunes(s string, n int) string {
 // pushSubject is the contact push services see: the server's public
 // address when it's HTTPS, otherwise the project's page.
 func (s *Server) pushSubject() string {
-	if u, err := url.Parse(strings.TrimSpace(s.Store.Setting(store.SettingPublicURL))); err == nil && u.Scheme == "https" && u.Host != "" {
+	if u, err := url.Parse(s.policy().publicURL); err == nil && u.Scheme == "https" && u.Host != "" {
 		return "https://" + u.Host
 	}
 	return "https://github.com/Spacegoose02/BingeBandit"
