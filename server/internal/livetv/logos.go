@@ -1,10 +1,13 @@
 package livetv
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"net/http"
 	"os"
@@ -116,6 +119,9 @@ func (l *LogoLibrary) Save(r io.Reader) (string, error) {
 	if ext == "" {
 		return "", fmt.Errorf("only PNG, JPEG, SVG, WebP and GIF images are supported")
 	}
+	if ext == ".png" {
+		data = trimTransparent(data)
+	}
 	sum := sha256.Sum256(data)
 	name := hex.EncodeToString(sum[:16]) + ext
 	if err := os.MkdirAll(l.dir, 0o755); err != nil {
@@ -128,6 +134,49 @@ func (l *LogoLibrary) Save(r io.Reader) (string, error) {
 		}
 	}
 	return name, nil
+}
+
+// trimTransparent crops the see-through margin many logo packs pad their PNGs
+// with, so the logo itself fills whatever box it's shown in instead of sitting
+// small in the middle of it. Anything it can't decode, or with nothing worth
+// trimming, comes back unchanged.
+func trimTransparent(data []byte) []byte {
+	img, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return data
+	}
+	b := img.Bounds()
+	const solid = 0x0800 // alpha (of 0xffff) below this is invisible antialiasing dust
+	box := image.Rectangle{Min: b.Max, Max: b.Min}
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if _, _, _, a := img.At(x, y).RGBA(); a >= solid {
+				box.Min.X, box.Min.Y = min(box.Min.X, x), min(box.Min.Y, y)
+				box.Max.X, box.Max.Y = max(box.Max.X, x+1), max(box.Max.Y, y+1)
+			}
+		}
+	}
+	if box.Empty() {
+		return data // fully transparent: nothing to fit
+	}
+	// Keep a hair of breathing room so edges aren't flush with the crop.
+	pad := max(box.Dx(), box.Dy()) / 50
+	box = image.Rect(box.Min.X-pad, box.Min.Y-pad, box.Max.X+pad, box.Max.Y+pad).Intersect(b)
+	// Only bother when it removes a noticeable margin.
+	if box.Dx()*box.Dy() > b.Dx()*b.Dy()*9/10 {
+		return data
+	}
+	sub, ok := img.(interface {
+		SubImage(image.Rectangle) image.Image
+	})
+	if !ok {
+		return data
+	}
+	var out bytes.Buffer
+	if err := (&png.Encoder{CompressionLevel: png.BestCompression}).Encode(&out, sub.SubImage(box)); err != nil || out.Len() > maxLogoBytes {
+		return data
+	}
+	return out.Bytes()
 }
 
 // Path resolves a library file name to its path and content type.
