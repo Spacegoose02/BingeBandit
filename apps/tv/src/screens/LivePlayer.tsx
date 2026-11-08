@@ -7,6 +7,7 @@ import { Button, useFocusOnce } from '../components'
 import { DEFAULT_BUFFER_SECS, clock, fmtBehind, programFacts, liveBuffer, reportBuffering, joinChannel, leaveChannel, pingViewer } from '../live'
 import { calibrateGameLights, delayFor, fetchGameLightsDelays, LIVE_TV_SOURCE, saveGameLights, type GameLightsDelays } from '../lights'
 import { useLock } from '../lock'
+import { pauseMusic } from '../music'
 import { setSleep, SLEEP_MINUTES, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
 import { refreshScoreBug, scoreBugChannel } from '../scorebug'
 import { backInterceptor, showLiveGuide, useNav, useScreen } from '../nav'
@@ -41,6 +42,9 @@ export default function LivePlayer({ channelId }: { channelId: number }) {
   const nav = useNav()
   // Hidden under another screen: stay paused and leave the remote alone.
   const { active } = useScreen()
+  useEffect(() => {
+    if (active) pauseMusic() // music stops for Live TV
+  }, [active])
   const [info, setInfo] = useState(true)
   const [controls, setControls] = useState(false) // TV: the bar's buttons are up and hold focus
   // Options: Game Lights (on / off and its delay) and the score bug, and the

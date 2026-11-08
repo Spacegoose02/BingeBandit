@@ -12,6 +12,7 @@ import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
 import { backInterceptor, holdOnReturn, useNav, useScreen } from '../nav'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLock } from '../lock'
+import { pauseMusic } from '../music'
 import { useLandscape } from '../screen'
 import { roomPosition, TogetherPanel, useTogether } from '../together'
 import { setSleep, SLEEP_MINUTES, sleepAtEpisodeEnd, sleepDue, sleepLabel, useSleepTimer } from '../sleepTimer'
@@ -256,6 +257,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // Hidden under another screen (it shouldn't be, but an invite or a deep
   // link could push one): stay paused and leave the remote alone.
   const { active } = useScreen()
+  // Music stops for a video.
+  useEffect(() => {
+    if (active) pauseMusic()
+  }, [active])
   const insets = useSafeAreaInsets()
   const lock = useLock()
   const video = useRef<VideoRef>(null)

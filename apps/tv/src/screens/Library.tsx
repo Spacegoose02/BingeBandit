@@ -7,8 +7,10 @@ import { seeAll, useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, units, quietPress } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
 
-type Section = 'recommended' | 'library' | 'collections'
-const sectionNames: Record<Section, string> = { recommended: 'Recommended', library: 'Library', collections: 'Collections' }
+type Section = 'recommended' | 'library' | 'collections' | 'artists'
+const sectionNames: Partial<Record<Section, string>> = { recommended: 'Recommended', library: 'Library', collections: 'Collections' }
+// A music library lists its albums or its artists.
+const musicSectionNames: Partial<Record<Section, string>> = { library: 'Albums', artists: 'Artists' }
 const PAGE = 120
 const ALPHABET = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
 
@@ -55,7 +57,9 @@ export function forgetSection(libraryId: number) {
 
 /** One library tab: its Recommended rows, every title, and its collections. */
 export default function LibraryTab({ library, onTogglePin }: { library: Library; onTogglePin: () => void }) {
-  const [section, setSectionState] = useState<Section>(lastSection[library.id] ?? 'recommended')
+  const music = library.kind === 'music'
+  const names = music ? musicSectionNames : sectionNames
+  const [section, setSectionState] = useState<Section>(lastSection[library.id] ?? (music ? 'library' : 'recommended'))
   const setSection = (s: Section) => {
     lastSection[library.id] = s
     setSectionState(s)
@@ -63,11 +67,11 @@ export default function LibraryTab({ library, onTogglePin }: { library: Library;
   return (
     <View style={st.flex}>
       <View style={st.sections}>
-        {(Object.keys(sectionNames) as Section[]).map((s) => (
+        {(Object.keys(names) as Section[]).map((s) => (
           // Only OK switches: moving down from the menu lands on whichever
           // chip is below it, and the library should stay on Recommended.
           <Focusable key={s} onPress={() => setSection(s)} style={section === s ? { ...st.chip, ...st.chipActive } : st.chip}>
-            <Text style={[st.chipText, section === s && st.chipTextActive]}>{sectionNames[s]}</Text>
+            <Text style={[st.chipText, section === s && st.chipTextActive]}>{names[s]}</Text>
           </Focusable>
         ))}
         {/* An unpinned library opened from More stays in the menu while it's open, so this can pin it back. */}
@@ -76,7 +80,8 @@ export default function LibraryTab({ library, onTogglePin }: { library: Library;
         </Focusable>
       </View>
       {section === 'recommended' && <Recommended library={library} />}
-      {section === 'library' && <AllTitles library={library} />}
+      {section === 'library' && <AllTitles key="library" library={library} />}
+      {section === 'artists' && <AllTitles key="artists" library={library} view="artists" />}
       {section === 'collections' && <Collections library={library} />}
     </View>
   )
@@ -199,14 +204,14 @@ function Grid<T>({ rows, keyOf, renderTile, onEnd, busy, header, footer, listRef
   )
 }
 
-function AllTitles({ library }: { library: Library }) {
+function AllTitles({ library, view }: { library: Library; view?: 'artists' }) {
   const nav = useNav()
   const [filters, setFiltersState] = useState<Filters>(lastFilters[library.id] ?? {})
   const setFilters = (f: Filters) => {
     lastFilters[library.id] = f
     setFiltersState(f)
   }
-  const query = filterQuery(filters)
+  const query = filterQuery(filters) + (view ? `&view=${view}` : '')
   const [items, setItems] = useState<Item[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [letters, setLetters] = useState<Letter[]>([])

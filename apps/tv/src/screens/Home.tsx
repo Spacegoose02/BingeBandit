@@ -248,7 +248,7 @@ export default function Home({ onSignedOut, onSwitchProfile }: { onSignedOut: ()
   const icons: Record<string, IconName> = { ...fixedIcons }
   for (const l of libraries) {
     names[`lib:${l.id}`] = l.name
-    icons[`lib:${l.id}`] = l.kind === 'movies' ? 'movies' : 'shows'
+    icons[`lib:${l.id}`] = l.kind === 'movies' ? 'movies' : l.kind === 'music' ? 'music' : 'shows'
   }
   const library = libraries.find((l) => `lib:${l.id}` === tab)
   // Holding OK (or a long tap) on a library, Sports or Live TV drops down Pin/Unpin, like Plex.
@@ -478,7 +478,7 @@ function More({
     ...libraries.map((l) => ({
       key: `lib:${l.id}`,
       label: l.name,
-      hint: l.kind === 'movies' ? 'Movies' : 'Shows',
+      hint: l.kind === 'movies' ? 'Movies' : l.kind === 'music' ? 'Music' : 'Shows',
       open: () => onOpen(`lib:${l.id}`),
       pin: pinLibrary(l),
     })),

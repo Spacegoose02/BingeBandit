@@ -5,6 +5,8 @@ import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Ses
 import { learnAddresses } from './src/addresses'
 import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
 import CastScreen from './src/screens/Cast'
+import NowPlaying from './src/screens/NowPlaying'
+import { MusicHost } from './src/music'
 import Connect from './src/screens/Connect'
 import Details from './src/screens/Details'
 import Downloads from './src/screens/Downloads'
@@ -241,6 +243,7 @@ export default function App() {
         <ItemMenuHost>
           <Insets enabled={!fullScreen}>{screen}</Insets>
         </ItemMenuHost>
+        {phase.name === 'app' && <MusicHost overlay={!playing && top.name !== 'music'} />}
         {phase.name === 'app' && <Toasts playing={playing} />}
         {phase.name === 'app' && <TogetherInvites playing={playing} />}
         {phase.name === 'app' && <ScoreBug playing={playing && top.name !== 'trailer' && top.name !== 'youtube' && top.name !== 'multiview'} channelId={top.name === 'live' ? top.channelId : undefined} />}
@@ -280,6 +283,8 @@ function routeScreen(r: Route, home: { onSignedOut: () => void; onSwitchProfile:
       return <MultiView channels={r.channels} />
     case 'cast':
       return <CastScreen id={r.id} start={r.start} session={r.session} />
+    case 'music':
+      return <NowPlaying />
   }
 }
 

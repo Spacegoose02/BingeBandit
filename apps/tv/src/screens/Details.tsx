@@ -7,6 +7,7 @@ import { scaled, colors, font, gutter, isPhone, quietPress } from '../theme'
 import type { Credit, Item, ItemDetail, MediaFile, Quality } from '../types'
 import { addDownloads, downloaded, downloadFor, downloadsSupported, estimateBytes, formatBytes, useDownloads } from '../downloads'
 import { canDirectPlay } from './Player'
+import { MusicDetails } from './NowPlaying'
 
 /** A resume point as a clock: 4:05, or 1:35:12 past an hour. */
 function fmtClock(t: number) {
@@ -84,6 +85,7 @@ export default function Details({ id }: { id: number }) {
   if (!d) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
 
   const it = d.item
+  if (it.kind === 'album' || it.kind === 'artist' || it.kind === 'track') return <MusicDetails d={d} />
   const playable = it.kind === 'movie' || it.kind === 'episode'
   // Shows and seasons play their next unwatched episode.
   const target: Item | undefined = playable ? it : d.upNext

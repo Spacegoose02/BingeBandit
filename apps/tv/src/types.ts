@@ -30,7 +30,7 @@ export interface WatchState {
 
 export interface Item {
   id: number
-  kind: 'movie' | 'show' | 'season' | 'episode'
+  kind: 'movie' | 'show' | 'season' | 'episode' | 'artist' | 'album' | 'track'
   title: string
   tmdbId?: number
   sortTitle?: string
@@ -141,7 +141,7 @@ export interface HomeData {
 export interface Library {
   id: number
   name: string
-  kind: 'movies' | 'shows'
+  kind: 'movies' | 'shows' | 'music'
   pinned: boolean // in this user's menu and on their Home
   itemCount: number
 }
@@ -336,4 +336,11 @@ export interface CastSession {
   volume: number // 0-1, -1 when unknown
   mode: 'direct' | 'transcode'
   error?: string
+}
+
+/** A music track with the file it plays (GET /api/items/{id}/tracks). */
+export interface Track {
+  item: Item & { studio?: string; parentId?: number }
+  file: { fileId: number; duration: number; container: string; audioCodec?: string; size: number }
+  album?: string
 }
