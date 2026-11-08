@@ -2,6 +2,9 @@ package livetv
 
 import (
 	"bytes"
+	"image"
+	"image/color"
+	"image/png"
 	"strings"
 	"testing"
 )
@@ -40,5 +43,37 @@ func TestLogoLibrarySave(t *testing.T) {
 	}
 	if _, _, err := lib.Path("../etc/passwd"); err == nil {
 		t.Fatal("path traversal accepted")
+	}
+}
+
+func TestTrimTransparent(t *testing.T) {
+	// A 10x4 logo in the middle of a 200x200 transparent canvas.
+	src := image.NewNRGBA(image.Rect(0, 0, 200, 200))
+	for y := 98; y < 102; y++ {
+		for x := 95; x < 105; x++ {
+			src.Set(x, y, color.NRGBA{255, 0, 0, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, src); err != nil {
+		t.Fatal(err)
+	}
+	out, err := png.Decode(bytes.NewReader(trimTransparent(buf.Bytes())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := out.Bounds(); b.Dx() != 10 || b.Dy() != 4 {
+		t.Fatalf("trimmed to %v, want 10x4", b)
+	}
+
+	// A logo that already fills its canvas is left byte-for-byte alone.
+	full := image.NewNRGBA(image.Rect(0, 0, 20, 10))
+	for i := range full.Pix {
+		full.Pix[i] = 255
+	}
+	buf.Reset()
+	png.Encode(&buf, full)
+	if got := trimTransparent(buf.Bytes()); !bytes.Equal(got, buf.Bytes()) {
+		t.Fatal("a logo with no margin was re-encoded")
 	}
 }
