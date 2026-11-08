@@ -96,6 +96,7 @@ export interface ItemDetail {
   collections?: { collection: Collection; items: Item[] }[] // movies and shows: the collections they're in
   canDownload?: boolean // movies and episodes: the viewer may download them (offline downloads, phones)
   quality?: Quality // the best copy's picture and sound (a show's: its best episode); older servers leave it out
+  myRating?: number // movies and shows: the viewer's thumbs (-1 not for me, 1 like, 2 love); older servers leave it out
 }
 
 /** A title's best picture and sound, for the 4K · Dolby Vision · Atmos badges. */

@@ -155,6 +155,9 @@ export default function Details({ id }: { id: number }) {
             label={fullyWatched ? 'Mark unwatched' : 'Mark watched'}
             onPress={() => change(api.post(`/api/items/${it.id}/${fullyWatched ? 'unwatched' : 'watched'}`))}
           />
+          {(it.kind === 'movie' || it.kind === 'show') && d.myRating !== undefined && (
+            <Thumbs rating={d.myRating} onRate={(r) => change(api.put(`/api/items/${it.id}/rating`, { rating: r }))} />
+          )}
           {canSave && <DownloadButton item={it} episodes={episodes} onPick={() => setPicking((p) => !p)} />}
           {it.kind === 'show' && !!it.tmdbId && <MissingSeasonsButton item={it} />}
         </View>
@@ -227,8 +230,45 @@ export default function Details({ id }: { id: number }) {
             </ScrollView>
           </React.Fragment>
         ))}
+        {(it.kind === 'movie' || it.kind === 'show') && <MoreLikeThis id={it.id} />}
       </ScrollView>
     </ImageBackground>
+  )
+}
+
+/** Thumbs down, up and two up (love). Pressing the lit one clears it. */
+function Thumbs({ rating, onRate }: { rating: number; onRate: (r: number) => void }) {
+  const opts: [number, string][] = [[-1, 'Not for me'], [1, 'Like'], [2, 'Love']]
+  return (
+    <>
+      {opts.map(([r, label]) => (
+        <Button key={r} small label={`${r === -1 ? '👎' : r === 1 ? '👍' : '👍👍'} ${label}${rating === r ? ' ✓' : ''}`} onPress={() => onRate(rating === r ? 0 : r)} />
+      ))}
+    </>
+  )
+}
+
+/** Titles on the server like this one; an older server without the route shows nothing. */
+function MoreLikeThis({ id }: { id: number }) {
+  const nav = useNav()
+  const [items, setItems] = useState<Item[]>([])
+  useEffect(() => {
+    let stale = false
+    api.get<Item[]>(`/api/items/${id}/similar`).then((l) => !stale && setItems(Array.isArray(l) ? l : []), () => undefined)
+    return () => {
+      stale = true
+    }
+  }, [id])
+  if (!items.length) return null
+  return (
+    <>
+      <Text style={st.section}>More like this</Text>
+      <ScrollView horizontal contentContainerStyle={st.hlist}>
+        {items.map((m) => (
+          <PosterCard key={m.id} item={m} onPress={() => nav.push({ name: 'details', id: m.id })} />
+        ))}
+      </ScrollView>
+    </>
   )
 }
 

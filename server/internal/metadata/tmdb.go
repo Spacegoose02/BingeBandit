@@ -15,6 +15,14 @@ import (
 // tmdbBase is a variable so tests can point it elsewhere.
 var tmdbBase = "https://api.themoviedb.org/3"
 
+// SetTMDBBase points TMDB requests at a fake (for other packages' tests)
+// and returns a function that puts it back.
+func SetTMDBBase(u string) (restore func()) {
+	old := tmdbBase
+	tmdbBase = u
+	return func() { tmdbBase = old }
+}
+
 type TMDB struct {
 	key  string
 	lang string

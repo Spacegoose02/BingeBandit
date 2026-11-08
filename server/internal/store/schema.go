@@ -993,4 +993,28 @@ CREATE INDEX problem_reports_status ON problem_reports(status, created_at);
 	`
 UPDATE settings SET value = '100' WHERE key = 'recently_added_days' AND value = '90';
 `,
+	// 58: thumbs up and down on titles (recommendations leave out the
+	// disliked ones), and markers for recaps and the ad breaks in
+	// recordings, which can come several to a file.
+	`
+CREATE TABLE title_ratings (
+	user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	rating     INTEGER NOT NULL CHECK (rating IN (-1, 1, 2)),
+	updated_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, item_id)
+);
+CREATE TABLE markers_new (
+	item_id  INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	kind     TEXT NOT NULL CHECK (kind IN ('intro','credits','recap','commercial')),
+	start_at REAL NOT NULL,
+	end_at   REAL NOT NULL,
+	source   TEXT NOT NULL DEFAULT 'detected' CHECK (source IN ('detected','manual'))
+);
+INSERT INTO markers_new (item_id, kind, start_at, end_at, source) SELECT item_id, kind, start_at, end_at, source FROM markers;
+DROP TABLE markers;
+ALTER TABLE markers_new RENAME TO markers;
+CREATE UNIQUE INDEX markers_one ON markers(item_id, kind) WHERE kind != 'commercial';
+CREATE INDEX markers_item ON markers(item_id, start_at);
+`,
 }

@@ -501,6 +501,11 @@ function ItemMenuBody({
           <Icon name="users" size={16} /> Recommend to…
         </button>
       )}
+      {top && (
+        <button role="menuitem" onClick={() => act(api.put(`/api/items/${top.id}/rating`, { rating: -1 }), "Got it. We won't suggest it to you.")}>
+          <Icon name="thumbDown" size={16} /> Not interested
+        </button>
+      )}
       {file && (
         <a role="menuitem" className="menu-link" href={`/api/files/${file.id}/direct?download=1`} download onClick={close}>
           <Icon name="download" size={16} /> Download

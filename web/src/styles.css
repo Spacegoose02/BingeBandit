@@ -141,6 +141,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .btn-block { width: 100%; padding: 12px; }
 .btn-sm { padding: 7px 13px; font-size: 13px; }
 .btn.icon-only { padding: 10px; }
+.btn.icon-only.thumbs-love { display: inline-flex; }
+.btn.icon-only.thumbs-love svg + svg { margin-left: -9px; }
 .icon-btn {
   background: none;
   border: 0;

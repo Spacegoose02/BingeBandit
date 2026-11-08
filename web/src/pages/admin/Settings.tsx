@@ -305,6 +305,14 @@ export default function AdminSettings() {
           </label>
           <p className="muted small">Off hides the Recommend buttons, the opt-in under Account and the “Recommended for You” row on Home, on the web and in the TV app.</p>
           <label className="check">
+            <input type="checkbox" checked={s.because_rows_enabled !== 'false'} onChange={set('because_rows_enabled')} />
+            Show “Because you watched” and “Because you liked” rows on Home
+          </label>
+          <p className="muted small">
+            Picked from TMDB’s recommendations for what each person finished or gave a thumbs up lately, keeping only what the server has. Titles
+            someone marked “Not interested” stay out of them.
+          </p>
+          <label className="check">
             <input type="checkbox" checked={s.requests_enabled !== 'false'} onChange={set('requests_enabled')} />
             Let people request movies and shows the server doesn’t have
           </label>

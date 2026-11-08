@@ -229,12 +229,15 @@ function MarkerEditor({ item, markers, onSaved }: { item: Item; markers: Marker[
     introEnd: fmt(get('intro')?.end),
     creditsStart: fmt(get('credits')?.start),
     creditsEnd: fmt(get('credits')?.end),
+    recapStart: fmt(get('recap')?.start),
+    recapEnd: fmt(get('recap')?.end),
   })
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   const save = async () => {
     const out: { kind: string; start: number; end: number }[] = []
     for (const [kind, s, e] of [
+      ['recap', v.recapStart, v.recapEnd],
       ['intro', v.introStart, v.introEnd],
       ['credits', v.creditsStart, v.creditsEnd],
     ] as const) {
@@ -264,6 +267,14 @@ function MarkerEditor({ item, markers, onSaved }: { item: Item; markers: Marker[
       <div className="label">Skip markers</div>
       <div className="field-grid">
         <label>
+          Recap starts <span className="muted small">({source('recap')})</span>
+          <input value={v.recapStart} onChange={(e) => setV({ ...v, recapStart: e.target.value })} placeholder="0:00" />
+        </label>
+        <label>
+          Recap ends
+          <input value={v.recapEnd} onChange={(e) => setV({ ...v, recapEnd: e.target.value })} placeholder="0:52" />
+        </label>
+        <label>
           Intro starts <span className="muted small">({source('intro')})</span>
           <input value={v.introStart} onChange={(e) => setV({ ...v, introStart: e.target.value })} placeholder="0:45" />
         </label>
@@ -280,7 +291,10 @@ function MarkerEditor({ item, markers, onSaved }: { item: Item; markers: Marker[
           <input value={v.creditsEnd} onChange={(e) => setV({ ...v, creditsEnd: e.target.value })} placeholder="43:20" />
         </label>
       </div>
-      <p className="muted small">Leave both times of a section empty to let automatic detection handle it.</p>
+      <p className="muted small">
+        Leave both times of a section empty to let automatic detection handle it.
+        {markers.some((m) => m.kind === 'commercial') && ` ${markers.filter((m) => m.kind === 'commercial').length} ad breaks were found in this recording; they're kept.`}
+      </p>
       {msg && <div className={msg.ok ? 'form-ok' : 'form-error'}>{msg.text}</div>}
       <div className="actions">
         <button type="button" className="btn btn-glass btn-sm" onClick={save}>Save markers</button>
