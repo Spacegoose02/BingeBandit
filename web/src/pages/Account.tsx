@@ -5,6 +5,7 @@ import { useAuth } from '../auth'
 import { IPTVLinks } from '../components/IPTVLinks'
 import { Icon } from '../components/Icon'
 import { InstallApp } from '../components/InstallApp'
+import { desktop } from '../desktop'
 import { PasscodeSettings } from '../components/Passcode'
 import { Profiles } from '../components/Profiles'
 import { PushSettings } from '../components/PushSettings'
@@ -154,6 +155,31 @@ function GameLightsSwitch() {
         Off until you turn it on, for each profile. Your teams come from <Link to="/sports">Sports</Link>; the delay and colours are on{' '}
         <a href={`${base}`} target="_blank" rel="noreferrer">My Game Lights</a>. Each TV then turns it on for itself and picks its room in the TV app's Settings.
       </p>
+    </div>
+  )
+}
+
+/** In the Windows app: open BingeBandit when this PC signs in, for a living-room PC. */
+function StartWithWindows() {
+  const startup = desktop?.startup
+  const [on, setOn] = useState<boolean | null>(null)
+  useEffect(() => {
+    startup?.get().then(setOn, () => undefined)
+  }, [startup])
+  if (!startup || on === null) return null
+  const set = async (next: boolean) => {
+    setOn(next)
+    const now = await startup.set(next).catch(() => !next)
+    if (now !== null) setOn(now)
+  }
+  return (
+    <div className="panel form" style={{ marginBottom: 20 }}>
+      <h3>This PC</h3>
+      <label className="check">
+        <input type="checkbox" checked={on} onChange={(e) => set(e.target.checked)} />
+        Start BingeBandit when Windows starts
+      </label>
+      <p className="muted small">For a living-room PC: BingeBandit opens full screen as soon as Windows signs in. Turn on automatic sign-in in Windows to skip the password too.</p>
     </div>
   )
 }
@@ -956,6 +982,7 @@ export default function Account() {
       <Profiles />
       <PlaybackPrefs />
       <InstallApp />
+      <StartWithWindows />
       <PushSettings />
       <Sharing />
       <Trakt />

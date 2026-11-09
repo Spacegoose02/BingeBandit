@@ -2,7 +2,7 @@
 // Picking the server: type an address, or pick one found on the network.
 // window.bbSetup comes from src/preload.js.
 
-/** @type {{ probe(input: string): Promise<any>, scan(): Promise<any[]>, use(url: string): Promise<void>, updates: any }} */
+/** @type {{ probe(input: string): Promise<any>, scan(): Promise<any[]>, use(url: string): Promise<void>, updates: any, startup?: { get(): Promise<boolean | null>, set(on: boolean): Promise<boolean | null> } }} */
 const setup = /** @type {any} */ (window).bbSetup
 const $ = (id) => /** @type {any} */ (document.getElementById(id))
 
@@ -53,6 +53,17 @@ async function scan() {
 }
 
 $('rescan').addEventListener('click', scan)
+
+// Starting with Windows (only the installed or portable app can).
+setup.startup?.get().then((on) => {
+  if (on === null || on === undefined) return
+  $('startup').checked = on
+  $('startup-row').hidden = false
+})
+$('startup').addEventListener('change', async () => {
+  const on = await setup.startup.set($('startup').checked)
+  if (on !== null) $('startup').checked = on
+})
 scan()
 
 // The app's version, and a new one when it's ready (src/updates.js).
