@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler } from 'react-native'
+import { ActivityIndicator, AppState, Linking, Pressable, ScrollView, StyleSheet, Text, TVFocusGuideView, View, useTVEventHandler, useWindowDimensions } from 'react-native'
 import Video, { SelectedTrackType, type OnProgressData, type VideoRef } from 'react-native-video'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { absolute, api, ApiError, authHeaders, cached, current, request, trackWrite } from '../api'
 import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
-import { hueArea, hueSyncOn, hueType, setHueSync, setHueType } from '../devicePrefs'
+import { hueArea, hueSyncOn, hueType, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
 import { Button, Focusable, useFocusOnce } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
@@ -73,6 +73,19 @@ function resolutionLabel(h: number): string {
   return h >= 2160 ? '4K' : `${h}p`
 }
 export const NO_LIVE_BADGE = { hideLiveBadge: true }
+
+// Options → Picture size. Original shows the whole picture with black bars;
+// Fill screen crops the edges to fill it; Wide stretches the picture to the
+// screen's shape; 4:3 squeezes it into a 4:3 box in the middle, for old shows
+// that were stretched wide in the file.
+const PICTURE_RESIZE = { fit: 'contain', fill: 'cover', stretch: 'stretch', classic: 'stretch' } as const
+
+function pictureStyle(p: PictureSize, w: number, h: number) {
+  if (p !== 'classic' || !w || !h) return StyleSheet.absoluteFill
+  const bw = Math.min(w, (h * 4) / 3)
+  const bh = Math.min(h, (w * 3) / 4)
+  return { position: 'absolute' as const, width: bw, height: bh, left: (w - bw) / 2, top: (h - bh) / 2 }
+}
 
 function clock(t: number) {
   t = Math.max(0, Math.floor(t))
@@ -277,6 +290,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [sub, setSub] = useState<MediaStream | undefined>()
   const [cues, setCues] = useState<Cue[]>([])
   const [menu, setMenu] = useState(false)
+  const [picture, setPicture] = useState<PictureSize>(pictureSize)
+  const win = useWindowDimensions()
   const [subSearch, setSubSearch] = useState(false)
   const [subDelay, setSubDelay] = useState(0) // seconds; positive shows subtitles later
   // Milliseconds the server moves the sound against the picture (positive:
@@ -1170,8 +1185,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           // The server's conversion stream is an HLS "event" playlist, which ExoPlayer badges as LIVE.
           controlsStyles={NO_LIVE_BADGE}
           source={{ ...src, headers: authHeaders() }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="contain"
+          style={pictureStyle(picture, win.width, win.height)}
+          resizeMode={PICTURE_RESIZE[picture]}
           paused={paused || !active}
           // react-native-video turns keep-screen-on back on whenever pausing
           // reports a "ready" state, so the TV's screensaver never came on.
@@ -1498,6 +1513,21 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
               </ScrollView>
             </>
           )}
+          <Text style={st.menuTitle}>Picture size</Text>
+          <ScrollView horizontal contentContainerStyle={st.menuRow}>
+            {PICTURE_SIZES.map((p) => (
+              <Button
+                key={p}
+                small
+                primary={picture === p}
+                label={pictureSizeNames[p]}
+                onPress={() => {
+                  setPicture(p)
+                  setPictureSize(p)
+                }}
+              />
+            ))}
+          </ScrollView>
           <Text style={st.menuTitle}>Sleep timer · {sleepLabel()}</Text>
           <ScrollView horizontal contentContainerStyle={st.menuRow}>
             <Button small primary={!sleeping} label="Off" onPress={() => setSleep(0)} />

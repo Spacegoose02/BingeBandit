@@ -102,3 +102,31 @@ export async function deviceId(): Promise<string> {
   AsyncStorage.setItem(DEVICE_KEY, devId).catch(() => undefined)
   return devId
 }
+
+// How the player sizes the picture on this screen (Options → Picture size).
+// Kept per device: what looks right depends on the TV, not the account.
+const PICTURE_KEY = 'bb.pictureSize'
+export type PictureSize = 'fit' | 'fill' | 'stretch' | 'classic'
+export const PICTURE_SIZES: PictureSize[] = ['fit', 'fill', 'stretch', 'classic']
+export const pictureSizeNames: Record<PictureSize, string> = {
+  fit: 'Original',
+  fill: 'Fill screen',
+  stretch: 'Wide (stretch)',
+  classic: '4:3',
+}
+let picture: PictureSize = 'fit'
+AsyncStorage.getItem(PICTURE_KEY).then(
+  (v) => {
+    if (v && (PICTURE_SIZES as string[]).includes(v)) picture = v as PictureSize
+  },
+  () => undefined,
+)
+
+export function pictureSize(): PictureSize {
+  return picture
+}
+
+export function setPictureSize(p: PictureSize) {
+  picture = p
+  AsyncStorage.setItem(PICTURE_KEY, p).catch(() => undefined)
+}
