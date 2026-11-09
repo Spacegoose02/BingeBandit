@@ -117,3 +117,36 @@ func TestLastEpisode(t *testing.T) {
 		}
 	}
 }
+
+func TestParseLooseEpisode(t *testing.T) {
+	cases := []struct {
+		in       string
+		season   int
+		inSeason bool
+		s, e     int
+		ok       bool
+		epTitle  string
+	}{
+		{"ridiculousness.2216.720p-yestv", 22, true, 22, 16, true, ""},
+		{"South Park - Special 41 - Six Days to Air The Making of South Park", 0, true, 0, 41, true, "Six Days to Air The Making of South Park"},
+		{"Teen Mom 2 - Special 6 - Season 2 Unseen Moments", 0, true, 0, 6, true, "Season 2 Unseen Moments"},
+		{"Ep 6 - This episode has been removed - Season 5 - TruBlu", 5, true, 5, 6, true, "This episode has been removed - Season 5 - TruBlu"},
+		{"The.Night.Of.Part1.1080p.BluRay.x264-DEPTH-Obfuscated", 0, false, 1, 1, true, ""},
+		{"The.Night.Of.Part8.1080p.BluRay.x265.HEVC.6CH-MRN", 0, false, 1, 8, true, ""},
+		{"To Catch a Predator - Ep04 HD Watch", 0, false, 1, 4, true, "HD Watch"},
+		{"To Catch a Predator - Special 5 - Predator Raw - The Unseen Tapes 4", 0, false, 0, 5, true, "Predator Raw - The Unseen Tapes 4"},
+		{"show.2216.720p", 21, true, 0, 0, false, ""},
+		{"Show 720p", 7, true, 0, 0, false, ""},
+		{"Hammy's Boomerang Adventure (2006)", 0, false, 0, 0, false, ""},
+	}
+	for _, c := range cases {
+		s, e, _, rest, ok := parseLooseEpisode(c.in, c.season, c.inSeason)
+		if s != c.s || e != c.e || ok != c.ok {
+			t.Errorf("parseLooseEpisode(%q) = %d, %d, %v; want %d, %d, %v", c.in, s, e, ok, c.s, c.e, c.ok)
+			continue
+		}
+		if ok && episodeTitle(rest) != c.epTitle {
+			t.Errorf("episodeTitle(%q) = %q; want %q", rest, episodeTitle(rest), c.epTitle)
+		}
+	}
+}

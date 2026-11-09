@@ -478,13 +478,21 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 			rest = name[strings.Index(name, d)+len(d):]
 		}
 	}
-	if !ok && len(parts) >= 3 {
-		if sn, sok := parseSeasonDir(parts[len(parts)-2]); sok {
-			if en, eok := parseLeadingNumber(name); eok {
-				season, episode, ok = sn, en, true
-				rest = reLeadNum.ReplaceAllString(name, "")
-			}
+	sn, inSeason := 0, false
+	if len(parts) >= 3 {
+		sn, inSeason = parseSeasonDir(parts[len(parts)-2])
+	}
+	if !ok && inSeason {
+		if en, eok := parseLeadingNumber(name); eok {
+			season, episode, ok = sn, en, true
+			rest = reLeadNum.ReplaceAllString(name, "")
 		}
+	}
+	// "Special 4", "Ep 6", "Part 3", or "show.2216" in Season 22. A file
+	// right in the show folder counts; one deeper but outside a season
+	// folder (extras, odd layouts) does not.
+	if !ok && (inSeason || len(parts) == 2) {
+		season, episode, prefix, rest, ok = parseLooseEpisode(name, sn, inSeason)
 	}
 	if !ok {
 		return 0, nil, fmt.Errorf("cannot find season/episode in %s", f.path)

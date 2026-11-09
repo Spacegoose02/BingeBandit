@@ -35,6 +35,8 @@ var (
 	reEpisodeX = regexp.MustCompile(`(?i)(?:^|[\s._\-])(\d{1,2})x(\d{2,3})(?:[\s._\-]|$)`)
 	reSeason   = regexp.MustCompile(`(?i)^(?:season|series|staffel|saison|s)[ ._-]*(\d{1,3})$`)
 	reLeadNum  = regexp.MustCompile(`^(\d{1,3})(?:[\s._\-]|$)`)
+	reEpWord   = regexp.MustCompile(`(?i)(?:^|[\s._\-])(special|episode|ep|part|pt)[\s._\-]*(\d{1,3})(?:[\s._\-]|$)`)
+	reBareNum  = regexp.MustCompile(`(?:^|[\s._\-])(\d{3,4})(?:[\s._\-]|$)`)
 	reSpaces   = regexp.MustCompile(`\s{2,}`)
 )
 
@@ -150,6 +152,40 @@ func parseSeasonDir(name string) (int, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// parseLooseEpisode is the last try for a name with no S01E02, 1x02 or date
+// marker. It reads "Special 4" (a special), "Ep 6", "Episode 6" and "Part 3"
+// (an episode of the season folder, or of season 1 when the file sits in the
+// show folder, as mini-series often do), and, inside a season folder, a bare
+// number that starts with the season: "show.2216" in Season 22 is episode 16.
+// season is the season folder's number when inSeason is true.
+func parseLooseEpisode(name string, season int, inSeason bool) (s, e int, prefix, rest string, ok bool) {
+	if m := reEpWord.FindStringSubmatchIndex(name); m != nil {
+		e, _ = strconv.Atoi(name[m[4]:m[5]])
+		switch {
+		case inSeason:
+			s = season
+		case strings.EqualFold(name[m[2]:m[3]], "special"):
+			s = 0
+		default:
+			s = 1
+		}
+		return s, e, name[:m[0]], name[m[5]:], true
+	}
+	if inSeason && season > 0 {
+		sp := strconv.Itoa(season)
+		for _, m := range reBareNum.FindAllStringSubmatchIndex(name, -1) {
+			digits := name[m[2]:m[3]]
+			if len(digits) == len(sp)+2 && strings.HasPrefix(digits, sp) {
+				e, _ = strconv.Atoi(digits[len(sp):])
+				if e > 0 {
+					return season, e, name[:m[2]], name[m[3]:], true
+				}
+			}
+		}
+	}
+	return 0, 0, "", "", false
 }
 
 func parseLeadingNumber(name string) (int, bool) {
