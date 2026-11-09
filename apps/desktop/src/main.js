@@ -271,6 +271,23 @@ ipcMain.handle('update:install', (e) => {
   updates.install()
 })
 
+// Starting with Windows: the app opens (full screen, as it closed) when
+// this PC signs in, for a living-room PC that should come up in BingeBandit.
+
+/** The .exe Windows should start: the portable app runs from a temporary copy, so its own file. */
+const startupExe = () => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath
+const canStartWithWindows = () => app.isPackaged && process.platform === 'win32'
+
+ipcMain.handle('startup:get', (e) => {
+  if ((!fromServer(e) && !fromSetup(e)) || !canStartWithWindows()) return null
+  return app.getLoginItemSettings({ path: startupExe() }).openAtLogin
+})
+ipcMain.handle('startup:set', (e, on) => {
+  if ((!fromServer(e) && !fromSetup(e)) || !canStartWithWindows()) return null
+  app.setLoginItemSettings({ openAtLogin: !!on, path: startupExe() })
+  return app.getLoginItemSettings({ path: startupExe() }).openAtLogin
+})
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {

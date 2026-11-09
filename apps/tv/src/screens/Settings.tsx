@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { AppState, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { ApiError, api, current, saveSession } from '../api'
+import { adbGrant, autoLaunchState, openAutoLaunchPermission, setAutoLaunch, type AutoLaunchState } from '../autoLaunch'
 import { Button, Focusable } from '../components'
 import { deviceId, hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
 import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveGameLightsDevice, saveHueMode, type GameLightsDevice, type GameLightsSetup, type HueMode } from '../lights'
@@ -217,6 +218,24 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
     setRecs({ ...recs, accept })
     api.put('/api/me/recommendations', { accept }).catch(() => setRecs(recs))
   }
+  // Open the app when this TV starts. Android 10+ also wants "display over
+  // other apps", so turning it on opens that page; coming back re-checks it.
+  const [auto, setAuto] = useState<AutoLaunchState | null>(null)
+  const [autoHidden, setAutoHidden] = useState(false) // the device has no page for the permission
+  useEffect(() => {
+    if (isPhone) return
+    const load = () => autoLaunchState().then(setAuto, () => undefined)
+    load()
+    const sub = AppState.addEventListener('change', (a) => a === 'active' && load())
+    return () => sub.remove()
+  }, [])
+  const toggleAuto = async () => {
+    if (!auto) return
+    const on = !auto.on
+    setAutoLaunch(on)
+    setAuto({ ...auto, on })
+    if (on && auto.needsPermission && auto.canAsk) setAutoHidden(!(await openAutoLaunchPermission()))
+  }
   const [found, setFound] = useState<AppRelease | null>(update)
   const [msg, setMsg] = useState('')
   const [progress, setProgress] = useState<number | null>(null)
@@ -281,6 +300,26 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
               : 'Always shows every name across the top.'}{' '}
             Press OK to switch.
           </Text>
+        </Focusable>
+      )}
+      {auto && (auto.canAsk || !auto.needsPermission) && (
+        <Focusable onPress={toggleAuto} style={st.option}>
+          <Text style={st.value}>Open BingeBandit when this TV starts: {auto.on ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {auto.on
+              ? 'BingeBandit opens by itself once the TV or box has started up.'
+              : 'Skip the home screen: open BingeBandit by itself once the TV or box has started up.'}{' '}
+            Press OK to turn it {auto.on ? 'off' : 'on'}.
+          </Text>
+          {auto.on && auto.needsPermission && autoHidden && (
+            <Text style={st.error}>This TV hides the "Display over other apps" setting BingeBandit needs. From a computer with adb, run once: {adbGrant}</Text>
+          )}
+        </Focusable>
+      )}
+      {auto?.on && auto.needsPermission && auto.canAsk && !autoHidden && (
+        <Focusable onPress={() => openAutoLaunchPermission().then((ok) => setAutoHidden(!ok))} style={st.option}>
+          <Text style={st.value}>Allow "Display over other apps"</Text>
+          <Text style={st.error}>Android won't let BingeBandit open by itself until this is allowed. Press OK to open the setting, then turn it on for BingeBandit.</Text>
         </Focusable>
       )}
       {hueMode !== null && (

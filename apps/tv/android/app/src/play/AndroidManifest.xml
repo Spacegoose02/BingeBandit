@@ -3,6 +3,8 @@
 
     <!-- Google Play updates the app, so it can't install packages itself. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
+    <!-- Play reviews "display over other apps" closely; the Play build opens itself at start-up only on Android 9 and older. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove" />
 
     <application>
       <provider

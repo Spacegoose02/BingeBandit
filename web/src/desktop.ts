@@ -71,6 +71,11 @@ export interface DesktopBridge {
     install(): Promise<void>
     onChange(cb: (s: DesktopUpdate) => void): () => void
   }
+  // Starting with Windows: true or false, or null when this copy can't. Older Windows apps don't have it.
+  startup?: {
+    get(): Promise<boolean | null>
+    set(on: boolean): Promise<boolean | null>
+  }
 }
 
 /** The Windows app's bridge, when this page runs inside it. */

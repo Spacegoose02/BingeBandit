@@ -19,12 +19,20 @@ const updates = {
   },
 }
 
+// Starting with Windows, for both: get() and set(on) answer true or false,
+// or null when this copy can't (not installed, or not on Windows).
+const startup = {
+  get: () => ipcRenderer.invoke('startup:get'),
+  set: (on) => ipcRenderer.invoke('startup:set', !!on),
+}
+
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('bbSetup', {
     probe: (input) => ipcRenderer.invoke('setup:probe', input),
     scan: () => ipcRenderer.invoke('setup:scan'),
     use: (url) => ipcRenderer.invoke('setup:use', url),
     updates,
+    startup,
   })
 } else if (location.origin === ipcRenderer.sendSync('bb:origin')) {
   contextBridge.exposeInMainWorld('bbDesktop', {
@@ -39,5 +47,6 @@ if (location.protocol === 'file:') {
       return () => ipcRenderer.removeListener('player:event', listener)
     },
     updates,
+    startup,
   })
 }

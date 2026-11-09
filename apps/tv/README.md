@@ -22,6 +22,7 @@ What it does:
 - **Live TV:** a guide grid like a cable box, with the focused channel previewing live. OK tunes in; ▲/▼ changes channel while watching.
 - **Search**, and adding to or removing from your watchlist.
 - **Updates itself:** when a newer APK is on GitHub, Settings offers it. The first time, Android asks you to allow BingeBandit to install apps.
+- **Opens when the TV starts** (Settings › This TV, off until turned on): once the TV or box finishes starting up, BingeBandit opens instead of the home screen (`AutoLaunch.kt`). Android 10 and later also want BingeBandit allowed to **Display over other apps**; Settings opens that page. Google TV and Chromecast hide it, so grant it once from a computer: `adb shell appops set com.bingebandit.tv SYSTEM_ALERT_WINDOW allow`. It runs on a real start-up, not when a TV wakes from standby. The Google Play build leaves the permission out, so there it only works on Android 9 and older.
 
 ## Building
 
