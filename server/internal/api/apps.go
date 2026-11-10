@@ -62,8 +62,11 @@ func (u *appUpdates) get(ctx context.Context, repo string) (*appRelease, error) 
 	return u.latest, u.err
 }
 
+// fetchAppRelease finds the newest published release that has a TV APK. It
+// looks past the very latest release, so a release whose TV build failed (or
+// is still uploading) doesn't leave /tv and TV updates with nothing.
 func fetchAppRelease(ctx context.Context, repo string) (*appRelease, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/"+repo+"/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesURL+repo+"/releases?per_page=10", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,30 +83,38 @@ func fetchAppRelease(ctx context.Context, repo string) (*appRelease, error) {
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("GitHub answered %s", resp.Status)
 	}
-	var rel struct {
+	var rels []struct {
 		TagName     string `json:"tag_name"`
 		Body        string `json:"body"`
 		PublishedAt string `json:"published_at"`
+		Draft       bool   `json:"draft"`
+		Prerelease  bool   `json:"prerelease"`
 		Assets      []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
 			Size int64  `json:"size"`
 		} `json:"assets"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&rels); err != nil {
 		return nil, err
 	}
-	for _, a := range rel.Assets {
-		if strings.HasPrefix(a.Name, "BingeBandit-TV-") && strings.HasSuffix(a.Name, ".apk") {
-			notes := rel.Body
-			if len(notes) > 2000 {
-				notes = notes[:2000]
+	// GitHub lists releases newest first.
+	for _, rel := range rels {
+		if rel.Draft || rel.Prerelease {
+			continue
+		}
+		for _, a := range rel.Assets {
+			if strings.HasPrefix(a.Name, "BingeBandit-TV-") && strings.HasSuffix(a.Name, ".apk") {
+				notes := rel.Body
+				if len(notes) > 2000 {
+					notes = notes[:2000]
+				}
+				return &appRelease{Version: strings.TrimPrefix(rel.TagName, "v"), VersionCode: versionCode(rel.TagName),
+					URL: a.URL, Size: a.Size, PublishedAt: rel.PublishedAt, Notes: notes}, nil
 			}
-			return &appRelease{Version: strings.TrimPrefix(rel.TagName, "v"), VersionCode: versionCode(rel.TagName),
-				URL: a.URL, Size: a.Size, PublishedAt: rel.PublishedAt, Notes: notes}, nil
 		}
 	}
-	return nil, nil // the latest release has no TV app
+	return nil, nil // no recent release has a TV app
 }
 
 // androidApp tells the TV app about the newest release (204 when there is none).
