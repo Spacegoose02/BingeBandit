@@ -53,6 +53,8 @@ export default function Details({ id }: { id: number }) {
   const [failed, setFailed] = useState('') // a button's change that didn't save
   useDownloads() // redraw as a download moves along
   const [picking, setPicking] = useState(false) // choosing a download quality
+  const [requesting, setRequesting] = useState(false) // choosing seasons to request
+  const seasons = useMissingSeasons(d?.item)
 
   const load = useCallback(() => {
     writesDone()
@@ -161,8 +163,9 @@ export default function Details({ id }: { id: number }) {
             <Thumbs rating={d.myRating} onRate={(r) => change(api.put(`/api/items/${it.id}/rating`, { rating: r }))} />
           )}
           {canSave && <DownloadButton item={it} episodes={episodes} onPick={() => setPicking((p) => !p)} />}
-          {it.kind === 'show' && !!it.tmdbId && <MissingSeasonsButton item={it} />}
+          {it.kind === 'show' && !!it.tmdbId && <RequestButton seasons={seasons} onPick={() => setRequesting((r) => !r)} />}
         </View>
+        {requesting && seasons.info && <RequestChoices seasons={seasons} onDone={() => setRequesting(false)} />}
         {canSave && picking && (
           <DownloadChoices
             file={playable ? d.files?.[0] : undefined}
@@ -383,30 +386,101 @@ interface SeasonsInfo {
   seasons?: { number: number; episodes: number; airDate?: string; onServer: number; requested: boolean }[]
 }
 
-/** On a show: the seasons the server doesn't have (out or coming), requested in one press. */
-function MissingSeasonsButton({ item }: { item: Item }) {
+type Season = NonNullable<SeasonsInfo['seasons']>[number]
+
+/** A show's seasons the server doesn't have (out or coming), looked up once. */
+function useMissingSeasons(item?: Item) {
   const [info, setInfo] = useState<SeasonsInfo | null>(null)
-  const [msg, setMsg] = useState('')
+  const [sent, setSent] = useState<number[]>([]) // requested from this screen
+  const [error, setError] = useState('')
+  const show = item?.kind === 'show' && !!item.tmdbId
+  const showId = item?.tmdbId
   useEffect(() => {
+    setInfo(null)
+    setSent([])
     // Requests off, or no TMDB key: no button.
-    api.get<SeasonsInfo>(`/api/requests/title/show/${item.tmdbId}`).then(setInfo, () => setInfo(null))
-  }, [item.tmdbId])
-  if (msg) return <Button label={msg} onPress={() => undefined} />
+    if (show) api.get<SeasonsInfo>(`/api/requests/title/show/${showId}`).then(setInfo, () => setInfo(null))
+  }, [show, showId])
   const missing = (info?.seasons ?? []).filter((s) => s.onServer < s.episodes && s.episodes > 0)
-  if (!info || missing.length === 0) return null
-  const open = missing.filter((s) => !s.requested)
-  if (open.length === 0) return <Button label={`Season${missing.length > 1 ? 's' : ''} ${missing.map((s) => s.number).join(', ')} requested ✓`} onPress={() => undefined} />
-  const label = `Request season${open.length > 1 ? 's' : ''} ${open.map((s) => s.number).join(', ')}`
+  const open = missing.filter((s) => !s.requested && !sent.includes(s.number))
+  const request = (numbers: number[]) => {
+    if (!info || !numbers.length) return Promise.resolve(false)
+    const { kind, tmdbId, title, year, poster, overview } = info.title
+    setError('')
+    return api.post('/api/requests', { kind, tmdbId, title, year, poster, overview, seasons: numbers }).then(
+      () => {
+        setSent((s) => [...s, ...numbers])
+        return true
+      },
+      (e: Error) => {
+        setError(e.message)
+        return false
+      },
+    )
+  }
+  return { info, missing, open, error, request }
+}
+
+/** A small Request button on a show missing seasons; hidden when nothing's missing. */
+function RequestButton({ seasons, onPick }: { seasons: ReturnType<typeof useMissingSeasons>; onPick: () => void }) {
+  if (!seasons.info || seasons.missing.length === 0) return null
+  if (seasons.open.length === 0) return <Button small label="Requested ✓" onPress={onPick} />
+  return <Button small label="Request" onPress={onPick} />
+}
+
+function seasonLabel(s: Season) {
+  const coming = !!s.airDate && new Date(s.airDate).getTime() > Date.now()
+  const detail = coming
+    ? `starts ${new Date(s.airDate!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : s.onServer > 0
+      ? `${s.episodes - s.onServer} of ${s.episodes} missing`
+      : `${s.episodes} episode${s.episodes === 1 ? '' : 's'}`
+  return `Season ${s.number} · ${detail}`
+}
+
+/** The missing seasons to tick and request, under the buttons like the download qualities. */
+function RequestChoices({ seasons, onDone }: { seasons: ReturnType<typeof useMissingSeasons>; onDone: () => void }) {
+  const [picked, setPicked] = useState<number[]>(() => seasons.open.map((s) => s.number))
+  const [busy, setBusy] = useState(false)
+  const done = seasons.missing.filter((s) => !seasons.open.includes(s))
+  const toggle = (n: number) => setPicked((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]))
+  const chosen = picked.filter((n) => seasons.open.some((s) => s.number === n))
   return (
-    <Button
-      label={label}
-      onPress={() => {
-        const { kind, tmdbId, title, year, poster, overview } = info.title
-        api.post('/api/requests', { kind, tmdbId, title, year, poster, overview, seasons: open.map((s) => s.number) }).then(
-          () => setMsg('Requested ✓'),
-          (e: Error) => setMsg(e.message),
-        )
-      }}
-    />
+    <View>
+      <Text style={st.muted}>{seasons.open.length ? 'Missing seasons' : 'Every missing season is requested'}</Text>
+      {seasons.open.length > 0 && (
+        <View style={st.buttons}>
+          {seasons.open.map((s, i) => (
+            <Button
+              key={s.number}
+              small
+              preferFocus={i === 0}
+              label={`${seasonLabel(s)}${picked.includes(s.number) ? ' ✓' : ''}`}
+              onPress={() => toggle(s.number)}
+            />
+          ))}
+        </View>
+      )}
+      <View style={st.buttons}>
+        {seasons.open.length > 0 && (
+          <Button
+            small
+            primary
+            label={busy ? 'Requesting…' : chosen.length ? `Request ${chosen.length === seasons.open.length && chosen.length > 1 ? 'all' : chosen.length === 1 ? `season ${chosen[0]}` : `${chosen.length} seasons`}` : 'Pick a season'}
+            onPress={() => {
+              if (busy || !chosen.length) return
+              setBusy(true)
+              seasons.request(chosen).then((ok) => {
+                setBusy(false)
+                if (ok) onDone()
+              })
+            }}
+          />
+        )}
+        <Button small label={seasons.open.length ? 'Cancel' : 'Close'} onPress={onDone} />
+      </View>
+      {done.length > 0 && <Text style={st.muted}>Already requested: season{done.length > 1 ? 's' : ''} {done.map((s) => s.number).join(', ')}</Text>}
+      {!!seasons.error && <Text style={st.error}>{seasons.error}</Text>}
+    </View>
   )
 }
