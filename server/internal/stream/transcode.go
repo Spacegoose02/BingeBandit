@@ -98,6 +98,7 @@ type Session struct {
 	Remote bool `json:"-"`
 
 	dir        string
+	cmdMu      sync.Mutex // guards cmd, which a retry replaces
 	cmd        *exec.Cmd
 	done       chan struct{}
 	lastAccess atomic.Int64
@@ -113,14 +114,17 @@ type Manager struct {
 	ffmpeg  string
 	dataDir string
 
-	caps     ffmpegCaps
-	mu       sync.Mutex
-	sessions map[string]*Session
-	stop     chan struct{}
+	caps ffmpegCaps
+	// noHWDecode lists video codecs the GPU turned out not to decode
+	// (guarded by mu); their conversions decode on the CPU.
+	noHWDecode map[string]bool
+	mu         sync.Mutex
+	sessions   map[string]*Session
+	stop       chan struct{}
 }
 
 func NewManager(st *store.Store, ffmpeg, dataDir string) *Manager {
-	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{}),
+	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{}), noHWDecode: map[string]bool{},
 		caps: probeCaps(ffmpeg)}
 	if !m.caps.readrateBurst {
 		log.Printf("transcode: this ffmpeg is older than 6.1, so conversions can't be throttled and run at full speed")
@@ -167,11 +171,7 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("transcode dir: %w", err)
 	}
-	args := m.buildArgs(f, s, o)
-	s.cmd = exec.Command(m.ffmpeg, args...)
-	s.cmd.Stderr = s.stderr
-	media.HideWindow(s.cmd)
-	if err := s.cmd.Start(); err != nil {
+	if err := m.launch(s, m.buildArgs(f, s, o)); err != nil {
 		os.RemoveAll(s.dir)
 		return nil, fmt.Errorf("start ffmpeg: %w", err)
 	}
@@ -183,7 +183,21 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled, s.AudioCodec, s.AudioChannels, s.AudioCopy, s.AudioDelayMs)
 
 	go func() {
-		err := s.cmd.Wait()
+		err := s.wait()
+		// The GPU can't decode this codec (say AV1 on an older Intel chip,
+		// or a driver without it): remember that and start again decoding
+		// on the CPU, in the same session so the player keeps waiting.
+		if err != nil && s.HWDecode && !s.stopped.Load() && isHWDecodeFailure(s.stderr.String()) && !s.hasOutput() {
+			m.mu.Lock()
+			m.noHWDecode[f.VideoCodec] = true
+			m.mu.Unlock()
+			log.Printf("transcode %s: the GPU can't decode %s, decoding it on the CPU instead", s.ID, f.VideoCodec)
+			s.stderr.Reset()
+			s.HWDecode = false
+			if err = m.launch(s, m.buildArgs(f, s, o)); err == nil {
+				err = s.wait()
+			}
+		}
 		close(s.done)
 		if s.stopped.Load() {
 			return
@@ -250,10 +264,10 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 				args = append(args, "-qsv_device", renderNode)
 			}
 		}
-		// Decoding on the GPU too. Frames come back to system memory, so the
-		// filters below work unchanged, and ffmpeg decodes in software when
-		// the GPU can't handle the codec.
-		if m.st.Setting(store.SettingHWDecode) == "true" {
+		// Decoding on the GPU too, unless it already failed for this codec
+		// (see Start): with VAAPI frames kept on the GPU, ffmpeg gives up
+		// instead of decoding in software.
+		if m.st.Setting(store.SettingHWDecode) == "true" && !m.hwDecodeFailed(f.VideoCodec) {
 			switch encoder {
 			case "nvenc":
 				args = append(args, "-hwaccel", "cuda")
@@ -682,11 +696,58 @@ func (s *Session) AccessCheckDue(every time.Duration) bool {
 	return now-last >= int64(every) && s.accessChecked.CompareAndSwap(last, now)
 }
 
+// launch starts ffmpeg for the session, unless the session was stopped
+// (a retry racing the player leaving).
+func (m *Manager) launch(s *Session, args []string) error {
+	cmd := exec.Command(m.ffmpeg, args...)
+	cmd.Stderr = s.stderr
+	media.HideWindow(cmd)
+	s.cmdMu.Lock()
+	defer s.cmdMu.Unlock()
+	if s.stopped.Load() {
+		return errors.New("stopped")
+	}
+	s.cmd = cmd
+	return cmd.Start()
+}
+
+func (s *Session) wait() error {
+	s.cmdMu.Lock()
+	cmd := s.cmd
+	s.cmdMu.Unlock()
+	return cmd.Wait()
+}
+
+// hasOutput reports whether ffmpeg wrote any segment yet.
+func (s *Session) hasOutput() bool {
+	m, _ := filepath.Glob(filepath.Join(s.dir, "*.ts"))
+	return len(m) > 0
+}
+
+// isHWDecodeFailure recognises ffmpeg giving up because the GPU (or its
+// driver) can't decode the video.
+func isHWDecodeFailure(stderr string) bool {
+	for _, s := range []string{"hwaccel initialisation returned error", "doesn't support hardware accelerated", "No support for codec"} {
+		if strings.Contains(stderr, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) hwDecodeFailed(codec string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.noHWDecode[codec]
+}
+
 func (s *Session) kill() {
+	s.cmdMu.Lock()
 	s.stopped.Store(true)
 	if s.cmd.Process != nil {
 		s.cmd.Process.Kill()
 	}
+	s.cmdMu.Unlock()
 	go func() {
 		select {
 		case <-s.done:
@@ -781,6 +842,12 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 		t.buf = t.buf[len(t.buf)-t.max:]
 	}
 	return len(p), nil
+}
+
+func (t *tailBuffer) Reset() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = nil
 }
 
 func (t *tailBuffer) String() string {
