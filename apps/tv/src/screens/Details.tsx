@@ -394,13 +394,13 @@ function useMissingSeasons(item?: Item) {
   const [sent, setSent] = useState<number[]>([]) // requested from this screen
   const [error, setError] = useState('')
   const show = item?.kind === 'show' && !!item.tmdbId
-  const tmdbId = item?.tmdbId
+  const showId = item?.tmdbId
   useEffect(() => {
     setInfo(null)
     setSent([])
     // Requests off, or no TMDB key: no button.
-    if (show) api.get<SeasonsInfo>(`/api/requests/title/show/${tmdbId}`).then(setInfo, () => setInfo(null))
-  }, [show, tmdbId])
+    if (show) api.get<SeasonsInfo>(`/api/requests/title/show/${showId}`).then(setInfo, () => setInfo(null))
+  }, [show, showId])
   const missing = (info?.seasons ?? []).filter((s) => s.onServer < s.episodes && s.episodes > 0)
   const open = missing.filter((s) => !s.requested && !sent.includes(s.number))
   const request = (numbers: number[]) => {
