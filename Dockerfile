@@ -46,8 +46,9 @@ ARG TARGETARCH
 # the transcode throttle (-readrate_initial_burst): without it every
 # conversion runs flat out to the end of the file. VA-API drivers for AMD (mesa) and, on x86
 # only since the package doesn't exist for arm64, Intel hardware transcoding.
+# vainfo lists what the GPU can decode (docker exec bingebandit vainfo).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg ca-certificates tzdata mesa-va-drivers \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates tzdata mesa-va-drivers vainfo \
  && if [ "$TARGETARCH" = "amd64" ]; then apt-get install -y --no-install-recommends intel-media-va-driver; fi \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /bingebandit /usr/local/bin/bingebandit
