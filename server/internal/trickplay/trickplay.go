@@ -119,11 +119,16 @@ func (g *Generator) Make(ctx context.Context, f *store.MediaFile) error {
 	// Keyframes only (-skip_frame nokey): rounding up, fps shows the last
 	// keyframe at or before each slot's time. dar keeps anamorphic video the right shape.
 	vf := fmt.Sprintf("fps=1/%d:round=up,scale=%d:trunc(%d/dar/2)*2,setsar=1,tile=%dx%d", Interval, Width, Width, Columns, Rows)
-	cmd := exec.CommandContext(ctx, g.ffmpeg, "-nostdin", "-loglevel", "error", "-y",
-		"-skip_frame", "nokey", "-i", f.Path, "-map", "0:v:0", "-an", "-sn", "-dn",
+	// This runs while someone watches (it's queued on play), so it stays
+	// out of the way: two threads, low priority, and decoding on the GPU
+	// when the admin set VAAPI decoding up (ffmpeg falls back to the CPU
+	// for codecs the GPU can't do).
+	args := []string{"-nostdin", "-loglevel", "error", "-y", "-threads", "2", "-filter_threads", "1"}
+	args = append(args, g.hwDecodeArgs()...)
+	args = append(args, "-skip_frame", "nokey", "-i", f.Path, "-map", "0:v:0", "-an", "-sn", "-dn",
 		"-vf", vf, "-q:v", "5", "-f", "image2", filepath.Join(tmp, "%03d.jpg"))
-	media.HideWindow(cmd)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	cmd := exec.CommandContext(ctx, g.ffmpeg, args...)
+	if out, err := media.RunBackground(cmd); err != nil {
 		return fmt.Errorf("ffmpeg: %v %s", err, strings.TrimSpace(string(out)))
 	}
 	sheets := 0
@@ -156,6 +161,20 @@ func (g *Generator) Make(ctx context.Context, f *store.MediaFile) error {
 	}
 	os.RemoveAll(dir)
 	return os.Rename(tmp, dir)
+}
+
+// hwDecodeArgs decodes on the GPU when transcoding is set to VAAPI with
+// hardware decoding on. Frames come back to memory for the scale and tile
+// filters; only keyframes are decoded, so that's a handful a minute.
+func (g *Generator) hwDecodeArgs() []string {
+	if g.st.Setting(store.SettingHWEncoder) != "vaapi" || g.st.Setting(store.SettingHWDecode) != "true" {
+		return nil
+	}
+	node := "/dev/dri/renderD128"
+	if d := g.st.Setting(store.SettingHWDevice); strings.HasPrefix(d, "/") {
+		node = d
+	}
+	return []string{"-hwaccel", "vaapi", "-hwaccel_device", node}
 }
 
 // Pending makes thumbnails for every file that has none, newest first (the

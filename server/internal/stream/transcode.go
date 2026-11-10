@@ -122,6 +122,9 @@ type Manager struct {
 func NewManager(st *store.Store, ffmpeg, dataDir string) *Manager {
 	m := &Manager{st: st, ffmpeg: ffmpeg, dataDir: dataDir, sessions: map[string]*Session{}, stop: make(chan struct{}),
 		caps: probeCaps(ffmpeg)}
+	if !m.caps.readrateBurst {
+		log.Printf("transcode: this ffmpeg is older than 6.1, so conversions can't be throttled and run at full speed")
+	}
 	m.cleanStale()
 	go m.janitor()
 	return m
@@ -232,6 +235,11 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		renderNode = device
 	}
 
+	// VAAPI scales on the GPU unless subtitles are burned in (the overlay
+	// runs on the CPU, after which the frames are uploaded). Frames decoded
+	// on the GPU then stay there: copying every frame back to system memory
+	// and up again costs more CPU than the conversion itself.
+	gpuScale := encoder == "vaapi" && burn < 0
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
 	if !s.VideoCopy {
 		switch encoder {
@@ -254,6 +262,10 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 				}
 			case "vaapi":
 				args = append(args, "-hwaccel", "vaapi", "-hwaccel_device", renderNode)
+				if gpuScale && !s.Tonemap {
+					// The tone mapping filters need the frames in memory.
+					args = append(args, "-hwaccel_output_format", "vaapi")
+				}
 			case "videotoolbox":
 				args = append(args, "-hwaccel", "videotoolbox")
 			case "qsv", "amf":
@@ -339,7 +351,14 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			post = append(post, "format=yuv420p")
 			codec = []string{"-c:v", "h264_amf", "-quality", "speed"}
 		case "vaapi":
-			post = append(post, "format=nv12", "hwupload")
+			if gpuScale {
+				// Frames still in memory (decoded on the CPU, or tone
+				// mapped) are uploaded once; frames already on the GPU pass
+				// through hwupload untouched.
+				pre = append(pre, "format=nv12|vaapi", "hwupload")
+			} else {
+				post = append(post, "format=nv12", "hwupload")
+			}
 			codec = []string{"-c:v", "h264_vaapi"}
 		case "videotoolbox":
 			post = append(post, "format=yuv420p")
@@ -352,6 +371,14 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		s.Encoder = encoder
 		// outputFilters scales one output to h, then readies it for the encoder.
 		outputFilters := func(h int) []string {
+			if gpuScale {
+				// scale_vaapi also turns 10-bit frames into the 8-bit ones
+				// h264_vaapi takes.
+				if h > 0 && h < f.Height {
+					return []string{fmt.Sprintf("scale_vaapi=w=-2:h=%d:format=nv12", h)}
+				}
+				return []string{"scale_vaapi=format=nv12"}
+			}
 			if h > 0 && h < f.Height {
 				return append([]string{fmt.Sprintf("scale=-2:%d", h)}, post...)
 			}

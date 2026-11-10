@@ -40,9 +40,11 @@ RUN case "$TARGETARCH" in arm64) f=yt-dlp_linux_aarch64; d=aarch64 ;; *) f=yt-dl
  && wget -qO /deno.zip "https://github.com/denoland/deno/releases/latest/download/deno-$d-unknown-linux-gnu.zip" \
  && unzip -q /deno.zip -d / && chmod +x /deno && rm /deno.zip
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 ARG TARGETARCH
-# ffmpeg for probing/transcoding; VA-API drivers for AMD (mesa) and, on x86
+# ffmpeg (7.1 on trixie) for probing/transcoding. It needs 6.1 or newer for
+# the transcode throttle (-readrate_initial_burst): without it every
+# conversion runs flat out to the end of the file. VA-API drivers for AMD (mesa) and, on x86
 # only since the package doesn't exist for arm64, Intel hardware transcoding.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg ca-certificates tzdata mesa-va-drivers \
