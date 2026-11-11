@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-10. Latest release v0.50.3, 58 schema migrations._
+_Last updated: 2026-11-11. Latest release v0.50.3, 58 schema migrations._
 
 
 ## Start here
@@ -68,6 +68,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Cast members open their whole filmography (2026-11-11, no migration)
+
+Michael: "When clicking on a cast member, on web and tv app, it should show the other movies/tv shows the actor/actress played in". Both apps already opened a person page from the Cast row, but it only listed what was in the libraries (plus, on the web, a "Not here yet" row of their 60 most popular other titles for people who can request).
+
+- **Server** (`metadata.PersonFilmography`, `api.personFilmography`): `GET /api/people/filmography?name=` looks the person up on TMDB (`/person/{id}?append_to_response=combined_credits`, cached an hour like the other request lists) and returns their bio, birth/death, department and every credit, newest first with announced titles on top. Acting and crew credits for the same title are one row (the parts win); shows carry their episode count; talk and news shows are dropped; capped at 250 by popularity. Each credit is run through `annotateRequestable`, so it has `itemId` when it's in a library the viewer can see and the request state. Anyone signed in can see it; `canRequest` says whether they can ask, and for those who can't (kids, requests off) `onServer` and `request` are cleared so it says nothing about libraries they can't see. `TMDB.findPerson` is now shared with `PersonCredits`.
+- **Web** (`pages/Person.tsx`): the header adds TMDB's photo, facts and a biography (four lines, then More). "In your libraries" is the old grid; below it **Filmography**, with tabs All / Movies / Shows / Behind the camera / Not here. Titles here carry a "Here" badge and open the title; the rest show Request / Me too (the usual `RequestModal`, seasons and 4K included) or their request status, or "Not here" for people who can't request. The old "Not here yet" request row is gone from this page (the filmography covers it). If the filmography can't load (no TMDB key) the page is what it was.
+- **TV app** (`screens/Person.tsx`): the same header and Filmography section, with filter buttons, the first 40 posters then "Show all N". A title here opens its details; one that isn't asks for it with one press (all seasons for a show), like Search's request results. `requestLabel` moved from `Home.tsx` to `src/requests.ts` so both use it.
+- **Roku** wasn't changed: its person grid still lists library titles only.
+- **Tested:** `go test ./...` with new `TestPersonFilmography` (fake TMDB: order, merged parts, crew jobs, episode counts, the talk show dropped, a kid without request info, an unknown name), `go vet`, gofmt; the web build, and the page in headless Chromium against mocked filmography data at desktop and phone width; TV typecheck and eslint. **Not tried** against the real TMDB or on a TV.
 
 ## Features from the Netflix / Apple TV comparison (2026-11-08, migration 58)
 

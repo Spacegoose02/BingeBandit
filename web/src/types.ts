@@ -142,6 +142,30 @@ export interface Person {
   titles: { item: Item; role: string; kind: 'cast' | 'crew' }[]
 }
 
+/** A cast or crew member on TMDB: who they are and everything they were in, marked with what's here. */
+export interface Filmography {
+  tmdbId: number
+  name: string
+  photo?: string
+  biography?: string
+  birthday?: string
+  deathday?: string
+  birthplace?: string
+  /** TMDB's department: Acting, Directing… */
+  knownFor?: string
+  credits: FilmographyCredit[]
+  /** The viewer may request what isn't here. */
+  canRequest: boolean
+  whyNoRequests?: string
+}
+
+export interface FilmographyCredit extends RequestableTitle {
+  /** Only behind the camera (role is the job). */
+  crew?: boolean
+  /** On a show: how many episodes they were in. */
+  episodes?: number
+}
+
 export type ItemKind =
   | 'movie'
   | 'show'
