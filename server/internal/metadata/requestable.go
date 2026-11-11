@@ -200,21 +200,9 @@ func (s *Service) PersonCredits(ctx context.Context, name string) ([]Requestable
 	}
 	name = strings.TrimSpace(name)
 	return remember("person:"+strings.ToLower(name)+":"+c.lang, func() ([]Requestable, error) {
-		var found struct {
-			Results []struct {
-				ID   int64  `json:"id"`
-				Name string `json:"name"`
-			} `json:"results"`
-		}
-		if err := c.get(ctx, "/search/person", url.Values{"query": {name}, "include_adult": {"false"}}, &found); err != nil {
+		id, err := c.findPerson(ctx, name)
+		if err != nil {
 			return nil, err
-		}
-		var id int64
-		for _, p := range found.Results {
-			if strings.EqualFold(p.Name, name) {
-				id = p.ID
-				break
-			}
 		}
 		if id == 0 {
 			return []Requestable{}, nil
@@ -308,4 +296,144 @@ func (s *Service) TitleInfo(ctx context.Context, kind string, id int64) (*TitleI
 		}
 		return info, nil
 	})
+}
+
+// Filmography is a person's page on TMDB: who they are and every movie and
+// show that credits them, newest first.
+type Filmography struct {
+	TMDBID     int64            `json:"tmdbId"`
+	Name       string           `json:"name"`
+	Photo      string           `json:"photo,omitempty"`
+	Biography  string           `json:"biography,omitempty"`
+	Birthday   string           `json:"birthday,omitempty"`
+	Deathday   string           `json:"deathday,omitempty"`
+	Birthplace string           `json:"birthplace,omitempty"`
+	KnownFor   string           `json:"knownFor,omitempty"` // TMDB's department: Acting, Directing…
+	Credits    []FilmographyRow `json:"credits"`
+}
+
+// FilmographyRow is one title on a person's filmography.
+type FilmographyRow struct {
+	Requestable
+	Crew     bool `json:"crew,omitempty"`     // credited behind the camera only (Role is the job)
+	Episodes int  `json:"episodes,omitempty"` // on a show: how many episodes they were in
+}
+
+// maxFilmography caps a filmography; voice actors and character actors
+// can have hundreds of credits.
+const maxFilmography = 250
+
+// findPerson is TMDB's id for a cast or crew member by name (credits carry
+// no ids), the most popular exact match; 0 when there's none.
+func (t *TMDB) findPerson(ctx context.Context, name string) (int64, error) {
+	var found struct {
+		Results []struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+		} `json:"results"`
+	}
+	if err := t.get(ctx, "/search/person", url.Values{"query": {name}, "include_adult": {"false"}}, &found); err != nil {
+		return 0, err
+	}
+	for _, p := range found.Results {
+		if strings.EqualFold(p.Name, name) {
+			return p.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+// PersonFilmography looks up a cast or crew member by name on TMDB: nil
+// (and no error) when TMDB has no one by that name.
+func (s *Service) PersonFilmography(ctx context.Context, name string) (*Filmography, error) {
+	c := s.client()
+	if c == nil {
+		return nil, ErrNoKey
+	}
+	name = strings.TrimSpace(name)
+	return remember("filmography:"+strings.ToLower(name)+":"+c.lang, func() (*Filmography, error) {
+		id, err := c.findPerson(ctx, name)
+		if err != nil || id == 0 {
+			return nil, err
+		}
+		var p struct {
+			ID              int64  `json:"id"`
+			Name            string `json:"name"`
+			Biography       string `json:"biography"`
+			Birthday        string `json:"birthday"`
+			Deathday        string `json:"deathday"`
+			PlaceOfBirth    string `json:"place_of_birth"`
+			ProfilePath     string `json:"profile_path"`
+			KnownFor        string `json:"known_for_department"`
+			CombinedCredits struct {
+				Cast []tmdbCreditEntry `json:"cast"`
+				Crew []tmdbCreditEntry `json:"crew"`
+			} `json:"combined_credits"`
+		}
+		if err := c.get(ctx, fmt.Sprintf("/person/%d", id), url.Values{"append_to_response": {"combined_credits"}}, &p); err != nil {
+			return nil, err
+		}
+		f := &Filmography{TMDBID: p.ID, Name: p.Name, Photo: store.ImageURL(img(p.ProfilePath)), Biography: strings.TrimSpace(p.Biography),
+			Birthday: p.Birthday, Deathday: p.Deathday, Birthplace: p.PlaceOfBirth, KnownFor: p.KnownFor, Credits: []FilmographyRow{}}
+		if f.Name == "" {
+			f.Name = name
+		}
+		at := map[string]int{} // kind:id → index in f.Credits
+		add := func(e tmdbCreditEntry, crew bool) {
+			r, ok := e.requestable("")
+			// Talk shows, news and award shows list everyone who ever sat on the couch.
+			if !ok || (r.Kind == "show" && slicesHas(e.GenreIDs, 10767, 10763)) {
+				return
+			}
+			key := r.Kind + ":" + fmt.Sprint(r.TMDBID)
+			if i, seen := at[key]; seen {
+				// Acted in it and directed it, or played two parts: one row.
+				row := &f.Credits[i]
+				if r.Role != "" && !strings.Contains(row.Role, r.Role) && (crew == row.Crew || !crew) {
+					row.Role = strings.TrimPrefix(row.Role+", "+r.Role, ", ")
+				}
+				row.Episodes = max(row.Episodes, e.EpisodeCount)
+				return
+			}
+			at[key] = len(f.Credits)
+			f.Credits = append(f.Credits, FilmographyRow{Requestable: r, Crew: crew, Episodes: e.EpisodeCount})
+		}
+		for _, e := range p.CombinedCredits.Cast {
+			add(e, false)
+		}
+		for _, e := range p.CombinedCredits.Crew {
+			add(e, true)
+		}
+		// Newest first; titles with no date yet are announced ones, so they go on top.
+		sort.SliceStable(f.Credits, func(i, j int) bool {
+			a, b := f.Credits[i].ReleaseDate, f.Credits[j].ReleaseDate
+			if (a == "") != (b == "") {
+				return a == ""
+			}
+			if a != b {
+				return a > b
+			}
+			return f.Credits[i].Popularity > f.Credits[j].Popularity
+		})
+		if len(f.Credits) > maxFilmography {
+			// Keep the best known ones, still newest first.
+			keep := append([]FilmographyRow(nil), f.Credits...)
+			sort.SliceStable(keep, func(i, j int) bool { return keep[i].Popularity > keep[j].Popularity })
+			cut := keep[maxFilmography-1].Popularity
+			kept := f.Credits[:0]
+			for _, r := range f.Credits {
+				if r.Popularity >= cut && len(kept) < maxFilmography {
+					kept = append(kept, r)
+				}
+			}
+			f.Credits = kept
+		}
+		return f, nil
+	})
+}
+
+// tmdbCreditEntry is a title on a person's combined credits.
+type tmdbCreditEntry struct {
+	tmdbListEntry
+	EpisodeCount int `json:"episode_count"`
 }

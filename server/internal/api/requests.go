@@ -1197,3 +1197,59 @@ func (s *Server) requestWatchlist(ctx context.Context, uid int64) {
 		}
 	}
 }
+
+// filmographyCredit is a title on a person's filmography with what the
+// server has of it.
+type filmographyCredit struct {
+	requestSearchResult
+	Crew     bool `json:"crew,omitempty"`
+	Episodes int  `json:"episodes,omitempty"`
+}
+
+// personFilmography is everything a cast or crew member was in, from TMDB,
+// marked with what the viewer can watch here and what they could ask for.
+// Anyone can see it; the request parts are only filled in for people who
+// may request titles.
+func (s *Server) personFilmography(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r)
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeErr(w, http.StatusBadRequest, "name required")
+		return
+	}
+	if s.Metadata == nil || !s.Metadata.Enabled() {
+		writeErr(w, http.StatusServiceUnavailable, "a filmography needs a TMDB API key")
+		return
+	}
+	f, err := s.Metadata.PersonFilmography(r.Context(), name)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if f == nil {
+		writeErr(w, http.StatusNotFound, "TMDB doesn't know "+name)
+		return
+	}
+	list := make([]metadata.Requestable, len(f.Credits))
+	for i, c := range f.Credits {
+		list[i] = c.Requestable
+	}
+	why := s.canRequest(u)
+	marked := s.annotateRequestable(u, list, false)
+	credits := make([]filmographyCredit, len(marked))
+	for i, m := range marked {
+		if why != "" {
+			// Nothing to ask for, and no hints about libraries they can't see.
+			m.OnServer, m.Request = m.ItemID != 0, nil
+		}
+		credits[i] = filmographyCredit{requestSearchResult: m, Crew: f.Credits[i].Crew, Episodes: f.Credits[i].Episodes}
+	}
+	person := *f
+	person.Credits = nil
+	writeJSON(w, http.StatusOK, struct {
+		metadata.Filmography
+		Credits    []filmographyCredit `json:"credits"`
+		CanRequest bool                `json:"canRequest"`
+		Why        string              `json:"whyNoRequests,omitempty"`
+	}{person, credits, why == "", why})
+}
