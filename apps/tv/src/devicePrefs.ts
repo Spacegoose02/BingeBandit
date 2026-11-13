@@ -130,3 +130,24 @@ export function setPictureSize(p: PictureSize) {
   picture = p
   AsyncStorage.setItem(PICTURE_KEY, p).catch(() => undefined)
 }
+
+// Switch the TV to the video's frame rate while it plays (24p films judder
+// on a 60 Hz screen). On unless turned off in Settings; some TVs blank for
+// a second or two at each switch.
+const FRAME_RATE_KEY = 'bb.matchFrameRate'
+let frameRateOn = true
+AsyncStorage.getItem(FRAME_RATE_KEY).then(
+  (v) => {
+    if (v !== null) frameRateOn = v !== '0'
+  },
+  () => undefined,
+)
+
+export function matchFrameRateOn(): boolean {
+  return frameRateOn
+}
+
+export function setMatchFrameRate(on: boolean) {
+  frameRateOn = on
+  AsyncStorage.setItem(FRAME_RATE_KEY, on ? '1' : '0').catch(() => undefined)
+}

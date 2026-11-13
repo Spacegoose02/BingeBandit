@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -22,6 +23,8 @@ type probeOutput struct {
 		Width         int               `json:"width"`
 		Height        int               `json:"height"`
 		PixFmt        string            `json:"pix_fmt"`
+		AvgFrameRate  string            `json:"avg_frame_rate"`
+		RFrameRate    string            `json:"r_frame_rate"`
 		ColorTransfer string            `json:"color_transfer"`
 		CodecTag      string            `json:"codec_tag_string"`
 		Profile       string            `json:"profile"`
@@ -105,6 +108,7 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 				}
 				f.HDR = s.ColorTransfer == "smpte2084" || s.ColorTransfer == "arib-std-b67"
 			}
+			st.FrameRate = frameRate(s.AvgFrameRate, s.RFrameRate)
 			st.Range = "sdr"
 			switch {
 			case dolbyVision(s.CodecTag, s.SideData):
@@ -125,6 +129,43 @@ func Probe(ctx context.Context, ffprobe string, f *store.MediaFile) error {
 	}
 	f.ProbedAt = time.Now().Unix()
 	return nil
+}
+
+// frameRate reads ffprobe's "24000/1001" rates: the average when it's
+// usable, else the stream's base rate. 0 when neither is.
+func frameRate(rates ...string) float64 {
+	for _, r := range rates {
+		n, d, ok := strings.Cut(r, "/")
+		num, err1 := strconv.ParseFloat(n, 64)
+		den := 1.0
+		var err2 error
+		if ok {
+			den, err2 = strconv.ParseFloat(d, 64)
+		}
+		if err1 == nil && err2 == nil && den > 0 && num > 0 {
+			if fps := num / den; fps >= 1 && fps <= 300 {
+				return math.Round(fps*1000) / 1000
+			}
+		}
+	}
+	return 0
+}
+
+// VideoFrameRate asks ffprobe for the frame rate of a file's first video
+// stream, for files probed before frame rates were kept.
+func VideoFrameRate(ctx context.Context, ffprobe, path string) (float64, error) {
+	cmd := exec.CommandContext(ctx, ffprobe, "-v", "quiet", "-select_streams", "v:0", "-print_format", "json",
+		"-show_entries", "stream=avg_frame_rate,r_frame_rate", path)
+	hideWindow(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe %s: %w", path, err)
+	}
+	var p probeOutput
+	if err := json.Unmarshal(out, &p); err != nil || len(p.Streams) == 0 {
+		return 0, fmt.Errorf("ffprobe %s: no video stream", path)
+	}
+	return frameRate(p.Streams[0].AvgFrameRate, p.Streams[0].RFrameRate), nil
 }
 
 // dolbyVision spots Dolby Vision from the stream's DOVI configuration

@@ -11,6 +11,9 @@ export interface MediaStream {
   forced?: boolean
   hearingImpaired?: boolean
   external?: string
+  range?: string // video: sdr, hdr10, hlg or dv
+  frameRate?: number // video: frames per second; servers before v0.52 leave it out
+  height?: number
 }
 
 export interface Prefs {

@@ -5,9 +5,9 @@ import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 
-/** The app's own native modules: in-app updates, screen orientation, audio format support, offline downloads, the home screen's Watch Next row and opening at start-up. */
+/** The app's own native modules: in-app updates, screen orientation, audio and video format support and frame rate matching, offline downloads, the home screen's Watch Next row and opening at start-up. */
 class BingeBanditPackage : ReactPackage {
-  override fun createNativeModules(ctx: ReactApplicationContext): List<NativeModule> = listOf(AppUpdaterModule(ctx), ScreenModule(ctx), AudioSupportModule(ctx), DownloadsModule(ctx), WatchNextModule(ctx), AutoLaunchModule(ctx))
+  override fun createNativeModules(ctx: ReactApplicationContext): List<NativeModule> = listOf(AppUpdaterModule(ctx), ScreenModule(ctx), AudioSupportModule(ctx), VideoSupportModule(ctx), DownloadsModule(ctx), WatchNextModule(ctx), AutoLaunchModule(ctx))
 
   override fun createViewManagers(ctx: ReactApplicationContext): List<ViewManager<*, *>> = emptyList()
 }

@@ -5,7 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { absolute, api, ApiError, authHeaders, cached, current, request, trackWrite } from '../api'
 import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
-import { hueArea, hueSyncOn, hueType, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
+import { hdrShown, matchFrameRate, refreshVideoSupport, resetFrameRate, videoPlayable } from '../videoSupport'
+import { hueArea, hueSyncOn, hueType, matchFrameRateOn, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
 import { Button, Focusable, useFocusOnce } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
@@ -59,9 +60,19 @@ function audioDelayLabel(ms: number): string {
   return `${(Math.abs(ms) / 1000).toFixed(1)}s ${ms > 0 ? 'later' : 'earlier'}`
 }
 
+const videoStream = (f: MediaFile) => (f.streams ?? []).find((s) => s.type === 'video')
+
+/** Whether the server should tone map this file's HDR for a screen that doesn't show it. */
+function needsTonemap(f: MediaFile): boolean {
+  return f.hdr && !hdrShown(videoStream(f)?.range)
+}
+
 /** Whether this device can play the file as is with the chosen audio track. */
 export function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
+  // The box's own decoders and screen (an older app build, or a box that
+  // won't say, counts as able).
+  if (!videoPlayable({ codec: f.videoCodec, height: f.height, bitDepth: f.bitDepth, hdr: f.hdr, range: videoStream(f)?.range })) return false
   const audios = (f.streams ?? []).filter((s) => s.type === 'audio')
   const a = audios.find((s) => s.index === audioIndex) ?? audios.find((s) => s.default) ?? audios[0]
   const codec = a?.codec ?? f.audioCodec
@@ -114,11 +125,11 @@ function sessionId() {
 // What the player needs before it can start: the title, the profile's
 // track preferences and the TV's audio formats. Started as soon as Play is
 // pressed, alongside the pre-roll check, instead of one after the other.
-type PlaybackInfo = [ItemDetail, Prefs | null, Set<string>]
+type PlaybackInfo = [ItemDetail, Prefs | null, Set<string>, unknown]
 const prefetched = new Map<number, { at: number; p: Promise<PlaybackInfo> }>()
 
 function loadPlaybackInfo(id: number): Promise<PlaybackInfo> {
-  return Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null), refreshAudioSupport()])
+  return Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null), refreshAudioSupport(), refreshVideoSupport()])
 }
 
 /** Starts loading what the player for id needs; the player picks it up if it's fresh. */
@@ -416,6 +427,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           setError('This item has no playable file.')
           return
         }
+        // The TV's refresh rate to the video's frame rate, before it starts
+        // (the screen blanks while it switches).
+        if (matchFrameRateOn()) await matchFrameRate(videoStream(f)?.frameRate)
         const picked = pickTracks(f.streams ?? [], prefs)
         // What was picked in the player last time wins over the profile's setting.
         const saved = await savedSubChoice(f.id)
@@ -465,6 +479,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       stale = true
     }
   }, [file, sub, offline, id])
+
+  // The refresh rate goes back to the TV's own choice after the player.
+  useEffect(() => () => resetFrameRate(), [])
 
   // A Hue hub this device paired for the profile (Settings): the TV drives it itself.
   const localHub = useRef<Hub | null>(null)
@@ -582,6 +599,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           // ARC takes Dolby but not 5.1 PCM).
           ...surroundCaps(),
           maxAudioChannels: 6,
+          // HDR on a screen that can't show it: tone mapped to SDR, not washed out.
+          tonemap: needsTonemap(file),
           audioDelayMs: audioDelayRef.current,
         })
         if (req !== transcodeReq.current) {
