@@ -25,6 +25,8 @@ import (
 
 const (
 	segmentSeconds = 4
+	// maxTonemapHeight is the tallest picture tone mapping makes.
+	maxTonemapHeight = 1080
 	// firstSegmentSeconds is the length of the first few segments of a
 	// conversion that encodes video, which the player waits for to start.
 	firstSegmentSeconds = 1
@@ -64,6 +66,9 @@ type Options struct {
 	// TV and soundbar) where they're out of step: positive plays the audio
 	// later, negative earlier. Clamped to ±MaxAudioDelayMs.
 	AudioDelayMs int `json:"audioDelayMs"`
+	// Tonemap turns HDR into SDR for a screen that can't show HDR (it would
+	// look washed out), whether or not the admin turned it on for everyone.
+	Tonemap bool `json:"tonemap"`
 	// CapKbps is the most video this viewer may be sent (the admin's cap
 	// for streams outside the home network); 0 = no cap. Set by the
 	// server, never by the client.
@@ -221,7 +226,9 @@ func IsImageSubtitle(codec string) bool { return imageSubtitleCodecs[codec] }
 
 func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string {
 	encoder := m.st.Setting(store.SettingHWEncoder)
-	tonemap := m.st.Setting(store.SettingTonemap) == "true" && f.HDR
+	// The admin's switch tone maps HDR for everyone; a player on a screen
+	// without HDR asks for it itself.
+	tonemap := (m.st.Setting(store.SettingTonemap) == "true" || o.Tonemap) && f.HDR
 
 	burn := -1
 	for _, st := range f.Streams {
@@ -239,6 +246,12 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	overCap := o.CapKbps > 0 && (FileKbps(f) == 0 || FileKbps(f) > o.CapKbps)
 	if h := HeightForKbps(o.CapKbps); overCap && (targetH == 0 || targetH > h) {
 		targetH = h
+	}
+	// Tone mapping runs on the CPU in 32-bit float per pixel: at 4K it can't
+	// keep up with playback on most machines, and a screen without HDR
+	// gains little from more than 1080p of tone-mapped picture.
+	if tonemap && (targetH == 0 || targetH > maxTonemapHeight) {
+		targetH = maxTonemapHeight
 	}
 	s.Height = targetH
 	s.VideoCopy = !o.EncodeVideo && !overCap && f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
@@ -349,7 +362,15 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		// pre runs on the source frames (before subtitles are overlaid),
 		// post prepares each output for the encoder.
 		var pre, post []string
+		// The picture's height going into the per-output scaling.
+		inH := f.Height
 		if s.Tonemap {
+			// Scaled down first: tone mapping costs per pixel, so a 4K source
+			// shrunk to 1080p before it costs a quarter as much.
+			if targetH > 0 && targetH < f.Height {
+				pre = append(pre, fmt.Sprintf("scale=-2:%d", targetH))
+				inH = targetH
+			}
 			pre = append(pre, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
 				"tonemap=tonemap="+tonemapAlgorithm(m.st.Setting(store.SettingTonemapAlgorithm))+":desat=0", "zscale=t=bt709:m=bt709:r=tv")
 		}
@@ -391,12 +412,12 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			if gpuScale {
 				// scale_vaapi also turns 10-bit frames into the 8-bit ones
 				// h264_vaapi takes.
-				if h > 0 && h < f.Height {
+				if h > 0 && h < inH {
 					return []string{fmt.Sprintf("scale_vaapi=w=-2:h=%d:format=nv12", h)}
 				}
 				return []string{"scale_vaapi=format=nv12"}
 			}
-			if h > 0 && h < f.Height {
+			if h > 0 && h < inH {
 				return append([]string{fmt.Sprintf("scale=-2:%d", h)}, post...)
 			}
 			return post

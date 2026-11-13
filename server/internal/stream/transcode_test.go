@@ -179,7 +179,8 @@ func TestBuildArgsHardwareDevice(t *testing.T) {
 			[]string{"-hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -hwaccel_output_format vaapi -i",
 				"-vf format=nv12|vaapi,hwupload,scale_vaapi=format=nv12 -c:v h264_vaapi"}, []string{"scale=-2"}},
 		{"vaapi tone mapping decodes to memory", map[string]string{store.SettingHWEncoder: "vaapi", store.SettingHWDecode: "true", store.SettingTonemap: "true"}, hdr,
-			[]string{"-hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -i", "zscale=t=bt709:m=bt709:r=tv,format=nv12|vaapi,hwupload,scale_vaapi=format=nv12"},
+			[]string{"-hwaccel vaapi -hwaccel_device /dev/dri/renderD128 -i", "-vf scale=-2:1080,zscale=t=linear",
+				"zscale=t=bt709:m=bt709:r=tv,format=nv12|vaapi,hwupload,scale_vaapi=format=nv12"},
 			[]string{"-hwaccel_output_format"}},
 		{"nvenc GPU 1", map[string]string{store.SettingHWEncoder: "nvenc", store.SettingHWDevice: "1", store.SettingHWDecode: "true"}, hdr,
 			[]string{"-hwaccel cuda -hwaccel_device 1 -i", "-c:v h264_nvenc -preset p4 -profile:v high -gpu 1"}, []string{"vaapi"}},
@@ -187,10 +188,14 @@ func TestBuildArgsHardwareDevice(t *testing.T) {
 			[]string{"-qsv_device /dev/dri/renderD129 -hwaccel auto -i"}, nil},
 		{"copied video needs no GPU", map[string]string{store.SettingHWEncoder: "nvenc", store.SettingHWDecode: "true"}, sdr,
 			[]string{"-c:v copy"}, []string{"-hwaccel", "-gpu"}},
+		{"tone mapping on the CPU stops at 1080p, scaled first", map[string]string{store.SettingHWEncoder: "none", store.SettingTonemap: "true"}, hdr,
+			[]string{"-vf scale=-2:1080,zscale=t=linear:npl=100", "tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p -c:v libx264"}, []string{"scale=-2:1080,format"}},
+		{"no tone mapping when it's off", map[string]string{store.SettingHWEncoder: "none", store.SettingTonemap: "false"}, hdr,
+			nil, []string{"tonemap", "zscale"}},
 		{"unknown algorithm falls back", map[string]string{store.SettingHWEncoder: "none", store.SettingTonemapAlgorithm: "bogus"}, hdr,
 			[]string{"tonemap=tonemap=hable"}, nil},
 	} {
-		defaults := map[string]string{store.SettingHWDevice: "", store.SettingHWDecode: "false", store.SettingTonemapAlgorithm: "hable"}
+		defaults := map[string]string{store.SettingHWDevice: "", store.SettingHWDecode: "false", store.SettingTonemapAlgorithm: "hable", store.SettingTonemap: "true"}
 		for k, v := range c.settings {
 			defaults[k] = v
 		}
@@ -260,5 +265,31 @@ func TestBuildArgsCap(t *testing.T) {
 	m.buildArgs(f, s, Options{AudioStream: -1, BurnSubtitle: -1, CapKbps: 4000})
 	if !s.VideoCopy {
 		t.Error("a file under the cap should be copied")
+	}
+}
+
+// A player on a screen without HDR asks for tone mapping even when the
+// admin left it off for everyone.
+func TestBuildArgsTonemapForSDRScreen(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	st.SetSettings(map[string]string{store.SettingHWEncoder: "none", store.SettingTonemap: "false"})
+	m := &Manager{st: st, ffmpeg: "ffmpeg", dataDir: t.TempDir()}
+	hdr := &store.MediaFile{Path: "movie.mkv", VideoCodec: "hevc", BitDepth: 10, HDR: true, Height: 1080,
+		Streams: []store.Stream{{Index: 0, Type: "video", Codec: "hevc"}, {Index: 1, Type: "audio", Codec: "aac", Channels: 2}}}
+	s := &Session{dir: "out"}
+	args := strings.Join(m.buildArgs(hdr, s, Options{AudioStream: -1, BurnSubtitle: -1, Tonemap: true}), " ")
+	if !strings.Contains(args, "tonemap=tonemap=") || !s.Tonemap {
+		t.Fatalf("no tone mapping for an SDR screen:\n%s", args)
+	}
+	sdr := &store.MediaFile{Path: "movie.mkv", VideoCodec: "h264", BitDepth: 8, Height: 1080,
+		Streams: []store.Stream{{Index: 0, Type: "video", Codec: "h264"}, {Index: 1, Type: "audio", Codec: "aac", Channels: 2}}}
+	s = &Session{dir: "out"}
+	args = strings.Join(m.buildArgs(sdr, s, Options{AudioStream: -1, BurnSubtitle: -1, Tonemap: true}), " ")
+	if strings.Contains(args, "tonemap") || !s.VideoCopy {
+		t.Fatalf("an SDR file was tone mapped or not copied:\n%s", args)
 	}
 }
