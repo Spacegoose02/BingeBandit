@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, AppState, BackHandler, Linking, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ApiError, api, current, loadSession, onSignedOut, saveSession, type Session } from './src/api'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ApiError, api, current, loadSession, onSignedOut, patchSession, restoreCache, saveSession, type Session } from './src/api'
 import { learnAddresses } from './src/addresses'
 import { backInterceptor, FocusMemoryContext, holdOnReturn, homeBack, NavContext, ScreenContext, type FocusTarget, type Nav, type Route } from './src/nav'
 import CastScreen from './src/screens/Cast'
@@ -17,7 +18,7 @@ import Home from './src/screens/Home'
 import LivePlayer from './src/screens/LivePlayer'
 import MultiView from './src/screens/MultiView'
 import Player, { TrailerScreen, YouTubeScreen } from './src/screens/Player'
-import Profiles, { needsPicker } from './src/screens/Profiles'
+import Profiles, { fetchHousehold, needsPicker } from './src/screens/Profiles'
 import SignIn from './src/screens/SignIn'
 import { colors, font, isPhone, scaled } from './src/theme'
 import type { ServerInfo, User } from './src/types'
@@ -26,6 +27,10 @@ import { Toasts } from './src/toasts'
 import { ItemMenuHost } from './src/itemMenu'
 import { TogetherInvites } from './src/together'
 import { clearWatchNext, parseWatchNextLink } from './src/watchNext'
+
+// Whether this TV opens without asking who's watching (one profile, or the
+// TV's own), so it can open on the Home kept from last time.
+const singleKey = (server: string) => `bb.noPicker:${server}`
 
 type Phase =
   | { name: 'loading' }
@@ -61,12 +66,40 @@ export default function App() {
   useEffect(() => {
     loadSession().then(async (s) => {
       if (!s) return setPhase({ name: 'connect' })
+      // Nobody to ask "who's watching", and Home kept from last time: open
+      // on it at once and check the session behind it.
+      const single = s.profileChosen || (await AsyncStorage.getItem(singleKey(s.server)).catch(() => null)) === '1'
+      if (single && (await restoreCache())) {
+        setPhase({ name: 'app' })
+        api.get<User>('/api/me').then(
+          (user) => {
+            patchSession({ user })
+            learnAddresses().catch(() => undefined)
+            // Someone joined the household since: ask who's watching from the next start.
+            if (!s.profileChosen)
+              fetchHousehold().then(
+                (m) => {
+                  if (m.length > 1 && !m.some((x) => x.auto && x.current)) AsyncStorage.setItem(singleKey(s.server), '0').catch(() => undefined)
+                },
+                () => undefined,
+              )
+          },
+          (e) => {
+            if (e instanceof ApiError && e.status === 401) {
+              saveSession(null).then(() => setPhase({ name: 'signin', server: { url: s.server, name: 'BingeBandit', version: '' } }))
+            }
+          },
+        )
+        return
+      }
       try {
         const user = await api.get<User>('/api/me')
         // current(): the request may have moved to another address of the server.
         await saveSession({ ...(current() ?? s), user })
         learnAddresses().catch(() => undefined)
-        setPhase(!s.profileChosen && (await needsPicker()) ? { name: 'profiles', cancelable: false } : { name: 'app' })
+        const picker = !s.profileChosen && (await needsPicker())
+        if (!s.profileChosen) AsyncStorage.setItem(singleKey(s.server), picker ? '0' : '1').catch(() => undefined)
+        setPhase(picker ? { name: 'profiles', cancelable: false } : { name: 'app' })
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           await saveSession(null)

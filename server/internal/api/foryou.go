@@ -21,6 +21,12 @@ import (
 // slow or unreachable TMDB never holds them up.
 const tmdbBudget = 2500 * time.Millisecond
 
+// homeTMDBWait is how long Home waits for a "Because you…" row that TMDB
+// hasn't answered for yet. The lookup carries on (for up to tmdbBudget
+// times four) and is remembered, so the row is there next time Home loads
+// instead of every TV waiting on TMDB for its Home screen.
+const homeTMDBWait = 300 * time.Millisecond
+
 func (s *Server) tmdbOn() bool { return s.Metadata != nil && s.Metadata.Enabled() }
 
 // seen reports whether the viewer has finished a movie or every episode of a show.
@@ -78,15 +84,25 @@ func (s *Server) becauseRows(ctx context.Context, uid int64) []homeRow {
 	if len(srcs) == 0 {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, tmdbBudget)
-	defer cancel()
 	disliked := s.Store.Disliked(uid)
 	rows := make([]homeRow, len(srcs))
 	var wg sync.WaitGroup
 	for i, sr := range srcs {
 		wg.Go(func() {
-			list, err := s.Metadata.Recommendations(ctx, sr.f.Kind, sr.f.TMDBID)
-			if err != nil {
+			answer := make(chan []metadata.Requestable, 1)
+			go func() {
+				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 4*tmdbBudget)
+				defer cancel()
+				list, _ := s.Metadata.Recommendations(ctx, sr.f.Kind, sr.f.TMDBID)
+				answer <- list
+			}()
+			var list []metadata.Requestable
+			select {
+			case list = <-answer:
+			case <-time.After(homeTMDBWait):
+			case <-ctx.Done():
+			}
+			if len(list) == 0 {
 				return
 			}
 			self := int64(0)

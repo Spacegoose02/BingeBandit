@@ -124,6 +124,33 @@ export async function request<T>(method: string, path: string, body?: unknown, s
 const cache = new Map<string, unknown>()
 const CACHE_MAX = 60
 
+// Home, the menu's libraries and the menu's preferences are also kept on
+// the device, per server and profile, so the app opens straight onto the
+// last Home while it asks the server for a fresh one.
+const PERSISTED = new Set(['/api/home', '/api/libraries', '/api/me/prefs'])
+const persistKey = (path: string) => (session ? `bb.cache:${session.server}|${session.user?.id}:${path}` : '')
+
+function persist(path: string, data: unknown) {
+  const key = persistKey(path)
+  if (!key || !PERSISTED.has(path)) return
+  AsyncStorage.setItem(key, JSON.stringify(data)).catch(() => undefined)
+}
+
+/** Loads what the device kept of the current profile's Home into the cache. */
+export async function restoreCache(): Promise<boolean> {
+  if (!session) return false
+  const keys = [...PERSISTED]
+  try {
+    const values = await Promise.all(keys.map((k) => AsyncStorage.getItem(persistKey(k))))
+    values.forEach((v, i) => {
+      if (v && !cache.has(keys[i])) cache.set(keys[i], JSON.parse(v))
+    })
+    return cache.has('/api/home')
+  } catch {
+    return false
+  }
+}
+
 /** What the server last said for this path, if anything. */
 export function cached<T>(path: string): T | undefined {
   return cache.get(path) as T | undefined
@@ -149,6 +176,7 @@ export const api = {
       cache.delete(path) // newest last, so the oldest goes first
       cache.set(path, data)
       if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value!)
+      persist(path, data)
       return data
     }),
   post: <T>(path: string, body: unknown = {}) => request<T>('POST', path, body),
