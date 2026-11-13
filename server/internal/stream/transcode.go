@@ -25,8 +25,11 @@ import (
 
 const (
 	segmentSeconds = 4
-	idleTimeout    = 90 * time.Second
-	waitTimeout    = 45 * time.Second
+	// firstSegmentSeconds is the length of the first few segments of a
+	// conversion that encodes video, which the player waits for to start.
+	firstSegmentSeconds = 1
+	idleTimeout         = 90 * time.Second
+	waitTimeout         = 45 * time.Second
 )
 
 type Options struct {
@@ -442,7 +445,10 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 				videoArgs = append(videoArgs, "-b"+spec, fmt.Sprintf("%dk", kbps*3/4))
 			}
 		}
-		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
+		// A keyframe each second for the first few, then one per segment,
+		// so the first segments can be short (see firstSegmentSeconds).
+		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:if(lt(t,%d),gte(t,n_forced*%d),gte(t,%d*(n_forced-%d)))",
+			segmentSeconds, firstSegmentSeconds, segmentSeconds, segmentSeconds/firstSegmentSeconds-1))
 	}
 
 	// Each variant carries its own copy of the audio, so every playlist
@@ -467,8 +473,17 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			args = append(args, "-af", "aresample=async=1")
 		}
 	}
-	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
-		"-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
+	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds))
+	if s.VideoCopy {
+		args = append(args, "-hls_list_size", "0")
+	} else {
+		// Playback starts once the first segment is written, so short ones
+		// at the start (cut at the keyframes forced above) get the picture
+		// up sooner. ffmpeg only applies hls_init_time within hls_list_size
+		// entries, so the list is "every segment" by a number, not by 0.
+		args = append(args, "-hls_init_time", fmt.Sprint(firstSegmentSeconds), "-hls_list_size", "1000000")
+	}
+	args = append(args, "-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
 	if len(heights) > 1 {
 		var streamMap []string
 		for i := range heights {

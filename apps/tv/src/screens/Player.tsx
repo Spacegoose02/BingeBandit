@@ -111,6 +111,34 @@ function sessionId() {
   return `tv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// What the player needs before it can start: the title, the profile's
+// track preferences and the TV's audio formats. Started as soon as Play is
+// pressed, alongside the pre-roll check, instead of one after the other.
+type PlaybackInfo = [ItemDetail, Prefs | null, Set<string>]
+const prefetched = new Map<number, { at: number; p: Promise<PlaybackInfo> }>()
+
+function loadPlaybackInfo(id: number): Promise<PlaybackInfo> {
+  return Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null), refreshAudioSupport()])
+}
+
+/** Starts loading what the player for id needs; the player picks it up if it's fresh. */
+export function prefetchPlayback(id: number) {
+  const p = loadPlaybackInfo(id)
+  p.catch(() => undefined)
+  prefetched.set(id, { at: Date.now(), p })
+}
+
+function playbackInfo(id: number): Promise<PlaybackInfo> {
+  const hit = prefetched.get(id)
+  prefetched.delete(id)
+  // Trailers can run for minutes; older answers are loaded again.
+  return hit && Date.now() - hit.at < 30_000 ? hit.p : loadPlaybackInfo(id)
+}
+
+// ExoPlayer waits for 2.5 s of video before starting and 5 s after a stall.
+// One second starts sooner on a LAN, where the next seconds arrive quickly.
+const PLAYER_BUFFER = { bufferForPlaybackMs: 1000, bufferForPlaybackAfterRebufferMs: 3000 }
+
 interface PreRollStep {
   url: string
   label: string
@@ -125,6 +153,8 @@ export default function Player({ id, start = 0, together, offline }: { id: numbe
   // Watching together skips the trailers and intro, to stay with the others;
   // a download plays at once (they'd need the server).
   const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 || together || offline ? [] : undefined)
+  // During the first render, so it's under way before the player below mounts.
+  useState(() => !offline && prefetchPlayback(id))
   useEffect(() => {
     if (start > 0 || together || offline) return
     let stale = false
@@ -370,11 +400,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       })
       return
     }
-    Promise.all([
-      api.get<ItemDetail>(`/api/items/${id}`),
-      api.get<Prefs>('/api/me/prefs').catch(() => null),
-      refreshAudioSupport(),
-    ]).then(
+    playbackInfo(id).then(
       async ([d, prefs]) => {
         setItem(d.item)
         setMarkers(d.markers ?? [])
@@ -1184,7 +1210,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           focusable={false}
           // The server's conversion stream is an HLS "event" playlist, which ExoPlayer badges as LIVE.
           controlsStyles={NO_LIVE_BADGE}
-          source={{ ...src, headers: authHeaders() }}
+          source={{ ...src, headers: authHeaders(), bufferConfig: PLAYER_BUFFER }}
           style={pictureStyle(picture, win.width, win.height)}
           resizeMode={PICTURE_RESIZE[picture]}
           paused={paused || !active}
