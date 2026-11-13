@@ -25,6 +25,13 @@ jobs:
       - name: Check formatting
         working-directory: server
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Install ffmpeg
+        # Without it the tests that run real ffmpeg (conversions, markers,
+        # subtitles, audio timing) skip themselves.
+        run: |
+          sudo rm -f /var/lib/man-db/auto-update
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends ffmpeg
       - name: Vet and test server
         working-directory: server
         run: go vet ./... && go test ./...

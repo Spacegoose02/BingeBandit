@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,8 +27,13 @@ import (
 
 const (
 	segmentSeconds = 4
-	idleTimeout    = 90 * time.Second
-	waitTimeout    = 45 * time.Second
+	// maxTonemapHeight is the tallest picture tone mapping makes.
+	maxTonemapHeight = 1080
+	// firstSegmentSeconds is the length of the first few segments of a
+	// conversion that encodes video, which the player waits for to start.
+	firstSegmentSeconds = 1
+	idleTimeout         = 90 * time.Second
+	waitTimeout         = 45 * time.Second
 )
 
 type Options struct {
@@ -61,6 +68,9 @@ type Options struct {
 	// TV and soundbar) where they're out of step: positive plays the audio
 	// later, negative earlier. Clamped to ±MaxAudioDelayMs.
 	AudioDelayMs int `json:"audioDelayMs"`
+	// Tonemap turns HDR into SDR for a screen that can't show HDR (it would
+	// look washed out), whether or not the admin turned it on for everyone.
+	Tonemap bool `json:"tonemap"`
 	// CapKbps is the most video this viewer may be sent (the admin's cap
 	// for streams outside the home network); 0 = no cap. Set by the
 	// server, never by the client.
@@ -171,7 +181,16 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("transcode dir: %w", err)
 	}
-	if err := m.launch(s, m.buildArgs(f, s, o)); err != nil {
+	args := m.buildArgs(f, s, o)
+	if !s.VideoCopy {
+		if limit := m.conversionLimit(s.Encoder); limit > 0 {
+			if n := m.videoEncodes(); n >= limit {
+				os.RemoveAll(s.dir)
+				return nil, &BusyError{Running: n}
+			}
+		}
+	}
+	if err := m.launch(s, args); err != nil {
 		os.RemoveAll(s.dir)
 		return nil, fmt.Errorf("start ffmpeg: %w", err)
 	}
@@ -218,7 +237,9 @@ func IsImageSubtitle(codec string) bool { return imageSubtitleCodecs[codec] }
 
 func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string {
 	encoder := m.st.Setting(store.SettingHWEncoder)
-	tonemap := m.st.Setting(store.SettingTonemap) == "true" && f.HDR
+	// The admin's switch tone maps HDR for everyone; a player on a screen
+	// without HDR asks for it itself.
+	tonemap := (m.st.Setting(store.SettingTonemap) == "true" || o.Tonemap) && f.HDR
 
 	burn := -1
 	for _, st := range f.Streams {
@@ -236,6 +257,12 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 	overCap := o.CapKbps > 0 && (FileKbps(f) == 0 || FileKbps(f) > o.CapKbps)
 	if h := HeightForKbps(o.CapKbps); overCap && (targetH == 0 || targetH > h) {
 		targetH = h
+	}
+	// Tone mapping runs on the CPU in 32-bit float per pixel: at 4K it can't
+	// keep up with playback on most machines, and a screen without HDR
+	// gains little from more than 1080p of tone-mapped picture.
+	if tonemap && (targetH == 0 || targetH > maxTonemapHeight) {
+		targetH = maxTonemapHeight
 	}
 	s.Height = targetH
 	s.VideoCopy = !o.EncodeVideo && !overCap && f.VideoCodec == "h264" && f.BitDepth <= 8 && !f.HDR && targetH == f.Height && o.BitrateKbps == 0 && burn < 0
@@ -346,7 +373,15 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 		// pre runs on the source frames (before subtitles are overlaid),
 		// post prepares each output for the encoder.
 		var pre, post []string
+		// The picture's height going into the per-output scaling.
+		inH := f.Height
 		if s.Tonemap {
+			// Scaled down first: tone mapping costs per pixel, so a 4K source
+			// shrunk to 1080p before it costs a quarter as much.
+			if targetH > 0 && targetH < f.Height {
+				pre = append(pre, fmt.Sprintf("scale=-2:%d", targetH))
+				inH = targetH
+			}
 			pre = append(pre, "zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
 				"tonemap=tonemap="+tonemapAlgorithm(m.st.Setting(store.SettingTonemapAlgorithm))+":desat=0", "zscale=t=bt709:m=bt709:r=tv")
 		}
@@ -388,12 +423,12 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			if gpuScale {
 				// scale_vaapi also turns 10-bit frames into the 8-bit ones
 				// h264_vaapi takes.
-				if h > 0 && h < f.Height {
+				if h > 0 && h < inH {
 					return []string{fmt.Sprintf("scale_vaapi=w=-2:h=%d:format=nv12", h)}
 				}
 				return []string{"scale_vaapi=format=nv12"}
 			}
-			if h > 0 && h < f.Height {
+			if h > 0 && h < inH {
 				return append([]string{fmt.Sprintf("scale=-2:%d", h)}, post...)
 			}
 			return post
@@ -442,7 +477,10 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 				videoArgs = append(videoArgs, "-b"+spec, fmt.Sprintf("%dk", kbps*3/4))
 			}
 		}
-		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:gte(t,n_forced*%d)", segmentSeconds))
+		// A keyframe each second for the first few, then one per segment,
+		// so the first segments can be short (see firstSegmentSeconds).
+		videoArgs = append(videoArgs, "-force_key_frames", fmt.Sprintf("expr:if(lt(t,%d),gte(t,n_forced*%d),gte(t,%d*(n_forced-%d)))",
+			segmentSeconds, firstSegmentSeconds, segmentSeconds, segmentSeconds/firstSegmentSeconds-1))
 	}
 
 	// Each variant carries its own copy of the audio, so every playlist
@@ -467,8 +505,17 @@ func (m *Manager) buildArgs(f *store.MediaFile, s *Session, o Options) []string 
 			args = append(args, "-af", "aresample=async=1")
 		}
 	}
-	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds), "-hls_list_size", "0",
-		"-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
+	args = append(args, "-f", "hls", "-hls_time", fmt.Sprint(segmentSeconds))
+	if s.VideoCopy {
+		args = append(args, "-hls_list_size", "0")
+	} else {
+		// Playback starts once the first segment is written, so short ones
+		// at the start (cut at the keyframes forced above) get the picture
+		// up sooner. ffmpeg only applies hls_init_time within hls_list_size
+		// entries, so the list is "every segment" by a number, not by 0.
+		args = append(args, "-hls_init_time", fmt.Sprint(firstSegmentSeconds), "-hls_list_size", "1000000")
+	}
+	args = append(args, "-hls_playlist_type", "event", "-hls_flags", "independent_segments", "-start_number", "0")
 	if len(heights) > 1 {
 		var streamMap []string
 		for i := range heights {
@@ -626,6 +673,50 @@ func HeightForKbps(kbps int) int {
 		}
 	}
 	return 480
+}
+
+// BusyError is a conversion refused because the server is already
+// converting as many videos as it may at once.
+type BusyError struct{ Running int }
+
+func (e *BusyError) Error() string {
+	if e.Running == 1 {
+		return "The server is already converting a video, the most it does at once. Stop it, or play something this device can play as it is."
+	}
+	return fmt.Sprintf("The server is already converting %d videos, the most it does at once. Stop one, or play something this device can play as it is.", e.Running)
+}
+
+// conversionLimit is how many videos may be encoded at once: the admin's
+// number, or by default a quarter of the CPU's threads (at least two) when
+// encoding on the CPU, where each 1080p conversion takes several cores.
+// Hardware encoders have no default limit. 0 means no limit.
+func (m *Manager) conversionLimit(encoder string) int {
+	if n, err := strconv.Atoi(m.st.Setting(store.SettingMaxConversions)); err == nil && n > 0 {
+		return n
+	}
+	if encoder == "libx264" {
+		return max(2, runtime.NumCPU()/4)
+	}
+	return 0
+}
+
+// videoEncodes counts running conversions that encode video (copies and
+// finished ones cost next to nothing).
+func (m *Manager) videoEncodes() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, s := range m.sessions {
+		if s.VideoCopy {
+			continue
+		}
+		select {
+		case <-s.done:
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 func (m *Manager) Get(id string) *Session {

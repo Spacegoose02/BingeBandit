@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { mayAutoPlay, userActive } from '../stillWatching'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, img } from '../api'
 import { roomPosition, togetherLink, useTogether, type TogetherRoom } from '../components/Together'
@@ -202,10 +203,11 @@ export default function DesktopPlayer({
         bridge.command('stop')
         return nav(done, { replace: true })
       }
-      if (prefs.autoPlayNext || roomId) return goNext(next)
+      if (roomId || (prefs.autoPlayNext && mayAutoPlay())) return goNext(next)
       upNextRef.current = next
       setUpNext(next)
-      if (!desktopCan('ui')) bridge.command('osd', `Up next: ${next.title}. Press N or OK to play it, Back to stop.`)
+      if (prefs.autoPlayNext) bridge.command('osd', `Are you still watching? Press OK for ${next.title}, Back to stop.`)
+      else if (!desktopCan('ui')) bridge.command('osd', `Up next: ${next.title}. Press N or OK to play it, Back to stop.`)
     } catch {
       bridge.command('stop')
       nav(-1)
@@ -319,6 +321,7 @@ export default function DesktopPlayer({
           started.current = true
           report()
         } else if (pauseChanged || seeked) {
+          userActive()
           report()
           // This viewer paused, played or skipped: tell the room.
           if (Date.now() > following.current) share(e.paused, e.position)
@@ -332,6 +335,7 @@ export default function DesktopPlayer({
         else onEnded()
         break
       case 'key':
+        userActive()
         if (e.name === 'bb-pick') onPick(e.arg ?? '')
         else if (upNextRef.current) {
           goNext(upNextRef.current)

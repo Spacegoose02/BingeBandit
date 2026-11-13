@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -103,6 +105,58 @@ func (s *Server) directPlay(w http.ResponseWriter, r *http.Request) {
 
 var textSubtitleCodecs = map[string]bool{"subrip": true, "srt": true, "ass": true, "ssa": true, "webvtt": true, "mov_text": true, "text": true}
 
+// subtitleJob is one extraction of a subtitle track into the cache.
+type subtitleJob struct {
+	done chan struct{}
+	err  error
+}
+
+var (
+	subtitleJobsMu sync.Mutex
+	subtitleJobs   = map[string]*subtitleJob{} // by cache path
+)
+
+// extractSubtitle converts a subtitle track to WebVTT at cache, or joins the
+// conversion already running for it. It runs apart from any request: on a
+// big remux on a NAS reading the whole file takes longer than a player
+// waits, and stopping with the request meant it never finished. Each run
+// writes its own temporary file, so two can't trip over each other.
+func (s *Server) extractSubtitle(cache, input, mapping string) *subtitleJob {
+	subtitleJobsMu.Lock()
+	defer subtitleJobsMu.Unlock()
+	if j, ok := subtitleJobs[cache]; ok {
+		return j
+	}
+	j := &subtitleJob{done: make(chan struct{})}
+	subtitleJobs[cache] = j
+	go func() {
+		defer func() {
+			subtitleJobsMu.Lock()
+			delete(subtitleJobs, cache)
+			subtitleJobsMu.Unlock()
+			close(j.done)
+		}()
+		tmp, err := os.CreateTemp(filepath.Dir(cache), "extract-*.vtt")
+		if err != nil {
+			j.err = err
+			return
+		}
+		tmp.Close()
+		defer os.Remove(tmp.Name())
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, s.FFmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", input,
+			"-map", mapping, "-f", "webvtt", tmp.Name())
+		media.HideWindow(cmd)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			j.err = fmt.Errorf("%v %s", err, out)
+			return
+		}
+		j.err = os.Rename(tmp.Name(), cache)
+	}()
+	return j
+}
+
 // subtitle extracts an embedded text subtitle stream as WebVTT and caches it.
 // Cue times are file time, which is what the player tracks even mid-transcode.
 func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
@@ -147,18 +201,15 @@ func (s *Server) subtitle(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "cache folder not writable")
 			return
 		}
-		tmp := cache + ".tmp.vtt"
-		cmd := exec.CommandContext(r.Context(), s.FFmpeg, "-nostdin", "-loglevel", "error", "-y", "-i", input,
-			"-map", mapping, "-f", "webvtt", tmp)
-		media.HideWindow(cmd)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			os.Remove(tmp)
-			log.Printf("subtitle %d:%d: %v %s", mf.ID, index, err, out)
-			writeErr(w, http.StatusInternalServerError, "could not extract subtitles")
-			return
+		job := s.extractSubtitle(cache, input, mapping)
+		select {
+		case <-job.done:
+		case <-r.Context().Done():
+			return // the extraction carries on; the next request finds it cached
 		}
-		if err := os.Rename(tmp, cache); err != nil {
-			writeErr(w, http.StatusInternalServerError, "could not cache subtitles")
+		if job.err != nil {
+			log.Printf("subtitle %d:%d: %v", mf.ID, index, job.err)
+			writeErr(w, http.StatusInternalServerError, "could not extract subtitles")
 			return
 		}
 	}
@@ -193,6 +244,10 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sess, err := s.Transcoder.Start(mf, currentUser(r).ID, opts)
+	if busy := (*stream.BusyError)(nil); errors.As(err, &busy) {
+		writeErr(w, http.StatusTooManyRequests, busy.Error())
+		return
+	}
 	if err != nil {
 		log.Printf("transcode: %v", err)
 		writeErr(w, http.StatusInternalServerError, "could not start transcoder")

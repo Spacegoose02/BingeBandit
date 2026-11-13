@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"bingebandit/internal/media"
 	"bingebandit/internal/overlay"
 	"bingebandit/internal/store"
 )
@@ -340,6 +341,7 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		if it.Kind == "movie" {
 			resp["trailers"] = localTrailers(it.ID, files)
 		}
+		s.fillFrameRate(r.Context(), files)
 		if !u.IsAdmin {
 			for _, f := range files {
 				f.Path = filepath.Base(f.Path)
@@ -623,4 +625,31 @@ func (s *Server) fetchRatingsSoon(it *store.Item) {
 			log.Printf("ratings: %q: %v", it.Title, err)
 		}
 	}()
+}
+
+// fillFrameRate adds the frame rate to the video stream of a file probed
+// before frame rates were kept, so the TV apps can match the screen to it.
+// It's one quick ffprobe the first time a title is opened.
+func (s *Server) fillFrameRate(ctx context.Context, files []*store.MediaFile) {
+	if len(files) == 0 || s.FFprobe == "" {
+		return
+	}
+	f := files[0]
+	for i := range f.Streams {
+		v := &f.Streams[i]
+		if v.Type != "video" || v.FrameRate > 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		fps, err := media.VideoFrameRate(ctx, s.FFprobe, f.Path)
+		if err != nil || fps <= 0 {
+			return
+		}
+		v.FrameRate = fps
+		if err := s.Store.UpdateStreams(f.ID, f.Streams); err != nil {
+			log.Printf("frame rate %d: %v", f.ID, err)
+		}
+		return
+	}
 }

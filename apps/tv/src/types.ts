@@ -101,6 +101,7 @@ export interface MediaFile {
   videoCodec: string
   width: number
   height: number
+  bitDepth?: number
   hdr: boolean
   audioCodec: string
   audioChannels: number

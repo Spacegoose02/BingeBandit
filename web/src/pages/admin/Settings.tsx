@@ -244,6 +244,21 @@ export default function AdminSettings() {
             <input type="checkbox" checked={s.transcode_throttle === 'true'} onChange={set('transcode_throttle')} />
             Throttle transcodes (stay about 2× ahead of playback instead of converting the whole file at full speed)
           </label>
+          <label>
+            Videos converted at once
+            <input
+              type="number"
+              min={0}
+              value={s.max_video_conversions ?? '0'}
+              onChange={set('max_video_conversions')}
+              placeholder="0"
+            />
+          </label>
+          <p className="muted small">
+            0 picks for you: a quarter of this computer's CPU threads (at least 2) when converting on the CPU, no limit on a graphics card. Past
+            the limit, a new viewer who needs a conversion is asked to wait instead of everyone stuttering. Seeking and files played as they
+            are don't count.
+          </p>
           <label className="check">
             <input type="checkbox" checked={s.adaptive_streaming === 'true'} onChange={set('adaptive_streaming')} />
             Adaptive streaming: when a video has to be converted, make up to three qualities at once so the player can switch on slow

@@ -5,7 +5,7 @@ sub Main(args as dynamic)
     port = CreateObject("roMessagePort")
     screen.setMessagePort(port)
     m.global = screen.getGlobalNode()
-    m.global.addFields({ server: "", alternates: [], serverId: "", reconnecting: false, token: "", user: {}, profileChosen: false, unauthorized: false, lastChannel: 0, spoilerFree: false, revealed: {} })
+    m.global.addFields({ server: "", alternates: [], serverId: "", reconnecting: false, token: "", user: {}, profileChosen: false, unauthorized: false, lastChannel: 0, spoilerFree: false, revealed: {}, autoEpisodes: 0 })
     scene = screen.CreateScene("MainScene")
     screen.show()
     ' Roku's certification checks ask for this signal once the first screen is up.

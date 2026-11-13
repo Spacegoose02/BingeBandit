@@ -5,7 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { absolute, api, ApiError, authHeaders, cached, current, request, trackWrite } from '../api'
 import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
-import { hueArea, hueSyncOn, hueType, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
+import { hdrShown, matchFrameRate, refreshVideoSupport, resetFrameRate, videoPlayable } from '../videoSupport'
+import { hueArea, hueSyncOn, hueType, matchFrameRateOn, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
 import { Button, Focusable, useFocusOnce } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
@@ -59,9 +60,19 @@ function audioDelayLabel(ms: number): string {
   return `${(Math.abs(ms) / 1000).toFixed(1)}s ${ms > 0 ? 'later' : 'earlier'}`
 }
 
+const videoStream = (f: MediaFile) => (f.streams ?? []).find((s) => s.type === 'video')
+
+/** Whether the server should tone map this file's HDR for a screen that doesn't show it. */
+function needsTonemap(f: MediaFile): boolean {
+  return f.hdr && !hdrShown(videoStream(f)?.range)
+}
+
 /** Whether this device can play the file as is with the chosen audio track. */
 export function canDirectPlay(f: MediaFile, audioIndex: number): boolean {
   if (!DIRECT_CONTAINERS.has(f.container) || (f.videoCodec && !DIRECT_VIDEO.has(f.videoCodec))) return false
+  // The box's own decoders and screen (an older app build, or a box that
+  // won't say, counts as able).
+  if (!videoPlayable({ codec: f.videoCodec, height: f.height, bitDepth: f.bitDepth, hdr: f.hdr, range: videoStream(f)?.range })) return false
   const audios = (f.streams ?? []).filter((s) => s.type === 'audio')
   const a = audios.find((s) => s.index === audioIndex) ?? audios.find((s) => s.default) ?? audios[0]
   const codec = a?.codec ?? f.audioCodec
@@ -111,6 +122,40 @@ function sessionId() {
   return `tv-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// What the player needs before it can start: the title, the profile's
+// track preferences and the TV's audio formats. Started as soon as Play is
+// pressed, alongside the pre-roll check, instead of one after the other.
+type PlaybackInfo = [ItemDetail, Prefs | null, Set<string>, unknown]
+const prefetched = new Map<number, { at: number; p: Promise<PlaybackInfo> }>()
+
+function loadPlaybackInfo(id: number): Promise<PlaybackInfo> {
+  return Promise.all([api.get<ItemDetail>(`/api/items/${id}`), api.get<Prefs>('/api/me/prefs').catch(() => null), refreshAudioSupport(), refreshVideoSupport()])
+}
+
+/** Starts loading what the player for id needs; the player picks it up if it's fresh. */
+export function prefetchPlayback(id: number) {
+  const p = loadPlaybackInfo(id)
+  p.catch(() => undefined)
+  prefetched.set(id, { at: Date.now(), p })
+}
+
+function playbackInfo(id: number): Promise<PlaybackInfo> {
+  const hit = prefetched.get(id)
+  prefetched.delete(id)
+  // Trailers can run for minutes; older answers are loaded again.
+  return hit && Date.now() - hit.at < 30_000 ? hit.p : loadPlaybackInfo(id)
+}
+
+// ExoPlayer waits for 2.5 s of video before starting and 5 s after a stall.
+// One second starts sooner on a LAN, where the next seconds arrive quickly.
+const PLAYER_BUFFER = { bufferForPlaybackMs: 1000, bufferForPlaybackAfterRebufferMs: 3000 }
+
+// "Are you still watching?": after this many episodes in a row that started
+// by themselves with no key pressed, the next one waits to be asked for, so
+// a TV left on doesn't stream (and the server convert) all night.
+const STILL_WATCHING_AFTER = 3
+let autoEpisodes = 0
+
 interface PreRollStep {
   url: string
   label: string
@@ -125,6 +170,8 @@ export default function Player({ id, start = 0, together, offline }: { id: numbe
   // Watching together skips the trailers and intro, to stay with the others;
   // a download plays at once (they'd need the server).
   const [steps, setSteps] = useState<PreRollStep[] | undefined>(start > 0 || together || offline ? [] : undefined)
+  // During the first render, so it's under way before the player below mounts.
+  useState(() => !offline && prefetchPlayback(id))
   useEffect(() => {
     if (start > 0 || together || offline) return
     let stale = false
@@ -370,11 +417,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       })
       return
     }
-    Promise.all([
-      api.get<ItemDetail>(`/api/items/${id}`),
-      api.get<Prefs>('/api/me/prefs').catch(() => null),
-      refreshAudioSupport(),
-    ]).then(
+    playbackInfo(id).then(
       async ([d, prefs]) => {
         setItem(d.item)
         setMarkers(d.markers ?? [])
@@ -384,6 +427,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           setError('This item has no playable file.')
           return
         }
+        // The TV's refresh rate to the video's frame rate, before it starts
+        // (the screen blanks while it switches).
+        if (matchFrameRateOn()) await matchFrameRate(videoStream(f)?.frameRate)
         const picked = pickTracks(f.streams ?? [], prefs)
         // What was picked in the player last time wins over the profile's setting.
         const saved = await savedSubChoice(f.id)
@@ -433,6 +479,9 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       stale = true
     }
   }, [file, sub, offline, id])
+
+  // The refresh rate goes back to the TV's own choice after the player.
+  useEffect(() => () => resetFrameRate(), [])
 
   // A Hue hub this device paired for the profile (Settings): the TV drives it itself.
   const localHub = useRef<Hub | null>(null)
@@ -550,6 +599,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           // ARC takes Dolby but not 5.1 PCM).
           ...surroundCaps(),
           maxAudioChannels: 6,
+          // HDR on a screen that can't show it: tone mapped to SDR, not washed out.
+          tonemap: needsTonemap(file),
           audioDelayMs: audioDelayRef.current,
         })
         if (req !== transcodeReq.current) {
@@ -852,7 +903,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     if (item?.kind === 'episode') {
       const next = await api.get<Item | undefined>(`/api/items/${item.id}/next`).catch(() => undefined)
       if (next?.id) {
-        playNext(next.id)
+        playNext(next.id, true)
         return
       }
     }
@@ -885,6 +936,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [roomId, setRoomId] = useState<string | null>(together ?? null)
   const [togetherOpen, setTogetherOpen] = useState(false)
   const [summary, setSummary] = useState(false)
+  // The next episode, held back to ask whether anyone is still watching.
+  const [stillAsk, setStillAsk] = useState<number | null>(null)
   // Hue Sync's quick switch in Options, for this device: only once this
   // profile turned Hue Sync on (Settings, or Account on the web).
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
@@ -971,7 +1024,14 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     seekTo(t)
     tg.send({ paused: pausedRef.current, position: posRef.current })
   }
-  const playNext = (nextId: number) => {
+  const playNext = (nextId: number, auto = false) => {
+    if (auto && !roomId && ++autoEpisodes >= STILL_WATCHING_AFTER) {
+      setPaused(true)
+      setControls('hidden')
+      setStillAsk(nextId)
+      return
+    }
+    if (!auto) autoEpisodes = 0
     if (offline) {
       nav.replace({ name: 'player', id: nextId, start: 0, offline: true })
       return
@@ -1002,7 +1062,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // Pause takes focus as the buttons come up, once: progress redraws the
   // player four times a second, and a lasting preference pulled focus back
   // to Pause before OK could reach Options or the others.
-  const pauseFocus = useFocusOnce(controls === 'full' && !menu && !togetherOpen && !summary && !subSearch)
+  const pauseFocus = useFocusOnce(controls === 'full' && !menu && !togetherOpen && !summary && stillAsk === null && !subSearch)
   const menuFocus = useFocusOnce(menu) // the same for the Options menu's current choices
 
   // The next episode, for the Next button.
@@ -1028,22 +1088,24 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       'button'
     if (skipMode === 'off') return null
     if (inMarker.kind === 'credits') {
-      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: () => playNext(next.id) }
+      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: (auto?: boolean) => playNext(next.id, auto) }
       if (duration && inMarker.end < duration - 5) return { key, mode: skipMode, label: 'Skip credits', run: () => userSeek(inMarker.end) }
       return null
     }
     const label = inMarker.kind === 'intro' ? 'Skip intro' : inMarker.kind === 'recap' ? 'Skip recap' : 'Skip ad'
     return { key, mode: skipMode, label, run: () => userSeek(inMarker.end) }
   })()
-  const doSkip = () => {
+  const doSkip = (auto = false) => {
     if (!skip) return
     skipped.current.add(skip.key)
-    skip.run()
+    skip.run(auto)
   }
   useEffect(() => {
     if (skip?.mode === 'auto' && !skipped.current.has(skip.key)) {
-      say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
-      doSkip()
+      if (skip.label !== 'Next episode' || autoEpisodes + 1 < STILL_WATCHING_AFTER || roomId) {
+        say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
+      }
+      doSkip(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip?.key])
@@ -1056,7 +1118,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Math.floor(pos / 5)])
-  const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && !subSearch && !togetherOpen
+  const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && stillAsk === null && !subSearch && !togetherOpen
 
 
   // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
@@ -1074,6 +1136,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       }
       if (summary) {
         setSummary(false)
+        return true
+      }
+      if (stillAsk !== null) {
+        nav.back()
         return true
       }
       if (menu) {
@@ -1095,7 +1161,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0 || !active) return
-    if (menu || togetherOpen || summary || subSearch) return // the menu's buttons handle the keys
+    autoEpisodes = 0 // someone is there
+    if (menu || togetherOpen || summary || stillAsk !== null || subSearch) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
       if (!paused) showControls('full')
@@ -1184,7 +1251,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           focusable={false}
           // The server's conversion stream is an HLS "event" playlist, which ExoPlayer badges as LIVE.
           controlsStyles={NO_LIVE_BADGE}
-          source={{ ...src, headers: authHeaders() }}
+          source={{ ...src, headers: authHeaders(), bufferConfig: PLAYER_BUFFER }}
           style={pictureStyle(picture, win.width, win.height)}
           resizeMode={PICTURE_RESIZE[picture]}
           paused={paused || !active}
@@ -1226,9 +1293,18 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           Phone: tapping the picture shows or hides the controls. */}
       <Pressable android_disableSound={quietPress}
         style={StyleSheet.absoluteFill}
-        hasTVPreferredFocus={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
-        focusable={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
-        onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
+        hasTVPreferredFocus={!menu && !togetherOpen && !summary && stillAsk === null && !subSearch && controls !== 'full'}
+        focusable={!menu && !togetherOpen && !summary && stillAsk === null && !subSearch && controls !== 'full'}
+        onPress={
+          isPhone
+            ? () => {
+                autoEpisodes = 0
+                if (lock.locked) lock.poke()
+                else if (controls === 'full') setControls('hidden')
+                else showControls('full')
+              }
+            : undefined
+        }
       />
       {!!cue && (
         <View style={[st.cueWrap, (controls !== 'hidden' || paused || menu) && st.cueRaised]} pointerEvents="none">
@@ -1237,7 +1313,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       )}
       {buffering && !error && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {skipButton && skip && (
-        <Pressable android_disableSound={quietPress} focusable={false} onPress={doSkip} style={st.skipPill}>
+        <Pressable android_disableSound={quietPress} focusable={false} onPress={() => doSkip()} style={st.skipPill}>
           <Text style={st.skipText}>{skip.label}{isPhone ? '' : '   ·   OK'}  ▶▶</Text>
         </Pressable>
       )}
@@ -1247,7 +1323,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !subSearch && !lock.locked && (
+      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && stillAsk === null && !subSearch && !lock.locked && (
         <Pressable android_disableSound={quietPress} style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
@@ -1353,6 +1429,24 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       {!!notice && (
         <View style={st.notice} pointerEvents="none">
           <Text style={st.noticeText}>{notice}</Text>
+        </View>
+      )}
+      {stillAsk !== null && (
+        <View style={[st.menu, barsPad]}>
+          <Text style={st.summaryTitle}>Are you still watching?</Text>
+          <Text style={st.summaryMeta}>{`${STILL_WATCHING_AFTER} episodes have played in a row without a button being pressed.`}</Text>
+          <View style={st.controlRow}>
+            <Button
+              small
+              preferFocus
+              label="Keep watching"
+              onPress={() => {
+                autoEpisodes = 0
+                playNext(stillAsk)
+              }}
+            />
+            <Button small label="Stop" onPress={nav.back} />
+          </View>
         </View>
       )}
       {summary && item && (

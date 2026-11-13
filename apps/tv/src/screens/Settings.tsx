@@ -3,7 +3,7 @@ import { AppState, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, Vie
 import { ApiError, api, current, saveSession } from '../api'
 import { adbGrant, autoLaunchState, openAutoLaunchPermission, setAutoLaunch, type AutoLaunchState } from '../autoLaunch'
 import { Button, Focusable } from '../components'
-import { deviceId, hueArea, hueSyncOn, hueType, setHueArea, setHueSync, setHueType, type MenuPosition } from '../devicePrefs'
+import { deviceId, hueArea, hueSyncOn, hueType, matchFrameRateOn, setHueArea, setHueSync, setHueType, setMatchFrameRate, type MenuPosition } from '../devicePrefs'
 import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveGameLightsDevice, saveHueMode, type GameLightsDevice, type GameLightsSetup, type HueMode } from '../lights'
 import { discoverHubs, hubAreas, LinkButton, loadHub, pairHub, refreshGameLights, saveHub, type Hub, type HubArea } from '../hue'
 import { Icon } from '../icons'
@@ -119,6 +119,7 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
   const hue = hueMode !== null && hueMode !== 'off'
   const [hueOn, setHueOn] = useState(hueSyncOn)
+  const [frameRate, setFrameRate] = useState(matchFrameRateOn)
   useEffect(() => {
     fetchHueMode().then(setHueMode)
   }, [])
@@ -299,6 +300,23 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
               ? 'Shows just icons until you press Left into it, like Plex.'
               : 'Always shows every name across the top.'}{' '}
             Press OK to switch.
+          </Text>
+        </Focusable>
+      )}
+      {!isPhone && (
+        <Focusable
+          onPress={() => {
+            setMatchFrameRate(!frameRate)
+            setFrameRate(!frameRate)
+          }}
+          style={st.option}
+        >
+          <Text style={st.value}>Match the TV to the video's frame rate: {frameRate ? 'On' : 'Off'}</Text>
+          <Text style={st.hint}>
+            {frameRate
+              ? 'Films play at 24 frames a second without judder. Some TVs go blank for a second as a video starts.'
+              : 'The TV stays at its usual refresh rate, so 24p films may judder a little.'}{' '}
+            Press OK to turn it {frameRate ? 'off' : 'on'}.
           </Text>
         </Focusable>
       )}

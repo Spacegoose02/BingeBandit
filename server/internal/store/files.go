@@ -22,6 +22,9 @@ type Stream struct {
 	// Range is a video stream's dynamic range: sdr, hdr10, hlg or dv (Dolby
 	// Vision). Empty: probed before BingeBandit looked for it.
 	Range string `json:"range,omitempty"`
+	// FrameRate is a video stream's frames per second (23.976, 25, 59.94…),
+	// which the TV apps switch the screen to. 0: not known yet.
+	FrameRate float64 `json:"frameRate,omitempty"`
 	// Profile is ffprobe's codec profile, which names DTS-HD MA, DTS:X
 	// and Atmos (e.g. "Dolby TrueHD + Dolby Atmos").
 	Profile string `json:"profile,omitempty"`
