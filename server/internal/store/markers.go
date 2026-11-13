@@ -33,6 +33,13 @@ func (s *Store) SetDetectedMarker(itemID int64, kind string, start, end float64)
 	return err
 }
 
+// DeleteDetectedMarker removes a detected marker that detection no longer
+// finds. One an admin set by hand stays.
+func (s *Store) DeleteDetectedMarker(itemID int64, kind string) error {
+	_, err := s.db.Exec(`DELETE FROM markers WHERE item_id = ? AND kind = ? AND source = 'detected'`, itemID, kind)
+	return err
+}
+
 // SetDetectedCommercials replaces a recording's detected ad breaks. Breaks an
 // admin set by hand are kept, and while there are any, detection leaves the
 // file alone.

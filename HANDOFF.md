@@ -69,6 +69,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Next episode no longer comes up mid-film in TV movies filed as a show (2026-11-13, migration 59)
+
+Michael: "skip to next episode has been showing way too early on lifetime movies, some by 10 to 15 minutes". Those films are episodes of a show, so their credits were found by comparing sound with the neighbouring "episodes" (`markers.Season`). Two different TV movies don't share credits; what they share near the end is the channel's promos and ads, so the longest common stretch was a promo minutes before the real credits.
+
+- **Movie-length episodes** (`longEpisode`, 75 min or more, `markers/detect.go`): the sound match only counts as the credits when it runs to within `longEndSlack` (2 min) of the end. Otherwise the picture decides, as for movies (`pictureCredits`, split out of `Detector.Movie` in `credits.go`). If neither finds credits, the old detected marker is removed (`store.DeleteDetectedMarker`): no button beats one in the middle of the film, and the next episode still plays at the end.
+- **Replaced files kept their old markers:** a file that's new or whose size or time changed now drops its item's detected intro, credits and recap and sets `markers_at = 0` (`store.UpsertFile`), so an upgrade or a different cut is looked at again. Manual markers and a recording's ad breaks stay.
+- **Migration 59** removes detected credits from episodes with a file of 75 minutes or more and queues those seasons again (intro fingerprints are cached).
+- **Tested:** `go test ./...`, `go vet`, gofmt. New `TestLongEpisodeCredits` (real ffmpeg: two 77-minute "episodes" sharing a minute of promo 6:40 before the end; fails without the fix with credits at the promo, passes with the black credits roll found on one and none on the other) and `TestReplacedFileForgetsDetectedMarkers`. **Not tried** on the real Lifetime files: I couldn't see them, so if a title still shows the button early, its probed duration is worth checking (a duration shorter than the file would also move the window).
+
 ## Cast members open their whole filmography (2026-11-11, no migration)
 
 Michael: "When clicking on a cast member, on web and tv app, it should show the other movies/tv shows the actor/actress played in". Both apps already opened a person page from the Cast row, but it only listed what was in the libraries (plus, on the web, a "Not here yet" row of their 60 most popular other titles for people who can request).

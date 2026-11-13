@@ -113,7 +113,28 @@ func (s *Store) UpsertFile(f *MediaFile, gen int64) error {
 	if f.Streams == nil {
 		streams = []byte("[]")
 	}
-	_, err := s.db.Exec(`INSERT INTO media_files (item_id, path, size, mtime, container, duration, bitrate, video_codec, width, height,
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// A new or changed file (an upgrade, a re-recording, another cut) makes
+	// the item's detected intro, credits and recap times wrong: they were
+	// found in the old file's audio. Drop them and let detection run again.
+	// Times an admin set by hand, and a recording's ad breaks, stay.
+	var oldSize, oldMTime int64
+	switch err := tx.QueryRow(`SELECT size, mtime FROM media_files WHERE path = ?`, f.Path).Scan(&oldSize, &oldMTime); {
+	case errors.Is(err, sql.ErrNoRows) || (err == nil && (oldSize != f.Size || oldMTime != f.MTime)):
+		if _, err := tx.Exec(`DELETE FROM markers WHERE item_id = ? AND source = 'detected' AND kind != 'commercial'`, f.ItemID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE items SET markers_at = 0 WHERE id = ?`, f.ItemID); err != nil {
+			return err
+		}
+	case err != nil:
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO media_files (item_id, path, size, mtime, container, duration, bitrate, video_codec, width, height,
 			bit_depth, hdr, audio_codec, audio_channels, streams, probed_at, scan_gen)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (path) DO UPDATE SET item_id = excluded.item_id, size = excluded.size, mtime = excluded.mtime,
@@ -123,7 +144,10 @@ func (s *Store) UpsertFile(f *MediaFile, gen int64) error {
 			streams = excluded.streams, probed_at = excluded.probed_at, scan_gen = excluded.scan_gen`,
 		f.ItemID, f.Path, f.Size, f.MTime, f.Container, f.Duration, f.Bitrate, f.VideoCodec, f.Width, f.Height,
 		f.BitDepth, boolInt(f.HDR), f.AudioCodec, f.AudioChannels, string(streams), f.ProbedAt, gen)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetFileEpisodes links a multi-episode file (by id, or by path when id is

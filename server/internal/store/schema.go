@@ -1034,4 +1034,13 @@ ALTER TABLE recordings ADD COLUMN commercials_at INTEGER NOT NULL DEFAULT 0;
 -- Seasons are looked at again for recaps (intro fingerprints are cached).
 UPDATE items SET markers_at = 0 WHERE kind = 'episode';
 `,
+	// 59: credits found by sound in movie-length episodes (TV movies filed as
+	// a show) matched the channel's promos and ads, not the credits, so
+	// Next episode came up 10 to 15 minutes early. Clear them and look again
+	// with the stricter rule (markers.longEpisode).
+	`
+DELETE FROM markers WHERE kind = 'credits' AND source = 'detected' AND item_id IN (
+	SELECT i.id FROM items i JOIN media_files f ON f.item_id = i.id WHERE i.kind = 'episode' AND f.duration >= 4500);
+UPDATE items SET markers_at = 0 WHERE kind = 'episode' AND id IN (SELECT item_id FROM media_files WHERE duration >= 4500);
+`,
 }
