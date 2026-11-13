@@ -15,10 +15,31 @@ import type { Collection, Item } from '../types'
 
 const PAGE = 120
 
+// The orders a viewer can pick for themselves, as the server names them;
+// "release" asks for the default oldest-first order (reported back as "").
+const viewerSorts: [string, string][] = [
+  ['release', 'Release date (oldest first)'],
+  ['release_desc', 'Release date (newest first)'],
+  ['title', 'Title'],
+  ['added', 'Recently added'],
+  ['rating', 'Rating'],
+  ['list', 'List order'],
+]
+
+function readSort(id?: string): string {
+  try {
+    return localStorage.getItem(`bb.collectionSort.${id}`) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 interface CollectionPageData {
   collection: Collection
   items: Item[]
   total: number
+  /** The order the titles came in: the viewer's pick, else the collection's own. */
+  sort?: string
   /** The same-named collections in other libraries the viewer can see. */
   others?: { collection: Collection; library: string; items: Item[] }[]
 }
@@ -31,7 +52,20 @@ export default function CollectionPage() {
   // The first page comes with the collection; the rest load as you scroll.
   // Back to it loads as many as were showing, so the scroll position is there.
   const first = useMemo(() => Math.min(500, Math.max(PAGE, readBack<number>(key, 'loaded') ?? 0)), [id, key]) // eslint-disable-line react-hooks/exhaustive-deps
-  const { data, error, reload, setData } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${first}`)
+  // An order picked here sticks for this collection on this device; "" uses the collection's own.
+  const [picked, setPicked] = useState(() => readSort(id))
+  useEffect(() => setPicked(readSort(id)), [id])
+  const sortQuery = picked ? `&sort=${picked}` : ''
+  const pickSort = (v: string) => {
+    try {
+      if (v) localStorage.setItem(`bb.collectionSort.${id}`, v)
+      else localStorage.removeItem(`bb.collectionSort.${id}`)
+    } catch {
+      // Private windows can refuse storage; the pick still applies until you leave.
+    }
+    setPicked(v)
+  }
+  const { data, error, reload, setData } = useApi<CollectionPageData>(`/api/collections/${id}?limit=${first}${sortQuery}`)
   const [more, setMore] = useState<Item[]>([])
   const [ended, setEnded] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -55,7 +89,7 @@ export default function CollectionPage() {
       if (!entries[0].isIntersecting || busy.current) return
       busy.current = true
       try {
-        const page = await api.get<CollectionPageData>(`/api/collections/${id}?offset=${items.length}&limit=${PAGE}`)
+        const page = await api.get<CollectionPageData>(`/api/collections/${id}?offset=${items.length}&limit=${PAGE}${sortQuery}`)
         if (!page.items.length) setEnded(true)
         const have = new Set(items.map((it) => it.id))
         setMore((m) => [...m, ...page.items.filter((it) => !have.has(it.id))])
@@ -65,16 +99,18 @@ export default function CollectionPage() {
     }, { rootMargin: '800px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [data, ended, id, items, total])
+  }, [data, ended, id, items, total, sortQuery])
 
   // A title taken out of (or added to) this collection from its ⋮ menu shows
   // at once: everything loaded so far comes again in one go.
   const refresh = () =>
-    api.get<CollectionPageData>(`/api/collections/${id}?limit=${Math.max(PAGE, items.length + 1)}`).then(setData, () => undefined)
+    api.get<CollectionPageData>(`/api/collections/${id}?limit=${Math.max(PAGE, items.length + 1)}${sortQuery}`).then(setData, () => undefined)
 
   if (error) return <div className="page"><div className="empty">{error}</div></div>
   if (!data) return <div className="page-loading" />
   const { collection } = data
+  const sort = picked || (data.sort ?? collection.sort) || 'release'
+  const sorts = viewerSorts.filter(([v]) => v !== 'list' || !!collection.listUrl || sort === 'list')
   const backdrop = img(collection.backdrop || items.find((i) => i.backdrop)?.backdrop, 'original')
 
   const remove = async () => {
@@ -99,6 +135,16 @@ export default function CollectionPage() {
               {collection.overview && <p className="overview">{collection.overview}</p>}
             </div>
             <div className="actions">
+              {items.length > 1 && (
+                <label className="select-label">
+                  Sort
+                  <select value={sort} onChange={(e) => pickSort(e.target.value)}>
+                    {sorts.map(([v, label]) => (
+                      <option key={v} value={v}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <KidsApproveCollectionButton collection={collection} shows={items[0]?.kind === 'show'} />
               {user?.isAdmin && (
                 <>
@@ -141,7 +187,9 @@ export default function CollectionPage() {
           onClose={() => setEditing(false)}
           onSaved={() => {
             setEditing(false)
-            reload()
+            // A new saved order should show, not one picked here earlier.
+            if (picked) pickSort('')
+            else reload()
           }}
         />
       )}
