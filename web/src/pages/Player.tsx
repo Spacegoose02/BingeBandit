@@ -1,4 +1,5 @@
 import Hls from 'hls.js'
+import { mayAutoPlay } from '../stillWatching'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiError, img } from '../api'
@@ -306,6 +307,8 @@ function PlayerView({
   const [toast, setToast] = useState(together.error ? `Couldn't join the watch party: ${together.error}` : '')
   const [upNext, setUpNext] = useState<Item | null>(null)
   const [countdown, setCountdown] = useState(10)
+  const [stillAsk, setStillAsk] = useState(false)
+  useEffect(() => setStillAsk(false), [upNext])
 
   const duration = file?.duration || (item.runtime ?? 0) * 60
   const position = () => offsetRef.current + (videoRef.current?.currentTime ?? 0)
@@ -901,14 +904,15 @@ function PlayerView({
   }, [inIntro, inCredits])
 
   useEffect(() => {
-    if (!upNext || !prefs.autoPlayNext) return
+    if (!upNext || !prefs.autoPlayNext || stillAsk) return
     if (countdown <= 0) {
-      goNext(upNext)
+      if (roomId || mayAutoPlay()) goNext(upNext)
+      else setStillAsk(true)
       return
     }
     const t = window.setTimeout(() => setCountdown((c) => c - 1), 1000)
     return () => window.clearTimeout(t)
-  }, [upNext, countdown, nav, prefs.autoPlayNext])
+  }, [upNext, countdown, nav, prefs.autoPlayNext, stillAsk])
 
   const changeAudio = (a: number) => {
     const def = audioStreams.find((s) => s.default) ?? audioStreams[0]
@@ -1325,7 +1329,7 @@ function PlayerView({
         <div className="up-next">
           {img(upNext.backdrop || upNext.showBackdrop, 'w500') && <img src={img(upNext.backdrop || upNext.showBackdrop, 'w500')} alt="" />}
           <div>
-            <div className="muted small">{prefs.autoPlayNext ? `Up next in ${countdown}s` : 'Up next'}</div>
+            <div className="muted small">{stillAsk ? 'Are you still watching?' : prefs.autoPlayNext ? `Up next in ${countdown}s` : 'Up next'}</div>
             <div className="up-next-title">
               {upNext.kind === 'episode' ? `${upNext.showTitle} · ${episodeLabel(upNext)} · ${upNext.title}` : upNext.title}
             </div>

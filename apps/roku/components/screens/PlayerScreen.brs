@@ -900,6 +900,7 @@ end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
     if not press then return false
+    m.global.autoEpisodes = 0 ' someone is there
     if m.upNext.visible
         if key = "OK" or key = "play"
             playNext()
@@ -1227,6 +1228,14 @@ sub onNext(event as object)
         m.top.findNode("nextCount").text = ""
         return
     end if
+    ' "Are you still watching?": after STILL_WATCHING_AFTER (3) episodes in
+    ' a row that started by themselves with no key pressed, wait for OK, so
+    ' a TV left on doesn't stream all night. Any key resets the count
+    ' (onKeyEvent). The Android TV app and the web do the same.
+    if m.room = "" and m.global.autoEpisodes + 1 >= 3
+        m.top.findNode("nextCount").text = "Still watching? Press OK"
+        return
+    end if
     m.countdown = 10
     m.top.findNode("nextCount").text = "Playing in 10"
     m.nextTimer.control = "start"
@@ -1235,6 +1244,7 @@ end sub
 sub onNextTick()
     m.countdown = m.countdown - 1
     if m.countdown <= 0
+        m.global.autoEpisodes = m.global.autoEpisodes + 1
         playNext()
     else
         m.top.findNode("nextCount").text = "Playing in " + m.countdown.ToStr()

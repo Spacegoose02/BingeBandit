@@ -139,6 +139,12 @@ function playbackInfo(id: number): Promise<PlaybackInfo> {
 // One second starts sooner on a LAN, where the next seconds arrive quickly.
 const PLAYER_BUFFER = { bufferForPlaybackMs: 1000, bufferForPlaybackAfterRebufferMs: 3000 }
 
+// "Are you still watching?": after this many episodes in a row that started
+// by themselves with no key pressed, the next one waits to be asked for, so
+// a TV left on doesn't stream (and the server convert) all night.
+const STILL_WATCHING_AFTER = 3
+let autoEpisodes = 0
+
 interface PreRollStep {
   url: string
   label: string
@@ -878,7 +884,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     if (item?.kind === 'episode') {
       const next = await api.get<Item | undefined>(`/api/items/${item.id}/next`).catch(() => undefined)
       if (next?.id) {
-        playNext(next.id)
+        playNext(next.id, true)
         return
       }
     }
@@ -911,6 +917,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   const [roomId, setRoomId] = useState<string | null>(together ?? null)
   const [togetherOpen, setTogetherOpen] = useState(false)
   const [summary, setSummary] = useState(false)
+  // The next episode, held back to ask whether anyone is still watching.
+  const [stillAsk, setStillAsk] = useState<number | null>(null)
   // Hue Sync's quick switch in Options, for this device: only once this
   // profile turned Hue Sync on (Settings, or Account on the web).
   const [hueMode, setHueMode] = useState<HueMode | null>(null)
@@ -997,7 +1005,14 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     seekTo(t)
     tg.send({ paused: pausedRef.current, position: posRef.current })
   }
-  const playNext = (nextId: number) => {
+  const playNext = (nextId: number, auto = false) => {
+    if (auto && !roomId && ++autoEpisodes >= STILL_WATCHING_AFTER) {
+      setPaused(true)
+      setControls('hidden')
+      setStillAsk(nextId)
+      return
+    }
+    if (!auto) autoEpisodes = 0
     if (offline) {
       nav.replace({ name: 'player', id: nextId, start: 0, offline: true })
       return
@@ -1028,7 +1043,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   // Pause takes focus as the buttons come up, once: progress redraws the
   // player four times a second, and a lasting preference pulled focus back
   // to Pause before OK could reach Options or the others.
-  const pauseFocus = useFocusOnce(controls === 'full' && !menu && !togetherOpen && !summary && !subSearch)
+  const pauseFocus = useFocusOnce(controls === 'full' && !menu && !togetherOpen && !summary && stillAsk === null && !subSearch)
   const menuFocus = useFocusOnce(menu) // the same for the Options menu's current choices
 
   // The next episode, for the Next button.
@@ -1054,22 +1069,24 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       'button'
     if (skipMode === 'off') return null
     if (inMarker.kind === 'credits') {
-      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: () => playNext(next.id) }
+      if (next && !sleepAtEpisodeEnd()) return { key, mode: skipMode, label: 'Next episode', run: (auto?: boolean) => playNext(next.id, auto) }
       if (duration && inMarker.end < duration - 5) return { key, mode: skipMode, label: 'Skip credits', run: () => userSeek(inMarker.end) }
       return null
     }
     const label = inMarker.kind === 'intro' ? 'Skip intro' : inMarker.kind === 'recap' ? 'Skip recap' : 'Skip ad'
     return { key, mode: skipMode, label, run: () => userSeek(inMarker.end) }
   })()
-  const doSkip = () => {
+  const doSkip = (auto = false) => {
     if (!skip) return
     skipped.current.add(skip.key)
-    skip.run()
+    skip.run(auto)
   }
   useEffect(() => {
     if (skip?.mode === 'auto' && !skipped.current.has(skip.key)) {
-      say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
-      doSkip()
+      if (skip.label !== 'Next episode' || autoEpisodes + 1 < STILL_WATCHING_AFTER || roomId) {
+        say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
+      }
+      doSkip(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skip?.key])
@@ -1082,7 +1099,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Math.floor(pos / 5)])
-  const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && !subSearch && !togetherOpen
+  const skipButton = skip?.mode === 'button' && !skipped.current.has(skip.key) && controls !== 'full' && !menu && !summary && stillAsk === null && !subSearch && !togetherOpen
 
 
   // Back closes the menu, then the controls, before leaving the player; a locked player swallows it.
@@ -1100,6 +1117,10 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       }
       if (summary) {
         setSummary(false)
+        return true
+      }
+      if (stillAsk !== null) {
+        nav.back()
         return true
       }
       if (menu) {
@@ -1121,7 +1142,8 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     // Android TV only delivers the key-up half to JS (key-down drives native
     // focus), so act on key up and ignore any key-down that does arrive.
     if (!evt || evt.eventKeyAction === 0 || !active) return
-    if (menu || togetherOpen || summary || subSearch) return // the menu's buttons handle the keys
+    autoEpisodes = 0 // someone is there
+    if (menu || togetherOpen || summary || stillAsk !== null || subSearch) return // the menu's buttons handle the keys
     if (controls === 'full') {
       // The buttons have focus; any key just keeps the controls up.
       if (!paused) showControls('full')
@@ -1252,9 +1274,18 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           Phone: tapping the picture shows or hides the controls. */}
       <Pressable android_disableSound={quietPress}
         style={StyleSheet.absoluteFill}
-        hasTVPreferredFocus={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
-        focusable={!menu && !togetherOpen && !summary && !subSearch && controls !== 'full'}
-        onPress={isPhone ? () => (lock.locked ? lock.poke() : controls === 'full' ? setControls('hidden') : showControls('full')) : undefined}
+        hasTVPreferredFocus={!menu && !togetherOpen && !summary && stillAsk === null && !subSearch && controls !== 'full'}
+        focusable={!menu && !togetherOpen && !summary && stillAsk === null && !subSearch && controls !== 'full'}
+        onPress={
+          isPhone
+            ? () => {
+                autoEpisodes = 0
+                if (lock.locked) lock.poke()
+                else if (controls === 'full') setControls('hidden')
+                else showControls('full')
+              }
+            : undefined
+        }
       />
       {!!cue && (
         <View style={[st.cueWrap, (controls !== 'hidden' || paused || menu) && st.cueRaised]} pointerEvents="none">
@@ -1263,7 +1294,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       )}
       {buffering && !error && <ActivityIndicator style={st.spinner} color={colors.accent} size="large" />}
       {skipButton && skip && (
-        <Pressable android_disableSound={quietPress} focusable={false} onPress={doSkip} style={st.skipPill}>
+        <Pressable android_disableSound={quietPress} focusable={false} onPress={() => doSkip()} style={st.skipPill}>
           <Text style={st.skipText}>{skip.label}{isPhone ? '' : '   ·   OK'}  ▶▶</Text>
         </Pressable>
       )}
@@ -1273,7 +1304,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
           <Text style={st.hint}>Press Back to return.</Text>
         </View>
       )}
-      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && !subSearch && !lock.locked && (
+      {(controls !== 'hidden' || paused) && !error && !menu && !togetherOpen && !summary && stillAsk === null && !subSearch && !lock.locked && (
         <Pressable android_disableSound={quietPress} style={[st.overlay, barsPad]} focusable={false} onPress={isPhone ? () => setControls('hidden') : undefined}>
           <View style={st.topRow}>
             {isPhone && (
@@ -1379,6 +1410,24 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       {!!notice && (
         <View style={st.notice} pointerEvents="none">
           <Text style={st.noticeText}>{notice}</Text>
+        </View>
+      )}
+      {stillAsk !== null && (
+        <View style={[st.menu, barsPad]}>
+          <Text style={st.summaryTitle}>Are you still watching?</Text>
+          <Text style={st.summaryMeta}>{`${STILL_WATCHING_AFTER} episodes have played in a row without a button being pressed.`}</Text>
+          <View style={st.controlRow}>
+            <Button
+              small
+              preferFocus
+              label="Keep watching"
+              onPress={() => {
+                autoEpisodes = 0
+                playNext(stillAsk)
+              }}
+            />
+            <Button small label="Stop" onPress={nav.back} />
+          </View>
         </View>
       )}
       {summary && item && (
