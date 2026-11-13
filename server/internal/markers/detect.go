@@ -25,6 +25,14 @@ const (
 	creditsMax    = 420
 	// endSnap: credits that end this close to the end of the file run to it.
 	endSnap = 25
+	// Movie-length "episodes" (TV movies filed as a show, like a channel's
+	// movies) don't share credits with each other. What they do share near
+	// the end is the channel's promos and ads, which ended them 10 to 15
+	// minutes early. Their sound match only counts as the credits when it
+	// runs to within longEndSlack of the end; otherwise the picture decides,
+	// as for movies.
+	longEpisode  = 75 * 60
+	longEndSlack = 120
 )
 
 type Detector struct {
@@ -119,12 +127,29 @@ func (d *Detector) Season(ctx context.Context, seasonID int64) (int, error) {
 				if ctx.Err() != nil {
 					return found, ctx.Err()
 				}
-				if m, ok := d.bestMatch(ctx, eps, i, p); ok {
+				m, ok := d.bestMatch(ctx, eps, i, p)
+				var s, e float64
+				if ok {
 					start, _ := p.span(ep.file.Duration)
-					s, e := start+m.AStart, start+m.AEnd
+					s, e = start+m.AStart, start+m.AEnd
 					if p.fromEnd && ep.file.Duration-e < endSnap {
 						e = ep.file.Duration
 					}
+				}
+				if p.fromEnd && ep.file.Duration >= longEpisode && (!ok || ep.file.Duration-e > longEndSlack) {
+					var err error
+					if s, e, ok, err = d.pictureCredits(ctx, ep.file); err != nil {
+						return found, err
+					}
+					if !ok {
+						// Nothing to offer is better than a button in the middle of the film.
+						if err := d.st.DeleteDetectedMarker(ep.item.ID, p.name); err != nil {
+							return found, err
+						}
+						continue
+					}
+				}
+				if ok {
 					if err := d.st.SetDetectedMarker(ep.item.ID, p.name, s, e); err != nil {
 						return found, err
 					}

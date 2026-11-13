@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"bingebandit/internal/store"
 )
 
 // Movies have no sibling episodes to compare, so their end credits are found
@@ -46,22 +48,11 @@ func (d *Detector) Movie(ctx context.Context, itemID int64) (bool, error) {
 	}
 	found := false
 	if len(files) > 0 && files[0].Duration >= movieMinDuration {
-		f := files[0]
-		length := min(movieCreditsWindow, f.Duration*movieCreditsShare)
-		start := f.Duration - length
-		samples, err := d.sampleFrames(ctx, f.Path, start, length)
+		s, e, ok, err := d.pictureCredits(ctx, files[0])
 		if err != nil {
-			if ctx.Err() != nil {
-				return false, ctx.Err()
-			}
-			// A file ffmpeg can't read is marked scanned, so it isn't retried every night.
-			log.Printf("markers: %s: %v", f.Path, err)
+			return false, err
 		}
-		if s, e, ok := FindCreditsRun(samples, length); ok {
-			s, e = start+s, start+e
-			if f.Duration-e < movieEndSnap {
-				e = f.Duration
-			}
+		if ok {
 			if err := d.st.SetDetectedMarker(itemID, "credits", s, e); err != nil {
 				return false, err
 			}
@@ -69,6 +60,30 @@ func (d *Detector) Movie(ctx context.Context, itemID int64) (bool, error) {
 		}
 	}
 	return found, d.st.MarkMarkersScanned([]int64{itemID})
+}
+
+// pictureCredits looks for end credits in a movie-length file from the
+// picture (see Movie). It only returns an error when ctx ends.
+func (d *Detector) pictureCredits(ctx context.Context, f *store.MediaFile) (start, end float64, ok bool, err error) {
+	length := min(movieCreditsWindow, f.Duration*movieCreditsShare)
+	from := f.Duration - length
+	samples, err := d.sampleFrames(ctx, f.Path, from, length)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, 0, false, ctx.Err()
+		}
+		// A file ffmpeg can't read is marked scanned, so it isn't retried every night.
+		log.Printf("markers: %s: %v", f.Path, err)
+	}
+	s, e, ok := FindCreditsRun(samples, length)
+	if !ok {
+		return 0, 0, false, nil
+	}
+	s, e = from+s, from+e
+	if f.Duration-e < movieEndSnap {
+		e = f.Duration
+	}
+	return s, e, true, nil
 }
 
 // sampleFrames measures the brightness and colour of frames from start for
