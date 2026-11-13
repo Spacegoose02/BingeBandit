@@ -116,8 +116,11 @@ func (s *Store) AddScreenTime(userID int64, day string, seconds int64) error {
 	}
 	_, err := s.db.Exec(`INSERT INTO screen_time_used (user_id, day, seconds) VALUES (?, ?, ?)
 		ON CONFLICT (user_id, day) DO UPDATE SET seconds = seconds + excluded.seconds`, userID, day, seconds)
-	if err == nil {
-		s.db.Exec(`DELETE FROM screen_time_used WHERE user_id = ? AND day < ?`, userID, ScreenTimeDay(time.Now().AddDate(0, 0, -7)))
+	// A week before the day being counted, not before the real clock: a
+	// device with its clock behind (or a test on a fixed date) would
+	// otherwise have its own day dropped as soon as it was written.
+	if d, perr := time.ParseInLocation("2006-01-02", day, time.Local); err == nil && perr == nil {
+		s.db.Exec(`DELETE FROM screen_time_used WHERE user_id = ? AND day < ?`, userID, ScreenTimeDay(d.AddDate(0, 0, -7)))
 	}
 	return err
 }
