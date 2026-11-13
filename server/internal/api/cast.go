@@ -278,6 +278,9 @@ func (s *Server) castMedia(c *castSession, mf *store.MediaFile, at float64) (cas
 		Start: at, MaxHeight: 1080, AudioStream: c.audio, BurnSubtitle: -1, Replace: replace,
 		AudioCodecs: []string{"aac", "mp3"}, MaxAudioChannels: 2,
 	})
+	if busy := (*stream.BusyError)(nil); errors.As(err, &busy) {
+		return cast.Media{}, busy
+	}
 	if err != nil {
 		log.Printf("cast: transcode: %v", err)
 		return cast.Media{}, errors.New("could not start converting the video")

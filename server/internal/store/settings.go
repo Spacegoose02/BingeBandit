@@ -25,7 +25,8 @@ const (
 	SettingHWDecode          = "hw_decode"         // also decode on the GPU when converting video
 	SettingHWDevice          = "hw_device"         // VAAPI/QSV render node (/dev/dri/renderD129) or NVIDIA GPU number; empty = default
 	SettingTranscodeThrottle = "transcode_throttle"
-	SettingAdaptiveStreaming = "adaptive_streaming" // convert to several qualities at once so players can switch
+	SettingMaxConversions    = "max_video_conversions" // videos converted at once; 0 = automatic (a quarter of the CPU threads on the CPU, no limit on a GPU)
+	SettingAdaptiveStreaming = "adaptive_streaming"    // convert to several qualities at once so players can switch
 	SettingAllowDownloads    = "allow_downloads"
 	SettingTrickplay         = "trickplay_enabled"      // thumbnails while scrubbing the seek bar
 	SettingOpenSubsKey       = "opensubtitles_api_key"  // subtitle search in the players
@@ -151,6 +152,7 @@ var SettingDefaults = map[string]string{
 	SettingHWDecode:            "false",
 	SettingHWDevice:            "",
 	SettingTranscodeThrottle:   "true",
+	SettingMaxConversions:      "0",
 	SettingAdaptiveStreaming:   "false",
 	SettingAllowDownloads:      "false",
 	SettingTrickplay:           "true",

@@ -244,6 +244,10 @@ func (s *Server) startTranscode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sess, err := s.Transcoder.Start(mf, currentUser(r).ID, opts)
+	if busy := (*stream.BusyError)(nil); errors.As(err, &busy) {
+		writeErr(w, http.StatusTooManyRequests, busy.Error())
+		return
+	}
 	if err != nil {
 		log.Printf("transcode: %v", err)
 		writeErr(w, http.StatusInternalServerError, "could not start transcoder")

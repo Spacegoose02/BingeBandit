@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -179,7 +181,16 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return nil, fmt.Errorf("transcode dir: %w", err)
 	}
-	if err := m.launch(s, m.buildArgs(f, s, o)); err != nil {
+	args := m.buildArgs(f, s, o)
+	if !s.VideoCopy {
+		if limit := m.conversionLimit(s.Encoder); limit > 0 {
+			if n := m.videoEncodes(); n >= limit {
+				os.RemoveAll(s.dir)
+				return nil, &BusyError{Running: n}
+			}
+		}
+	}
+	if err := m.launch(s, args); err != nil {
 		os.RemoveAll(s.dir)
 		return nil, fmt.Errorf("start ffmpeg: %w", err)
 	}
@@ -662,6 +673,50 @@ func HeightForKbps(kbps int) int {
 		}
 	}
 	return 480
+}
+
+// BusyError is a conversion refused because the server is already
+// converting as many videos as it may at once.
+type BusyError struct{ Running int }
+
+func (e *BusyError) Error() string {
+	if e.Running == 1 {
+		return "The server is already converting a video, the most it does at once. Stop it, or play something this device can play as it is."
+	}
+	return fmt.Sprintf("The server is already converting %d videos, the most it does at once. Stop one, or play something this device can play as it is.", e.Running)
+}
+
+// conversionLimit is how many videos may be encoded at once: the admin's
+// number, or by default a quarter of the CPU's threads (at least two) when
+// encoding on the CPU, where each 1080p conversion takes several cores.
+// Hardware encoders have no default limit. 0 means no limit.
+func (m *Manager) conversionLimit(encoder string) int {
+	if n, err := strconv.Atoi(m.st.Setting(store.SettingMaxConversions)); err == nil && n > 0 {
+		return n
+	}
+	if encoder == "libx264" {
+		return max(2, runtime.NumCPU()/4)
+	}
+	return 0
+}
+
+// videoEncodes counts running conversions that encode video (copies and
+// finished ones cost next to nothing).
+func (m *Manager) videoEncodes() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, s := range m.sessions {
+		if s.VideoCopy {
+			continue
+		}
+		select {
+		case <-s.done:
+		default:
+			n++
+		}
+	}
+	return n
 }
 
 func (m *Manager) Get(id string) *Session {
