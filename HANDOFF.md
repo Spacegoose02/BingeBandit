@@ -70,6 +70,16 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Quick wins from the TV and server review (2026-11-13, no migration)
+
+Michael asked what would make BingeBandit its best on his TV and the server, then picked all ten suggestions. These are the first four.
+
+- **Faster start on Android TV** (`apps/tv/src/screens/Player.tsx`): `prefetchPlayback` starts loading the title, prefs and audio formats during the pre-roll wrapper's first render, and `MediaPlayer` takes that promise (`playbackInfo`, fresh for 30 s) instead of loading after the pre-roll check. ExoPlayer starts with 1 s buffered instead of 2.5 s and resumes after a stall with 3 s instead of 5 s (`PLAYER_BUFFER`, on the `source`). **Server:** conversions that encode video force a keyframe each second for the first 4 s and use `-hls_init_time 1`, so the first four segments are 1 s long and the player can start after one (`stream.buildArgs`, `firstSegmentSeconds`). ffmpeg only applies `hls_init_time` within `hls_list_size` entries, so those sessions list 1000000 instead of 0. Video-copy sessions are unchanged (they cut at the source's keyframes).
+- **"Are you still watching?"**: after 3 episodes in a row that started by themselves with no key pressed, the next one waits. Android TV (`autoEpisodes`, `stillAsk` panel: Keep watching / Stop; Back stops), Roku (`m.global.autoEpisodes`, Up next shows "Still watching? Press OK" without the countdown), web player and the Windows app (`web/src/stillWatching.ts`: keydown/pointerdown reset; in mpv a key, pause or seek resets). Watch parties never ask. On Roku the Video node may swallow some keys, so the count may not reset on those; at worst it asks.
+- **Subtitles from big files** (bug check #5, `api/playback.go` `extractSubtitle`): extraction runs apart from the request (30 min cap) and requests for the same track share it; each run writes its own `extract-*.vtt` temp. A player that gives up leaves it running, so its next try finds it cached.
+- **Tidy-up:** removed `server/internal/stream/full` and `seg00000.ts` (committed with #215) and ignored that kind of output; the log up to 2026-10-31 moved to [docs/HANDOFF-ARCHIVE.md](docs/HANDOFF-ARCHIVE.md); CI installs ffmpeg for the server tests (they skipped before).
+- **Tested:** `go test ./...` with new `TestFirstSegmentsAreShort` (real ffmpeg: segments 1,1,1,1,4,4,4…) and `TestSubtitleExtraction` (with `-race`: an abandoned request still caches, two at once both succeed, no temp files left); TV `tsc` and eslint; web `tsc` and build; Roku brighterscript. **Not tried** on a device: the shorter start buffer and the still-watching prompts.
+
 ## Next episode no longer comes up mid-film in TV movies filed as a show (2026-11-13, migration 59)
 
 Michael: "skip to next episode has been showing way too early on lifetime movies, some by 10 to 15 minutes". Those films are episodes of a show, so their credits were found by comparing sound with the neighbouring "episodes" (`markers.Season`). Two different TV movies don't share credits; what they share near the end is the channel's promos and ads, so the longest common stretch was a promo minutes before the real credits.
