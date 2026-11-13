@@ -731,7 +731,14 @@ function Favorites() {
   )
 }
 
-function HomeRows() {
+// Home's rows are drawn a few at a time: on a TV box, building every row
+// before the first frame kept Home blank for seconds at start-up. The
+// first rows (all a screen shows) come at once, the rest in the frames after.
+const FIRST_ROWS = 3
+
+// Memoized (it takes no props) so the menu redrawing above it doesn't
+// rebuild every row.
+const HomeRows = React.memo(function HomeRowsList() {
   const nav = useNav()
   // Back from the player or details draws the last rows at once and refreshes behind them.
   const [data, setData] = useState<HomeData | null>(() => cached<HomeData>('/api/home') ?? null)
@@ -754,6 +761,13 @@ function HomeRows() {
   // Again each time Back comes here, for the new Continue Watching.
   const { returns } = useScreen()
   useEffect(load, [load, returns])
+  const total = data?.rows.length ?? 0
+  const [shown, setShown] = useState(FIRST_ROWS)
+  useEffect(() => {
+    if (shown >= total) return
+    const t = setTimeout(() => setShown((n) => n + 2), 16)
+    return () => clearTimeout(t)
+  }, [shown, total])
 
   if (error && !data)
     return (
@@ -785,7 +799,7 @@ function HomeRows() {
             renderItem={(it, i) => <WideCard item={it} preferFocus={i === 0} onFocus={() => show(it)} onPress={() => play(it)} />}
           />
         )}
-        {data.rows.map((row, r) => (
+        {data.rows.slice(0, shown).map((row, r) => (
           <ItemRow
             key={row.id}
             title={row.title}
@@ -804,7 +818,7 @@ function HomeRows() {
       </ScrollView>
     </View>
   )
-}
+})
 
 /**
  * The focused title's backdrop and blurb. It redraws on its own, once focus
