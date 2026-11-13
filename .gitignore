@@ -28,3 +28,7 @@ server/plugins/*/hue-sync
 server/plugins/*/watchlist-rss
 server/plugins/*/youtube-live
 server/plugins/*/arr-requests
+
+# Stray ffmpeg output from running a test or command in a package folder
+server/internal/**/seg[0-9]*.ts
+server/internal/**/*.m3u8
