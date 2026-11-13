@@ -288,8 +288,19 @@ func (s *Store) CollectionMembers(uid, collectionID int64) ([]*Item, error) {
 
 // CollectionPage is a page of a collection's titles; a limit of -1 is all of them.
 func (s *Store) CollectionPage(uid, collectionID int64, offset, limit int) ([]*Item, error) {
+	return s.CollectionPageSorted(uid, collectionID, s.collectionSort(collectionID), offset, limit)
+}
+
+// CollectionPageSorted is CollectionPage in a sort the viewer picked (a key
+// of CollectionSorts) instead of the collection's saved one; an unknown sort
+// uses the saved one.
+func (s *Store) CollectionPageSorted(uid, collectionID int64, sort string, offset, limit int) ([]*Item, error) {
+	order, ok := CollectionSorts[sort]
+	if !ok {
+		order = CollectionSorts[s.collectionSort(collectionID)]
+	}
 	return s.pagedItems(`JOIN collections c ON c.id = @c`, memberOf+` AND `+visible,
-		CollectionSorts[s.collectionSort(collectionID)],
+		order,
 		uidArg(uid), sql.Named("c", collectionID), sql.Named("offset", offset), sql.Named("limit", limit))
 }
 

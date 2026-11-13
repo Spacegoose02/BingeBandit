@@ -549,12 +549,23 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 	if err != nil || limit <= 0 || limit > 500 {
 		limit = -1
 	}
-	items, err := s.Store.CollectionPage(currentUser(r).ID, id, max(offset, 0), limit)
+	// A viewer can pick another order for themselves (the TV apps' Sort
+	// button); "release" names the default oldest-first order, whose key is "".
+	sort := c.Sort
+	if v := q.Get("sort"); v != "" {
+		if v == "release" {
+			v = ""
+		}
+		if _, ok := store.CollectionSorts[v]; ok {
+			sort = v
+		}
+	}
+	items, err := s.Store.CollectionPageSorted(currentUser(r).ID, id, sort, max(offset, 0), limit)
 	if err != nil {
 		writeStoreErr(w, err)
 		return
 	}
-	out := map[string]any{"collection": c, "items": items, "total": c.ItemCount}
+	out := map[string]any{"collection": c, "items": items, "total": c.ItemCount, "sort": sort}
 	if offset <= 0 {
 		out["others"] = s.sameNamedRows(currentUser(r), id)
 	}

@@ -170,6 +170,8 @@ A collection can also fill itself:
 - **Smart rules** pick titles by genre, studio or network, year range, or label.
 - **Lists** follow TMDB, Trakt, IMDb or MDBList lists and charts, and update when the list changes.
 
+An admin's **Edit → Sort titles by** sets the order everyone sees. Anyone can view a collection in another order without changing that: **Sort** on the collection's page in the web app (and Windows TV mode), **Sort** above the titles on Android TV, and the **\*** button on Roku. The web app remembers the pick for that collection on that device, Android TV keeps it until the app closes, and Roku keeps it while the collection is open.
+
 **Server → Overlays** adds Kometa-style badges to posters, such as 4K, Dolby Vision, HDR, Atmos and ratings, or your own images. Your original artwork is never changed, and turning overlays off brings the plain posters straight back. This page also sets up the default collections.
 
 ![Overlays and collections](screenshots/admin-overlays.webp)

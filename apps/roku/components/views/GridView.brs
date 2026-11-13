@@ -8,6 +8,10 @@ sub init()
     m.top.observeField("focusedChild", "onFocusChanged")
     m.filters = { genre: "", decade: 0, rating: 0, unwatched: false }
     m.filterOptions = invalid
+    ' A collection's order: "" is the collection's own, else one picked with *.
+    m.sort = ""
+    m.shownSort = ""
+    m.hasList = false
 end sub
 
 sub onFocusChanged()
@@ -27,7 +31,9 @@ end sub
 sub load()
     p = m.top.params
     if p = invalid or p.path = invalid then return
-    api("GET", p.path, invalid, "onLoaded", { build: getOr(p, "build", "items"), query: filterQuery() })
+    path = p.path
+    if isCollection() and m.sort <> "" then path = path + "?sort=" + m.sort
+    api("GET", path, invalid, "onLoaded", { build: getOr(p, "build", "items"), query: filterQuery() })
 end sub
 
 sub onLoaded(event as object)
@@ -48,6 +54,16 @@ sub onLoaded(event as object)
         m.status.text = ""
         if n = 1 then count = "1 title" else count = n.ToStr() + " titles"
         if isLibrary() then count = joinStrings([count, filterSummary(), "* to filter"], "   ·   ")
+        if isCollection()
+            data = res.data
+            if type(data) = "roAssociativeArray"
+                m.shownSort = getOr(data, "sort", "")
+                if m.shownSort = "" then m.shownSort = "release"
+                col = getOr(data, "collection", {})
+                m.hasList = getOr(col, "listUrl", "") <> ""
+            end if
+            if n > 1 then count = joinStrings([count, "Sorted by " + sortLabel(m.shownSort), "* to sort"], "   ·   ")
+        end if
         m.top.findNode("count").text = count
     end if
     focus = m.grid.itemFocused
@@ -65,6 +81,44 @@ sub onSelected()
     if m.grid.content = invalid then return
     c = m.grid.content.getChild(m.grid.itemSelected)
     if c <> invalid then m.top.navigate = openItem(c)
+end sub
+
+' --- Collection sort (the * button) ------------------------------------------
+
+function isCollection() as boolean
+    return m.top.params <> invalid and Left(getOr(m.top.params, "path", ""), 17) = "/api/collections/"
+end function
+
+' The orders a viewer can pick, as the server names them, like the Android TV
+' and web apps. "release" is the default oldest-first order.
+function collectionSorts() as object
+    sorts = [
+        { value: "release", label: "Release date (oldest first)" },
+        { value: "release_desc", label: "Release date (newest first)" },
+        { value: "title", label: "Title" },
+        { value: "added", label: "Recently added" },
+        { value: "rating", label: "Rating" },
+    ]
+    if m.hasList or m.shownSort = "list" then sorts.Push({ value: "list", label: "List order" })
+    return sorts
+end function
+
+function sortLabel(value as string) as string
+    for each s in collectionSorts()
+        if s.value = value then return s.label
+    end for
+    return "Release date (oldest first)"
+end function
+
+sub openSort()
+    m.sortChoices = collectionSorts()
+    buttons = []
+    for each s in m.sortChoices
+        label = s.label
+        if s.value = m.shownSort then label = label + "  (current)"
+        buttons.Push(label)
+    end for
+    showDialog("Sort by", buttons, "sort")
 end sub
 
 ' --- Library filters (the * button) ------------------------------------------
@@ -143,6 +197,11 @@ sub onDialogButton()
     kind = m.dialogKind
     m.dialog.close = true
     m.dialog = invalid
+    if kind = "sort"
+        m.sort = m.sortChoices[i].value
+        applyFilters()
+        return
+    end if
     opts = m.filterOptions
     if kind = "menu"
         if i = 0
@@ -186,6 +245,10 @@ end sub
 function onKeyEvent(key as string, press as boolean) as boolean
     if press and key = "options" and isLibrary()
         openFilters()
+        return true
+    end if
+    if press and key = "options" and isCollection() and m.grid.content <> invalid and m.grid.content.getChildCount() > 1
+        openSort()
         return true
     end if
     return false

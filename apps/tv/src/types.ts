@@ -176,6 +176,10 @@ export interface Collection {
   poster?: string
   backdrop?: string
   itemCount: number
+  /** How its titles are ordered unless the viewer picks another (see COLLECTION_SORTS). */
+  sort?: string
+  /** The list it follows, if any; only then is "List order" offered. */
+  listUrl?: string
 }
 
 export interface GuideProgram {

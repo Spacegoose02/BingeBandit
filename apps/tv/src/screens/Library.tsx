@@ -477,12 +477,32 @@ interface OtherCollection {
   items: Item[]
 }
 
+/**
+ * The orders a viewer can pick for a collection's titles, as the server names
+ * them ("release" asks for the default oldest-first order, which the server
+ * reports back as "").
+ */
+const COLLECTION_SORTS: Choice<string>[] = [
+  { label: 'Release date (oldest first)', value: 'release' },
+  { label: 'Release date (newest first)', value: 'release_desc' },
+  { label: 'Title', value: 'title' },
+  { label: 'Recently added', value: 'added' },
+  { label: 'Rating', value: 'rating' },
+  { label: 'List order', value: 'list' },
+]
+
+/** The order picked for each collection, kept while the app runs; one not here uses the collection's own. */
+const pickedSorts = new Map<number, string>()
+
 /** A collection's titles, pushed from a library's Collections section; big ones load a page at a time. */
 export function CollectionScreen({ id }: { id: number }) {
   const nav = useNav()
   const cols = useColumns(false)
-  const path = `/api/collections/${id}?limit=${PAGE}`
-  const { data, error, load } = useLoad<{ collection: Collection; items: Item[]; total?: number; others?: OtherCollection[] }>(path)
+  const [picked, setPicked] = useState(() => pickedSorts.get(id))
+  const [sorting, setSorting] = useState(false)
+  const sortQuery = picked ? `&sort=${picked}` : ''
+  const path = `/api/collections/${id}?limit=${PAGE}${sortQuery}`
+  const { data, error, load } = useLoad<{ collection: Collection; items: Item[]; total?: number; sort?: string; others?: OtherCollection[] }>(path)
   const [more, setMore] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
@@ -495,11 +515,19 @@ export function CollectionScreen({ id }: { id: number }) {
   if (!data) return <View style={st.screen}><Center><ActivityIndicator color={colors.accent} size="large" /></Center></View>
   const items = [...data.items, ...more]
   const total = data.total ?? data.items.length
+  // The order on screen: the one picked here, else the one the server used.
+  const sort = picked ?? ((data.sort ?? data.collection.sort) || 'release')
+  const sorts = COLLECTION_SORTS.filter((c) => c.value !== 'list' || !!data.collection.listUrl || sort === 'list')
+  const sortLabel = COLLECTION_SORTS.find((c) => c.value === sort)?.label ?? 'Sort'
+  const pickSort = (v: string) => {
+    pickedSorts.set(id, v)
+    setPicked(v)
+  }
   const next = () => {
     if (busyRef.current || ended.current || items.length >= total) return
     busyRef.current = true
     setBusy(true)
-    api.get<{ items: Item[] }>(`/api/collections/${id}?offset=${items.length}&limit=${PAGE}`).then(
+    api.get<{ items: Item[] }>(`/api/collections/${id}?offset=${items.length}&limit=${PAGE}${sortQuery}`).then(
       (p) => {
         if (!p.items.length) ended.current = true
         const have = new Set(items.map((it) => it.id))
@@ -533,6 +561,14 @@ export function CollectionScreen({ id }: { id: number }) {
           <View style={st.collectionHead}>
             <Text style={st.title}>{data.collection.name}</Text>
             {!!data.collection.overview && <Text style={st.overview} numberOfLines={3}>{data.collection.overview}</Text>}
+            {items.length > 1 && (
+              <View style={st.sortBar}>
+                <Focusable onPress={() => setSorting(true)} style={st.chip}>
+                  <Text style={st.chipText}>Sort: {sortLabel}</Text>
+                </Focusable>
+              </View>
+            )}
+            {sorting && <ChoiceList title="Sort by" choices={sorts} current={sort} onPick={pickSort} onClose={() => setSorting(false)} />}
           </View>
         }
         renderTile={(t) => (
@@ -635,6 +671,7 @@ const st = StyleSheet.create(scaled({
   letterMissing: { opacity: 0.25 },
   gridTitle: { color: colors.text, fontSize: font.small, marginTop: 8, marginBottom: 30, width: 230 },
   collectionHead: { paddingTop: 30 },
+  sortBar: { flexDirection: 'row', marginBottom: 30 },
   title: { color: colors.text, fontSize: font.hero, fontWeight: '900', marginBottom: 12 },
   overview: { color: colors.muted, fontSize: font.body, marginBottom: 30, maxWidth: 1500, lineHeight: 40 },
   error: { color: colors.danger, fontSize: font.body, marginBottom: 20, textAlign: 'center' },
