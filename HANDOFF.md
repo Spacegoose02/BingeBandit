@@ -70,6 +70,15 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## End credits count as watched (2026-11-14, no migration)
+
+Michael stopped Below S1 E1 in its end credits (about 93%, converting in the web player) and it stayed on Continue Watching.
+
+- **Credits finish it** (`store.SaveProgress`, `inEndCredits`): a position at or past the item's credits marker counts as watched, as well as passing the "count as watched after" percentage, so long credits or a raised setting don't leave it half watched. A credits marker in the first half of the runtime doesn't count.
+- **Web player's last report** (`Player.tsx`): React clears `videoRef` before the player's cleanup runs, so leaving with Back never sent the final (stopped) report: the last saved position was up to 10 s old and Now Playing waited to time out. `lastVideoRef` keeps the element for that report.
+- **Continue Watching cards show a check** when the card is a finished episode (`WideCard` has the `Badge` now): a caught-up show stays on the row with the episode just finished (the Mickey Mouse Clubhouse decision), and the check says it did count.
+- PR #222 (credits detection) and #223 (start-up) didn't touch watched marking.
+- **Tested:** `go test ./internal/store ./internal/api` with new `TestEndCreditsCountAsWatched`; web `tsc`. Not tried in a browser.
 ## Damaged database no longer says every season is missing; Optimize database repairs damaged indexes (2026-11-14, no migration)
 
 Michael saw "Seasons 1, 2, … 29 aren't here yet" under South Park with every season in the library. His server's log was full of `database disk image is malformed (11)` (Cinemask collections, custom channels, the ratings task): the SQLite file is damaged. With planner statistics the season count reads `items_library_kind`, so it failed, and `ShowSeasons` swallowed the error and returned an empty map, which every caller took as "nothing here". Every show on his server read the same way.

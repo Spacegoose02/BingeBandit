@@ -104,3 +104,31 @@ func TestContinueWatchingDays(t *testing.T) {
 		t.Fatal("a start 40 days ago stayed with a 30-day limit")
 	}
 }
+
+// Below S1 E1 was stopped in its end credits, short of the watched point,
+// and stayed on Continue Watching.
+func TestEndCreditsCountAsWatched(t *testing.T) {
+	s := openTest(t)
+	lib := &Library{Name: "Movies", Kind: "movies", Paths: []string{}}
+	s.CreateLibrary(lib)
+	id := addMovie(t, s, lib.ID, "Below")
+	early := addMovie(t, s, lib.ID, "Cold Open")
+	u, _ := s.CreateUser("dana", "x", false)
+	s.SetSettings(map[string]string{SettingWatchedPercent: "95"})
+	s.SetDetectedMarker(id, "credits", 2600, 2855)
+	s.SetDetectedMarker(early, "credits", 60, 120)
+
+	if done, _ := s.SaveProgress(u.ID, id, 2500, 2855); done {
+		t.Fatal("before the credits counted as watched")
+	}
+	if done, _ := s.SaveProgress(u.ID, id, 2668, 2855); !done {
+		t.Fatal("stopping in the end credits didn't count as watched")
+	}
+	if got, _ := s.InProgress(u.ID, 10); len(got) != 0 {
+		t.Fatalf("finished in the credits but still in progress: %d items", len(got))
+	}
+	// Credits in the first half aren't the end credits.
+	if done, _ := s.SaveProgress(u.ID, early, 1000, 2855); done {
+		t.Fatal("credits marker in the first half counted as the end")
+	}
+}

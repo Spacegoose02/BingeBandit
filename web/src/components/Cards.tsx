@@ -114,6 +114,8 @@ export function WideCard({ item }: { item: Item }) {
       <Link to={`/play/${item.id}${item.watch.position > 15 ? `?t=${Math.floor(item.watch.position)}` : ''}`} className="wide-frame">
         <Art src={art} label={item.title} />
         <Progress item={item} />
+        {/* A finished episode Continue Watching keeps for a caught-up show. */}
+        <Badge item={item} />
         <div className="poster-hover">
           <Icon name="play" fill size={34} />
         </div>
