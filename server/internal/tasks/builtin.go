@@ -89,7 +89,7 @@ func Builtin(d Deps) []*Task {
 		},
 		{
 			ID: "optimize_database", Name: "Optimize database",
-			Description: "Update query statistics and reclaim unused space.",
+			Description: "Check the database for damage and rebuild damaged indexes, update query statistics and reclaim unused space.",
 			Maintenance: true, DefaultEnabled: true, DefaultHours: 24 * 7,
 			Run: d.optimizeDatabase,
 		},
