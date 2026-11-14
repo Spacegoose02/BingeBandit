@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -109,6 +110,21 @@ func (s *Store) Optimize(ctx context.Context) (string, error) {
 			}
 		}
 	}
+	// A damaged index makes some queries fail with "database disk image is
+	// malformed" while the rest work, e.g. every season of every show
+	// reading as missing. Rebuilding the indexes from the tables fixes
+	// that; damage to the tables themselves needs a backup.
+	repaired := false
+	if problem := integrityProblem(ctx, conn); problem != "" {
+		slog.Warn("database damaged; rebuilding its indexes", "problem", problem)
+		if err := rebuildIndexes(ctx, conn, retry); err != nil {
+			return "", fmt.Errorf("the database is damaged (%s) and rebuilding its indexes failed (%v); restore a backup", problem, err)
+		}
+		if still := integrityProblem(ctx, conn); still != "" {
+			return "", fmt.Errorf("the database is damaged (%s) and rebuilding its indexes didn't fix it; restore a backup", still)
+		}
+		repaired = true
+	}
 	for _, q := range []string{`PRAGMA optimize`, `ANALYZE`} {
 		if err := retry(q); err != nil {
 			return "", fmt.Errorf("%s: %w", q, err)
@@ -124,7 +140,121 @@ func (s *Store) Optimize(ctx context.Context) (string, error) {
 	// Reports busy in its result row rather than failing; a partial
 	// checkpoint is fine, the next one finishes it.
 	conn.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
+	if repaired {
+		result = "repaired damaged indexes, " + result
+	}
 	return result, nil
+}
+
+// rebuildIndexes recreates every index from its table. REINDEX and DROP
+// INDEX can't when an index's pages are damaged (both read them to free
+// them), so the indexes are taken out of the schema directly, VACUUM copies
+// the tables to a fresh file (leaving the damaged pages behind), and the
+// indexes are created again from their saved definitions.
+//
+// It only goes ahead when every table reads in full without its indexes:
+// damage in a table needs a backup, and the schema is left as it was.
+func rebuildIndexes(ctx context.Context, conn *sql.Conn, retry func(string) error) error {
+	tables, err := conn.QueryContext(ctx, `SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`)
+	if err != nil {
+		return err
+	}
+	var names []string
+	for tables.Next() {
+		var name string
+		if err := tables.Scan(&name); err != nil {
+			tables.Close()
+			return err
+		}
+		names = append(names, name)
+	}
+	tables.Close()
+	if err := tables.Err(); err != nil {
+		return err
+	}
+	for _, name := range names {
+		var n int64
+		q := `SELECT COUNT(*) FROM "` + strings.ReplaceAll(name, `"`, `""`) + `" NOT INDEXED`
+		if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
+			return fmt.Errorf("table %s is damaged too: %w", name, err)
+		}
+	}
+
+	rows, err := conn.QueryContext(ctx, `SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL`)
+	if err != nil {
+		return err
+	}
+	type index struct{ name, sql string }
+	var indexes []index
+	for rows.Next() {
+		var ix index
+		if err := rows.Scan(&ix.name, &ix.sql); err != nil {
+			rows.Close()
+			return err
+		}
+		indexes = append(indexes, ix)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := conn.ExecContext(ctx, `PRAGMA writable_schema = ON`); err != nil {
+		return err
+	}
+	var version int64
+	err = conn.QueryRowContext(ctx, `PRAGMA schema_version`).Scan(&version)
+	if err == nil {
+		_, err = conn.ExecContext(ctx, `DELETE FROM sqlite_schema WHERE type = 'index' AND sql IS NOT NULL`)
+	}
+	if err == nil {
+		// Every connection reloads the schema, now without the old indexes.
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(`PRAGMA schema_version = %d`, version+1))
+	}
+	conn.ExecContext(context.WithoutCancel(ctx), `PRAGMA writable_schema = OFF`)
+	if err != nil {
+		return err
+	}
+	// If VACUUM fails the indexes are still created again, so the database
+	// keeps working (with the damaged pages left over) until a backup is
+	// restored.
+	vacuumErr := retry(`VACUUM`)
+	for _, ix := range indexes {
+		if _, err := conn.ExecContext(context.WithoutCancel(ctx), ix.sql); err != nil {
+			return fmt.Errorf("%s: %w", ix.name, err)
+		}
+	}
+	if vacuumErr != nil {
+		return fmt.Errorf("VACUUM: %w", vacuumErr)
+	}
+	return nil
+}
+
+// integrityProblem runs SQLite's integrity check and returns its first
+// complaint, or "" when the database is sound.
+func integrityProblem(ctx context.Context, conn *sql.Conn) string {
+	rows, err := conn.QueryContext(ctx, `PRAGMA integrity_check(5)`)
+	if err != nil {
+		return err.Error()
+	}
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return err.Error()
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		return err.Error()
+	}
+	if len(lines) == 1 && lines[0] == "ok" {
+		return ""
+	}
+	if len(lines) == 0 {
+		return "no result"
+	}
+	return strings.Join(lines, "; ")
 }
 
 // ReferencedImages lists every image reference in use (items, credits,

@@ -407,7 +407,10 @@ func (s *Server) serverCovers(in requestInput) bool {
 		return false
 	}
 	if in.Kind == "show" && len(in.Seasons) > 0 {
-		have := s.Store.ShowSeasons(in.TMDBID)
+		have, err := s.Store.ShowSeasons(in.TMDBID)
+		if err != nil {
+			return false // can't tell; let the request through
+		}
 		for _, n := range in.Seasons {
 			if have[n] == 0 {
 				return false
@@ -716,7 +719,14 @@ func (s *Server) titleInfo(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"title": ann, "backdrop": info.Backdrop, "status": info.Status, "has4K": s.Store.Has4K(kind, id),
 		"fourK": s.fourKOn() || u.IsAdmin, "limit": s.limitState(u, kind), "kidsWait": u.Kid && u.OwnerID != 0}
 	if kind == "show" {
-		have := s.Store.ShowSeasons(id)
+		have, err := s.Store.ShowSeasons(id)
+		if err != nil {
+			// Without the counts every season would look missing; leave the
+			// seasons out so the page doesn't offer to request what's here.
+			slog.Warn("requests: show seasons", "tmdb", id, "err", err)
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
 		asked := map[int]bool{}
 		whole := false
 		if ann.Request != nil && ann.Request.Status != store.RequestDeclined {
@@ -1084,7 +1094,10 @@ func (s *Server) offerNextSeason(u *store.User, ep *store.Item) {
 	if err != nil || show.TMDBID == 0 {
 		return
 	}
-	have := s.Store.ShowSeasons(show.TMDBID)
+	have, err := s.Store.ShowSeasons(show.TMDBID)
+	if err != nil {
+		return
+	}
 	last := 0
 	for n := range have {
 		last = max(last, n)

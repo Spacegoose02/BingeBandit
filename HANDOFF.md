@@ -79,6 +79,13 @@ Michael stopped Below S1 E1 in its end credits (about 93%, converting in the web
 - **Continue Watching cards show a check** when the card is a finished episode (`WideCard` has the `Badge` now): a caught-up show stays on the row with the episode just finished (the Mickey Mouse Clubhouse decision), and the check says it did count.
 - PR #222 (credits detection) and #223 (start-up) didn't touch watched marking.
 - **Tested:** `go test ./internal/store ./internal/api` with new `TestEndCreditsCountAsWatched`; web `tsc`. Not tried in a browser.
+## Damaged database no longer says every season is missing; Optimize database repairs damaged indexes (2026-11-14, no migration)
+
+Michael saw "Seasons 1, 2, … 29 aren't here yet" under South Park with every season in the library. His server's log was full of `database disk image is malformed (11)` (Cinemask collections, custom channels, the ratings task): the SQLite file is damaged. With planner statistics the season count reads `items_library_kind`, so it failed, and `ShowSeasons` swallowed the error and returned an empty map, which every caller took as "nothing here". Every show on his server read the same way.
+
+- **`store.ShowSeasons`** now returns `(map, error)`, checks `rows.Err()` and fails on a bad row. `titleInfo` leaves `seasons` out (and logs) when it can't count, so the web's missing-seasons panel and the TV's Request button stay hidden; `serverCovers` lets the request through; `offerNextSeason` and `RequestCovered` do nothing.
+- **Optimize database** (`store.Optimize`) starts with `PRAGMA integrity_check(5)`. On damage it checks every table reads in full `NOT INDEXED` (if not: error, restore a backup, nothing changed), then `rebuildIndexes`: drop the index rows from `sqlite_schema` with `writable_schema` (REINDEX and DROP INDEX read the damaged pages and fail), bump `schema_version`, VACUUM (copies only tables, leaves the damaged pages behind), and create the indexes again from their saved SQL. A second integrity check must pass; the result starts "repaired damaged indexes".
+- **Tested:** `go test ./...` with new `TestDamagedIndexIsReportedAndRepaired` (overwrites the items indexes' root pages in a real file). Not tried on Michael's database; if his damage is in a table, the task says to restore a backup.
 
 ## Bigger items from the TV and server review (2026-11-13, no migration)
 
