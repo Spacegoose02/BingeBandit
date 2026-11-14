@@ -79,6 +79,15 @@ Michael stopped Below S1 E1 in its end credits (about 93%, converting in the web
 - **Continue Watching cards show a check** when the card is a finished episode (`WideCard` has the `Badge` now): a caught-up show stays on the row with the episode just finished (the Mickey Mouse Clubhouse decision), and the check says it did count.
 - PR #222 (credits detection) and #223 (start-up) didn't touch watched marking.
 - **Tested:** `go test ./internal/store ./internal/api` with new `TestEndCreditsCountAsWatched`; web `tsc`. Not tried in a browser.
+## Admins see a damaged database or failing backups on every page (2026-11-14, no migration)
+
+Follow-up to the entry below: Michael's database broke on Nov 8 and nightly backups failed for five days, but that only showed as a failed task on Tasks and Health (the in-app notification may not have been saved either, since it's written to the same damaged database).
+
+- **Detection:** `RunHealth` runs `store.CheckIntegrity` (`PRAGMA quick_check(5)`) once, a minute after start. `TaskDone` reads the backup and Optimize database results. `store.IsCorrupt` matches SQLITE_CORRUPT/NOTADB (11/26) or "malformed". Clean backups and Optimize runs clear the flag.
+- **Alerts** (`api/dbhealth.go`): "The database is damaged" goes out once per damage (`setDatabaseProblem` reports only changes), with what to do and the newest backup's date. Other backup failures keep "The database backup failed", now with the newest backup's date. Optimize database failures alert too. `notify` still sends web push for server alerts when saving the notification fails.
+- **Banner:** `GET /api/admin/status` → `{problems:[{kind,title,body,link}]}` (`serverProblems`): damaged, or "Database backups are failing" from the backup task's stored last error, so it shows after a restart even before the check runs; a later clean check wins. Web `components/ServerProblems.tsx` puts it at the top of every page for admins (polled every 5 minutes); the health response carries `problems` too.
+- **Tested:** `go test ./...` with new `TestDamagedDatabaseIsFlagged` (one alert per damage, banner, cleared by Optimize, other backup errors) and the quick check in `TestDamagedIndexIsReportedAndRepaired`; web `tsc` and build; the banner looked at in headless Chromium against mocked APIs at desktop and phone width.
+
 ## Damaged database no longer says every season is missing; Optimize database repairs damaged indexes (2026-11-14, no migration)
 
 Michael saw "Seasons 1, 2, … 29 aren't here yet" under South Park with every season in the library. His server's log was full of `database disk image is malformed (11)` (Cinemask collections, custom channels, the ratings task): the SQLite file is damaged. With planner statistics the season count reads `items_library_kind`, so it failed, and `ShowSeasons` swallowed the error and returned an empty map, which every caller took as "nothing here". Every show on his server read the same way.

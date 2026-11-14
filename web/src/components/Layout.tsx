@@ -13,6 +13,7 @@ import { PinsDialog, savePins, setFavoritesPinned } from './Pins'
 import { SelectionProvider } from './Selection'
 import { TogetherInvites } from './Together'
 import { DesktopUpdateNotice } from './DesktopUpdate'
+import { ServerProblemsBanner } from './ServerProblems'
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -218,6 +219,7 @@ export default function Layout() {
       </aside>
       <main className="main">
         <DesktopUpdateNotice />
+        <ServerProblemsBanner admin={!!user?.isAdmin} />
         <TogetherInvites />
         <SelectionProvider>
           <Outlet />

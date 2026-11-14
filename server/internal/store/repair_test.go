@@ -79,6 +79,10 @@ func TestDamagedIndexIsReportedAndRepaired(t *testing.T) {
 		t.Fatal("a request counted as arrived with the counts unreadable")
 	}
 
+	if problem, err := s.CheckIntegrity(context.Background()); err != nil || problem == "" {
+		t.Fatalf("quick check: %q %v", problem, err)
+	}
+
 	result, err := s.Optimize(context.Background())
 	if err != nil {
 		t.Fatalf("optimize: %v", err)
@@ -88,6 +92,9 @@ func TestDamagedIndexIsReportedAndRepaired(t *testing.T) {
 	}
 	if have, err := s.ShowSeasons(1005); err != nil || have[1] != 10 || have[2] != 10 || have[3] != 10 {
 		t.Fatalf("after repair: %v %v", have, err)
+	}
+	if problem, err := s.CheckIntegrity(context.Background()); err != nil || problem != "" {
+		t.Fatalf("quick check after repair: %q %v", problem, err)
 	}
 	// A sound database is left alone.
 	if result, err := s.Optimize(context.Background()); err != nil || strings.Contains(result, "repaired") {
