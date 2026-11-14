@@ -323,7 +323,16 @@ func (s *Server) receiveBackup(w http.ResponseWriter, r *http.Request) (string, 
 func (s *Server) restoreFrom(w http.ResponseWriter, r *http.Request, path, label string) {
 	s.restoreMu.Lock()
 	defer s.restoreMu.Unlock()
-	safety, err := tasks.SaveBackup(s.Store, tasks.BackupDir(s.Store, s.DataDir))
+	dir := tasks.BackupDir(s.Store, s.DataDir)
+	safety, err := tasks.SaveBackup(s.Store, dir)
+	if err != nil && store.IsCorrupt(err) {
+		// A damaged database can't be backed up normally (that reads
+		// every row), which is exactly when it needs restoring. Keep an
+		// as-is copy instead; it isn't named like a backup, so it doesn't
+		// show in the list or push a good backup out of rotation.
+		safety = filepath.Join(dir, "damaged-"+time.Now().Format("20060102-150405")+".db")
+		err = s.Store.SaveDamagedCopy(r.Context(), safety)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "could not back up the current database first: "+err.Error())
 		return

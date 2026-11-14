@@ -384,7 +384,20 @@ func UploadBackup(ctx context.Context, remote *s3.Client, path string, keep int)
 var BackupFileName = regexp.MustCompile(`^bingebandit-[0-9]{8}-[0-9]{6}\.db$`)
 
 func (d Deps) optimizeDatabase(ctx context.Context) (string, error) {
-	return d.Store.Optimize(ctx)
+	return d.Store.Optimize(ctx, LocalBackups(d.BackupDir())...)
+}
+
+// LocalBackups lists the backups in dir, newest first.
+func LocalBackups(dir string) []string {
+	matches, _ := filepath.Glob(filepath.Join(dir, "bingebandit-*.db"))
+	var out []string
+	for _, m := range matches {
+		if BackupFileName.MatchString(filepath.Base(m)) {
+			out = append(out, m)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(out)))
+	return out
 }
 
 func (d Deps) cleanCache(ctx context.Context) (string, error) {

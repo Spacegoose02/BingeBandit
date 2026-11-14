@@ -347,6 +347,8 @@ Admins with **push notifications** on (see Browsers and phones) get these on the
 
 **Server → Tasks** lists background jobs such as library scans, guide refreshes, metadata refreshes and database backups, with how often each runs and a **Run now** button. Backups are kept locally and can also be copied to S3-compatible cloud storage. **Restore a backup** is at the bottom of this page.
 
+If the database file gets damaged, admins see a banner on every page. Run **Optimize database**: it rebuilds damaged indexes, and if a table is damaged it rebuilds the database from every row that still reads and fills the rest from the newest good backup, keeping the damaged file as `damaged-<date>.db` next to it. Restoring a backup also works on a damaged database (the damaged one is kept in the backup folder as `damaged-<date>.db`).
+
 ![Scheduled tasks](screenshots/admin-tasks.webp)
 
 ### Plugins

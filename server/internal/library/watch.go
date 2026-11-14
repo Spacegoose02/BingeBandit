@@ -49,6 +49,9 @@ type watcher struct {
 	mu    sync.Mutex
 	fw    *fsnotify.Watcher
 	roots string // fingerprint of the watched library roots
+	// failed is the last error starting the watch, logged once rather
+	// than at every retry.
+	failed string
 
 	pending map[int64]map[string]bool // library → changed folders
 	timers  map[int64]*time.Timer
@@ -101,9 +104,14 @@ func (w *watcher) sync() {
 
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Printf("watch: %v", err)
+		// Retried every rewatchEvery; say so once.
+		if msg := err.Error(); msg != w.failed {
+			w.failed = msg
+			log.Printf("watch: couldn't start watching library folders (%v); scheduled scans still pick up changes.%s", err, watchHint(err))
+		}
 		return
 	}
+	w.failed = ""
 	n := 0
 	for _, r := range roots {
 		n += addTree(fw, r)
@@ -113,6 +121,16 @@ func (w *watcher) sync() {
 	w.mu.Unlock()
 	log.Printf("watch: watching %d folders in %d library locations for changes", n, len(roots))
 	go w.loop(fw)
+}
+
+// watchHint explains the usual cause of a failure to start watching:
+// inotify instances are limited per user across the whole host (every
+// container running as the same user shares them), 128 by default.
+func watchHint(err error) string {
+	if !strings.Contains(err.Error(), "too many open files") {
+		return ""
+	}
+	return " The host has run out of inotify instances; raise fs.inotify.max_user_instances on the host (e.g. sysctl -w fs.inotify.max_user_instances=512; on Unraid, Tips and Tweaks has a setting) and restart the container."
 }
 
 // addTree watches dir and every non-skipped folder below it.

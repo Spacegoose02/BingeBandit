@@ -70,6 +70,16 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Damaged tables are salvaged, and restoring over a damaged database works (2026-11-14, no migration)
+
+Michael's damage turned out to be in the `items` table itself, so Optimize database said "restore a backup", and restoring the Nov 8 backup answered 500: `restoreFrom` first saves the current database with `VACUUM INTO`, which reads every row and fails on a damaged file. Clearing the damaged table (`DELETE FROM items`) would have failed next. He got back up by stopping the container and copying the backup over `bingebandit.db` by hand.
+
+- **Page copies** (`store/salvage.go`): `copyPages` and `restorePages` use SQLite's online backup through the modernc driver (`conn.Raw` → `NewBackup` / `NewRestore`). They copy pages without reading the b-trees, so they work on a damaged file, and other pooled connections see the new contents on their next statement.
+- **Restore over damage:** `restoreFrom` falls back to `Store.SaveDamagedCopy` (`damaged-<time>.db` in the backup folder; not named like a backup, so it isn't listed and doesn't push a good backup out of rotation). `Store.Restore` runs `quick_check(1)` and, on damage, `restoreOverDamaged` replaces the file page by page from the checked, migrated copy and keeps the admin's session.
+- **Salvage** (`Store.salvage`, from `Optimize` when `rebuildIndexes` finds a damaged table or its VACUUM hits corruption): page copy of the damaged file to `damaged-<time>.db` next to the database; a fresh file with the same schema, page size and `user_version`; every table copied `NOT INDEXED`; a damaged table row by row (ids from scans up to the damage from both ends and from every index, then a lookup per id, each its own statement because SQLite rolls back a whole transaction on a damaged page); missing rows of damaged tables filled from the newest backup that passes `checkBackup` (`tasks.LocalBackups`, migrated copy, shared columns, `INSERT OR IGNORE`); AUTOINCREMENT counters kept; rows left dangling by lost ones removed (`PRAGMA foreign_key_check`, up to 10 passes); triggers after the copy; integrity check; then `restorePages` over the live file. Rows deleted since the backup can come back; a scan removes those whose files are gone.
+- **Folder watching:** "couldn't initialize inotify: too many open files" is the host's `fs.inotify.max_user_instances` (128 by default, shared by every container running as the same user), not a leak here: a failed `NewWatcher` holds nothing. It's now logged once per distinct error with the fix, not every 2 minutes.
+- **Tested:** `go test ./...` with new `TestOptimizeSalvagesDamagedTable` (3,000 movies, one items leaf page overwritten: 2,987 read, 13 from the backup, a user added after the backup kept), `TestOptimizeSalvagesWithoutBackup`, `TestOptimizeSalvagesWhenIndexRebuildFails` and `TestRestoreOverDamagedDatabase`. Not tried on Michael's database.
+
 ## End credits count as watched (2026-11-14, no migration)
 
 Michael stopped Below S1 E1 in its end credits (about 93%, converting in the web player) and it stayed on Continue Watching.
