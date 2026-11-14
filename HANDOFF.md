@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-13. Latest release v0.52.0, 58 schema migrations._
+_Last updated: 2026-11-14. Latest release v0.52.0, 58 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,14 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Damaged database no longer says every season is missing; Optimize database repairs damaged indexes (2026-11-14, no migration)
+
+Michael saw "Seasons 1, 2, … 29 aren't here yet" under South Park with every season in the library. His server's log was full of `database disk image is malformed (11)` (Cinemask collections, custom channels, the ratings task): the SQLite file is damaged. With planner statistics the season count reads `items_library_kind`, so it failed, and `ShowSeasons` swallowed the error and returned an empty map, which every caller took as "nothing here". Every show on his server read the same way.
+
+- **`store.ShowSeasons`** now returns `(map, error)`, checks `rows.Err()` and fails on a bad row. `titleInfo` leaves `seasons` out (and logs) when it can't count, so the web's missing-seasons panel and the TV's Request button stay hidden; `serverCovers` lets the request through; `offerNextSeason` and `RequestCovered` do nothing.
+- **Optimize database** (`store.Optimize`) starts with `PRAGMA integrity_check(5)`. On damage it checks every table reads in full `NOT INDEXED` (if not: error, restore a backup, nothing changed), then `rebuildIndexes`: drop the index rows from `sqlite_schema` with `writable_schema` (REINDEX and DROP INDEX read the damaged pages and fail), bump `schema_version`, VACUUM (copies only tables, leaves the damaged pages behind), and create the indexes again from their saved SQL. A second integrity check must pass; the result starts "repaired damaged indexes".
+- **Tested:** `go test ./...` with new `TestDamagedIndexIsReportedAndRepaired` (overwrites the items indexes' root pages in a real file). Not tried on Michael's database; if his damage is in a table, the task says to restore a backup.
 
 ## Bigger items from the TV and server review (2026-11-13, no migration)
 

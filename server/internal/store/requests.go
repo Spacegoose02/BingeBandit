@@ -365,8 +365,8 @@ func (s *Store) ArrivedRequests() ([]*TitleRequest, error) {
 // RequestCovered tells whether the server has everything t asks for.
 func (s *Store) RequestCovered(t *TitleRequest) bool {
 	if t.Kind == "show" {
-		have := s.ShowSeasons(t.TMDBID)
-		if len(have) == 0 {
+		have, err := s.ShowSeasons(t.TMDBID)
+		if err != nil || len(have) == 0 {
 			return false
 		}
 		for _, n := range t.Seasons {
@@ -379,23 +379,28 @@ func (s *Store) RequestCovered(t *TitleRequest) bool {
 }
 
 // ShowSeasons counts the episodes the server has of a show (by TMDB id) in
-// each season, across libraries.
-func (s *Store) ShowSeasons(tmdbID int64) map[int]int {
+// each season, across libraries. An error means the counts couldn't be read
+// (a damaged database, say), not that the server has none.
+func (s *Store) ShowSeasons(tmdbID int64) (map[int]int, error) {
 	out := map[int]int{}
 	rows, err := s.db.Query(`SELECT e.season_number, COUNT(*) FROM items e JOIN items sh ON sh.id = e.show_id
 		WHERE sh.kind = 'show' AND sh.tmdb_id = ? AND e.kind = 'episode' AND e.season_number IS NOT NULL
 		GROUP BY e.season_number`, tmdbID)
 	if err != nil {
-		return out
+		return nil, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var season, n int
-		if rows.Scan(&season, &n) == nil {
-			out[season] = n
+		if err := rows.Scan(&season, &n); err != nil {
+			return nil, err
 		}
+		out[season] = n
 	}
-	return out
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Has4K tells whether a movie, or any episode of a show, has a file 2160
