@@ -229,10 +229,41 @@ func rebuildIndexes(ctx context.Context, conn *sql.Conn, retry func(string) erro
 	return nil
 }
 
-// integrityProblem runs SQLite's integrity check and returns its first
-// complaint, or "" when the database is sound.
+// IsCorrupt reports whether err is SQLite saying the database file is
+// damaged (SQLITE_CORRUPT or SQLITE_NOTADB).
+func IsCorrupt(err error) bool {
+	var coded interface{ Code() int }
+	if errors.As(err, &coded) {
+		c := coded.Code() & 0xff
+		return c == 11 || c == 26
+	}
+	return err != nil && strings.Contains(err.Error(), "database disk image is malformed")
+}
+
+// CheckIntegrity runs SQLite's quick check (the file's structure, without
+// comparing every index to its table) and returns its first complaints, or
+// "" when the database is sound.
+func (s *Store) CheckIntegrity(ctx context.Context) (string, error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	problem := checkProblem(ctx, conn, `PRAGMA quick_check(5)`)
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+	return problem, nil
+}
+
+// integrityProblem runs SQLite's full integrity check and returns its first
+// complaints, or "" when the database is sound.
 func integrityProblem(ctx context.Context, conn *sql.Conn) string {
-	rows, err := conn.QueryContext(ctx, `PRAGMA integrity_check(5)`)
+	return checkProblem(ctx, conn, `PRAGMA integrity_check(5)`)
+}
+
+func checkProblem(ctx context.Context, conn *sql.Conn, pragma string) string {
+	rows, err := conn.QueryContext(ctx, pragma)
 	if err != nil {
 		return err.Error()
 	}

@@ -326,6 +326,9 @@ a.person-card:hover .card-title { color: var(--accent); }
 .panel.form { gap: 14px; }
 .notice { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; }
 .notice a { color: var(--accent); text-decoration: underline; }
+.notice.danger { background: color-mix(in srgb, var(--danger) 12%, var(--surface)); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.server-problem { display: flex; gap: 10px; align-items: flex-start; margin: 16px 24px 0; }
+.server-problem > svg { color: var(--danger); flex: none; margin-top: 2px; }
 .notice.warn { background: color-mix(in srgb, var(--warn) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
 .form-error-text { color: var(--danger); }
 .disk-bar { max-width: 420px; }
@@ -1087,6 +1090,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
   .user-menu { bottom: 60px; left: auto; right: 0; }
   .notify-panel { position: fixed; bottom: 72px; left: auto; right: 12px; }
   .main { padding-bottom: 72px; }
+  .server-problem { margin: 12px 16px 0; }
   .hero { height: 70vh; min-height: 420px; }
   .hero-body { bottom: 14%; }
   .hero-dots { display: none; }

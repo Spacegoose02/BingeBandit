@@ -76,13 +76,12 @@ type backupFile struct {
 
 var backupName = tasks.BackupFileName
 
-// listBackups lists the database backups in the backup folder, newest first.
-func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
+// backupFiles lists the backups in the backup folder, newest first.
+func (s *Server) backupFiles() (string, []backupFile, error) {
 	dir := tasks.BackupDir(s.Store, s.DataDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
+		return dir, nil, err
 	}
 	out := []backupFile{}
 	for _, e := range entries {
@@ -95,6 +94,16 @@ func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
 	}
 	// Names carry the time, so they sort newest first in reverse.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	return dir, out, nil
+}
+
+// listBackups lists the database backups in the backup folder, newest first.
+func (s *Server) listBackups(w http.ResponseWriter, r *http.Request) {
+	dir, out, err := s.backupFiles()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	res := map[string]any{"dir": dir, "backups": out}
 	if remote := tasks.RemoteBackups(s.Store); remote.Configured() {
 		res["bucket"] = remote.Bucket

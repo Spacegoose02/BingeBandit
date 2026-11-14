@@ -385,6 +385,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Delete("/discover/{id}", s.deleteDiscoverSource)
 				r.Get("/system", s.system)
 				r.Get("/health", s.adminHealth)
+				r.Get("/status", s.adminStatus)
 				r.Post("/alerts/test", s.testAlerts)
 				r.Get("/stats", s.stats)
 				r.Get("/activity", s.activity)

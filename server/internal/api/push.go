@@ -86,6 +86,11 @@ type pushMessage struct {
 // notify adds n to the user's notifications and pushes it to their devices.
 func (s *Server) notify(n *store.Notification) error {
 	if err := s.Store.AddNotification(n); err != nil {
+		// Still push it: a server alert about a damaged database can't be
+		// saved, but the phone or browser can still show it.
+		if n.Kind == "server" {
+			go s.push(n.UserID, pushMessage{Kind: n.Kind, Title: n.Title, Body: n.Body, Link: n.Link})
+		}
 		return err
 	}
 	msg := pushMessage{Kind: n.Kind, Title: n.Title, Body: n.Body, Link: n.Link, Image: n.Image}

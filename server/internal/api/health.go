@@ -37,7 +37,10 @@ type healthState struct {
 
 	mu      sync.Mutex
 	offline map[string]bool // folder path → offline at the last check
-	low     map[string]bool // folder path → nearly full at the last check
+	// dbProblem is the damage the last database check found, "" when none.
+	dbProblem   string
+	dbCheckedAt time.Time       // when dbProblem was last decided
+	low         map[string]bool // folder path → nearly full at the last check
 
 	releaseMu  sync.Mutex
 	release    *serverRelease
@@ -269,6 +272,7 @@ func (s *Server) RunHealth(ctx context.Context) {
 		return
 	case <-time.After(time.Minute):
 	}
+	go s.checkDatabase(ctx)
 	t := time.NewTicker(healthInterval)
 	defer t.Stop()
 	var updates time.Time
@@ -398,12 +402,31 @@ func fetchServerRelease(ctx context.Context, repo string) (*serverRelease, error
 	return &serverRelease{Version: strings.TrimPrefix(rel.TagName, "v"), URL: rel.HTMLURL, PublishedAt: rel.PublishedAt, Notes: notes}, nil
 }
 
-// TaskDone is the scheduler's hook: a failed backup is an alert.
+// TaskDone is the scheduler's hook: a failed backup or database check is
+// an alert, and a clean one clears a damaged-database warning.
 func (s *Server) TaskDone(t *tasks.Task, result string, err error) {
-	if t.ID != "backup_database" || err == nil {
-		return
+	switch t.ID {
+	case "backup_database":
+		if err == nil {
+			s.setDatabaseProblem("") // the backup's copy read every table
+			return
+		}
+		if store.IsCorrupt(err) {
+			s.databaseDamaged(err.Error())
+			return
+		}
+		s.sendAlert(alert{Kind: "backup", Title: "The database backup failed", Body: err.Error() + s.newestBackupNote(), Link: "/admin/tasks", Problem: true})
+	case "optimize_database":
+		if err == nil {
+			s.setDatabaseProblem("") // it checked the whole file first
+			return
+		}
+		if store.IsCorrupt(err) || strings.Contains(err.Error(), "database is damaged") {
+			s.databaseDamaged(err.Error())
+			return
+		}
+		s.sendAlert(alert{Kind: "backup", Title: "Optimize database failed", Body: err.Error(), Link: "/admin/tasks", Problem: true})
 	}
-	s.sendAlert(alert{Kind: "backup", Title: "The database backup failed", Body: err.Error(), Link: "/admin/tasks", Problem: true})
 }
 
 // alertEvent turns server events into admin alerts.
@@ -482,6 +505,7 @@ func (s *Server) adminHealth(w http.ResponseWriter, r *http.Request) {
 		},
 		"tasks":    taskList,
 		"alerts":   s.alerts.recent(),
+		"problems": s.serverProblems(),
 		"channels": alertChannelsFrom(s.Store.Setting).names(),
 	})
 }
