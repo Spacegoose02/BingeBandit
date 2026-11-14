@@ -321,9 +321,12 @@ function PlayerView({
     if (id) api.del(`/api/transcode/${id}`, { keepalive: true }).catch(() => undefined)
   }, [])
 
+  // React has already let go of videoRef when the player's cleanup runs, so
+  // the last report (leaving with Back) keeps the element here.
+  const lastVideoRef = useRef<HTMLVideoElement | null>(null)
   const report = useCallback(
     (stopped = false, finished = false) => {
-      const video = videoRef.current
+      const video = videoRef.current ?? lastVideoRef.current
       if (!video || !file || !startedRef.current) return
       api
         .post(
@@ -333,7 +336,7 @@ function PlayerView({
             itemId: item.id,
             fileId: file.id,
             // Skipping the credits counts as finishing, wherever they start.
-            position: video.ended || finished ? duration : position(),
+            position: video.ended || finished ? duration : offsetRef.current + video.currentTime,
             duration,
             paused: video.paused,
             stopped,
@@ -489,6 +492,7 @@ function PlayerView({
   // First load, and cleanup when leaving the player.
   useEffect(() => {
     if (!file) return
+    lastVideoRef.current = videoRef.current
     load(startAt, choiceRef.current)
     // Closing the tab or reloading skips React cleanup; pagehide still fires.
     const onHide = () => {

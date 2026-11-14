@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-13. Latest release v0.52.0, 58 schema migrations._
+_Last updated: 2026-11-14. Latest release v0.52.0, 58 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## End credits count as watched (2026-11-14, no migration)
+
+Michael stopped Below S1 E1 in its end credits (about 93%, converting in the web player) and it stayed on Continue Watching.
+
+- **Credits finish it** (`store.SaveProgress`, `inEndCredits`): a position at or past the item's credits marker counts as watched, as well as passing the "count as watched after" percentage, so long credits or a raised setting don't leave it half watched. A credits marker in the first half of the runtime doesn't count.
+- **Web player's last report** (`Player.tsx`): React clears `videoRef` before the player's cleanup runs, so leaving with Back never sent the final (stopped) report: the last saved position was up to 10 s old and Now Playing waited to time out. `lastVideoRef` keeps the element for that report.
+- **Continue Watching cards show a check** when the card is a finished episode (`WideCard` has the `Badge` now): a caught-up show stays on the row with the episode just finished (the Mickey Mouse Clubhouse decision), and the check says it did count.
+- PR #222 (credits detection) and #223 (start-up) didn't touch watched marking.
+- **Tested:** `go test ./internal/store ./internal/api` with new `TestEndCreditsCountAsWatched`; web `tsc`. Not tried in a browser.
 
 ## Bigger items from the TV and server review (2026-11-13, no migration)
 

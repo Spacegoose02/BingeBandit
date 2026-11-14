@@ -12,10 +12,11 @@ func (s *Store) WatchedFraction() float64 {
 	return float64(n) / 100
 }
 
-// SaveProgress records a playback position. Crossing WatchedFraction marks
-// the item watched and resets the position so it leaves Continue Watching.
+// SaveProgress records a playback position. Crossing WatchedFraction, or
+// reaching the end credits, marks the item watched and resets the position
+// so it leaves Continue Watching.
 func (s *Store) SaveProgress(uid, itemID int64, position, duration float64) (bool, error) {
-	completed := duration > 0 && position/duration >= s.WatchedFraction()
+	completed := duration > 0 && (position/duration >= s.WatchedFraction() || s.inEndCredits(itemID, position, duration))
 	if completed {
 		position = 0
 	}
@@ -51,4 +52,16 @@ func (s *Store) SetWatched(uid int64, itemIDs []int64, watched bool) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// inEndCredits reports whether position is in the item's end credits. Long
+// credits can start before the "count as watched after" point (an episode
+// whose credits roll at 88%, or a setting raised to 95%), and someone who
+// stops once they start has finished it. A credits marker in the first half
+// isn't end credits (a cold open's titles, or a bad detection), so it
+// doesn't count.
+func (s *Store) inEndCredits(itemID int64, position, duration float64) bool {
+	var start float64
+	err := s.db.QueryRow(`SELECT start_at FROM markers WHERE item_id = ? AND kind = 'credits'`, itemID).Scan(&start)
+	return err == nil && start >= duration/2 && position >= start
 }
