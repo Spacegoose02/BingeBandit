@@ -83,7 +83,11 @@ var (
 // needs the database to itself for a moment; if other work keeps it busy
 // past the retries, compaction is skipped (statistics are still updated)
 // and the result says so, rather than failing the run.
-func (s *Store) Optimize(ctx context.Context) (string, error) {
+//
+// A damaged database is repaired first: damaged indexes are rebuilt, and a
+// damaged table is salvaged, with the rows that no longer read filled from
+// the first sound backup in fallbacks (newest first).
+func (s *Store) Optimize(ctx context.Context, fallbacks ...string) (string, error) {
 	s.heavy.Lock()
 	defer s.heavy.Unlock()
 	conn, err := s.db.Conn(ctx)
@@ -113,17 +117,30 @@ func (s *Store) Optimize(ctx context.Context) (string, error) {
 	// A damaged index makes some queries fail with "database disk image is
 	// malformed" while the rest work, e.g. every season of every show
 	// reading as missing. Rebuilding the indexes from the tables fixes
-	// that; damage to the tables themselves needs a backup.
-	repaired := false
+	// that. Damage to the tables themselves needs a salvage.
+	repaired := ""
 	if problem := integrityProblem(ctx, conn); problem != "" {
 		slog.Warn("database damaged; rebuilding its indexes", "problem", problem)
-		if err := rebuildIndexes(ctx, conn, retry); err != nil {
+		err := rebuildIndexes(ctx, conn, retry)
+		var tableErr *errTableDamaged
+		switch {
+		case errors.As(err, &tableErr) || IsCorrupt(err):
+			// A damaged table, or damage VACUUM trips over that the table
+			// checks didn't (the free list, say).
+			slog.Warn("rebuilding the indexes can't repair the database; salvaging it", "err", err)
+			summary, err := s.salvage(ctx, conn, fallbacks)
+			if err != nil {
+				return "", fmt.Errorf("the database is damaged (%s) and salvaging it failed (%v); restore a backup", problem, err)
+			}
+			repaired = summary
+		case err != nil:
 			return "", fmt.Errorf("the database is damaged (%s) and rebuilding its indexes failed (%v); restore a backup", problem, err)
+		default:
+			repaired = "repaired damaged indexes"
 		}
 		if still := integrityProblem(ctx, conn); still != "" {
-			return "", fmt.Errorf("the database is damaged (%s) and rebuilding its indexes didn't fix it; restore a backup", still)
+			return "", fmt.Errorf("the database is damaged (%s) and the repair didn't fix it (%s); restore a backup", problem, still)
 		}
-		repaired = true
 	}
 	for _, q := range []string{`PRAGMA optimize`, `ANALYZE`} {
 		if err := retry(q); err != nil {
@@ -140,8 +157,8 @@ func (s *Store) Optimize(ctx context.Context) (string, error) {
 	// Reports busy in its result row rather than failing; a partial
 	// checkpoint is fine, the next one finishes it.
 	conn.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`)
-	if repaired {
-		result = "repaired damaged indexes, " + result
+	if repaired != "" {
+		result = repaired + "; " + result
 	}
 	return result, nil
 }
@@ -176,7 +193,7 @@ func rebuildIndexes(ctx context.Context, conn *sql.Conn, retry func(string) erro
 		var n int64
 		q := `SELECT COUNT(*) FROM "` + strings.ReplaceAll(name, `"`, `""`) + `" NOT INDEXED`
 		if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
-			return fmt.Errorf("table %s is damaged too: %w", name, err)
+			return &errTableDamaged{name, err}
 		}
 	}
 
@@ -459,6 +476,12 @@ func (s *Store) Restore(ctx context.Context, path, keepToken string) error {
 	}
 	defer conn.ExecContext(context.Background(), `DETACH DATABASE bk`)
 
+	// Clearing a damaged table fails, so a damaged database is replaced
+	// page by page instead of row by row.
+	if problem := checkProblem(ctx, conn, `PRAGMA quick_check(1)`); problem != "" {
+		return s.restoreOverDamaged(ctx, conn, tmpPath, keepToken)
+	}
+
 	tables, err := tableNames(ctx, conn, "main")
 	if err != nil {
 		return err
@@ -510,6 +533,37 @@ func (s *Store) Restore(ctx context.Context, path, keepToken string) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	s.loadOverlayTag()
+	return nil
+}
+
+// restoreOverDamaged replaces a damaged live database with the checked
+// backup at path, keeping the restoring admin signed in when the backup
+// has the same admin.
+func (s *Store) restoreOverDamaged(ctx context.Context, conn *sql.Conn, path, keepToken string) error {
+	type session struct {
+		userID               int64
+		username, device, ip string
+		created, lastSeen    int64
+	}
+	var keep session
+	keepErr := conn.QueryRowContext(ctx, `SELECT s.user_id, u.username, s.device, s.ip, s.created_at, s.last_seen
+		FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`, hashToken(keepToken)).
+		Scan(&keep.userID, &keep.username, &keep.device, &keep.ip, &keep.created, &keep.lastSeen)
+	// Detach first: the live connection can't be copied over while it has
+	// the backup attached.
+	conn.ExecContext(ctx, `DETACH DATABASE bk`)
+	s.heavy.Lock()
+	err := restorePages(ctx, conn, path)
+	s.heavy.Unlock()
+	if err != nil {
+		return fmt.Errorf("replace the damaged database: %w", err)
+	}
+	if keepErr == nil && keepToken != "" {
+		conn.ExecContext(ctx, `INSERT OR IGNORE INTO sessions (token_hash, user_id, device, ip, created_at, last_seen)
+			SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ? AND username = ? AND is_admin = 1)`,
+			hashToken(keepToken), keep.userID, keep.device, keep.ip, keep.created, keep.lastSeen, keep.userID, keep.username)
 	}
 	s.loadOverlayTag()
 	return nil
