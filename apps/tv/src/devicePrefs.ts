@@ -151,3 +151,27 @@ export function setMatchFrameRate(on: boolean) {
   frameRateOn = on
   AsyncStorage.setItem(FRAME_RATE_KEY, on ? '1' : '0').catch(() => undefined)
 }
+
+// "Are you still watching?": how many episodes may start by themselves in a
+// row before the player asks; 0 never asks. Kept per device: a bedroom TV
+// left on wants a check, a living-room binge may not.
+const STILL_WATCHING_KEY = 'bb.stillWatchingAfter'
+export const STILL_WATCHING_CHOICES = [3, 4, 5, 6, 8, 10, 0, 1, 2]
+let stillAfter = 3
+AsyncStorage.getItem(STILL_WATCHING_KEY).then(
+  (v) => {
+    const n = Number(v)
+    if (v !== null && Number.isInteger(n) && n >= 0) stillAfter = n
+  },
+  () => undefined,
+)
+
+/** Episodes in a row before "Are you still watching?"; 0 when it's off. */
+export function stillWatchingAfter(): number {
+  return stillAfter
+}
+
+export function setStillWatchingAfter(n: number) {
+  stillAfter = n
+  AsyncStorage.setItem(STILL_WATCHING_KEY, String(n)).catch(() => undefined)
+}

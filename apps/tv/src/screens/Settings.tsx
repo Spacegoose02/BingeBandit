@@ -3,7 +3,7 @@ import { AppState, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, Vie
 import { ApiError, api, current, saveSession } from '../api'
 import { adbGrant, autoLaunchState, openAutoLaunchPermission, setAutoLaunch, type AutoLaunchState } from '../autoLaunch'
 import { Button, Focusable } from '../components'
-import { deviceId, hueArea, hueSyncOn, hueType, matchFrameRateOn, setHueArea, setHueSync, setHueType, setMatchFrameRate, type MenuPosition } from '../devicePrefs'
+import { deviceId, hueArea, hueSyncOn, hueType, matchFrameRateOn, setHueArea, setHueSync, setHueType, setMatchFrameRate, setStillWatchingAfter, STILL_WATCHING_CHOICES, stillWatchingAfter, type MenuPosition } from '../devicePrefs'
 import { fetchGameLightsSetup, fetchHueMode, saveGameLights, saveGameLightsDevice, saveHueMode, type GameLightsDevice, type GameLightsSetup, type HueMode } from '../lights'
 import { discoverHubs, hubAreas, LinkButton, loadHub, pairHub, refreshGameLights, saveHub, type Hub, type HubArea } from '../hue'
 import { Icon } from '../icons'
@@ -120,6 +120,12 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
   const hue = hueMode !== null && hueMode !== 'off'
   const [hueOn, setHueOn] = useState(hueSyncOn)
   const [frameRate, setFrameRate] = useState(matchFrameRateOn)
+  const [stillAfter, setStillAfter] = useState(stillWatchingAfter)
+  const nextStillAfter = () => {
+    const n = STILL_WATCHING_CHOICES[(STILL_WATCHING_CHOICES.indexOf(stillAfter) + 1) % STILL_WATCHING_CHOICES.length]
+    setStillWatchingAfter(n)
+    setStillAfter(n)
+  }
   useEffect(() => {
     fetchHueMode().then(setHueMode)
   }, [])
@@ -320,6 +326,17 @@ function Device({ update, menu, onSignOut, onSwitchProfile }: { update: AppRelea
           </Text>
         </Focusable>
       )}
+      <Focusable onPress={nextStillAfter} style={st.option}>
+        <Text style={st.value}>
+          Are you still watching?: {stillAfter === 0 ? 'Off' : stillAfter === 1 ? 'After every episode' : `After ${stillAfter} episodes`}
+        </Text>
+        <Text style={st.hint}>
+          {stillAfter === 0
+            ? 'Episodes keep playing one after another until you stop them.'
+            : `After ${stillAfter === 1 ? 'an episode' : `${stillAfter} episodes in a row`} with no button pressed, the next one waits until you say you're still watching.`}{' '}
+          {isPhone ? 'Tap' : 'Press OK'} for the next choice.
+        </Text>
+      </Focusable>
       {auto && (auto.canAsk || !auto.needsPermission) && (
         <Focusable onPress={toggleAuto} style={st.option}>
           <Text style={st.value}>Open BingeBandit when this TV starts: {auto.on ? 'On' : 'Off'}</Text>

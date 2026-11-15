@@ -88,6 +88,8 @@ sub render()
         end if
     end if
     if hasCode and unlocked then actions.Push({ label: "Lock now", method: "POST", path: "/api/me/passcode/lock", done: "Locked." })
+    ' Kept on this Roku, not the account, so it needs no passcode.
+    actions.Push({ label: "Are you still watching?: " + stillWatchingLabel(stillWatchingAfter()), kind: "stillWatching" })
     if owner
         for each mem in m.members
             if not isTrue(mem.isOwner)
@@ -123,11 +125,32 @@ sub onOption()
     a = m.actions[m.options.itemSelected]
     if a = invalid then return
     showMessage("", false)
-    if getOr(a, "kind", "") = "new"
+    if getOr(a, "kind", "") = "stillWatching"
+        nextStillWatching()
+    else if getOr(a, "kind", "") = "new"
         openPad({ kind: "new", action: a }, a.title)
     else
         send({ method: a.method, path: a.path, body: getOr(a, "body", invalid), done: a.done })
     end if
+end sub
+
+' Steps through the choices: 3, 4, 5, 6, 8, 10, Off, every episode, 2.
+sub nextStillWatching()
+    choices = [3, 4, 5, 6, 8, 10, 0, 1, 2]
+    now = stillWatchingAfter()
+    n = 3
+    for i = 0 to choices.Count() - 1
+        if choices[i] = now then n = choices[(i + 1) mod choices.Count()]
+    end for
+    setStillWatchingAfter(n)
+    if n = 0
+        showMessage("Episodes keep playing one after another until you stop them.", false)
+    else if n = 1
+        showMessage("After each episode, the next waits until you press OK.", false)
+    else
+        showMessage("After " + n.ToStr() + " episodes in a row with no button pressed, the next waits for OK.", false)
+    end if
+    render()
 end sub
 
 ' --- Sending a change --------------------------------------------------------

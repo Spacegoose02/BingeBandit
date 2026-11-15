@@ -11,7 +11,7 @@ import { Profiles } from '../components/Profiles'
 import { PushSettings } from '../components/PushSettings'
 import { useApi, useDocumentTitle } from '../hooks'
 import { commonLanguages, languageName } from '../format'
-import { hueArea, hueSyncOn, setHueArea, setHueSync } from '../devicePrefs'
+import { hueArea, hueSyncOn, setHueArea, setHueSync, setStillWatchingAfter, stillWatchingAfter } from '../devicePrefs'
 import { hueModeNames, useHueMode, type HueMode } from '../lights'
 import { createPasskey, passkeyErrorMessage, passkeysSupported } from '../passkeys'
 import type { APIKey, DeviceSession, Identity, Passkey, PluginLinks, Prefs } from '../types'
@@ -891,6 +891,7 @@ function PlaybackPrefs() {
         <input type="checkbox" checked={p.autoPlayNext} onChange={(e) => set('autoPlayNext', e.target.checked)} />
         Play the next episode automatically
       </label>
+      {p.autoPlayNext && <StillWatchingPick />}
       <label className="check">
         <input type="checkbox" checked={p.notifyEpisodes} onChange={(e) => set('notifyEpisodes', e.target.checked)} />
         Tell me when new episodes arrive for shows I watch or have on my watchlist
@@ -1013,6 +1014,32 @@ export default function Account() {
         <button className="btn btn-primary">{hasPassword ? 'Update password' : 'Set password'}</button>
       </form>
     </div>
+  )
+}
+
+/** "Are you still watching?": after how many episodes in a row it asks, on this browser or TV. */
+function StillWatchingPick() {
+  const [after, setAfter] = useState(stillWatchingAfter)
+  return (
+    <label>
+      Ask “Are you still watching?” (this device)
+      <select
+        value={after}
+        onChange={(e) => {
+          const n = Number(e.target.value)
+          setStillWatchingAfter(n)
+          setAfter(n)
+        }}
+      >
+        <option value={0}>Never</option>
+        <option value={1}>After every episode</option>
+        {[2, 3, 4, 5, 6, 8, 10].map((n) => (
+          <option key={n} value={n}>
+            After {n} episodes in a row{n === 3 ? ' (default)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

@@ -60,6 +60,31 @@ function currentSession() as object
     return { server: m.global.server, alternates: m.global.alternates, serverId: m.global.serverId, token: m.global.token, user: m.global.user, profileChosen: m.global.profileChosen }
 end function
 
+' --- This TV ------------------------------------------------------------------
+
+' "Are you still watching?": how many episodes may start by themselves in a
+' row before the player waits for OK; 0 never asks. Kept on this Roku, 3
+' until changed in Settings.
+function stillWatchingAfter() as integer
+    sec = CreateObject("roRegistrySection", "bingebandit")
+    if not sec.Exists("stillWatchingAfter") then return 3
+    n = sec.Read("stillWatchingAfter").ToInt()
+    if n < 0 then return 3
+    return n
+end function
+
+sub setStillWatchingAfter(n as integer)
+    sec = CreateObject("roRegistrySection", "bingebandit")
+    sec.Write("stillWatchingAfter", n.ToStr())
+    sec.Flush()
+end sub
+
+function stillWatchingLabel(n as integer) as string
+    if n = 0 then return "Off"
+    if n = 1 then return "After every episode"
+    return "After " + n.ToStr() + " episodes"
+end function
+
 ' --- URLs --------------------------------------------------------------------
 
 ' Adds the session token to a server path, for Posters and the Video node,
