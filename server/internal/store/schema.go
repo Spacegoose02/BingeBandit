@@ -1043,4 +1043,12 @@ DELETE FROM markers WHERE kind = 'credits' AND source = 'detected' AND item_id I
 	SELECT i.id FROM items i JOIN media_files f ON f.item_id = i.id WHERE i.kind = 'episode' AND f.duration >= 4500);
 UPDATE items SET markers_at = 0 WHERE kind = 'episode' AND id IN (SELECT item_id FROM media_files WHERE duration >= 4500);
 `,
+	// 60: problem reports about a whole season (made from one of its
+	// episodes), and the report a fetching plugin filed for one elsewhere
+	// (Cinemask's id for it, and a link to it).
+	`
+ALTER TABLE problem_reports ADD COLUMN whole_season INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE problem_reports ADD COLUMN remote_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE problem_reports ADD COLUMN remote_link TEXT NOT NULL DEFAULT '';
+`,
 }

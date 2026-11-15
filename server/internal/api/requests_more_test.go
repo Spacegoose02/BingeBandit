@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/crypto/bcrypt"
 
 	"bingebandit/internal/store"
@@ -218,6 +219,63 @@ func TestRequestsBeyondTheBasics(t *testing.T) {
 	call("dana", "GET", "/api/problems?all=1", "", &open)
 	if len(open) != 0 {
 		t.Errorf("resolved still listed: %+v", open)
+	}
+
+	// A report about the whole season, from one of its episodes.
+	var season store.ProblemReport
+	if c := call("ivy", "POST", "/api/items/"+itoa(ep)+"/problems", `{"kind":"audio","wholeSeason":true}`, &season); c != http.StatusCreated || !season.WholeSeason {
+		t.Fatalf("whole season: %d %+v", c, season)
+	}
+	if n := notes(dana.ID); len(n) == 0 || !strings.Contains(n[0].Title, "Severance season 1") {
+		t.Errorf("admin told of the season: %+v", n)
+	}
+	// The fetching pluginAPI records Cinemask's report, then says it's being fixed, then fixed.
+	pluginAPI := chi.NewRouter()
+	pluginAPI.Put("/problems/{id}", srv.pluginUpdateProblem)
+	put := func(body string, out any) int {
+		w := httptest.NewRecorder()
+		pluginAPI.ServeHTTP(w, httptest.NewRequest("PUT", "/problems/"+itoa(season.ID), strings.NewReader(body)))
+		if out != nil {
+			json.Unmarshal(w.Body.Bytes(), out)
+		}
+		return w.Code
+	}
+	var got store.ProblemReport
+	if c := put(`{"remoteId":"7","remoteLink":"http://cinemask:7979/issues"}`, &got); c != http.StatusOK || got.RemoteID != "7" || got.RemoteLink != "http://cinemask:7979/issues" || got.Status != "open" {
+		t.Fatalf("remote: %d %+v", c, got)
+	}
+	if c := put(`{"status":"fixing","reply":"Downloading a different copy"}`, &got); c != http.StatusOK || got.Status != "fixing" || got.RemoteID != "7" {
+		t.Fatalf("fixing: %d %+v", c, got)
+	}
+	var relinked store.ProblemReport
+	if c := put(`{"remoteLink":"javascript:alert(1)","remoteId":"7"}`, &relinked); c != http.StatusOK || relinked.RemoteLink != "" || relinked.RemoteID != "7" {
+		t.Errorf("only web links are kept: %+v", relinked)
+	}
+	if c := put(`{"status":"resolved","reply":"Replaced season 1"}`, nil); c != http.StatusOK {
+		t.Fatalf("resolved: %d", c)
+	}
+	if n := notes(ivy.ID); len(n) == 0 || n[0].Title != "Fixed: Severance season 1" || n[0].Body != "Replaced season 1" {
+		t.Errorf("reporter told it's fixed: %+v", n)
+	}
+
+	// A file the server can't read files a "won't play" report for whoever tried.
+	st.UpsertFile(&store.MediaFile{ItemID: ep, Path: "/media/severance-s01e01.mkv"}, 1)
+	files, _ := st.FilesForItem(ep)
+	srv.playbackFailed(files[0].ID, ivy.ID, "the file is damaged, or isn't a video ffmpeg can read")
+	srv.playbackFailed(files[0].ID, ivy.ID, "the file is damaged, or isn't a video ffmpeg can read")
+	var ivyReports []store.ProblemReport
+	call("ivy", "GET", "/api/problems", "", &ivyReports)
+	won := 0
+	for _, r := range ivyReports {
+		if r.Kind == "playback" {
+			won++
+			if !strings.Contains(r.Note, "reported this by itself") || !strings.Contains(r.Note, "damaged") {
+				t.Errorf("won't play note: %q", r.Note)
+			}
+		}
+	}
+	if won != 1 {
+		t.Errorf("won't play reports: %d in %+v", won, ivyReports)
 	}
 
 	// Cleanup: a requested movie nobody who asked has watched.

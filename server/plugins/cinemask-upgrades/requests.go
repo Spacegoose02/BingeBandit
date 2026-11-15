@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -20,8 +19,7 @@ import (
 // requests are picked up on the request.approved event and every 15
 // minutes, so ones approved while the plugin was off or Cinemask was down
 // go through later. While they download, their progress and ETA are
-// passed on every 2 minutes. A problem report an admin sends off
-// (problem.refetch) has Cinemask grab a different copy.
+// passed on every 2 minutes. Problem reports are in reports.go.
 
 // request is a title request, as the plugin API lists it.
 type request struct {
@@ -75,12 +73,14 @@ func (a *app) watchRequests(ctx context.Context) {
 	for {
 		a.sendRequests(ctx)
 		a.trackRequests(ctx)
+		a.syncReports(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		case <-p.C:
 			a.trackRequests(ctx)
+			a.syncReports(ctx)
 			continue
 		}
 	}
@@ -259,42 +259,13 @@ func progressOf(r request, monitoredID int64, downloads []Download, now time.Tim
 	return p
 }
 
-// problem is a problem report an admin sent off to be fixed.
-type problem struct {
-	ID       int64  `json:"id"`
-	Kind     string `json:"kind"`
-	ItemKind string `json:"itemKind"`
-	TMDBID   int64  `json:"tmdbId"`
-	Title    string `json:"title"`
-	Show     string `json:"showTitle"`
-	Season   *int   `json:"seasonNumber"`
-	Episode  *int   `json:"episodeNumber"`
-}
-
-func (a *app) onRefetch(ctx context.Context, data json.RawMessage) {
-	var p problem
-	if json.Unmarshal(data, &p) != nil || p.ID == 0 {
-		return
-	}
-	status, reply := "resolved", ""
-	cm, err := a.cinemask(ctx)
-	if err == nil {
-		reply, err = refetch(ctx, cm, p)
-	}
-	if err != nil {
-		status, reply = "open", "Cinemask couldn't get another copy: "+err.Error()
-	}
-	if err := a.p.Call(ctx, "PUT", "/problems/"+strconv.FormatInt(p.ID, 10), map[string]string{"status": status, "reply": reply}, nil); err != nil {
-		log.Printf("problem %d: telling BingeBandit: %v", p.ID, err)
-	}
-}
-
 // replaceable are rejections that only say the file on disk is good
 // enough, which a bad file isn't.
 var replaceable = regexp.MustCompile(`(?i)upgrade|cutoff|already|existing|on disk`)
 
 // refetch has Cinemask grab a different release of the movie or episode
-// than the ones it already got.
+// than the ones it already got. It's for reports Cinemask has no fix for
+// ("something else"); the others go through Cinemask's own report fixes.
 func refetch(ctx context.Context, cm *Cinemask, p problem) (string, error) {
 	kind := "movie"
 	sc := Scope{}

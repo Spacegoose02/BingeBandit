@@ -293,3 +293,26 @@ func TestBuildArgsTonemapForSDRScreen(t *testing.T) {
 		t.Fatalf("an SDR file was tone mapped or not copied:\n%s", args)
 	}
 }
+
+func TestUnreadableInput(t *testing.T) {
+	path := "/media/Heat (1995).mkv"
+	for _, c := range []struct {
+		stderr, why string
+	}{
+		// ffmpeg 6 and older name the file on the error line.
+		{"[matroska,webm @ 0x1] EBML header parsing failed\n" + path + ": Invalid data found when processing input", "the file is damaged, or isn't a video ffmpeg can read"},
+		{"[mov,mp4,m4a @ 0x2] moov atom not found\n" + path + ": Invalid data found when processing input", "the file is cut short (its index is missing)"},
+		// ffmpeg 7 says it over a few lines.
+		{"[in#0 @ 0x3] Error opening input: No such file or directory\nError opening input file " + path + ".\nError opening input files: No such file or directory", "the file is missing"},
+		// Not the file's fault: an encoder that won't start, or a GPU decoder.
+		{"[h264_nvenc @ 0x4] OpenEncodeSessionEx failed: unsupported device\nError while opening encoder", ""},
+		{"Error opening input file " + path + ".\nhwaccel initialisation returned error", ""},
+		// Another file (an external subtitle) that's missing isn't this one.
+		{"/media/Heat (1995).en.srt: No such file or directory", ""},
+	} {
+		why, ok := unreadableInput(c.stderr, path)
+		if ok != (c.why != "") || why != c.why {
+			t.Errorf("%q: got %q %v, want %q", c.stderr, why, ok, c.why)
+		}
+	}
+}

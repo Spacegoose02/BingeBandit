@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -131,6 +132,12 @@ type Manager struct {
 	mu         sync.Mutex
 	sessions   map[string]*Session
 	stop       chan struct{}
+
+	// OnUnreadable, when set, hears of a conversion that failed before it
+	// made any video because ffmpeg couldn't read the file (see
+	// unreadableInput), with ffmpeg's line saying why. It runs on its own
+	// goroutine.
+	OnUnreadable func(fileID, userID int64, ffmpegSaid string)
 }
 
 func NewManager(st *store.Store, ffmpeg, dataDir string) *Manager {
@@ -224,8 +231,14 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 		if s.stopped.Load() {
 			return
 		}
-		if msg := strings.TrimSpace(s.stderr.String()); err != nil || msg != "" {
+		msg := strings.TrimSpace(s.stderr.String())
+		if err != nil || msg != "" {
 			log.Printf("transcode %s exited (%v): %s", s.ID, err, msg)
+		}
+		if err != nil && m.OnUnreadable != nil && !s.hasOutput() {
+			if why, ok := unreadableInput(msg, f.Path); ok {
+				go m.OnUnreadable(f.ID, s.UserID, why)
+			}
 		}
 	}()
 	return s, nil
@@ -816,6 +829,43 @@ func (s *Session) wait() error {
 func (s *Session) hasOutput() bool {
 	m, _ := filepath.Glob(filepath.Join(s.dir, "*.ts"))
 	return len(m) > 0
+}
+
+// unreadableInputErrors are what ffmpeg says about the file itself when it
+// can't be read: cut short, damaged, gone or not really a video. ffmpeg
+// names the file on that line, which is how they're told apart from
+// settings problems (a GPU encoder that won't start fails every file).
+var unreadableInputErrors = []string{
+	"Invalid data found when processing input",
+	"No such file or directory",
+	"Error opening input",
+}
+
+// unreadableInput reports whether ffmpeg's output says it couldn't read the
+// file at path, and why in plain words.
+func unreadableInput(stderr, path string) (string, bool) {
+	if path == "" || isHWDecodeFailure(stderr) {
+		return "", false
+	}
+	found := false
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, path) && slices.ContainsFunc(unreadableInputErrors, func(e string) bool { return strings.Contains(line, e) }) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", false
+	}
+	switch {
+	case strings.Contains(stderr, "No such file or directory"):
+		return "the file is missing", true
+	case strings.Contains(stderr, "moov atom not found"):
+		return "the file is cut short (its index is missing)", true
+	case strings.Contains(stderr, "Invalid data found"):
+		return "the file is damaged, or isn't a video ffmpeg can read", true
+	}
+	return "ffmpeg couldn't open the file", true
 }
 
 // isHWDecodeFailure recognises ffmpeg giving up because the GPU (or its

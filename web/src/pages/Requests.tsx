@@ -368,17 +368,20 @@ const problemNames: Record<ProblemReport['kind'], string> = {
   audio: 'Sound',
   subtitles: 'Subtitles',
   wrong: 'Wrong file',
+  playback: 'Won’t play',
   other: 'Something else',
 }
 
 const problemPill: Record<ProblemReport['status'], [string, string]> = {
   open: ['warn', 'Open'],
-  fixing: ['', 'Getting a new copy'],
+  fixing: ['', 'Fixing…'],
   resolved: ['ok', 'Fixed'],
 }
 
 export const problemTitle = (p: ProblemReport) =>
-  p.itemKind === 'episode' && p.seasonNumber != null && p.episodeNumber != null
+  p.itemKind === 'episode' && p.wholeSeason && p.seasonNumber != null
+    ? `${p.showTitle} season ${p.seasonNumber}`
+    : p.itemKind === 'episode' && p.seasonNumber != null && p.episodeNumber != null
     ? `${p.showTitle} S${String(p.seasonNumber).padStart(2, '0')}E${String(p.episodeNumber).padStart(2, '0')}`
     : p.title
 
@@ -416,6 +419,12 @@ function Problems({ admin, onChange }: { admin: boolean; onChange: () => void })
                 </div>
                 <div className="muted small">
                   {[problemNames[p.kind], admin && p.user, p.position ? `at ${clock(p.position)}` : '', day(p.createdAt)].filter(Boolean).join(' · ')}
+                  {admin && p.remoteLink && (
+                    <>
+                      {' · '}
+                      <a href={p.remoteLink} target="_blank" rel="noreferrer">In Cinemask</a>
+                    </>
+                  )}
                 </div>
                 {p.note && <div className="small">“{p.note}”</div>}
                 {p.reply && <div className="small muted">↳ {p.reply}</div>}
@@ -423,7 +432,7 @@ function Problems({ admin, onChange }: { admin: boolean; onChange: () => void })
               <span className={`pill ${cls}`}>{label}</span>
               {admin && p.status !== 'resolved' && (
                 <>
-                  <button className="btn btn-glass btn-sm" onClick={() => act(p, 'refetch')} title="Blocklist this copy and get another">
+                  <button className="btn btn-glass btn-sm" onClick={() => act(p, 'refetch')} title={p.kind === 'subtitles' ? 'Fetch subtitles (or get another copy)' : 'Blocklist this copy and get another'}>
                     <Icon name="refresh" size={14} /> New copy
                   </button>
                   <button className="btn btn-primary btn-sm" onClick={() => act(p, 'resolve')}>Fixed</button>

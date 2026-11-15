@@ -1058,11 +1058,16 @@ export interface ProblemReport {
   itemId: number
   userId: number
   user: string
-  kind: 'video' | 'audio' | 'subtitles' | 'wrong' | 'other'
+  kind: 'video' | 'audio' | 'subtitles' | 'wrong' | 'playback' | 'other'
   note?: string
+  /** About every episode of the episode's season. */
+  wholeSeason?: boolean
   position?: number
   status: 'open' | 'fixing' | 'resolved'
   reply?: string
+  /** The report a fetching plugin filed for it elsewhere (Cinemask's), and a link to it. */
+  remoteId?: string
+  remoteLink?: string
   createdAt: number
   updatedAt: number
   title: string

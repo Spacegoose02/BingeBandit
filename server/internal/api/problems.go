@@ -15,16 +15,21 @@ import (
 )
 
 // Problem reports: anyone can say, from the player or a title's page, that
-// a movie or episode has bad picture or sound, missing subtitles or is the
-// wrong file. Admins see them on the Requests page and either answer them
-// or have the fetching plugin get a new copy (the problem.refetch event,
-// which carries the report with the title's TMDB id, season and episode).
+// a movie or episode (or an episode's whole season) has bad picture or
+// sound, missing subtitles, is the wrong file or won't play; the server
+// files "won't play" by itself when it can't read a file at all. Admins see
+// them on the Requests page and either answer them or have the fetching
+// plugin get a new copy (the problem.refetch event, which carries the
+// report with the title's TMDB id, season and episode). problem.created,
+// problem.resolved and problem.reopened let a plugin keep a report it
+// filed elsewhere (Cinemask's) in step.
 
 var problemNames = map[string]string{
 	"video":     "picture problem",
 	"audio":     "sound problem",
 	"subtitles": "subtitle problem",
 	"wrong":     "wrong file",
+	"playback":  "playback problem",
 	"other":     "problem",
 }
 
@@ -50,9 +55,10 @@ func (s *Server) reportProblem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Kind     string  `json:"kind"`
-		Note     string  `json:"note"`
-		Position float64 `json:"position"`
+		Kind        string  `json:"kind"`
+		Note        string  `json:"note"`
+		Position    float64 `json:"position"`
+		WholeSeason bool    `json:"wholeSeason"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
@@ -66,8 +72,11 @@ func (s *Server) reportProblem(w http.ResponseWriter, r *http.Request) {
 	case utf8.RuneCountInString(in.Note) > 1000:
 		writeErr(w, http.StatusBadRequest, "keep the note under 1000 characters")
 		return
+	case in.WholeSeason && (it.Kind != "episode" || it.SeasonNumber == nil):
+		writeErr(w, http.StatusBadRequest, "only an episode's report can be about its whole season")
+		return
 	}
-	p, created, err := s.Store.ReportProblem(&store.ProblemReport{ItemID: it.ID, UserID: u.ID, Kind: in.Kind, Note: in.Note, Position: max(in.Position, 0)})
+	p, created, err := s.Store.ReportProblem(&store.ProblemReport{ItemID: it.ID, UserID: u.ID, Kind: in.Kind, Note: in.Note, WholeSeason: in.WholeSeason, Position: max(in.Position, 0)})
 	if err != nil {
 		writeStoreErr(w, err)
 		return
@@ -84,6 +93,9 @@ func (s *Server) reportProblem(w http.ResponseWriter, r *http.Request) {
 }
 
 func problemTitle(p *store.ProblemReport) string {
+	if p.ItemKind == "episode" && p.WholeSeason && p.Season != nil {
+		return fmt.Sprintf("%s season %d", p.ShowTitle, *p.Season)
+	}
 	if p.ItemKind == "episode" && p.Season != nil && p.Episode != nil {
 		return fmt.Sprintf("%s S%02dE%02d", p.ShowTitle, *p.Season, *p.Episode)
 	}
@@ -168,7 +180,10 @@ func (s *Server) answerProblem(w http.ResponseWriter, r *http.Request) {
 		s.Emit("problem.refetch", p)
 		s.notifyReporter(p, "Getting a new copy of "+problemTitle(p), in.Reply)
 	case "resolve":
+		s.Emit("problem.resolved", p)
 		s.notifyReporter(p, "Fixed: "+problemTitle(p), in.Reply)
+	case "reopen":
+		s.Emit("problem.reopened", p)
 	}
 	writeJSON(w, http.StatusOK, p)
 }
@@ -215,7 +230,10 @@ func (s *Server) pluginProblems(w http.ResponseWriter, r *http.Request) {
 }
 
 // pluginUpdateProblem is the plugin's report on a refetch: resolved (a new
-// copy is on its way or in) or open again (it couldn't, with why).
+// copy is in), fixing (on its way) or open again (it couldn't, with why).
+// It also records the report the plugin filed elsewhere (remoteId and
+// remoteLink), with or without a status. The reporter hears when a plugin
+// marks it fixed.
 func (s *Server) pluginUpdateProblem(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")
 	if !ok {
@@ -228,24 +246,84 @@ func (s *Server) pluginUpdateProblem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Status string `json:"status"`
-		Reply  string `json:"reply"`
+		Status     string  `json:"status"`
+		Reply      string  `json:"reply"`
+		RemoteID   *string `json:"remoteId"`
+		RemoteLink string  `json:"remoteLink"`
 	}
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if in.Status != store.ProblemResolved && in.Status != store.ProblemOpen && in.Status != store.ProblemFixing {
+	if in.Status == "" && in.RemoteID == nil {
+		writeErr(w, http.StatusBadRequest, "send a status, a remoteId or both")
+		return
+	}
+	if in.Status != "" && in.Status != store.ProblemResolved && in.Status != store.ProblemOpen && in.Status != store.ProblemFixing {
 		writeErr(w, http.StatusBadRequest, "status must be open, fixing or resolved")
 		return
 	}
-	if len(in.Reply) > 1000 {
-		in.Reply = in.Reply[:1000]
+	if in.RemoteID != nil {
+		id, link := truncateRunes(strings.TrimSpace(*in.RemoteID), 200), strings.TrimSpace(in.RemoteLink)
+		if link != "" && !strings.HasPrefix(link, "http://") && !strings.HasPrefix(link, "https://") {
+			link = ""
+		}
+		if err := s.Store.SetProblemRemote(p.ID, id, truncateRunes(link, 500)); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
 	}
-	if err := s.Store.SetProblemStatus(p.ID, in.Status, in.Reply); err != nil {
-		writeStoreErr(w, err)
-		return
+	if in.Status != "" {
+		was := p.Status
+		if err := s.Store.SetProblemStatus(p.ID, in.Status, truncateRunes(in.Reply, 1000)); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		if in.Status == store.ProblemResolved && was != store.ProblemResolved {
+			p, _ = s.Store.ProblemReport(p.ID)
+			s.notifyReporter(p, "Fixed: "+problemTitle(p), p.Reply)
+		}
 	}
 	p, _ = s.Store.ProblemReport(p.ID)
 	writeJSON(w, http.StatusOK, p)
+}
+
+// playbackFailed files a "won't play" report for the person whose
+// conversion of a file failed before it made any video because ffmpeg
+// couldn't read the file (the stream package only calls it then; a GPU or
+// encoder problem would fail every file and isn't the file's fault). A
+// player tries a few times, so the repeats land on the same open report.
+func (s *Server) playbackFailed(fileID, userID int64, ffmpegSaid string) {
+	if userID == 0 {
+		return
+	}
+	f, err := s.Store.File(fileID)
+	if err != nil {
+		return
+	}
+	it, err := s.Store.Item(userID, f.ItemID)
+	if err != nil || (it.Kind != "movie" && it.Kind != "episode") {
+		return
+	}
+	note := "BingeBandit reported this by itself: it couldn't play the file"
+	if ffmpegSaid != "" {
+		note += " because " + ffmpegSaid
+	}
+	note += "."
+	p, created, err := s.Store.ReportProblem(&store.ProblemReport{ItemID: it.ID, UserID: userID, Kind: "playback", Note: truncateRunes(note, 1000)})
+	if err != nil || !created {
+		return
+	}
+	slog.Info("playback failed; reported a problem", "item", it.ID, "file", fileID, "report", p.ID)
+	s.Emit("problem.created", p)
+	if u, err := s.Store.UserByID(userID); err == nil {
+		s.notifyAdminsOfProblem(p, u)
+	}
+}
+
+// WatchPlaybackFailures has the transcoder report files it can't read.
+func (s *Server) WatchPlaybackFailures() {
+	if s.Transcoder != nil {
+		s.Transcoder.OnUnreadable = s.playbackFailed
+	}
 }

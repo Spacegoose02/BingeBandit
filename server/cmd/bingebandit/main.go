@@ -115,6 +115,7 @@ func main() {
 	srv.Plugins.Env = []string{"BINGEBANDIT_FFMPEG=" + cfg.FFmpeg, "BINGEBANDIT_FFPROBE=" + cfg.FFprobe}
 	srv.Plugins.ServerName = func() string { return st.Setting(store.SettingServerName) }
 	go srv.Plugins.Start(ctx)
+	srv.WatchPlaybackFailures()
 	go srv.RunNotifications(ctx)
 	go srv.RunSports(ctx)
 	go srv.RunHealth(ctx)

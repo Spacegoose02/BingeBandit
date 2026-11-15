@@ -1322,6 +1322,7 @@ function PlayerView({
           itemId={item.id}
           title={item.kind === 'episode' ? `${item.showTitle} ${episodeLabel(item)}` : item.title}
           position={reportAt}
+          season={item.kind === 'episode' ? item.seasonNumber : undefined}
           onClose={(msg) => {
             setReportAt(null)
             if (msg) setToast(msg)

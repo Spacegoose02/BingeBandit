@@ -9,23 +9,26 @@ const kinds: [ProblemReport['kind'], string, string][] = [
   ['audio', 'Sound', 'Missing, out of sync, wrong language'],
   ['subtitles', 'Subtitles', 'Missing, wrong or out of sync'],
   ['wrong', 'Wrong file', 'A different movie or episode'],
+  ['playback', 'Won’t play', 'Stops with an error or never starts'],
   ['other', 'Something else', ''],
 ]
 
 /**
- * Telling an admin something's wrong with a movie or episode. From the
- * player it also sends where you were, so they can jump to it.
+ * Telling an admin something's wrong with a movie or episode (or, from an
+ * episode, its whole season). From the player it also sends where you
+ * were, so they can jump to it.
  */
-export function ReportProblemDialog({ itemId, title, position, onClose }: { itemId: number; title: string; position?: number; onClose: (msg?: string) => void }) {
+export function ReportProblemDialog({ itemId, title, position, season, onClose }: { itemId: number; title: string; position?: number; season?: number; onClose: (msg?: string) => void }) {
   const [kind, setKind] = useState<ProblemReport['kind'] | ''>('')
   const [note, setNote] = useState('')
+  const [wholeSeason, setWholeSeason] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const send = async () => {
     if (!kind) return
     setBusy(true)
     try {
-      await api.post(`/api/items/${itemId}/problems`, { kind, note, position: position ?? 0 })
+      await api.post(`/api/items/${itemId}/problems`, { kind, note, position: wholeSeason ? 0 : position ?? 0, wholeSeason })
       onClose('Thanks, an admin will take a look.')
     } catch (e) {
       setError((e as Error).message)
@@ -43,6 +46,11 @@ export function ReportProblemDialog({ itemId, title, position, onClose }: { item
             </button>
           ))}
         </div>
+        {season != null && (
+          <label className="check">
+            <input type="checkbox" checked={wholeSeason} onChange={(e) => setWholeSeason(e.target.checked)} /> It’s the whole of season {season}, not just this episode
+          </label>
+        )}
         <label>
           What’s wrong? (optional)
           <input value={note} maxLength={1000} onChange={(e) => setNote(e.target.value)} placeholder="E.g. the sound drops out after 20 minutes" />
@@ -71,6 +79,7 @@ export function ReportProblemButton({ item }: { item: Item }) {
         <ReportProblemDialog
           itemId={item.id}
           title={title}
+          season={item.kind === 'episode' ? item.seasonNumber : undefined}
           onClose={(msg) => {
             setOpen(false)
             if (msg) {
