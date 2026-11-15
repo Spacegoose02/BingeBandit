@@ -1228,11 +1228,13 @@ sub onNext(event as object)
         m.top.findNode("nextCount").text = ""
         return
     end if
-    ' "Are you still watching?": after STILL_WATCHING_AFTER (3) episodes in
-    ' a row that started by themselves with no key pressed, wait for OK, so
-    ' a TV left on doesn't stream all night. Any key resets the count
-    ' (onKeyEvent). The Android TV app and the web do the same.
-    if m.room = "" and m.global.autoEpisodes + 1 >= 3
+    ' "Are you still watching?": after stillWatchingAfter() episodes (3
+    ' unless changed in Settings, 0 for never) in a row that started by
+    ' themselves with no key pressed, wait for OK, so a TV left on doesn't
+    ' stream all night. Any key resets the count (onKeyEvent). The Android
+    ' TV app and the web do the same.
+    after = stillWatchingAfter()
+    if m.room = "" and after > 0 and m.global.autoEpisodes + 1 >= after
         m.top.findNode("nextCount").text = "Still watching? Press OK"
         return
     end if

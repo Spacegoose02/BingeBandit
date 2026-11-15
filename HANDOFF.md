@@ -70,6 +70,16 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## "Are you still watching?" can be turned off or set to a number of episodes (2026-11-15, no migration)
+
+Michael asked for the still-watching prompt to be changeable in the TV app's settings: off, or how many episodes play first.
+
+- **A per-device choice**, since a bedroom TV and a living-room binge want different things: Off, after every episode, or after 2, 3 (default, as before), 4, 5, 6, 8 or 10 episodes in a row with no button pressed. 0 means off.
+- **Android TV / phones:** Settings → This TV (This phone) → "Are you still watching?", OK steps through the choices (`devicePrefs.stillWatchingAfter`, `bb.stillWatchingAfter`; `Player.tsx` `stillWatchingDue`).
+- **Roku:** Settings → "Are you still watching?" row, OK steps through (registry `stillWatchingAfter`, `util.brs`; `PlayerScreen.onNext`). Needs no passcode since it's on the Roku.
+- **Web, Samsung/LG TVs and the Windows app:** Account → Playback, under "Play the next episode automatically" (shown only when that's on): a dropdown kept in the browser (`web/src/devicePrefs.ts`, `stillWatching.ts`).
+- **Tested:** TV `tsc` and eslint; web `tsc` and build; Roku brighterscript. **Not tried** on a device.
+
 ## A GPU that can't decode a file no longer leaves the player spinning (2026-11-15, no migration)
 
 Michael's AV1 episode spun forever with "Decode on the GPU too" on (VAAPI, a GPU without AV1 decoding). The fallback to the CPU only ran once ffmpeg exited, but ffmpeg doesn't exit when every frame fails to decode: throttled to real time, it would read the whole episode and write nothing. Unticking the setting got him watching.

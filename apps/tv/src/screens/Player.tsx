@@ -6,7 +6,7 @@ import { absolute, api, ApiError, authHeaders, cached, current, request, trackWr
 import { downloaded, nextDownloaded, offlineProgressSent, readSaved, saveOfflineProgress } from '../downloads'
 import { refreshAudioSupport, surroundPlayable } from '../audioSupport'
 import { hdrShown, matchFrameRate, refreshVideoSupport, resetFrameRate, videoPlayable } from '../videoSupport'
-import { hueArea, hueSyncOn, hueType, matchFrameRateOn, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, type PictureSize } from '../devicePrefs'
+import { hueArea, hueSyncOn, hueType, matchFrameRateOn, PICTURE_SIZES, pictureSize, pictureSizeNames, setHueSync, setHueType, setPictureSize, stillWatchingAfter, type PictureSize } from '../devicePrefs'
 import { Button, Focusable, useFocusOnce } from '../components'
 import { LocalSync, loadHub, type Hub } from '../hue'
 import { fetchHueMode, hueModeNames, type HueMode } from '../lights'
@@ -150,11 +150,16 @@ function playbackInfo(id: number): Promise<PlaybackInfo> {
 // One second starts sooner on a LAN, where the next seconds arrive quickly.
 const PLAYER_BUFFER = { bufferForPlaybackMs: 1000, bufferForPlaybackAfterRebufferMs: 3000 }
 
-// "Are you still watching?": after this many episodes in a row that started
-// by themselves with no key pressed, the next one waits to be asked for, so
-// a TV left on doesn't stream (and the server convert) all night.
-const STILL_WATCHING_AFTER = 3
+// "Are you still watching?": after stillWatchingAfter() episodes in a row
+// that started by themselves with no key pressed (3 unless changed in
+// Settings, 0 for never), the next one waits to be asked for, so a TV left
+// on doesn't stream (and the server convert) all night.
 let autoEpisodes = 0
+/** Whether one more episode starting by itself should ask first. */
+const stillWatchingDue = (played: number) => {
+  const after = stillWatchingAfter()
+  return after > 0 && played >= after
+}
 
 interface PreRollStep {
   url: string
@@ -1025,7 +1030,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
     tg.send({ paused: pausedRef.current, position: posRef.current })
   }
   const playNext = (nextId: number, auto = false) => {
-    if (auto && !roomId && ++autoEpisodes >= STILL_WATCHING_AFTER) {
+    if (auto && !roomId && stillWatchingDue(++autoEpisodes)) {
       setPaused(true)
       setControls('hidden')
       setStillAsk(nextId)
@@ -1102,7 +1107,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
   }
   useEffect(() => {
     if (skip?.mode === 'auto' && !skipped.current.has(skip.key)) {
-      if (skip.label !== 'Next episode' || autoEpisodes + 1 < STILL_WATCHING_AFTER || roomId) {
+      if (skip.label !== 'Next episode' || !stillWatchingDue(autoEpisodes + 1) || roomId) {
         say(skip.label === 'Next episode' ? 'Playing the next episode' : skip.label.replace('Skip', 'Skipped the'))
       }
       doSkip(true)
@@ -1434,7 +1439,7 @@ function MediaPlayer({ id, start = 0, together, offline }: { id: number; start?:
       {stillAsk !== null && (
         <View style={[st.menu, barsPad]}>
           <Text style={st.summaryTitle}>Are you still watching?</Text>
-          <Text style={st.summaryMeta}>{`${STILL_WATCHING_AFTER} episodes have played in a row without a button being pressed.`}</Text>
+          <Text style={st.summaryMeta}>{stillWatchingAfter() === 1 ? 'An episode has played without a button being pressed.' : `${stillWatchingAfter()} episodes have played in a row without a button being pressed.`}</Text>
           <View style={st.controlRow}>
             <Button
               small
