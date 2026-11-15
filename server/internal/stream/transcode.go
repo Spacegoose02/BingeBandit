@@ -201,6 +201,9 @@ func (m *Manager) Start(f *store.MediaFile, userID int64, o Options) (*Session, 
 	log.Printf("transcode %s: file %d start=%.0fs copy=%v encoder=%s height=%d burn=%d throttled=%v audio=%s/%dch copy=%v delay=%dms",
 		s.ID, f.ID, o.Start, s.VideoCopy, s.Encoder, s.Height, s.BurnSubtitle, s.Throttled, s.AudioCodec, s.AudioChannels, s.AudioCopy, s.AudioDelayMs)
 
+	if s.HWDecode {
+		go s.abandonFailedHWDecode()
+	}
 	go func() {
 		err := s.wait()
 		// The GPU can't decode this codec (say AV1 on an older Intel chip,
@@ -824,6 +827,44 @@ func isHWDecodeFailure(stderr string) bool {
 		}
 	}
 	return false
+}
+
+// hwDecodeGiveUp is how long abandonFailedHWDecode watches a GPU-decoding
+// conversion, and hwDecodePoll how often it looks.
+var (
+	hwDecodeGiveUp = 30 * time.Second
+	hwDecodePoll   = 250 * time.Millisecond
+)
+
+// abandonFailedHWDecode stops a conversion whose GPU decoder failed but
+// that ffmpeg keeps running. ffmpeg doesn't exit when every frame fails to
+// decode: throttled to real time it would read the whole file and write
+// nothing while the player spins. Killing it lets the fallback in Start
+// try again on the CPU.
+func (s *Session) abandonFailedHWDecode() {
+	s.cmdMu.Lock()
+	first := s.cmd
+	s.cmdMu.Unlock()
+	deadline := time.Now().Add(hwDecodeGiveUp)
+	for time.Now().Before(deadline) {
+		select {
+		case <-s.done:
+			return
+		case <-time.After(hwDecodePoll):
+		}
+		if s.hasOutput() {
+			return
+		}
+		if isHWDecodeFailure(s.stderr.String()) {
+			s.cmdMu.Lock()
+			if s.cmd == first && !s.stopped.Load() && first.Process != nil {
+				log.Printf("transcode %s: the GPU decoder failed and ffmpeg kept going; stopping it to decode on the CPU", s.ID)
+				first.Process.Kill()
+			}
+			s.cmdMu.Unlock()
+			return
+		}
+	}
 }
 
 func (m *Manager) hwDecodeFailed(codec string) bool {
