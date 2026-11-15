@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-14. Latest release v0.53.1, 58 schema migrations._
+_Last updated: 2026-11-15. Latest release v0.53.1, 58 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,13 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## A GPU that can't decode a file no longer leaves the player spinning (2026-11-15, no migration)
+
+Michael's AV1 episode spun forever with "Decode on the GPU too" on (VAAPI, a GPU without AV1 decoding). The fallback to the CPU only ran once ffmpeg exited, but ffmpeg doesn't exit when every frame fails to decode: throttled to real time, it would read the whole episode and write nothing. Unticking the setting got him watching.
+
+- **`Session.abandonFailedHWDecode`** (`stream/transcode.go`): started with every GPU-decoding conversion; for up to 30 s it looks every 250 ms for the GPU failure messages (`isHWDecodeFailure`) before the first segment, and kills that first ffmpeg so the existing fallback in `Start` marks the codec and starts again on the CPU in the same session.
+- **Tested:** `go test ./internal/stream ./internal/api`; new `TestHWDecodeFallbackWhenFFmpegKeepsRunning` (a fake ffmpeg that prints the VAAPI AV1 errors and keeps running) fails without the change. **Not tried** on his server; he can tick the setting again once this release is in.
 
 ## Damaged tables are salvaged, and restoring over a damaged database works (2026-11-14, no migration)
 
