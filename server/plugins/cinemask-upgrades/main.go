@@ -17,11 +17,11 @@ import (
 var manifest = bbplugin.Manifest{
 	ID:          "cinemask-upgrades",
 	Name:        "Cinemask Upgrades",
-	Version:     "1.4.0",
-	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies, fetches approved title requests (with their progress), and replaces files people report problems with.",
+	Version:     "1.5.0",
+	Description: "Finds movies and episodes below the quality you want and searches Cinemask for better copies, fetches approved title requests (with their progress), and files problem reports in Cinemask, which replaces the bad copies.",
 	Author:      "BingeBandit",
 	Homepage:    "https://github.com/Spacegoose02/cinemask",
-	Events:      []string{"request.approved", "problem.refetch"},
+	Events:      []string{"request.approved", "problem.created", "problem.refetch", "problem.resolved", "problem.reopened"},
 	Settings: []bbplugin.Setting{
 		{Key: "url", Label: "Cinemask address", Type: "text", Help: "For example http://192.168.1.10:7979"},
 		{Key: "api_key", Label: "Cinemask API key", Type: "password",
@@ -34,6 +34,8 @@ var manifest = bbplugin.Manifest{
 			Help: "Each collection then gets Monitor and Search switches in its editor, both off until you turn them on."},
 		{Key: "requests", Label: "Fetch title requests an admin approves", Type: "bool", Default: "true",
 			Help: "Approved requests (Requests in the sidebar) are added to Cinemask, which searches for them at once. Their download progress shows on the Requests page."},
+		{Key: "reports", Label: "Send problem reports to Cinemask", Type: "bool", Default: "true",
+			Help: "Each problem someone reports (about a movie, an episode or a whole season) becomes a report in Cinemask, kept in step both ways. New copy on the Requests page uses Cinemask's fix: it blocklists the bad copy and gets another, or fetches subtitles. With Cinemask's automatic fixes on, it starts without you."},
 		{Key: "profile_4k", Label: "Quality profile for 4K requests", Type: "text",
 			Help: "The name of a Cinemask quality profile that gets 4K copies. 4K requests (turned on in Settings → Library) use it; without one they fail with a reminder."},
 	},
@@ -93,8 +95,14 @@ func (a *app) onEvent(_ context.Context, e bbplugin.Event) {
 	case "request.approved":
 		go a.sendRequests(context.Background())
 		return
+	case "problem.created":
+		go a.fileNew(context.Background(), e.Data)
+		return
 	case "problem.refetch":
 		go a.onRefetch(context.Background(), e.Data)
+		return
+	case "problem.resolved", "problem.reopened":
+		go a.onProblemAnswered(context.Background(), e.Event, e.Data)
 		return
 	}
 	if e.Event != "plugin.settings" {

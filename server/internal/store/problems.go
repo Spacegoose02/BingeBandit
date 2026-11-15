@@ -6,20 +6,28 @@ import (
 )
 
 // ProblemReport is someone saying something is wrong with a movie or
-// episode: bad picture or sound, missing or wrong subtitles, the wrong file.
+// episode (or, from an episode, its whole season): bad picture or sound,
+// missing or wrong subtitles, the wrong file, or it won't play.
 type ProblemReport struct {
-	ID       int64   `json:"id"`
-	ItemID   int64   `json:"itemId"`
-	UserID   int64   `json:"userId"`
-	User     string  `json:"user"` // their name
-	Kind     string  `json:"kind"` // video | audio | subtitles | wrong | other
-	Note     string  `json:"note,omitempty"`
-	Position float64 `json:"position,omitempty"` // seconds into the file when they reported it
+	ID     int64  `json:"id"`
+	ItemID int64  `json:"itemId"`
+	UserID int64  `json:"userId"`
+	User   string `json:"user"` // their name
+	Kind   string `json:"kind"` // video | audio | subtitles | wrong | playback | other
+	Note   string `json:"note,omitempty"`
+	// WholeSeason is set on an episode's report that's about every
+	// episode of its season (wrong language all season, say).
+	WholeSeason bool    `json:"wholeSeason,omitempty"`
+	Position    float64 `json:"position,omitempty"` // seconds into the file when they reported it
 	// Status is open, fixing (sent off to be fetched again) or resolved.
-	Status    string `json:"status"`
-	Reply     string `json:"reply,omitempty"` // the admin's answer
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
+	Status string `json:"status"`
+	Reply  string `json:"reply,omitempty"` // the admin's answer
+	// RemoteID and RemoteLink are the report a fetching plugin filed for
+	// this one elsewhere (Cinemask's report), when it did.
+	RemoteID   string `json:"remoteId,omitempty"`
+	RemoteLink string `json:"remoteLink,omitempty"`
+	CreatedAt  int64  `json:"createdAt"`
+	UpdatedAt  int64  `json:"updatedAt"`
 	// Filled from the item.
 	Title     string `json:"title"`
 	ShowTitle string `json:"showTitle,omitempty"`
@@ -31,7 +39,7 @@ type ProblemReport struct {
 }
 
 // Problem report kinds and statuses.
-var ProblemKinds = []string{"video", "audio", "subtitles", "wrong", "other"}
+var ProblemKinds = []string{"video", "audio", "subtitles", "wrong", "playback", "other"}
 
 const (
 	ProblemOpen     = "open"
@@ -41,7 +49,7 @@ const (
 
 const problemSelect = `SELECT p.id, p.item_id, p.user_id,
 	COALESCE(CASE WHEN u.profile_name != '' THEN u.profile_name ELSE u.username END, ''),
-	p.kind, p.note, p.position, p.status, p.reply, p.created_at, p.updated_at,
+	p.kind, p.note, p.whole_season, p.position, p.status, p.reply, p.remote_id, p.remote_link, p.created_at, p.updated_at,
 	i.title, COALESCE(sh.title, ''), i.kind, i.season_number, i.episode_number,
 	CASE WHEN i.poster != '' THEN i.poster ELSE COALESCE(sh.poster, '') END,
 	CASE WHEN i.kind = 'episode' THEN COALESCE(sh.tmdb_id, 0) ELSE i.tmdb_id END
@@ -52,7 +60,7 @@ const problemSelect = `SELECT p.id, p.item_id, p.user_id,
 func scanProblem(row interface{ Scan(...any) error }) (*ProblemReport, error) {
 	var p ProblemReport
 	var season, episode sql.NullInt64
-	err := row.Scan(&p.ID, &p.ItemID, &p.UserID, &p.User, &p.Kind, &p.Note, &p.Position, &p.Status, &p.Reply, &p.CreatedAt, &p.UpdatedAt,
+	err := row.Scan(&p.ID, &p.ItemID, &p.UserID, &p.User, &p.Kind, &p.Note, &p.WholeSeason, &p.Position, &p.Status, &p.Reply, &p.RemoteID, &p.RemoteLink, &p.CreatedAt, &p.UpdatedAt,
 		&p.Title, &p.ShowTitle, &p.ItemKind, &season, &episode, &p.Poster, &p.TMDBID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -70,16 +78,16 @@ func scanProblem(row interface{ Scan(...any) error }) (*ProblemReport, error) {
 }
 
 // ReportProblem saves a report, or adds to the reporter's open one about the
-// same item and kind.
+// same item and kind (and the same whole-season choice).
 func (s *Store) ReportProblem(p *ProblemReport) (*ProblemReport, bool, error) {
 	var id int64
-	err := s.db.QueryRow(`SELECT id FROM problem_reports WHERE item_id = ? AND user_id = ? AND kind = ? AND status != 'resolved'`,
-		p.ItemID, p.UserID, p.Kind).Scan(&id)
+	err := s.db.QueryRow(`SELECT id FROM problem_reports WHERE item_id = ? AND user_id = ? AND kind = ? AND whole_season = ? AND status != 'resolved'`,
+		p.ItemID, p.UserID, p.Kind, p.WholeSeason).Scan(&id)
 	created := false
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		res, err := s.db.Exec(`INSERT INTO problem_reports (item_id, user_id, kind, note, position, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, p.ItemID, p.UserID, p.Kind, p.Note, p.Position, now(), now())
+		res, err := s.db.Exec(`INSERT INTO problem_reports (item_id, user_id, kind, note, whole_season, position, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, p.ItemID, p.UserID, p.Kind, p.Note, p.WholeSeason, p.Position, now(), now())
 		if err != nil {
 			return nil, false, err
 		}
@@ -125,6 +133,19 @@ func (s *Store) ProblemReports(uid int64, all bool) ([]*ProblemReport, error) {
 func (s *Store) SetProblemStatus(id int64, status, reply string) error {
 	res, err := s.db.Exec(`UPDATE problem_reports SET status = ?, reply = CASE WHEN ? != '' THEN ? ELSE reply END, updated_at = ? WHERE id = ?`,
 		status, reply, reply, now(), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetProblemRemote records the report a fetching plugin filed for this one
+// elsewhere.
+func (s *Store) SetProblemRemote(id int64, remoteID, link string) error {
+	res, err := s.db.Exec(`UPDATE problem_reports SET remote_id = ?, remote_link = ? WHERE id = ?`, remoteID, link, id)
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-15. Latest release v0.54.0, 58 schema migrations._
+_Last updated: 2026-11-15. Latest release v0.54.0, 58 schema migrations (60 on main)._
 
 
 ## Start here
@@ -69,6 +69,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Problem reports go to Cinemask's reports: movies, episodes and whole seasons (2026-11-15, migration 60)
+
+Michael chose to have BingeBandit's problem reports become real reports in Cinemask ("Report a problem", `src/server/issues` in the cinemask repo) instead of the plugin picking another release by itself, which didn't blocklist the bad copy, couldn't fetch subtitles or do a whole season, and called the report fixed before anything downloaded.
+
+- **Whole season:** an episode's report can be about its whole season (`wholeSeason`, migration 60's `problem_reports.whole_season`; the web report box has "It's the whole of season N"). It joins the reporter's open report only when the choice matches. TV app and Roku still report the one episode.
+- **"Won't play"** is a new kind (`playback`) on the web. The server also files it by itself when ffmpeg exits before any segment because it couldn't read the file (`stream.Manager.OnUnreadable`, `unreadableInput`: ffmpeg's "Invalid data found", "No such file" or "Error opening input" on a line naming the file, never a GPU failure), for the person who was watching (`api.playbackFailed`, wired by `WatchPlaybackFailures` in `main.go`). The player's retries join the same open report.
+- **Plugin API:** `PUT /problems/{id}` also takes `remoteId` and `remoteLink` (the report filed elsewhere; only http(s) links kept), with or without a status, and tells the reporter when a plugin marks it fixed. New events `problem.resolved` and `problem.reopened` from the admin's buttons.
+- **Cinemask Upgrades 1.5.0** (`plugins/cinemask-upgrades/reports.go`), setting **Send problem reports to Cinemask** (on): files each report on `problem.created` and every 2 minutes for ones it missed (a refused one waits an hour), with the movie, or the show plus season and (unless whole season) episode, and "Reported in BingeBandit by NAME at 12:34: note" as the message, since Cinemask lists them all under the API key's account. Every 2 minutes Cinemask's state (open, fixing, resolved, with its resolution) comes back, so the Requests page shows **Fixing…** until the new file is in. **New copy** runs Cinemask's fix (`/api/issues/{id}/fix`): `subtitles` for subtitle reports, otherwise `replace`; it reopens a report Cinemask already closed and starts following a title Cinemask doesn't yet. "Something else" has no Cinemask fix, so New copy still grabs an ungrabbed release (`refetch`) for a movie or episode. Fixed and Reopen in BingeBandit do the same in Cinemask. Admins get an **In Cinemask** link on each report.
+- **Tested:** `go vet`, `go test ./...` (new `TestUnreadableInput`, plugin `TestIssueBody`, `TestMirror`, `TestFixReport` against a fake Cinemask, more in `TestRequestsBeyondTheBasics`); web `tsc` and build. **Not tried** against a real Cinemask or in a browser; the Cinemask side was read from its source (0.11).
 
 ## "Are you still watching?" can be turned off or set to a number of episodes (2026-11-15, no migration)
 
