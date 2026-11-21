@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-15. Latest release v0.55.0, 60 schema migrations._
+_Last updated: 2026-11-21. Latest release v0.55.0, 61 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,13 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Remove a title from Continue Watching, on the web and the TV app (2026-11-21, migration 61)
+
+- **Server:** `DELETE /api/continue/{id}` (`api.hideFromContinue`) takes a movie, or a show by any of its episodes or the show itself, off the person's Continue Watching. It stores the row's own key (`cwKey`: the show's name, so copies in other libraries go too) and the time in `continue_hidden` (migration 61, `Store.HideFromContinue` / `ContinueHidden`). `continueWatching` skips a title whose latest play is no newer than that, so playing it again brings it back. Per person (each profile is its own user). The library's own "Continue Watching" row (`rows.go`, `continue`) isn't filtered.
+- **Web** (and so the Windows app): an x on each Continue Watching card (`ContinueRow` in `pages/Home.tsx`), shown on hover like the recommendations' one.
+- **TV app:** **Remove from Continue Watching** in the hold-OK menu of a card on Home's Continue Watching row and on the More tab's Continue Watching and On Deck (`ItemMenuOptions.inContinue`; `continueChanged` reloads Home, which also updates the Android TV Play Next row). Roku has no remove yet.
+- **Tested:** `go vet`, `go test` for `store` and `api` (new `TestRemoveFromContinueWatching`); web build, and clicking the x in Chromium against a seeded server (the card goes and stays gone after a reload). TV app only typechecked, not run on a device.
 
 ## Problem reports go to Cinemask's reports: movies, episodes and whole seasons (2026-11-15, migration 60)
 

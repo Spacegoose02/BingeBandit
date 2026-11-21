@@ -6,7 +6,7 @@ import { Button, Center, Focusable, ItemRow, PosterCard, WideCard } from '../com
 import { menuPosition, menuPositionLoaded, setMenuPosition, type MenuPosition } from '../devicePrefs'
 import { refreshGameLights } from '../hue'
 import { Icon, type IconName } from '../icons'
-import { favoritesChanged, homeBack, seeAll, showLiveGuide, useNav, useScreen } from '../nav'
+import { continueChanged, favoritesChanged, homeBack, seeAll, showLiveGuide, useNav, useScreen } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
 import type { HomeData, Item, Library, RequestableTitle, TitleRequest, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
@@ -465,11 +465,16 @@ function More({
   const nav = useNav()
   const [home, setHome] = useState<HomeData | null>(() => cached<HomeData>('/api/home') ?? null)
   const { returns } = useScreen()
+  const [removed, setRemoved] = useState(0)
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(continueChanged, () => setRemoved((n) => n + 1))
+    return () => sub.remove()
+  }, [])
   useEffect(() => {
     writesDone()
       .then(() => api.get<HomeData>('/api/home'))
       .then(setHome, () => undefined)
-  }, [returns])
+  }, [returns, removed])
   // Started titles are Continue Watching; the next episodes of shows are On Deck.
   const cw = home?.continueWatching ?? []
   const started = cw.filter((it) => it.watch?.position > 15)
@@ -504,10 +509,10 @@ function More({
       {!isPhone && (
         <ScrollView style={st.flex} contentContainerStyle={st.rows}>
           {started.length > 0 && (
-            <ItemRow title="Continue Watching" items={started} renderItem={(it) => <WideCard item={it} onPress={() => play(it)} />} />
+            <ItemRow title="Continue Watching" items={started} renderItem={(it) => <WideCard item={it} inContinue onPress={() => play(it)} />} />
           )}
           {onDeck.length > 0 && (
-            <ItemRow title="On Deck" items={onDeck} renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />} />
+            <ItemRow title="On Deck" items={onDeck} renderItem={(it) => <PosterCard item={it} inContinue onPress={() => nav.push({ name: 'details', id: it.id })} />} />
           )}
           {home && cw.length === 0 && <Text style={[st.mutedLeft, st.moreEmpty]}>Nothing started yet.</Text>}
         </ScrollView>
@@ -761,6 +766,10 @@ const HomeRows = React.memo(function HomeRowsList() {
   // Again each time Back comes here, for the new Continue Watching.
   const { returns } = useScreen()
   useEffect(load, [load, returns])
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(continueChanged, load)
+    return () => sub.remove()
+  }, [load])
   const total = data?.rows.length ?? 0
   const [shown, setShown] = useState(FIRST_ROWS)
   useEffect(() => {
@@ -796,7 +805,7 @@ const HomeRows = React.memo(function HomeRowsList() {
           <ItemRow
             title="Continue Watching"
             items={data.continueWatching}
-            renderItem={(it, i) => <WideCard item={it} preferFocus={i === 0} onFocus={() => show(it)} onPress={() => play(it)} />}
+            renderItem={(it, i) => <WideCard item={it} inContinue preferFocus={i === 0} onFocus={() => show(it)} onPress={() => play(it)} />}
           />
         )}
         {data.rows.slice(0, shown).map((row, r) => (

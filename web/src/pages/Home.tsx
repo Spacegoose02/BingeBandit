@@ -70,6 +70,29 @@ function RecommendedRow({ title, items, by }: { title: string; items: Item[]; by
   )
 }
 
+/** Continue Watching; the x on a card takes it off the row until it's played again. */
+function ContinueRow({ items }: { items: Item[] }) {
+  const [hidden, setHidden] = useState<number[]>([])
+  const shown = items.filter((it) => !hidden.includes(it.id))
+  if (!shown.length) return null
+  const remove = (id: number) => {
+    setHidden((h) => [...h, id])
+    api.del(`/api/continue/${id}`).catch(() => setHidden((h) => h.filter((x) => x !== id)))
+  }
+  return (
+    <Row title="Continue Watching">
+      {shown.map((it) => (
+        <div key={it.id} className="continue-card">
+          <WideCard item={it} />
+          <button className="rec-dismiss" onClick={() => remove(it.id)} title="Remove from Continue Watching" aria-label="Remove from Continue Watching">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+      ))}
+    </Row>
+  )
+}
+
 export default function Home() {
   useDocumentTitle('Home')
   const { user } = useAuth()
@@ -113,13 +136,7 @@ export default function Home() {
     <div className="home">
       <Hero items={data.hero} />
       <div className="rows">
-        {data.continueWatching.length > 0 && (
-          <Row title="Continue Watching">
-            {data.continueWatching.map((it) => (
-              <WideCard key={it.id} item={it} />
-            ))}
-          </Row>
-        )}
+        {data.continueWatching.length > 0 && <ContinueRow items={data.continueWatching} />}
         <FriendsRow />
         {data.rows.map((row) =>
           row.id === 'recommended' ? (

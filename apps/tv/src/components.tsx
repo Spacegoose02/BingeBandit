@@ -128,20 +128,22 @@ export function useLatest<A extends unknown[]>(fn: ((...a: A) => void) | undefin
 interface CardProps {
   item: Item
   onPress: () => void
+  /** On Continue Watching or On Deck, so the hold menu offers to take it off. */
+  inContinue?: boolean
   onFocus?: () => void
   preferFocus?: boolean
 }
 
-export function PosterCard({ item, onPress, onFocus, preferFocus }: CardProps) {
-  return <PosterCardView item={item} preferFocus={preferFocus} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
+export function PosterCard({ item, onPress, onFocus, preferFocus, inContinue }: CardProps) {
+  return <PosterCardView item={item} preferFocus={preferFocus} inContinue={inContinue} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
 }
 
-const PosterCardView = memo(function Poster({ item, onPress, onFocus, preferFocus }: CardProps) {
+const PosterCardView = memo(function Poster({ item, onPress, onFocus, preferFocus, inContinue }: CardProps) {
   const src = image(item.poster || item.showPoster, 'w342')
   const p = progress(item)
   const menu = useContext(ItemMenuContext)
   return (
-    <Focusable onPress={onPress} onLongPress={() => menu(item)} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.poster}>
+    <Focusable onPress={onPress} onLongPress={() => menu(item, { inContinue })} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.poster}>
       {src ? <Art source={src} style={s.posterImg} /> : <View style={[s.posterImg, s.fallback]}><Text style={s.fallbackText}>{item.title}</Text></View>}
       {item.watch?.watched && item.kind !== 'show' && <View style={s.badge}><Text style={s.badgeText}>✓</Text></View>}
       {!!item.unwatchedCount && <View style={s.badge}><Text style={s.badgeText}>{item.unwatchedCount}</Text></View>}
@@ -168,18 +170,18 @@ const CollectionCardView = memo(function CollectionPoster({ collection, onPress,
   )
 })
 
-export function WideCard({ item, onPress, onFocus, preferFocus }: CardProps) {
-  return <WideCardView item={item} preferFocus={preferFocus} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
+export function WideCard({ item, onPress, onFocus, preferFocus, inContinue }: CardProps) {
+  return <WideCardView item={item} preferFocus={preferFocus} inContinue={inContinue} onPress={useLatest(onPress)} onFocus={useLatest(onFocus)} />
 }
 
-const WideCardView = memo(function Wide({ item, onPress, onFocus, preferFocus }: CardProps) {
+const WideCardView = memo(function Wide({ item, onPress, onFocus, preferFocus, inContinue }: CardProps) {
   const src = image(item.backdrop || item.showBackdrop || item.poster, 'w780')
   const p = progress(item)
   const label = item.kind === 'episode' ? `${item.showTitle} · S${item.seasonNumber}E${item.episodeNumber}` : item.title
   const menu = useContext(ItemMenuContext)
   return (
     <View style={s.wideWrap}>
-      <Focusable onPress={onPress} onLongPress={() => menu(item)} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.wide}>
+      <Focusable onPress={onPress} onLongPress={() => menu(item, { inContinue })} onFocus={onFocus} hasTVPreferredFocus={preferFocus} style={s.wide}>
         {src ? <Art source={src} style={s.wideImg} /> : <View style={[s.wideImg, s.fallback]} />}
         {p > 0 && <View style={s.progressTrack}><View style={[s.progressFill, { width: `${p * 100}%` }]} /></View>}
       </Focusable>
