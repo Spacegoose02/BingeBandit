@@ -156,6 +156,10 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 		}
 		all = append(all, entry{next, p.UpdatedAt})
 	}
+	hidden, err := s.Store.ContinueHidden(uid)
+	if err != nil {
+		return nil, err
+	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].at > all[j].at })
 	// One card per show: two started episodes, or the same show in two
 	// libraries (Kids TV and TV, say), show only the latest.
@@ -165,10 +169,16 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 		if len(out) == limit {
 			break
 		}
-		if k := cwKey(e.item); !seen[k] {
-			seen[k] = true
-			out = append(out, e.item)
+		k := cwKey(e.item)
+		if seen[k] {
+			continue
 		}
+		seen[k] = true
+		// Taken off the row, and not played since.
+		if at, ok := hidden[k]; ok && e.at <= at {
+			continue
+		}
+		out = append(out, e.item)
 	}
 	return out, nil
 }
@@ -183,6 +193,37 @@ func cwKey(it *store.Item) string {
 		return "show:" + strconv.FormatInt(it.ShowID, 10)
 	}
 	return "item:" + strconv.FormatInt(it.ID, 10)
+}
+
+// hideFromContinue takes a movie or a show (by any of its episodes) off the
+// user's Continue Watching row. Playing it again brings it back.
+func (s *Server) hideFromContinue(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(r, "id")
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	uid := currentUser(r).ID
+	it, err := s.Store.Item(uid, id)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	var key string
+	switch it.Kind {
+	case "movie", "episode":
+		key = cwKey(it)
+	case "show":
+		key = cwKey(&store.Item{Kind: "episode", ShowID: it.ID, ShowTitle: it.Title})
+	default:
+		writeErr(w, http.StatusBadRequest, "only movies and shows are on Continue Watching")
+		return
+	}
+	if err := s.Store.HideFromContinue(uid, key); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) libraries(w http.ResponseWriter, r *http.Request) {

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { DeviceEventEmitter, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TVFocusGuideView, View } from 'react-native'
 import { api, current } from './api'
 import { Button } from './components'
-import { favoritesChanged, ItemMenuContext, useNav } from './nav'
+import { continueChanged, favoritesChanged, ItemMenuContext, useNav, type ItemMenuOptions } from './nav'
 import { colors, font, scaled, quietPress } from './theme'
 import type { Item, ItemDetail } from './types'
 
@@ -19,11 +19,15 @@ interface Choice {
  */
 export function ItemMenuHost({ children }: { children: React.ReactNode }) {
   const [item, setItem] = useState<Item | null>(null)
-  const open = useCallback((it: Item) => setItem(it), [])
+  const [opts, setOpts] = useState<ItemMenuOptions>({})
+  const open = useCallback((it: Item, o?: ItemMenuOptions) => {
+    setOpts(o ?? {})
+    setItem(it)
+  }, [])
   return (
     <ItemMenuContext.Provider value={open}>
       {children}
-      {item && <ItemMenu item={item} onClose={() => setItem(null)} />}
+      {item && <ItemMenu item={item} opts={opts} onClose={() => setItem(null)} />}
     </ItemMenuContext.Provider>
   )
 }
@@ -34,7 +38,7 @@ export function ItemMenuHost({ children }: { children: React.ReactNode }) {
  * collections and refresh. A Modal keeps focus in it, and Back closes it
  * (or goes back to the first page).
  */
-function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
+function ItemMenu({ item, opts, onClose }: { item: Item; opts: ItemMenuOptions; onClose: () => void }) {
   const nav = useNav()
   const admin = !!current()?.user.isAdmin
   const [d, setD] = useState<ItemDetail | null>(null)
@@ -100,6 +104,20 @@ function ItemMenu({ item, onClose }: { item: Item; onClose: () => void }) {
             />
           )}
           {resume > 0 && <Opt label="Play from the start" onPress={() => go(() => nav.push({ name: 'player', id: target!.id, start: 0 }))} />}
+          {opts.inContinue && (
+            <Opt
+              label="Remove from Continue Watching"
+              onPress={() =>
+                api.del(`/api/continue/${item.id}`).then(
+                  () => {
+                    DeviceEventEmitter.emit(continueChanged)
+                    onClose()
+                  },
+                  (e) => setMsg(e.message),
+                )
+              }
+            />
+          )}
           {!!d?.trailers?.length && <Opt label="Watch trailer" onPress={() => go(() => nav.push({ name: 'trailer', url: d.trailers![0].url, title: it.title }))} />}
           {it.kind === 'movie' && <Opt label="Go to movie" onPress={() => go(() => nav.push({ name: 'details', id: it.id }))} />}
           {(it.showId || d?.show) && <Opt label="Go to show" onPress={() => go(() => nav.push({ name: 'details', id: d?.show?.id ?? it.showId! }))} />}

@@ -91,4 +91,12 @@ export const FocusMemoryContext = createContext<(view: FocusTarget | null) => vo
 /** Emitted (DeviceEventEmitter) after a favorite is added or removed, so the Favorites tab reloads. */
 export const favoritesChanged = 'favoritesChanged'
 
-export const ItemMenuContext = createContext<(item: import('./types').Item) => void>(() => {})
+/** Emitted after a title is taken off Continue Watching, so Home reloads. */
+export const continueChanged = 'continueChanged'
+
+export interface ItemMenuOptions {
+  /** The card is on Continue Watching or On Deck: offer to take it off. */
+  inContinue?: boolean
+}
+
+export const ItemMenuContext = createContext<(item: import('./types').Item, opts?: ItemMenuOptions) => void>(() => {})

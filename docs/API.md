@@ -136,6 +136,7 @@ A profile is its own user under an account (`ownerId` and `profileName` on the u
 | GET | `/discover/videos/{id}` | Plays a Discover video through the server (TV app): yt-dlp finds its stream and the answer is `{url, type}`, an HLS playlist (`/discover/videos/{id}/index.m3u8`, its parts at `…/s/{n}`; `type` `m3u8`) or an MP4 file (`…/video.mp4`, with Range; `type` `mp4`). Only videos on Discover; 502 with the reason when YouTube won't give one. One lookup per video runs at a time and carries on if the caller goes away (it's kept for the next ask); 504 if it takes over 90 seconds. |
 | POST | `/discover/videos/{id}/prepare` | Starts finding a Discover video's stream ahead of a press (the TV app asks when a tile stays highlighted). 202; at most 2 such lookups run at once, beyond that it does nothing. |
 | GET / POST / DELETE | `/watchlist`, `/watchlist/{id}` | Your watchlist. |
+| DELETE | `/continue/{id}` | Take a movie, or a show (by the show or any of its episodes), off your Continue Watching until you play it again. |
 | GET / POST / PUT / DELETE | `/playlists`, `/playlists/{id}`, `/playlists/{id}/items`, `/playlists/{id}/order` | Playlists. |
 | GET | `/profiles`, `/profiles/{username}` | Public profiles and stats. |
 
