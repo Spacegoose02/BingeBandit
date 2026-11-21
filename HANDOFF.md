@@ -2,8 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-21. Latest release v0.55.0, 60 schema migrations._
-_Last updated: 2026-11-21. Latest release v0.55.0, 61 schema migrations._
+_Last updated: 2026-11-21. Latest release v0.56.0, 61 schema migrations._
 
 
 ## Start here
@@ -79,6 +78,7 @@ Michael saw TV Shows and Kids TV Shows both "Scanning 26166/41530" together and 
 - **Unchanged files are cheaper in full scans:** the counter still counts every file on disk (unchanged ones were already skipped for ffprobe), but `scanRun` now lists each folder once per scan for sidecar subtitles instead of once per video, and writes each show and season once instead of once per episode. About 25% faster on a local test library of 3,200 episodes; more on network shares, where the folder listings cost the most. Each unchanged file still costs a `TouchFile` and the episode upsert.
 - **Unchanged:** the scheduled 6-hourly **Scan libraries** task, **Scan all**, **Scan** and editing a library still walk everything, on purpose, since network shares may not send watch events.
 - **Tested:** `go vet`, `go test ./...`, new `TestWatchRootLevelChangeRescansJustThatPath` (fails without the watcher change) and `TestScanFoldersSingleFile`. **Not tried** on the real server.
+
 ## Remove a title from Continue Watching, on the web and the TV app (2026-11-21, migration 61)
 
 - **Server:** `DELETE /api/continue/{id}` (`api.hideFromContinue`) takes a movie, or a show by any of its episodes or the show itself, off the person's Continue Watching. It stores the row's own key (`cwKey`: the show's name, so copies in other libraries go too) and the time in `continue_hidden` (migration 61, `Store.HideFromContinue` / `ContinueHidden`). `continueWatching` skips a title whose latest play is no newer than that, so playing it again brings it back. Per person (each profile is its own user). The library's own "Continue Watching" row (`rows.go`, `continue`) isn't filtered.
