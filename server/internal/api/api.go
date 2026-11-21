@@ -274,6 +274,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 			r.Put("/collections/{id}/kids", s.setCollectionKids)
 			r.Post("/watchlist/{id}", s.setWatchlist(true))
 			r.Delete("/watchlist/{id}", s.setWatchlist(false))
+			r.Delete("/continue/{id}", s.hideFromContinue)
 			r.Get("/favorites", s.favorites)
 			r.Post("/favorites/{id}", s.setFavorite(true))
 			r.Delete("/favorites/{id}", s.setFavorite(false))

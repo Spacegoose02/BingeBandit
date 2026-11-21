@@ -244,3 +244,30 @@ func (s *Store) PlaylistNext(uid, id, itemID int64) (*Item, error) {
 		WHERE `+visible+` AND pi.position > (SELECT position FROM playlist_items WHERE playlist_id = @p AND item_id = @cur)
 		ORDER BY pi.position LIMIT 1`, uidArg(uid), sql.Named("p", id), sql.Named("cur", itemID)))
 }
+
+// HideFromContinue takes a title off the user's Continue Watching row until
+// they play it again. key is the row's key for it (api.cwKey).
+func (s *Store) HideFromContinue(uid int64, key string) error {
+	_, err := s.db.Exec(`INSERT INTO continue_hidden (user_id, key, hidden_at) VALUES (?, ?, ?)
+		ON CONFLICT (user_id, key) DO UPDATE SET hidden_at = excluded.hidden_at`, uid, key, now())
+	return err
+}
+
+// ContinueHidden is when the user took each title off Continue Watching.
+func (s *Store) ContinueHidden(uid int64) (map[string]int64, error) {
+	rows, err := s.db.Query(`SELECT key, hidden_at FROM continue_hidden WHERE user_id = ?`, uid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var k string
+		var at int64
+		if err := rows.Scan(&k, &at); err != nil {
+			return nil, err
+		}
+		out[k] = at
+	}
+	return out, rows.Err()
+}

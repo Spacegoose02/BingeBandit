@@ -1051,4 +1051,15 @@ ALTER TABLE problem_reports ADD COLUMN whole_season INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE problem_reports ADD COLUMN remote_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE problem_reports ADD COLUMN remote_link TEXT NOT NULL DEFAULT '';
 `,
+	// 61: titles someone took off their Continue Watching row, by the
+	// row's own key (a show's name, or a movie). Playing it again after
+	// hidden_at brings it back.
+	`
+CREATE TABLE continue_hidden (
+	user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	key       TEXT NOT NULL,
+	hidden_at INTEGER NOT NULL,
+	PRIMARY KEY (user_id, key)
+);
+`,
 }
