@@ -49,10 +49,14 @@ func isSubsDir(name string) bool { return subsDirs[strings.ToLower(name)] }
 //   - in a Subs/ folder beside it, named after it the same way
 //   - in Subs/, any name (2_English.srt), when the video is the only one in its folder
 //   - in Subs/<video name>/, any name (TV packs: Subs/Show.S01E01/2_English.srt)
-func sidecars(videoPath string) []store.Stream {
+func sidecars(videoPath string) []store.Stream { return sidecarsIn(videoPath, os.ReadDir) }
+
+// sidecarsIn is sidecars with the folder listing supplied, so a scan can list
+// each folder once instead of once per video in it.
+func sidecarsIn(videoPath string, readDir func(string) ([]os.DirEntry, error)) []store.Stream {
 	dir := filepath.Dir(videoPath)
 	base := strings.ToLower(strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath)))
-	entries, err := os.ReadDir(dir)
+	entries, err := readDir(dir)
 	if err != nil {
 		return nil
 	}
@@ -114,7 +118,7 @@ func sidecars(videoPath string) []store.Stream {
 		}
 	}
 	for _, sd := range subs {
-		files, err := os.ReadDir(filepath.Join(dir, sd))
+		files, err := readDir(filepath.Join(dir, sd))
 		if err != nil {
 			continue
 		}
@@ -122,7 +126,7 @@ func sidecars(videoPath string) []store.Stream {
 			name := e.Name()
 			if e.IsDir() {
 				if strings.ToLower(name) == base {
-					inner, _ := os.ReadDir(filepath.Join(dir, sd, name))
+					inner, _ := readDir(filepath.Join(dir, sd, name))
 					for _, f := range inner {
 						if !f.IsDir() && isSubtitleFile(f.Name()) {
 							rest, ok := named(f.Name())
