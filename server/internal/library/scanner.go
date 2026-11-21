@@ -285,13 +285,22 @@ func (s *Scanner) scanFolders(ctx context.Context, lib *store.Library, st *Statu
 			continue
 		}
 		complete := true
-		if reachable(d) {
+		info, err := os.Stat(d)
+		if err == nil {
+			// A folder, or a single video (the watcher passes one sitting
+			// right in a library folder rather than rescanning all of it).
 			var f []found
 			f, complete = walk(lib, root, d)
 			files = append(files, f...)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			complete = false
 		}
 		if complete {
 			prefixes = append(prefixes, strings.TrimSuffix(d, string(filepath.Separator))+string(filepath.Separator))
+			if err != nil || !info.IsDir() {
+				// Gone, so it may have been a file: drop it by its own path.
+				prefixes = append(prefixes, d)
+			}
 		}
 	}
 	if err := s.processAll(ctx, lib, st, files, gen); err != nil {
@@ -319,9 +328,9 @@ func rootFor(lib *store.Library, path string) string {
 
 func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status, files []found, gen int64) error {
 	s.update(st, func(st *Status) { st.Found, st.Processed = len(files), 0 })
-	var folders map[string]string
+	run := &scanRun{dirs: map[string]dirListing{}, items: map[string]int64{}}
 	if lib.Kind == "shows" {
-		folders = folderKeys(lib.Paths)
+		run.folders = folderKeys(lib.Paths)
 	}
 	var done atomic.Int64
 	var wg sync.WaitGroup
@@ -334,7 +343,7 @@ func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status
 		wg.Add(1)
 		go func(f found) {
 			defer func() { <-sem; wg.Done() }()
-			if err := s.processFile(ctx, lib, f, gen, folders); err != nil {
+			if err := s.processFile(ctx, lib, f, gen, run); err != nil {
 				log.Printf("scan %q: %v", lib.Name, err)
 			}
 			n := int(done.Add(1))
@@ -345,8 +354,8 @@ func (s *Scanner) processAll(ctx context.Context, lib *store.Library, st *Status
 	return ctx.Err()
 }
 
-// folders is folderKeys for a shows library.
-func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64, folders map[string]string) error {
+// run is shared by the files of one scan; nil is fine for a single file.
+func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, gen int64, run *scanRun) error {
 	if !store.IsVideoLibrary(lib.Kind) {
 		return s.processTagged(ctx, lib, f, gen)
 	}
@@ -360,7 +369,7 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 	case "movies":
 		itemID, err = s.movieItem(lib, f)
 	case "shows":
-		itemID, more, err = s.episodeItems(lib, f, folders)
+		itemID, more, err = s.episodeItems(lib, f, run)
 	default:
 		err = fmt.Errorf("unknown library kind %q", lib.Kind)
 	}
@@ -368,7 +377,7 @@ func (s *Scanner) processFile(ctx context.Context, lib *store.Library, f found, 
 		return err
 	}
 
-	side := sidecars(f.path)
+	side := sidecarsIn(f.path, run.readDir)
 	existing, err := s.st.FileByPath(f.path)
 	if err == nil && existing.Size == info.Size() && existing.MTime == info.ModTime().Unix() && existing.ProbedAt > 0 {
 		// The video is unchanged, but subtitle files next to it may not be.
@@ -449,7 +458,7 @@ func (s *Scanner) movieItem(lib *store.Library, f found) (int64, error) {
 // gets a row for each later episode, returned in more, which plays the same
 // file. Each show folder is its own show: folders gives the ones whose name
 // alone would share another folder's key their own (see folderKeys).
-func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]string) (id int64, more []int64, err error) {
+func (s *Scanner) episodeItems(lib *store.Library, f found, run *scanRun) (id int64, more []int64, err error) {
 	rel, err := filepath.Rel(f.root, f.path)
 	if err != nil {
 		return 0, nil, err
@@ -512,10 +521,10 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 		return 0, nil, fmt.Errorf("cannot find show name for %s", f.path)
 	}
 	showKey := plainShowKey(showTitle, showYear)
-	if k, ok := folders[showName]; ok && len(parts) > 1 {
+	if k, ok := run.folderKey(showName); ok && len(parts) > 1 {
 		showKey = k
 	}
-	showID, err := s.st.UpsertItem(&store.Item{
+	showID, err := run.upsert(s.st, &store.Item{
 		LibraryID: lib.ID, Kind: "show", Title: showTitle, Year: showYear, TMDBID: tmdb, TVDBID: tvdb, IMDbID: imdb, MatchKey: showKey,
 	})
 	if err != nil {
@@ -530,7 +539,7 @@ func (s *Scanner) episodeItems(lib *store.Library, f found, folders map[string]s
 	if season == 0 {
 		seasonTitle = "Specials"
 	}
-	seasonID, err := s.st.UpsertItem(&store.Item{
+	seasonID, err := run.upsert(s.st, &store.Item{
 		LibraryID: lib.ID, Kind: "season", ParentID: showID, ShowID: showID, Title: seasonTitle,
 		SeasonNumber: &season, MatchKey: fmt.Sprintf("%s:s%d", showKey, season),
 	})
@@ -601,4 +610,70 @@ func (s *Scanner) fetchMetadata(ctx context.Context, lib *store.Library, st *Sta
 	}
 	// Episodes new to a kept show still need their details.
 	return s.meta.RefreshLibrary(ctx, lib.ID, false, progress)
+}
+
+// scanRun is what the files of one scan share, so a big library that has
+// barely changed is quick to check: each folder is listed once rather than
+// once per video in it, and a show or season is written once rather than
+// once per episode. Every method works on a nil *scanRun, uncached.
+type scanRun struct {
+	folders map[string]string // folderKeys, for a shows library
+
+	mu    sync.Mutex
+	dirs  map[string]dirListing
+	items map[string]int64 // kind + match key → item id (shows and seasons)
+}
+
+type dirListing struct {
+	entries []os.DirEntry
+	err     error
+}
+
+func (r *scanRun) folderKey(showName string) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	k, ok := r.folders[showName]
+	return k, ok
+}
+
+func (r *scanRun) readDir(dir string) ([]os.DirEntry, error) {
+	if r == nil {
+		return os.ReadDir(dir)
+	}
+	r.mu.Lock()
+	l, ok := r.dirs[dir]
+	r.mu.Unlock()
+	if ok {
+		return l.entries, l.err
+	}
+	entries, err := os.ReadDir(dir)
+	r.mu.Lock()
+	r.dirs[dir] = dirListing{entries, err}
+	r.mu.Unlock()
+	return entries, err
+}
+
+// upsert is Store.UpsertItem, once per show or season per scan. Within a
+// scan the same match key always gets the same parent, so repeating the
+// write for every episode changes nothing.
+func (r *scanRun) upsert(st *store.Store, it *store.Item) (int64, error) {
+	if r == nil {
+		return st.UpsertItem(it)
+	}
+	key := it.Kind + "\x00" + it.MatchKey
+	r.mu.Lock()
+	id, ok := r.items[key]
+	r.mu.Unlock()
+	if ok {
+		return id, nil
+	}
+	id, err := st.UpsertItem(it)
+	if err != nil {
+		return 0, err
+	}
+	r.mu.Lock()
+	r.items[key] = id
+	r.mu.Unlock()
+	return id, nil
 }

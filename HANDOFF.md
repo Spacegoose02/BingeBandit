@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-15. Latest release v0.55.0, 60 schema migrations._
+_Last updated: 2026-11-21. Latest release v0.55.0, 60 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,15 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Removing or renaming a show folder no longer rescans the whole library (2026-11-21, no migration)
+
+Michael saw TV Shows and Kids TV Shows both "Scanning 26166/41530" together and asked why partial scans weren't being used.
+
+- **Cause:** the folder watcher (`library/watch.go`) rescans the parent of whatever changed. For a show or movie folder sitting right in a library folder, or a loose video there, that parent is the library root, so a Move between libraries, a Delete, or Sonarr renaming a show folder walked every file in the library. Now `handle` queues the changed path itself when its parent is a root, and `scanFolders` takes a single file as well as a folder; a path that's gone is pruned as a folder prefix and by its exact path (`store.PruneUnder` treats an entry without a trailing separator as one file).
+- **Unchanged files are cheaper in full scans:** the counter still counts every file on disk (unchanged ones were already skipped for ffprobe), but `scanRun` now lists each folder once per scan for sidecar subtitles instead of once per video, and writes each show and season once instead of once per episode. About 25% faster on a local test library of 3,200 episodes; more on network shares, where the folder listings cost the most. Each unchanged file still costs a `TouchFile` and the episode upsert.
+- **Unchanged:** the scheduled 6-hourly **Scan libraries** task, **Scan all**, **Scan** and editing a library still walk everything, on purpose, since network shares may not send watch events.
+- **Tested:** `go vet`, `go test ./...`, new `TestWatchRootLevelChangeRescansJustThatPath` (fails without the watcher change) and `TestScanFoldersSingleFile`. **Not tried** on the real server.
 
 ## Problem reports go to Cinemask's reports: movies, episodes and whole seasons (2026-11-15, migration 60)
 

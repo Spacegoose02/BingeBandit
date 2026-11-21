@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -238,7 +239,8 @@ func (s *Store) PruneLibrary(libraryID, gen int64) (int64, error) {
 }
 
 // PruneUnder is PruneLibrary limited to files below the given folders
-// (each ending in a path separator), for partial scans.
+// (each ending in a path separator), for partial scans. An entry without a
+// trailing separator is a single file.
 func (s *Store) PruneUnder(libraryID, gen int64, prefixes []string) (int64, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -247,8 +249,14 @@ func (s *Store) PruneUnder(libraryID, gen int64, prefixes []string) (int64, erro
 	defer tx.Rollback()
 	var removed int64
 	for _, p := range prefixes {
-		res, err := tx.Exec(`DELETE FROM media_files WHERE scan_gen != ? AND substr(path, 1, ?) = ?
-			AND item_id IN (SELECT id FROM items WHERE library_id = ?)`, gen, utf8.RuneCountInString(p), p, libraryID) // substr counts characters
+		q := `DELETE FROM media_files WHERE scan_gen != ?1 AND substr(path, 1, ?2) = ?3
+			AND item_id IN (SELECT id FROM items WHERE library_id = ?4)` // substr counts characters
+		if !strings.HasSuffix(p, "/") && !strings.HasSuffix(p, `\`) {
+			// Not a folder: just that one file.
+			q = `DELETE FROM media_files WHERE scan_gen != ?1 AND path = ?3
+				AND item_id IN (SELECT id FROM items WHERE library_id = ?4)`
+		}
+		res, err := tx.Exec(q, gen, utf8.RuneCountInString(p), p, libraryID)
 		if err != nil {
 			return 0, err
 		}

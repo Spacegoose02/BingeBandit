@@ -208,8 +208,13 @@ func (w *watcher) handle(fw *fsnotify.Watcher, ev fsnotify.Event) {
 		if mediaOnly && store.IsVideoLibrary(l.Kind) {
 			continue
 		}
-		switch {
-		case rootFor(l, dir) != "":
+		switch root := rootFor(l, dir); {
+		case root == dir && ev.Name != dir && rootFor(l, ev.Name) == root:
+			// Something right in the library folder: a show or movie folder
+			// removed or renamed, or a loose video. Rescan just that path,
+			// not the whole library.
+			w.queue(l.ID, ev.Name)
+		case root != "":
 			w.queue(l.ID, dir)
 		case rootFor(l, ev.Name) != "": // the event is a library root itself
 			w.queue(l.ID, ev.Name)
