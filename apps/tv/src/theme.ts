@@ -14,9 +14,14 @@ export const quietPress = !isPhone
 // screen as ~960×540 density pixels (and 720p boxes differently), so every
 // size goes through px() to land the same on any TV. Phones size from their
 // short side (a phone is ~750 canvas units across in portrait), so text keeps
-// its size when the phone turns.
+// its size when the phone turns. Tablets (a short side of 600 dp or more) would
+// come out twice a phone's size that way, so big enough that the players'
+// controls ran off the screen; they get a wider canvas (1100 units across the
+// short side), which still draws things a bit bigger than on a phone.
 const win = Dimensions.get('window')
-const scale = isPhone ? Math.min(win.width, win.height) / 750 : win.width / 1920
+const short = Math.min(win.width, win.height)
+export const isTablet = isPhone && short >= 600
+const scale = !isPhone ? win.width / 1920 : short / (isTablet ? 1100 : 750)
 
 /** Converts density pixels (e.g. from useWindowDimensions) back to canvas units. */
 export function units(dp: number): number {

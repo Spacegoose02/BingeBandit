@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-21. Latest release v0.56.0, 61 schema migrations._
+_Last updated: 2026-11-22. Latest release v0.56.0, 61 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,14 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Tablets: player controls fit the screen, and the taskbar hides during playback (2026-11-22, no migration, apps only)
+
+Michael said the Live TV player's controls on a tablet were too big and ran off the screen, and the Android taskbar (pinned apps) stayed over the video.
+
+- **Size:** `theme.ts` sized phones from the short side over 750 canvas units, so a tablet (about 800 dp across) drew everything about twice a phone's size and the live info bar with its buttons grew past the screen. Tablets (`isTablet`: not a TV, short side 600 dp or more) now use 1100 units across the short side, about 1.4 times a phone's size. This applies to the whole app on tablets, not only the players. Phones and TVs are unchanged.
+- **Taskbar:** a new `Screen.setImmersive` hides the navigation bars (which include a tablet's taskbar) while any player is open (`useLandscape`), with swipe-to-show; the status bar was already hidden.
+- **Tested:** `tsc` only. **Not tried** on a tablet or phone.
 
 ## Removing or renaming a show folder no longer rescans the whole library (2026-11-21, no migration)
 
