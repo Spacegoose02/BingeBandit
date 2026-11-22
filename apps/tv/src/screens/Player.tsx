@@ -1746,7 +1746,8 @@ const st = StyleSheet.create(scaled({
   menu: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: gutter, paddingTop: 30, paddingBottom: 50, backgroundColor: 'rgba(11,13,16,0.94)' },
   menuTitle: { color: colors.muted, fontSize: font.small, fontWeight: '700', marginTop: 10, marginBottom: 6 },
   menuRow: { paddingVertical: 10 },
-  controlRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
+  // Phones and tablets wrap onto a second line rather than run off the sides.
+  controlRow: { flexDirection: 'row', flexWrap: isPhone ? 'wrap' : 'nowrap', justifyContent: 'center', marginTop: 24 },
   seekFocus: { borderRadius: 12, paddingVertical: 10, paddingHorizontal: 6 },
   preview: { position: 'absolute', bottom: '100%', marginBottom: 16 },
   chapterTick: { position: 'absolute', top: 0, width: 4, height: 10, marginLeft: -2, backgroundColor: 'rgba(0,0,0,0.75)' },
