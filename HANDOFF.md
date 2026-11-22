@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-21. Latest release v0.56.0, 61 schema migrations._
+_Last updated: 2026-11-22. Latest release v0.56.0, 61 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,16 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Tablets: player controls fit the screen, and the taskbar hides during playback (2026-11-22, no migration, apps only)
+
+Michael said the Live TV player's controls on a tablet were too big and ran off the screen, and the Android taskbar (pinned apps) stayed over the video. His photo (a small Samsung tablet in a kids' case) showed the same in the episode player: the button row clipped on both sides.
+
+- **Size:** `theme.ts` sized phones from the short side over 750 canvas units, so a tablet drew everything bigger than a phone and, being squarer, had fewer units across when sideways (about 1200 against a phone's 1650), so the players' button rows didn't fit. Now tablets (`isTablet`: not a TV, short side 600 dp or more) use 1100 units across the short side, and any phone or tablet gets at least 1600 units along its long side. Modern tall phones are unchanged; 16:9 phones come out slightly smaller; TVs are unchanged. This applies to the whole app on those screens, not only the players.
+- **Wrapping:** the episode player's button row (`Player.tsx` `controlRow`) now wraps onto a second line on phones and tablets instead of running off both sides. The Live TV player's row already wrapped.
+- **Taskbar:** a new `Screen.setImmersive` hides the navigation bars (which include a tablet's taskbar) while any player is open (`useLandscape`), with swipe-to-show; the status bar was already hidden.
+- **Child lock pins the app:** the immersive bars come back for a moment on a swipe from the edge, so a locked player could still reach the taskbar or home. Locking now also calls `Screen.setPinned` (Android screen pinning, `startLockTask`), and unlocking unpins. Android asks to confirm pinning each time; unpinning (hold Back and Overview, or swipe up and hold) asks for the device PIN only if "Ask for PIN before unpinning" is on in the device's settings.
+- **Tested:** `tsc` only. **Not tried** on a tablet or phone.
 
 ## Removing or renaming a show folder no longer rescans the whole library (2026-11-21, no migration)
 

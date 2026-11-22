@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { NativeModules, Pressable, StyleSheet, Text, View } from 'react-native'
 import { colors, font, scaled, quietPress } from './theme'
 
 const PIN_LENGTH = 2
 
+const Screen = NativeModules.Screen as { setPinned?(on: boolean): void } | undefined
+
 /**
  * A child lock for the phone players: lock with a 2-digit PIN you choose on
  * the spot; while locked, taps and Back do nothing except show a small badge,
- * and the same PIN unlocks.
+ * and the same PIN unlocks. Locking also pins the app (Android's screen
+ * pinning), so a swipe from the edge can't reach the taskbar or home.
  */
 export function useLock() {
   const [pin, setPin] = useState<string | null>(null)
@@ -22,6 +25,11 @@ export function useLock() {
   )
 
   const locked = pin !== null
+  useEffect(() => {
+    if (!locked) return
+    Screen?.setPinned?.(true)
+    return () => Screen?.setPinned?.(false)
+  }, [locked])
   /** Called for taps (and Back) while locked: show the unlock badge for a moment. */
   const poke = () => {
     setBadge(true)
