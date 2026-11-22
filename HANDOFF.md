@@ -72,9 +72,10 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 ## Tablets: player controls fit the screen, and the taskbar hides during playback (2026-11-22, no migration, apps only)
 
-Michael said the Live TV player's controls on a tablet were too big and ran off the screen, and the Android taskbar (pinned apps) stayed over the video.
+Michael said the Live TV player's controls on a tablet were too big and ran off the screen, and the Android taskbar (pinned apps) stayed over the video. His photo (a small Samsung tablet in a kids' case) showed the same in the episode player: the button row clipped on both sides.
 
-- **Size:** `theme.ts` sized phones from the short side over 750 canvas units, so a tablet (about 800 dp across) drew everything about twice a phone's size and the live info bar with its buttons grew past the screen. Tablets (`isTablet`: not a TV, short side 600 dp or more) now use 1100 units across the short side, about 1.4 times a phone's size. This applies to the whole app on tablets, not only the players. Phones and TVs are unchanged.
+- **Size:** `theme.ts` sized phones from the short side over 750 canvas units, so a tablet drew everything bigger than a phone and, being squarer, had fewer units across when sideways (about 1200 against a phone's 1650), so the players' button rows didn't fit. Now tablets (`isTablet`: not a TV, short side 600 dp or more) use 1100 units across the short side, and any phone or tablet gets at least 1600 units along its long side. Modern tall phones are unchanged; 16:9 phones come out slightly smaller; TVs are unchanged. This applies to the whole app on those screens, not only the players.
+- **Wrapping:** the episode player's button row (`Player.tsx` `controlRow`) now wraps onto a second line on phones and tablets instead of running off both sides. The Live TV player's row already wrapped.
 - **Taskbar:** a new `Screen.setImmersive` hides the navigation bars (which include a tablet's taskbar) while any player is open (`useLandscape`), with swipe-to-show; the status bar was already hidden.
 - **Tested:** `tsc` only. **Not tried** on a tablet or phone.
 
