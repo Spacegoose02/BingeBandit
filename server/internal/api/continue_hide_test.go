@@ -83,6 +83,21 @@ func TestRemoveFromContinueWatching(t *testing.T) {
 	if got := row(sam.ID); len(got) != 0 {
 		t.Fatalf("want an empty row, got %v", got)
 	}
+	// The libraries' own Continue Watching rows leave them out too.
+	libRow := func(uid int64, lib *store.Library) int {
+		t.Helper()
+		got, err := st.RowItems(uid, []int64{lib.ID}, lib.Kind, "continue", "", 0, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(got)
+	}
+	if n := libRow(sam.ID, movies) + libRow(sam.ID, shows); n != 0 {
+		t.Fatalf("library rows still have %d removed titles", n)
+	}
+	if n := libRow(other.ID, movies) + libRow(other.ID, shows); n != 2 {
+		t.Fatalf("someone else's library rows have %d titles, want 2", n)
+	}
 	if got := row(other.ID); len(got) != 2 {
 		t.Fatalf("someone else's row changed: %v", got)
 	}
@@ -95,5 +110,16 @@ func TestRemoveFromContinueWatching(t *testing.T) {
 	st.SaveProgress(sam.ID, eps[1], 200, 1200)
 	if got := row(sam.ID); len(got) != 1 || got[0] != eps[1] {
 		t.Fatalf("want Bluey back after playing it, got %v", got)
+	}
+	if libRow(sam.ID, shows) != 1 || libRow(sam.ID, movies) != 0 {
+		t.Fatal("want only Bluey back on the libraries' rows")
+	}
+
+	// Removing a show from its library row (by the show itself) works too.
+	if c := remove(show); c != http.StatusNoContent {
+		t.Fatalf("remove show: %d", c)
+	}
+	if libRow(sam.ID, shows) != 0 || len(row(sam.ID)) != 0 {
+		t.Fatal("Bluey still on Continue Watching after removing the show")
 	}
 }

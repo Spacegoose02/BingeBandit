@@ -401,7 +401,8 @@ function homeContent(data as dynamic) as object
     if cw.Count() > 0
         row = root.createChild("ContentNode")
         row.title = "Continue Watching"
-        row.addFields({ wide: true })
+        ' Its titles can be taken off it (the * menu on Home).
+        row.addFields({ wide: true, inContinue: true })
         for each it in cw
             row.appendChild(itemNode(it, true))
         end for

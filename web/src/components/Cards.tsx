@@ -61,11 +61,14 @@ export function PosterCard({
   subtitle,
   domId,
   onMembership,
+  onRemoveFromContinue,
 }: {
   item: Item
   subtitle?: string
   domId?: string
   onMembership?: () => void
+  /** On a Continue Watching row: the menu offers to take it off; runs once it's off. */
+  onRemoveFromContinue?: () => void
 }) {
   const [changed, setChanged] = useState<Item | null>(null)
   const [deleted, setDeleted] = useState(false)
@@ -98,19 +101,29 @@ export function PosterCard({
       </Link>
       {/* Watchlist, collections, matching and moving are for movies and shows. */}
       {!isMediaKind(item.kind) && (
-        <ItemMenu item={item} onChanged={(it) => setChanged({ ...item, ...it })} onMembership={onMembership} onDeleted={() => setDeleted(true)} />
+        <ItemMenu
+          item={item}
+          onChanged={(it) => setChanged({ ...item, ...it })}
+          onMembership={onMembership}
+          onDeleted={() => setDeleted(true)}
+          onRemoveFromContinue={onRemoveFromContinue}
+        />
       )}
       {sel?.circle}
     </div>
   )
 }
 
-/** Landscape card for Continue Watching and episode lists. Clicking plays. */
-export function WideCard({ item }: { item: Item }) {
+/**
+ * Landscape card for Continue Watching and episode lists. Clicking plays.
+ * With onRemove (Continue Watching) it has the options menu too, with
+ * Remove from Continue Watching, so TV mode's menu key reaches it.
+ */
+export function WideCard({ item, onRemove }: { item: Item; onRemove?: () => void }) {
   const art = img(item.backdrop || item.showBackdrop, 'w780')
   const isEp = item.kind === 'episode'
   return (
-    <div className="wide-card">
+    <div className={`wide-card${onRemove ? ' has-menu' : ''}`}>
       <Link to={`/play/${item.id}${item.watch.position > 15 ? `?t=${Math.floor(item.watch.position)}` : ''}`} className="wide-frame">
         <Art src={art} label={item.title} />
         <Progress item={item} />
@@ -124,6 +137,7 @@ export function WideCard({ item }: { item: Item }) {
         {isEp ? item.showTitle : item.title}
       </Link>
       <div className="card-sub">{isEp ? `${episodeLabel(item)} · ${item.title}` : item.year || ''}</div>
+      {onRemove && <ItemMenu item={item} onChanged={() => undefined} onRemoveFromContinue={onRemove} />}
     </div>
   )
 }

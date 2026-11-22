@@ -394,6 +394,8 @@ function RecommendedTab({ library }: { library: Library }) {
   const { data, loading, reload } = useApi<HubRow[]>(`/api/libraries/${library.id}/hubs`)
   const [managing, setManaging] = useState(false)
   const [charts, setCharts] = useState(false)
+  // Taken off Continue Watching from a card's menu.
+  const [removed, setRemoved] = useState<number[]>([])
   return (
     <>
       {user?.isAdmin && (
@@ -410,17 +412,22 @@ function RecommendedTab({ library }: { library: Library }) {
       {loading && <div className="page-loading" />}
       {data?.length === 0 && <div className="empty">Nothing to recommend yet. The Library tab has everything.</div>}
       <div className="library-hubs">
-        {data?.map((row) => (
-          <Row
-            key={row.id}
-            title={row.title}
-            to={row.collectionId ? `/collection/${row.collectionId}` : row.seeAll ? `/rows?${row.seeAll}` : undefined}
-          >
-            {row.items.map((it) => (
-              <PosterCard key={it.id} item={it} />
-            ))}
-          </Row>
-        ))}
+        {data?.map((row) => {
+          const cw = row.id === 'continue'
+          const items = cw ? row.items.filter((it) => !removed.includes(it.id)) : row.items
+          if (!items.length) return null
+          return (
+            <Row
+              key={row.id}
+              title={row.title}
+              to={row.collectionId ? `/collection/${row.collectionId}` : row.seeAll ? `/rows?${row.seeAll}` : undefined}
+            >
+              {items.map((it) => (
+                <PosterCard key={it.id} item={it} onRemoveFromContinue={cw ? () => setRemoved((r) => [...r, it.id]) : undefined} />
+              ))}
+            </Row>
+          )
+        })}
       </div>
       {managing && <RecommendationsEditor library={library} onClose={() => setManaging(false)} onSaved={reload} />}
       {charts && <ChartRows libraryId={library.id} libraryKind={library.kind} onClose={() => setCharts(false)} onSaved={reload} />}

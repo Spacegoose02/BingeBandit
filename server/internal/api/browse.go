@@ -187,12 +187,9 @@ func (s *Server) continueWatching(uid int64, limit int) ([]*store.Item, error) {
 // (by name, so copies in different libraries count once), or the title.
 func cwKey(it *store.Item) string {
 	if it.Kind == "episode" {
-		if t := strings.ToLower(strings.TrimSpace(it.ShowTitle)); t != "" {
-			return "show:" + t
-		}
-		return "show:" + strconv.FormatInt(it.ShowID, 10)
+		return store.ContinueShowKey(it.ShowTitle, it.ShowID)
 	}
-	return "item:" + strconv.FormatInt(it.ID, 10)
+	return store.ContinueItemKey(it.ID)
 }
 
 // hideFromContinue takes a movie or a show (by any of its episodes) off the
@@ -214,7 +211,7 @@ func (s *Server) hideFromContinue(w http.ResponseWriter, r *http.Request) {
 	case "movie", "episode":
 		key = cwKey(it)
 	case "show":
-		key = cwKey(&store.Item{Kind: "episode", ShowID: it.ID, ShowTitle: it.Title})
+		key = store.ContinueShowKey(it.Title, it.ID)
 	default:
 		writeErr(w, http.StatusBadRequest, "only movies and shows are on Continue Watching")
 		return

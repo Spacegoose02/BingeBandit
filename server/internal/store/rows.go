@@ -194,10 +194,19 @@ func (s *Store) RowItems(uid int64, libs []int64, libraryKind, key, genre string
 		q, order = where+` AND `+lastWatched+` > 0`, lastWatched+` DESC`
 	case "continue":
 		// Movies in progress, and shows with an episode in progress or
-		// started but not finished.
+		// started but not finished, played within continue_watching_days
+		// and not taken off Continue Watching since, like Home's row.
+		hidden, err := s.continueHiddenIDs(uid, string(ids))
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, sql.Named("since", s.continueSince()), sql.Named("hidden", hidden))
 		q = where + ` AND ((i.kind = 'movie' AND w.position > 15 AND COALESCE(w.watched, 0) = 0)
 			OR (i.kind = 'show' AND EXISTS (SELECT 1 FROM watch_state x JOIN items e ON e.id = x.item_id
-				WHERE e.show_id = i.id AND x.user_id = @uid AND (x.watched = 1 OR x.position > 15)) AND ` + unwatchedEpisodes + `))`
+				WHERE e.show_id = i.id AND x.user_id = @uid AND (x.watched = 1 OR x.position > 15)) AND ` + unwatchedEpisodes + `))
+			AND ` + lastWatched + ` >= @since
+			AND NOT EXISTS (SELECT 1 FROM json_each(@hidden) h
+				WHERE json_extract(h.value, '$[0]') = i.id AND json_extract(h.value, '$[1]') >= ` + lastWatched + `)`
 		order = lastWatched + ` DESC`
 	default:
 		return nil, fmt.Errorf("unknown row %q", key)

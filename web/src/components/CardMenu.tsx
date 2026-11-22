@@ -141,11 +141,14 @@ export function ItemMenu({
   onChanged,
   onMembership,
   onDeleted,
+  onRemoveFromContinue,
 }: {
   item: Item
   onChanged: (it: Item) => void
   onMembership?: () => void
   onDeleted?: () => void
+  /** On a Continue Watching row: offers to take it off, and runs once it's off. */
+  onRemoveFromContinue?: () => void
 }) {
   const [dialog, setDialog] = useState<Dialog>(null)
   const [detail, setDetail] = useState<ItemDetail | null>(null)
@@ -200,6 +203,7 @@ export function ItemMenu({
             canApprove={!!user && (user.isAdmin || !user.ownerId)}
             admin={!!user?.isAdmin}
             onMembership={onMembership}
+            onRemoveFromContinue={onRemoveFromContinue}
             close={close}
             done={(msg) => {
               close()
@@ -298,6 +302,7 @@ function ItemMenuBody({
   canApprove,
   admin,
   onMembership,
+  onRemoveFromContinue,
   close,
   done,
   open,
@@ -310,6 +315,7 @@ function ItemMenuBody({
   canApprove: boolean
   admin: boolean
   onMembership?: () => void
+  onRemoveFromContinue?: () => void
   close: () => void
   done: (msg?: string) => void
   open: (d: Dialog) => void
@@ -447,6 +453,22 @@ function ItemMenuBody({
       {resume > 0 && (
         <button role="menuitem" onClick={() => go(`/play/${target!.id}`)}>
           <Icon name="replay10" size={16} /> Play from the start
+        </button>
+      )}
+      {onRemoveFromContinue && (
+        <button
+          role="menuitem"
+          onClick={() =>
+            api.del(`/api/continue/${it.id}`).then(
+              () => {
+                close()
+                onRemoveFromContinue()
+              },
+              (e) => setError(e.message),
+            )
+          }
+        >
+          <Icon name="x" size={16} /> Remove from Continue Watching
         </button>
       )}
       {target && (

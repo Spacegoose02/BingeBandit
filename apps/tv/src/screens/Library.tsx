@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { ActivityIndicator, DeviceEventEmitter, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { api, cached } from '../api'
 import { Icon } from '../icons'
 import { Button, Center, CollectionCard, Focusable, ItemRow, PosterCard, Row } from '../components'
-import { seeAll, useNav } from '../nav'
+import { continueChanged, seeAll, useNav } from '../nav'
 import { scaled, colors, font, gutter, isPhone, px, units, quietPress } from '../theme'
 import type { Collection, HubRow, Item, Library } from '../types'
 
@@ -99,6 +99,14 @@ function useLoad<T>(path: string) {
   return { data, error: data ? '' : error, load }
 }
 
+/** Loads again after a title is taken off Continue Watching (the hold-OK menu). */
+function useContinueChanged(load: () => void) {
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(continueChanged, load)
+    return () => sub.remove()
+  }, [load])
+}
+
 function Problem({ error, retry }: { error: string; retry: () => void }) {
   return (
     <Center>
@@ -111,6 +119,7 @@ function Problem({ error, retry }: { error: string; retry: () => void }) {
 function Recommended({ library }: { library: Library }) {
   const nav = useNav()
   const { data, error, load } = useLoad<HubRow[]>(`/api/libraries/${library.id}/hubs`)
+  useContinueChanged(load)
   if (error) return <Problem error={error} retry={load} />
   if (!data) return <Center><ActivityIndicator color={colors.accent} size="large" /></Center>
   if (data.length === 0) return <Center><Text style={st.muted}>Nothing to recommend yet. Library has every title.</Text></Center>
@@ -121,7 +130,7 @@ function Recommended({ library }: { library: Library }) {
           key={row.id}
           title={row.title}
           items={row.items}
-          renderItem={(it) => <PosterCard item={it} onPress={() => nav.push({ name: 'details', id: it.id })} />}
+          renderItem={(it) => <PosterCard item={it} inContinue={row.id === 'continue'} onPress={() => nav.push({ name: 'details', id: it.id })} />}
           onSeeAll={seeAll(nav, row)}
         />
       ))}
@@ -587,6 +596,9 @@ export function RowScreen({ query, title }: { query: string; title: string }) {
   const nav = useNav()
   const cols = useColumns(false)
   const { data, error, load } = useLoad<{ title: string; items: Item[] }>(`/api/rows?${query}&limit=${PAGE}`)
+  // Continue Watching's See all offers to take titles off it.
+  const inContinue = /(^|&)key=continue(&|$)/.test(query)
+  useContinueChanged(load)
   const [more, setMore] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
@@ -631,7 +643,7 @@ export function RowScreen({ query, title }: { query: string; title: string }) {
         }
         renderTile={(t) => (
           <View>
-            <PosterCard item={t.item} preferFocus={t.index === 0} onPress={() => nav.push({ name: 'details', id: t.item.id })} onFocus={() => t.index >= items.length - cols * 3 && next()} />
+            <PosterCard item={t.item} inContinue={inContinue} preferFocus={t.index === 0} onPress={() => nav.push({ name: 'details', id: t.item.id })} onFocus={() => t.index >= items.length - cols * 3 && next()} />
             <Text style={st.gridTitle} numberOfLines={1}>{t.item.title}</Text>
           </View>
         )}

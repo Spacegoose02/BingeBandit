@@ -103,7 +103,7 @@ New and changed files are picked up automatically while BingeBandit is running, 
 
 ### Home
 
-Home opens with a spotlight of recent titles, then **Continue Watching** (including the next episode of shows you're partway through; the x on a card, or **Remove from Continue Watching** when you hold OK on it in the TV app, takes it off until you play it again), and rows from each of your pinned libraries.
+Home opens with a spotlight of recent titles, then **Continue Watching** (including the next episode of shows you're partway through; the x on a card or **Remove from Continue Watching** in its ⋮ menu, **Remove from Continue Watching** when you hold OK on it in the TV app, or ✱ on it on Roku, takes it off until you play it again; the same works on a library's own Continue Watching row and its See all), and rows from each of your pinned libraries.
 
 ![Home](screenshots/home.webp)
 

@@ -28,6 +28,9 @@ export default function RowPage() {
   const first = useMemo(() => Math.min(500, Math.max(PAGE, readBack<number>(key, 'loaded') ?? 0)), [query, key]) // eslint-disable-line react-hooks/exhaustive-deps
   const { data, error } = useApi<RowPageData>(`/api/rows?${query}&limit=${first}`)
   const [more, setMore] = useState<Item[]>([])
+  // Continue Watching's See all: titles taken off it from a card's menu.
+  const continueRow = new URLSearchParams(query).get('key') === 'continue'
+  const [removed, setRemoved] = useState<number[]>([])
   const [ended, setEnded] = useState(false)
   const sentinel = useRef<HTMLDivElement>(null)
   const busy = useRef(false)
@@ -73,9 +76,11 @@ export default function RowPage() {
       </header>
       {items.length === 0 && <div className="empty">Nothing here right now.</div>}
       <div className="poster-grid">
-        {items.map((it) => (
-          <PosterCard key={it.id} item={it} />
-        ))}
+        {items
+          .filter((it) => !removed.includes(it.id))
+          .map((it) => (
+            <PosterCard key={it.id} item={it} onRemoveFromContinue={continueRow ? () => setRemoved((r) => [...r, it.id]) : undefined} />
+          ))}
       </div>
       <div ref={sentinel} style={{ height: 1 }} />
     </div>

@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-21. Latest release v0.56.0, 61 schema migrations._
+_Last updated: 2026-11-22. Latest release v0.56.0, 61 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,17 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Remove from Continue Watching everywhere, and the library rows follow "Keep titles" days (2026-11-22)
+
+Reported: removing only worked on the TV app's Home, and the "Keep titles in Continue Watching (days)" setting didn't seem to do anything.
+
+- **Why:** each library's own "Continue Watching" row (Recommended tab, `RowItems` key `continue` in `store/rows.go`, and its See all via `/api/rows?key=continue`) ignored both `continue_watching_days` and `continue_hidden`, so old and removed titles stayed there. Home's row already honoured both.
+- **Server:** the `continue` row now keeps only titles played within `continueSince()` and leaves out ones hidden since their last play (`Store.continueHiddenIDs` turns the hidden keys into movie and show ids for the libraries). The key logic moved to `store.ContinueItemKey` / `ContinueShowKey`; `api.cwKey` uses them.
+- **Web** (and the Windows and smart TV apps): **Remove from Continue Watching** in the ⋮ menu of Home's Continue Watching cards (`WideCard` `onRemove`, so TV mode's menu key reaches it; the hover x stays), and of the cards on a library's Continue Watching row and its See all page (`PosterCard` `onRemoveFromContinue`).
+- **TV app:** the hold-OK option is also on the library's Continue Watching row and its See all screen; both reload on `continueChanged`.
+- **Roku:** ✱ on a Home Continue Watching tile opens a panel with Remove from Continue Watching (`RowsView`, row field `inContinue`); ✱ elsewhere still refreshes Home.
+- **Tested:** `go vet`, `go test` for `store` and `api` (`TestRemoveFromContinueWatching` and `TestContinueWatchingDays` now cover the library rows, and fail without the fix); web and TV app typechecked. Not run on a device; the Roku change was only read through, not compiled or sideloaded.
 
 ## Removing or renaming a show folder no longer rescans the whole library (2026-11-21, no migration)
 
