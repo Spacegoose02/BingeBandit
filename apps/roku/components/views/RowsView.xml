@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home: Continue Watching and the server's rows. -->
+<!-- Home: Continue Watching and the server's rows. * on a Continue Watching tile offers to take it off. -->
 <component name="RowsView" extends="BaseView">
   <children>
     <RowList id="rows" translation="[0, 40]" itemComponentName="PosterItem" itemSize="[1500, 430]" numRows="3"
@@ -12,6 +12,8 @@
     <Label id="status" width="1400" translation="[0, 400]" horizAlign="center" wrap="true" color="0x98A1ADFF">
       <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="32" />
     </Label>
+    <!-- * on a Continue Watching tile: take it off the row. -->
+    <OptionsMenu id="menu" translation="[-400, 0]" visible="false" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/views/RowsView.brs" />

@@ -70,6 +70,17 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Remove from Continue Watching everywhere, and the library rows follow "Keep titles" days (2026-11-22)
+
+Reported: removing only worked on the TV app's Home, and the "Keep titles in Continue Watching (days)" setting didn't seem to do anything.
+
+- **Why:** each library's own "Continue Watching" row (Recommended tab, `RowItems` key `continue` in `store/rows.go`, and its See all via `/api/rows?key=continue`) ignored both `continue_watching_days` and `continue_hidden`, so old and removed titles stayed there. Home's row already honoured both.
+- **Server:** the `continue` row now keeps only titles played within `continueSince()` and leaves out ones hidden since their last play (`Store.continueHiddenIDs` turns the hidden keys into movie and show ids for the libraries). The key logic moved to `store.ContinueItemKey` / `ContinueShowKey`; `api.cwKey` uses them.
+- **Web** (and the Windows and smart TV apps): **Remove from Continue Watching** in the ⋮ menu of Home's Continue Watching cards (`WideCard` `onRemove`, so TV mode's menu key reaches it; the hover x stays), and of the cards on a library's Continue Watching row and its See all page (`PosterCard` `onRemoveFromContinue`).
+- **TV app:** the hold-OK option is also on the library's Continue Watching row and its See all screen; both reload on `continueChanged`.
+- **Roku:** ✱ on a Home Continue Watching tile opens a panel with Remove from Continue Watching (`RowsView`, row field `inContinue`); ✱ elsewhere still refreshes Home.
+- **Tested:** `go vet`, `go test` for `store` and `api` (`TestRemoveFromContinueWatching` and `TestContinueWatchingDays` now cover the library rows, and fail without the fix); web and TV app typechecked. Not run on a device; the Roku change was only read through, not compiled or sideloaded.
+
 ## Tablets: player controls fit the screen, and the taskbar hides during playback (2026-11-22, no migration, apps only)
 
 Michael said the Live TV player's controls on a tablet were too big and ran off the screen, and the Android taskbar (pinned apps) stayed over the video. His photo (a small Samsung tablet in a kids' case) showed the same in the episode player: the button row clipped on both sides.

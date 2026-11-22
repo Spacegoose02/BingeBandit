@@ -70,7 +70,7 @@ function RecommendedRow({ title, items, by }: { title: string; items: Item[]; by
   )
 }
 
-/** Continue Watching; the x on a card takes it off the row until it's played again. */
+/** Continue Watching; the x on a card (or Remove in its menu) takes it off the row until it's played again. */
 function ContinueRow({ items }: { items: Item[] }) {
   const [hidden, setHidden] = useState<number[]>([])
   const shown = items.filter((it) => !hidden.includes(it.id))
@@ -83,7 +83,7 @@ function ContinueRow({ items }: { items: Item[] }) {
     <Row title="Continue Watching">
       {shown.map((it) => (
         <div key={it.id} className="continue-card">
-          <WideCard item={it} />
+          <WideCard item={it} onRemove={() => setHidden((h) => [...h, it.id])} />
           <button className="rec-dismiss" onClick={() => remove(it.id)} title="Remove from Continue Watching" aria-label="Remove from Continue Watching">
             <Icon name="x" size={14} />
           </button>

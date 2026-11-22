@@ -1182,7 +1182,8 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 /* ---------- library rows (Recommended tab, Visible on, Manage Recommendations) ---------- */
 .library-hubs { margin: 0 calc(-1 * var(--gutter)); }
 .library-hubs .row { margin-bottom: 28px; }
-.poster-card.has-menu { position: relative; }
+.poster-card.has-menu, .wide-card.has-menu { position: relative; }
+.wide-card .card-menu-anchor { aspect-ratio: 16 / 9; }
 .poster-link { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: inherit; }
 /* The ⋮ sits on the poster's bottom right: the anchor covers the 2:3 artwork. */
 .card-menu-anchor { position: absolute; left: 0; right: 0; top: 0; aspect-ratio: 2 / 3; pointer-events: none; }
@@ -1191,7 +1192,7 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .card-menu-btn.card-edit-btn { right: auto; left: 8px; }
 .card-menu-btn.card-edit-btn svg { stroke-width: 1.8; }
 .card-menu-btn:hover, .card-menu-btn[aria-expanded='true'] { background: var(--accent); color: #fff; }
-.poster-card.has-menu:hover .card-menu-btn, .card-menu-btn:focus-visible, .card-menu-btn[aria-expanded='true'] { opacity: 1; }
+.poster-card.has-menu:hover .card-menu-btn, .wide-card.has-menu:hover .card-menu-btn, .card-menu-btn:focus-visible, .card-menu-btn[aria-expanded='true'] { opacity: 1; }
 @media (hover: none) { .card-menu-btn { opacity: 1; } }
 .menu.card-menu { position: fixed; z-index: 60; width: 270px; overflow-y: auto; }
 .menu.card-menu > * { flex-shrink: 0; }

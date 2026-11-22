@@ -103,6 +103,14 @@ func TestContinueWatchingDays(t *testing.T) {
 	if got, _ := s.InProgress(u.ID, 10); len(got) != 0 {
 		t.Fatal("a start 40 days ago stayed with a 30-day limit")
 	}
+	// The library's own Continue Watching row follows the setting too.
+	if got, _ := s.RowItems(u.ID, []int64{lib.ID}, lib.Kind, "continue", "", 0, 10); len(got) != 0 {
+		t.Fatal("the library's Continue Watching kept a start 40 days ago with a 30-day limit")
+	}
+	s.SetSettings(map[string]string{SettingContinueDays: "60"})
+	if got, _ := s.RowItems(u.ID, []int64{lib.ID}, lib.Kind, "continue", "", 0, 10); len(got) != 1 {
+		t.Fatal("the library's Continue Watching dropped a start 40 days ago with a 60-day limit")
+	}
 }
 
 // Below S1 E1 was stopped in its end credits, short of the watched point,

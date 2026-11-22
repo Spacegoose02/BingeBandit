@@ -2,7 +2,10 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strconv"
+	"strings"
 )
 
 func (s *Store) AddToWatchlist(uid, itemID int64) error {
@@ -251,6 +254,62 @@ func (s *Store) HideFromContinue(uid int64, key string) error {
 	_, err := s.db.Exec(`INSERT INTO continue_hidden (user_id, key, hidden_at) VALUES (?, ?, ?)
 		ON CONFLICT (user_id, key) DO UPDATE SET hidden_at = excluded.hidden_at`, uid, key, now())
 	return err
+}
+
+// ContinueItemKey is Continue Watching's key for a movie (or any title that
+// isn't an episode): the item itself.
+func ContinueItemKey(id int64) string { return "item:" + strconv.FormatInt(id, 10) }
+
+// ContinueShowKey is Continue Watching's key for a show: its name, so copies
+// in different libraries (Kids TV and TV) count once, or its id when unnamed.
+func ContinueShowKey(title string, showID int64) string {
+	if t := strings.ToLower(strings.TrimSpace(title)); t != "" {
+		return "show:" + t
+	}
+	return "show:" + strconv.FormatInt(showID, 10)
+}
+
+// continueHiddenIDs are the movies and shows in libs the user took off
+// Continue Watching, as JSON [[id, hidden_at], ...] for json_each, so a
+// library's Continue Watching row leaves out the same titles Home does.
+func (s *Store) continueHiddenIDs(uid int64, libs string) (string, error) {
+	hidden, err := s.ContinueHidden(uid)
+	if err != nil {
+		return "", err
+	}
+	out := [][2]int64{}
+	shows := false
+	for k, at := range hidden {
+		if id, ok := strings.CutPrefix(k, "item:"); ok {
+			if n, err := strconv.ParseInt(id, 10, 64); err == nil {
+				out = append(out, [2]int64{n, at})
+			}
+		} else if strings.HasPrefix(k, "show:") {
+			shows = true
+		}
+	}
+	if shows {
+		rows, err := s.db.Query(`SELECT id, title FROM items WHERE kind = 'show' AND library_id IN (SELECT value FROM json_each(?))`, libs)
+		if err != nil {
+			return "", err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id int64
+			var title string
+			if err := rows.Scan(&id, &title); err != nil {
+				return "", err
+			}
+			if at, ok := hidden[ContinueShowKey(title, id)]; ok {
+				out = append(out, [2]int64{id, at})
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return "", err
+		}
+	}
+	b, err := json.Marshal(out)
+	return string(b), err
 }
 
 // ContinueHidden is when the user took each title off Continue Watching.
