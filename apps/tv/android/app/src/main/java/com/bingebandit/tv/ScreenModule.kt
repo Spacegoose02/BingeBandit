@@ -40,4 +40,22 @@ class ScreenModule(private val ctx: ReactApplicationContext) : ReactContextBaseJ
       }
     }
   }
+
+  /**
+   * Pins the app to the screen while a player's child lock is on, so the home
+   * gesture, the taskbar and recent apps can't leave it. Android asks the person
+   * to confirm pinning; unpinning (hold Back and Overview, or swipe up and hold)
+   * asks for the device PIN when "Ask for PIN before unpinning" is on.
+   */
+  @ReactMethod
+  fun setPinned(on: Boolean) {
+    val activity = ctx.currentActivity ?: return
+    UiThreadUtil.runOnUiThread {
+      try {
+        if (on) activity.startLockTask() else activity.stopLockTask()
+      } catch (_: Exception) {
+        // Not pinned (or pinning not allowed): the child lock still blocks taps and Back.
+      }
+    }
+  }
 }
