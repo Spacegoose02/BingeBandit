@@ -11,7 +11,7 @@ import { KidsApproveCollectionButton } from '../components/KidsApprove'
 import { Row } from '../components/Row'
 import { useApi, useDocumentTitle } from '../hooks'
 import { smartRuleText } from '../format'
-import type { Collection, Item } from '../types'
+import type { Collection, Item, Visibility } from '../types'
 
 const PAGE = 120
 
@@ -133,6 +133,7 @@ export default function CollectionPage() {
               <h1 className="detail-title">{collection.name}</h1>
               <div className="muted">{total} {total === 1 ? 'item' : 'items'}</div>
               {collection.overview && <p className="overview">{collection.overview}</p>}
+              {user?.isAdmin && collection.visible && <VisibleOn collection={collection} />}
             </div>
             <div className="actions">
               {items.length > 1 && (
@@ -193,6 +194,42 @@ export default function CollectionPage() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+const places: [keyof Visibility, string][] = [
+  ['library', 'Library'],
+  ['home', 'Home'],
+  ['friends', "Friends' Home"],
+]
+
+/** Where the collection shows as a row (Plex's "Visible on"), for admins. */
+function VisibleOn({ collection }: { collection: Collection }) {
+  const [visible, setVisible] = useState<Visibility | undefined>(collection.visible)
+  const [error, setError] = useState('')
+  useEffect(() => setVisible(collection.visible), [collection.visible])
+  if (!visible) return null
+  const toggle = async (place: keyof Visibility) => {
+    const next = { ...visible, [place]: !visible[place] }
+    setVisible(next)
+    setError('')
+    try {
+      await api.put(`/api/admin/collections/${collection.id}/visibility`, next)
+    } catch (e) {
+      setVisible(visible)
+      setError((e as Error).message)
+    }
+  }
+  return (
+    <div className="visible-on" role="group" aria-label="Visible on">
+      <span className="muted small">Visible on</span>
+      {places.map(([p, label]) => (
+        <button key={p} type="button" className="chip" aria-pressed={visible[p]} onClick={() => toggle(p)}>
+          {visible[p] && <Icon name="check" size={12} />} {label}
+        </button>
+      ))}
+      {error && <span className="form-error small">{error}</span>}
     </div>
   )
 }

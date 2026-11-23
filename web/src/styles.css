@@ -1212,6 +1212,14 @@ button.art-thumb:hover { box-shadow: 0 0 0 2px var(--accent); }
 .rec-col { text-align: center; }
 .rec-col input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 .rec-title { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-add { position: relative; margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.rec-add input { width: 100%; }
+.rec-add-results { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-elev); }
+.rec-add-results button { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.rec-add-results button:hover, .rec-add-results button:focus-visible { background: var(--surface-2); }
+.visible-on { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.visible-on button { cursor: pointer; color: var(--muted); }
+.visible-on button[aria-pressed='true'] { color: var(--accent); border-color: var(--accent); }
 @media (max-width: 640px) {
   .rec-row { grid-template-columns: 20px 1fr repeat(3, 56px); font-size: 13px; }
   .rec-head { font-size: 10px; }

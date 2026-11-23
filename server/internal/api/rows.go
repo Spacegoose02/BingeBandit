@@ -304,6 +304,20 @@ func (s *Server) setLibraryRows(w http.ResponseWriter, r *http.Request) {
 	s.libraryRows(w, r)
 }
 
+// resetLibraryRows puts a library's rows back to the defaults: built-in rows
+// in their usual order and places, and every collection hidden.
+func (s *Server) resetLibraryRows(w http.ResponseWriter, r *http.Request) {
+	lib, ok := s.libraryParam(w, r)
+	if !ok {
+		return
+	}
+	if err := s.Store.SetLibraryRows(lib.ID, nil); err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	s.libraryRows(w, r)
+}
+
 // setCollectionVisibility is the "Visible on" menu of a collection.
 func (s *Server) setCollectionVisibility(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(r, "id")

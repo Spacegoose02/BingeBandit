@@ -447,6 +447,7 @@ func (s *Server) Router(ctx context.Context) http.Handler {
 				r.Post("/libraries/{id}/kometa", s.importKometa)
 				r.Get("/libraries/{id}/rows", s.libraryRows)
 				r.Put("/libraries/{id}/rows", s.setLibraryRows)
+				r.Delete("/libraries/{id}/rows", s.resetLibraryRows)
 				r.Delete("/collections/{id}", s.deleteCollection)
 
 				r.Get("/live/sources", s.liveSources)
