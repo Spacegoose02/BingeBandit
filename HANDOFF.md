@@ -70,6 +70,14 @@ Add a dated `##` section at the top of the log (right under `# Log`, not above *
 
 # Log
 
+## Why the database keeps getting damaged: warn about FUSE appdata, close it cleanly on stop (2026-11-23, no migration)
+
+The database came back "malformed" on 2026-11-14 and again on 2026-11-23 (index damage, code 779). Nothing in the store writes unsafely (one process, WAL, synchronous=NORMAL, backups via VACUUM INTO). The likely cause is the Unraid template mapping /config to `/mnt/user/appdata`, which is Unraid's FUSE share layer (shfs); SQLite's WAL shared memory and file locks aren't reliable there. Not yet confirmed on Michael's server (asked him to run `stat -f -c %T /config` in the container).
+
+- `api.OnFUSE` (statfs type 0x65735546, Linux only) logs a warning at start-up and adds a "storage" banner to `/api/admin/status` while the data folder is on FUSE.
+- Shutdown now fits inside Docker's 10 s stop window (HTTP 4 s, plugins 2 s) and then checkpoints the WAL and closes the database. Before, it could take 15 s, so Docker killed it before the deferred close ran. `store.Close` checkpoints with TRUNCATE; `TestCloseCheckpointsWAL` covers it.
+- Unraid template defaults Appdata to `/mnt/cache/appdata/bingebandit` and adds `--stop-timeout=30`; docker-compose gets `stop_grace_period: 30s`; UNRAID.md has a troubleshooting entry. Existing installs keep their path until changed by hand.
+
 ## Remove from Continue Watching everywhere, and the library rows follow "Keep titles" days (2026-11-22)
 
 Reported: removing only worked on the TV app's Home, and the "Keep titles in Continue Watching (days)" setting didn't seem to do anything.
