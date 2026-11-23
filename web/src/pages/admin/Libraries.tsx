@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { api } from '../../api'
 import { Icon } from '../../components/Icon'
 import { Modal } from '../../components/Modal'
+import { RecommendationsEditor } from '../../components/RecommendationsEditor'
 import { useApi, useDocumentTitle } from '../../hooks'
 import { timeAgo } from '../../format'
 import { isVideoLibrary, libraryKinds } from '../../libraryKinds'
@@ -13,6 +14,7 @@ export default function AdminLibraries() {
   const { data: libraries, reload } = useApi<Library[]>('/api/admin/libraries')
   const { data: scans } = useApi<ScanStatus[]>('/api/admin/scan', 2000)
   const [editing, setEditing] = useState<Library | 'new' | null>(null)
+  const [managing, setManaging] = useState<Library | null>(null)
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -67,6 +69,11 @@ export default function AdminLibraries() {
                     <Icon name="download" size={16} /> Refresh metadata
                   </button>
                 )}
+                {isVideoLibrary(l.kind) && (
+                  <button className="btn btn-glass btn-sm" onClick={() => setManaging(l)}>
+                    <Icon name="sliders" size={16} /> Manage recommendations
+                  </button>
+                )}
                 <button className="btn btn-glass btn-sm" onClick={() => setEditing(l)}>
                   <Icon name="edit" size={16} /> Edit
                 </button>
@@ -83,6 +90,7 @@ export default function AdminLibraries() {
       </div>
       {libraries?.length === 0 && <div className="empty">No libraries yet. Add a folder of movies, TV shows, music, audiobooks or photos to get started.</div>}
 
+      {managing && <RecommendationsEditor library={managing} onClose={() => setManaging(null)} />}
       {editing && (
         <LibraryEditor
           library={editing === 'new' ? null : editing}

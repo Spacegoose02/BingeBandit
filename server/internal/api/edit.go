@@ -565,6 +565,12 @@ func (s *Server) collection(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	if currentUser(r).IsAdmin {
+		if lib, err := s.Store.Library(c.LibraryID); err == nil {
+			v := s.collectionVisibility(lib)[c.ID]
+			c.Visible = &v
+		}
+	}
 	out := map[string]any{"collection": c, "items": items, "total": c.ItemCount, "sort": sort}
 	if offset <= 0 {
 		out["others"] = s.sameNamedRows(currentUser(r), id)
