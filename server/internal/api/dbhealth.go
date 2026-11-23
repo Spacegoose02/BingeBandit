@@ -99,6 +99,9 @@ func (s *Server) serverProblems() []serverProblem {
 	if !damaged && backupErr != "" && strings.Contains(backupErr, "malformed") {
 		damaged = true
 	}
+	if s.DataOnFUSE() {
+		out = append(out, fuseProblem)
+	}
 	switch {
 	case damaged:
 		out = append(out, damagedProblem(s.newestBackupNote()))
@@ -107,6 +110,26 @@ func (s *Server) serverProblems() []serverProblem {
 			Body: backupErr + "." + s.newestBackupNote(), Link: "/admin/tasks"})
 	}
 	return out
+}
+
+// fuseProblem is shown while the data folder is on a FUSE filesystem.
+// SQLite's write-ahead log shares memory with every connection through a
+// mapped -shm file and relies on file locks; FUSE layers such as Unraid's
+// /mnt/user (shfs) don't honour these reliably, and the database ends up
+// "malformed" every week or two. The fix is to mount the pool directly.
+var fuseProblem = serverProblem{
+	Kind:  "storage",
+	Title: "The database is on a FUSE share, which damages it over time",
+	Body: "The data folder (/config) is on a FUSE filesystem, such as Unraid's /mnt/user. " +
+		"SQLite can't lock and share its files safely there, which is the usual cause of \"database disk image is malformed\". " +
+		"Stop the container and change the Appdata path to the pool itself, for example /mnt/cache/appdata/bingebandit instead of /mnt/user/appdata/bingebandit " +
+		"(or make the appdata share exclusive on Unraid 6.12 and newer).",
+	Link: "/admin/health",
+}
+
+// DataOnFUSE reports whether the data folder is on a FUSE filesystem.
+func (s *Server) DataOnFUSE() bool {
+	return s.DataDir != "" && OnFUSE(s.DataDir)
 }
 
 // adminStatus is the small summary every admin page polls for its banner.

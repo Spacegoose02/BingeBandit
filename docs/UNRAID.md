@@ -35,7 +35,7 @@ Then use **Add another Path, Port, Variable, Label or Device** for each row belo
 | What | Container | Host (example) | Notes |
 |---|---|---|---|
 | Port | `8484` | `8484` | Keep 8484. The TV and phone apps search for servers on this port. |
-| Appdata | `/config` | `/mnt/user/appdata/bingebandit` | Holds the database, artwork, caches, logs and backups. |
+| Appdata | `/config` | `/mnt/cache/appdata/bingebandit` | Holds the database, artwork, caches, logs and backups. Use the pool path (`/mnt/cache/...`, or your pool's name), not `/mnt/user/...`: see **Database keeps getting damaged** below. |
 | Media | `/media` | `/mnt/user/media` | Read-only is fine. Libraries use paths under `/media`. |
 | DVR recordings *(optional)* | `/config/recordings` | `/mnt/user/media/recordings` | Read/write. Puts recordings on the array instead of in appdata. |
 | Transcode folder *(optional)* | `/config/transcode` | `/tmp/bingebandit-transcode` | `/tmp` is RAM on Unraid. That's fast, but it needs a few GB free. |
@@ -107,6 +107,7 @@ Most TVs play files directly. Hardware transcoding helps phones, browsers and re
 - **Logs:**
   - Click the container icon and choose **Logs**.
   - Or in BingeBandit, go to **Server → Logs**. The files are also in `appdata/bingebandit/logs`.
+- **Database keeps getting damaged** ("database disk image is malformed"): the appdata folder is almost certainly mapped through `/mnt/user`. That path goes through Unraid's FUSE share layer (shfs), and SQLite can't lock and share its files safely there, so the database slowly gets damaged. BingeBandit shows a banner and logs a warning at start-up when this is the case. To fix it, stop the container, change **Appdata** to the pool path such as `/mnt/cache/appdata/bingebandit` (check with `ls /mnt/*/appdata/bingebandit` which pool holds it, and make sure the appdata share is set to stay on that pool), then start it again. On Unraid 6.12 and newer, making the appdata share *exclusive* also works. Then run **Optimize database** under **Server → Tasks** to repair the damage, or restore a backup if it can't.
 - **Libraries show nothing:** check that the library paths start with `/media/...`, the container path, not `/mnt/user/...`.
 - **Apps can't find the server:** check that port 8484 is mapped to 8484 and the device is on the same subnet. If not, type the address.
 - **Recordings owned by root:** the container runs as root, so new recordings are owned by `root`. Run **Tools → New Permissions** on the recordings share, or this in the Unraid terminal:

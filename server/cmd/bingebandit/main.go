@@ -46,12 +46,15 @@ func main() {
 	log.SetOutput(logBuf)
 	log.Printf("BingeBandit %s", version)
 	log.Printf("data directory: %s", cfg.DataDir)
+	if api.OnFUSE(cfg.DataDir) {
+		log.Printf("WARNING: the data directory is on a FUSE filesystem (such as Unraid's /mnt/user). " +
+			"SQLite databases get damaged there over time; map /config to the pool directly, e.g. /mnt/cache/appdata/bingebandit")
+	}
 
 	st, err := store.Open(filepath.Join(cfg.DataDir, "bingebandit.db"))
 	if err != nil {
 		log.Fatalf("database: %v", err)
 	}
-	defer st.Close()
 
 	artwork := metadata.NewArtwork(filepath.Join(cfg.DataDir, "artwork"))
 	meta := metadata.NewService(st)
@@ -138,11 +141,19 @@ func main() {
 	}()
 
 	<-ctx.Done()
+	// Docker sends SIGKILL 10 seconds after SIGTERM (docker stop, Unraid,
+	// auto-updaters), so everything here has to finish well inside that,
+	// or the database is never closed. Open streams are cut after 4s.
 	log.Print("shutting down")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	httpSrv.Shutdown(shutdownCtx)
-	srv.Plugins.Wait(5 * time.Second)
+	srv.Plugins.Wait(2 * time.Second)
+	if err := st.Close(); err != nil {
+		log.Printf("database: close: %v", err)
+	} else {
+		log.Print("database closed")
+	}
 }
 
 // loopbackURL is how plugins this server starts reach it: the listen port on 127.0.0.1.

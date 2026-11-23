@@ -5,6 +5,8 @@ services:
     image: ghcr.io/spacegoose02/bingebandit:latest
     container_name: bingebandit
     restart: unless-stopped
+    # Time to close the database cleanly before Docker kills the process.
+    stop_grace_period: 30s
     ports:
       - "8484:8484"
     # To cast to Chromecasts and DLNA TVs, the server has to see them on the

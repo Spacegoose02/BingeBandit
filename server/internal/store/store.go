@@ -46,7 +46,13 @@ func Open(path string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+// Close copies the write-ahead log back into the database file and closes
+// it, so a stopped server leaves one self-contained bingebandit.db.
+// database/sql waits for queries already running to finish first.
+func (s *Store) Close() error {
+	s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	return s.db.Close()
+}
 
 func (s *Store) migrate() error {
 	var version int
