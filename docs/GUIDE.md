@@ -107,7 +107,7 @@ Home opens with a spotlight of recent titles, then **Continue Watching** (includ
 
 ![Home](screenshots/home.webp)
 
-When you finish or thumbs-up something, Home adds **Because you watched…** and **Because you liked…** rows of titles like it from your own libraries (TMDB's recommendations for it, then titles of the same genres). Admins can turn these rows off under Settings. The spotlight plays a title's trailer silently after a few seconds (the speaker button turns the sound on); turn that off under **Account → Playback**, and it stays off when your device asks for reduced motion.
+When you finish or thumbs-up something, Home adds **Because you watched…** and **Because you liked…** rows of titles like it from your own libraries (TMDB's recommendations for it, then titles of the same genres). To hide them for yourself (each profile chooses for itself), choose **Hide** next to one of these rows, or untick them under **Account → Playback**; in the TV and Roku apps it is under **Settings**. Admins can turn them off for everyone under Settings. The spotlight plays a title's trailer silently after a few seconds (the speaker button turns the sound on); turn that off under **Account → Playback**, and it stays off when your device asks for reduced motion.
 
 Libraries you pin sit in the sidebar and fill your Home. Use **Edit** next to **Pinned** to choose which ones and their order. Unpinned libraries stay under **More**.
 

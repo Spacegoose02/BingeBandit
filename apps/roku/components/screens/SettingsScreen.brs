@@ -15,6 +15,7 @@ sub init()
     m.passcode = invalid
     m.asking = invalid ' what the PIN pad is for: { kind: "new"|"confirm"|"unlock", ... }
     m.pending = invalid ' the change to send again once unlocked
+    m.prefs = invalid ' this person's preferences, for "Because you watched" rows on Home
     m.options.observeField("itemSelected", "onOption")
     m.pinPad.observeField("pin", "onPin")
     m.pinPad.observeField("cancel", "closePad")
@@ -32,6 +33,14 @@ sub load()
     m.passcode = invalid
     api("GET", "/api/household", invalid, "onHousehold")
     api("GET", "/api/me/passcode", invalid, "onPasscode")
+    api("GET", "/api/me/prefs", invalid, "onPrefs")
+end sub
+
+sub onPrefs(event as object)
+    doneTask(event.getRoSGNode())
+    res = event.getData()
+    if res.ok and type(res.data) = "roAssociativeArray" then m.prefs = res.data
+    if m.members <> invalid and m.passcode <> invalid then render()
 end sub
 
 sub onHousehold(event as object)
@@ -90,6 +99,10 @@ sub render()
     if hasCode and unlocked then actions.Push({ label: "Lock now", method: "POST", path: "/api/me/passcode/lock", done: "Locked." })
     ' Kept on this Roku, not the account, so it needs no passcode.
     actions.Push({ label: "Are you still watching?: " + stillWatchingLabel(stillWatchingAfter()), kind: "stillWatching" })
+    ' Older servers don't send it; the rows are on until turned off.
+    if m.prefs <> invalid
+        actions.Push({ label: "Because you watched rows on Home: " + onOff(becauseRowsOn()), kind: "becauseRows" })
+    end if
     if owner
         for each mem in m.members
             if not isTrue(mem.isOwner)
@@ -116,6 +129,14 @@ sub render()
     m.options.jumpToItem = focus
 end sub
 
+' On unless this person turned them off (older servers don't send it).
+function becauseRowsOn() as boolean
+    if m.prefs = invalid then return true
+    v = m.prefs.becauseRows
+    if type(v) = "roBoolean" or type(v) = "Boolean" then return v
+    return true
+end function
+
 function onOff(on as boolean) as string
     if on then return "On"
     return "Off"
@@ -127,6 +148,10 @@ sub onOption()
     showMessage("", false)
     if getOr(a, "kind", "") = "stillWatching"
         nextStillWatching()
+    else if getOr(a, "kind", "") = "becauseRows"
+        turnOn = not becauseRowsOn()
+        if turnOn then done = "Because you watched rows are back on Home." else done = "Because you watched rows are off. Home leaves them out."
+        send({ method: "PUT", path: "/api/me/prefs", body: { becauseRows: turnOn }, done: done })
     else if getOr(a, "kind", "") = "new"
         openPad({ kind: "new", action: a }, a.title)
     else

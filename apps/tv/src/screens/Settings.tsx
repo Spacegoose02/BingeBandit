@@ -580,6 +580,39 @@ function MenuSection({ menu }: { menu: MenuChoices }) {
           </View>
         </Focusable>
       ))}
+      <BecauseRowsOption />
+    </>
+  )
+}
+
+/** This profile's "Because you watched" rows on Home, saved with its other preferences. */
+function BecauseRowsOption() {
+  const [on, setOn] = useState<boolean | null>(null)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    api.get<{ becauseRows?: boolean }>('/api/me/prefs').then((p) => setOn(p.becauseRows !== false), (e) => setMsg(e.message))
+  }, [])
+  if (on === null) return msg ? <Text style={st.msg}>{msg}</Text> : null
+  const toggle = () => {
+    setOn(!on)
+    // The server keeps the rest of the preferences as they are.
+    api
+      .put('/api/me/prefs', { becauseRows: !on })
+      .then(() => api.get('/api/me/prefs'))
+      .catch((e) => {
+        setOn(on)
+        setMsg(e.message)
+      })
+  }
+  return (
+    <>
+      {!!msg && <Text style={st.msg}>{msg}</Text>}
+      <Focusable onPress={toggle} style={st.option}>
+        <Text style={st.value}>“Because you watched” rows on Home: {on ? 'On' : 'Off'}</Text>
+        <Text style={st.hint}>
+          Picks from what you finished or liked lately. {isPhone ? 'Tap' : 'Press OK'} to turn them {on ? 'off' : 'on'}.
+        </Text>
+      </Focusable>
     </>
   )
 }

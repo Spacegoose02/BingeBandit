@@ -363,6 +363,8 @@ export interface Prefs {
   /** Leagues moved to the top of Sports, in order, and leagues whose rows are off. */
   sportsOrder?: string[] | null
   sportsHidden?: string[] | null
+  /** "Because you watched" and "Because you liked" rows on Home. Older servers leave it out. */
+  becauseRows?: boolean
   liveFollows: string[] | null
   liveAlertMinutes: number
   quietWhilePlaying: boolean

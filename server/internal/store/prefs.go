@@ -68,6 +68,9 @@ type Prefs struct {
 	// under Your teams).
 	SportsOrder  []string `json:"sportsOrder"`
 	SportsHidden []string `json:"sportsHidden"`
+	// BecauseRows shows this person's "Because you watched" and "Because
+	// you liked" rows on Home (when the server has them on at all).
+	BecauseRows bool `json:"becauseRows"`
 }
 
 // MultiViewLayout is a saved Multi-View: its channels in screen order.
@@ -93,7 +96,7 @@ var DefaultPrefs = Prefs{
 	AudioLanguage: "eng", SubtitleMode: "auto", SubtitleLanguage: "eng", SubtitleSize: "medium",
 	AutoQuality: true, AutoPlayNext: true, SkipIntro: "button", SkipCredits: "button", SkipRecap: "button", SkipAds: "button",
 	PreRollIntro: true, NotifyEpisodes: true, NotifyRecordings: true, GameAlertMinutes: 15,
-	NotifyTogether: true, LiveAlertMinutes: 10, ScoreBug: true,
+	NotifyTogether: true, LiveAlertMinutes: 10, ScoreBug: true, BecauseRows: true,
 }
 
 func (p *Prefs) Validate() error {
