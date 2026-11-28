@@ -42,14 +42,35 @@ func chartServer(t *testing.T) *httptest.Server {
 			w.Write([]byte(`[{"type":"movie","movie":{"title":"Alien","year":1979,"ids":{"tmdb":348}}},{"type":"show","show":{"title":"Bluey","year":2018,"ids":{"tvdb":353948}}}]`))
 		case "/graphql/":
 			body, _ := io.ReadAll(r.Body)
-			var q struct{ Query string }
+			var q struct {
+				Query     string
+				Variables struct{ LsConst string }
+			}
 			json.Unmarshal(body, &q)
+			if r.Header.Get("x-imdb-client-name") == "" || q.Variables.LsConst == "ls999" {
+				w.Header().Set("Server", "CloudFront")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			switch q.Variables.LsConst {
+			case "ls100": // two pages, a show among them
+				if !strings.Contains(string(body), `"after"`) {
+					w.Write([]byte(`{"data":{"list":{"titleListItemSearch":{"edges":[{"listItem":{"id":"tt0038650","titleText":{"text":"It's a Wonderful Life"},"releaseYear":{"year":1946},"titleType":{"id":"movie"}}}],"pageInfo":{"hasNextPage":true,"endCursor":"c1"}}}}}`))
+					return
+				}
+				w.Write([]byte(`{"data":{"list":{"titleListItemSearch":{"edges":[{"listItem":{"id":"tt0903747","titleText":{"text":"Breaking Bad"},"titleType":{"id":"tvSeries"}}}],"pageInfo":{"hasNextPage":false,"endCursor":"c2"}}}}}`))
+				return
+			case "ls404":
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"errors":[{"message":"not found","extensions":{"code":"RESOURCE_NOT_FOUND"}}]}`))
+				return
+			}
 			if strings.Contains(q.Query, "TOP_RATED_MOVIES") {
 				w.Write([]byte(`{"data":{"chartTitles":{"edges":[{"node":{"id":"tt0113277","titleText":{"text":"Heat"},"releaseYear":{"year":1995},"titleType":{"id":"movie"}}},{"node":{"id":"tt0903747","titleText":{"text":"Breaking Bad"},"releaseYear":{"year":2008},"titleType":{"id":"tvSeries"}}}]}}}`))
 				return
 			}
 			w.Write([]byte(`{"errors":[{"message":"nope"}]}`))
-		case "/imdb/list/ls999/": // AWS WAF's bot challenge
+		case "/imdb/list/ls999/", "/imdb/list/ls404/": // AWS WAF's bot challenge
 			w.Header().Set("x-amzn-waf-action", "challenge")
 			w.WriteHeader(http.StatusAccepted)
 		case "/imdb/list/ls000096828/":
@@ -142,11 +163,19 @@ func TestChartLists(t *testing.T) {
 	if recs, err = fetch("https://www.imdb.com/chart/top/", "movies"); err != nil || labels(recs) != "movie:Heat:tt0113277, show:Breaking Bad:tt0903747" {
 		t.Fatalf("IMDb Top 250: %v %+v", err, recs)
 	}
-	// GraphQL refuses the list, so the page's title links are read instead.
+	// The API refuses the list, so the page's title links are read instead.
 	if recs, err = fetch("https://www.imdb.com/list/ls000096828/", "movies"); err != nil || labels(recs) != "movie::tt0078748, movie::tt0113277" {
 		t.Fatalf("IMDb list from the page: %v %+v", err, recs)
 	}
 
+	// Lists come from the persisted list query, page by page.
+	if recs, err = fetch("https://www.imdb.com/list/ls100/", "movies"); err != nil || labels(recs) != "movie:It's a Wonderful Life:tt0038650, show:Breaking Bad:tt0903747" {
+		t.Fatalf("IMDb list: %v %+v", err, recs)
+	}
+	// A missing list says so rather than blaming the bot wall.
+	if _, err = fetch("https://www.imdb.com/list/ls404/", "movies"); err == nil || !strings.Contains(err.Error(), "no such list") {
+		t.Fatalf("IMDb missing list: %v", err)
+	}
 	// IMDb's bot wall says so instead of "answered 202 Accepted".
 	if _, err = fetch("https://www.imdb.com/list/ls999/", "movies"); err == nil || !strings.Contains(err.Error(), "blocks automated requests") {
 		t.Fatalf("IMDb bot wall: %v", err)

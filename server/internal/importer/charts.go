@@ -324,44 +324,18 @@ func (l *Lists) imdb(ctx context.Context, u *url.URL, libraryKind string) ([]Rec
 			out = append(out, e.Node.record())
 		}
 	case imdbListPath.MatchString(path):
-		id := imdbListPath.FindStringSubmatch(path)[1]
-		after := ""
-		for page := 0; page < 40; page++ {
-			var res struct {
-				List struct {
-					Items struct {
-						Edges []struct {
-							ListItem imdbTitle `json:"listItem"`
-						} `json:"edges"`
-						PageInfo struct {
-							HasNextPage bool   `json:"hasNextPage"`
-							EndCursor   string `json:"endCursor"`
-						} `json:"pageInfo"`
-					} `json:"titleListItemSearch"`
-				} `json:"list"`
-			}
-			cursor := ""
-			if after != "" {
-				cursor = fmt.Sprintf(`, after: %q`, after)
-			}
-			if err = l.imdbQuery(ctx, fmt.Sprintf(`{ list(id: %q) { titleListItemSearch(first: 250%s) { edges { listItem { ... on Title { %s } } } pageInfo { hasNextPage endCursor } } } }`, id, cursor, imdbTitleFields), &res); err != nil {
-				break
-			}
-			for _, e := range res.List.Items.Edges {
-				out = append(out, e.ListItem.record())
-			}
-			after = res.List.Items.PageInfo.EndCursor
-			if !res.List.Items.PageInfo.HasNextPage || after == "" {
-				break
-			}
-		}
+		out, err = l.imdbList(ctx, imdbListPath.FindStringSubmatch(path)[1], libraryKind)
 	default:
 		return nil, fmt.Errorf("IMDb links look like https://www.imdb.com/chart/top or https://www.imdb.com/list/ls…")
 	}
 	if err != nil || len(out) == 0 {
 		gqlErr := err
 		if out, err = l.imdbPage(ctx, u, path, libraryKind); err != nil {
-			if errors.Is(err, errIMDbBlocked) || errors.Is(gqlErr, errIMDbBlocked) {
+			if errors.Is(err, errIMDbBlocked) {
+				// The API's own answer ("private", "no such list") says more.
+				if gqlErr != nil {
+					return nil, gqlErr
+				}
 				return nil, errIMDbBlocked
 			}
 			if gqlErr != nil {
@@ -377,12 +351,98 @@ func (l *Lists) imdb(ctx context.Context, u *url.URL, libraryKind string) ([]Rec
 }
 
 func (l *Lists) imdbQuery(ctx context.Context, query string, out any) error {
-	body, _ := json.Marshal(map[string]string{"query": query})
+	return l.imdbGraph(ctx, map[string]any{"query": query}, out)
+}
+
+// imdbListHash is the persisted query IMDb's own list page runs
+// (TitleListMainPage). IMDb's API no longer accepts the list query written
+// out, so this is how Kometa reads lists too; when IMDb retires the hash,
+// the current one is read from Kometa's IMDb-Hash repository.
+const imdbListHash = "dc98c1b896ffcb97e619b888d27721ff40fea6985fd022bca920615ed744ee0b"
+
+var imdbListHashURL = "https://raw.githubusercontent.com/Kometa-Team/IMDb-Hash/master/LIST_HASH"
+
+// imdbList reads an IMDb list, 100 titles a page, in the list's own order.
+func (l *Lists) imdbList(ctx context.Context, id, libraryKind string) ([]Record, error) {
+	hash := imdbListHash
+	refreshed := false
+	after := ""
+	var out []Record
+	for page := 0; page < 100; page++ {
+		vars := map[string]any{"locale": "en-US", "first": 100, "lsConst": id, "isInPace": false,
+			"sort": map[string]string{"by": "LIST_ORDER", "order": "ASC"}}
+		if after != "" {
+			vars["after"] = after
+		}
+		var res struct {
+			List *struct {
+				Items struct {
+					Edges []struct {
+						ListItem imdbTitle `json:"listItem"`
+					} `json:"edges"`
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"titleListItemSearch"`
+			} `json:"list"`
+		}
+		err := l.imdbGraph(ctx, map[string]any{"operationName": "TitleListMainPage", "variables": vars,
+			"extensions": map[string]any{"persistedQuery": map[string]any{"version": 1, "sha256Hash": hash}}}, &res)
+		if err != nil && !refreshed && strings.Contains(strings.ToLower(err.Error()), "persisted") {
+			refreshed = true
+			if h := l.imdbCurrentListHash(ctx); h != "" && h != hash {
+				hash = h
+				page--
+				continue
+			}
+		}
+		if err != nil {
+			return out, err
+		}
+		if res.List == nil {
+			return nil, fmt.Errorf("IMDb has no list %s, or it's private", id)
+		}
+		for _, e := range res.List.Items.Edges {
+			r := e.ListItem.record()
+			if e.ListItem.TitleType == nil && libraryKind == "shows" {
+				r.Kind = "show"
+			}
+			if r.IMDB != "" {
+				out = append(out, r)
+			}
+		}
+		after = res.List.Items.PageInfo.EndCursor
+		if !res.List.Items.PageInfo.HasNextPage || after == "" {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (l *Lists) imdbCurrentListHash(ctx context.Context) string {
+	body, err := l.get(ctx, imdbListHashURL)
+	if err != nil {
+		return ""
+	}
+	defer body.Close()
+	b, _ := io.ReadAll(io.LimitReader(body, 256))
+	h := strings.TrimSpace(string(b))
+	if !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(h) {
+		return ""
+	}
+	return h
+}
+
+func (l *Lists) imdbGraph(ctx context.Context, payload map[string]any, out any) error {
+	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, l.imdbGraphQL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "BingeBandit")
+	// IMDb's CDN turns away API requests that don't name a client.
 	req.Header.Set("x-imdb-client-name", "imdb-web-next")
 	resp, err := l.client.Do(req)
 	if err != nil {
@@ -392,20 +452,36 @@ func (l *Lists) imdbQuery(ctx context.Context, query string, out any) error {
 	if imdbBlocked(resp) {
 		return errIMDbBlocked
 	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("IMDb answered %s", resp.Status)
-	}
 	var res struct {
 		Data   json.RawMessage `json:"data"`
 		Errors []struct {
-			Message string `json:"message"`
+			Message    string `json:"message"`
+			Extensions struct {
+				Code string `json:"code"`
+			} `json:"extensions"`
 		} `json:"errors"`
 	}
+	// IMDb sends its errors as JSON with a 400 as well as a 200.
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(&res); err != nil {
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("IMDb answered %s", resp.Status)
+		}
 		return err
 	}
 	if len(res.Errors) > 0 {
-		return fmt.Errorf("IMDb: %s", res.Errors[0].Message)
+		switch e := res.Errors[0]; e.Extensions.Code {
+		case "RESOURCE_NOT_FOUND":
+			return fmt.Errorf("IMDb has no such list")
+		case "FORBIDDEN":
+			return fmt.Errorf("that IMDb list is private")
+		case "":
+			return fmt.Errorf("IMDb: %s", e.Message)
+		default:
+			return fmt.Errorf("IMDb: %s (%s)", e.Message, e.Extensions.Code)
+		}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("IMDb answered %s", resp.Status)
 	}
 	return json.Unmarshal(res.Data, out)
 }
