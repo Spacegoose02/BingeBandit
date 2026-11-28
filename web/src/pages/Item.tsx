@@ -279,7 +279,7 @@ function ItemView({ detail, reload }: { detail: ItemDetail; reload: () => void }
         {(item.kind === 'movie' || item.kind === 'show') && <MoreLikeThis id={item.id} />}
 
         {(item.kind === 'movie' || item.kind === 'show') && item.tmdbId ? (
-          <RequestRow title="Like this, not here yet" path={`/api/requests/similar/${item.kind}/${item.tmdbId}`} />
+          <RequestRow title="Like this, not here yet" path={`/api/requests/similar/${item.kind}/${item.tmdbId}`} libraryId={item.libraryId} />
         ) : null}
       </div>
 

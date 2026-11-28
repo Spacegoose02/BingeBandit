@@ -384,6 +384,9 @@ const st = StyleSheet.create(scaled({
 interface SeasonsInfo {
   title: { kind: 'show'; tmdbId: number; title: string; year?: number; poster?: string; overview?: string }
   seasons?: { number: number; episodes: number; airDate?: string; onServer: number; requested: boolean }[]
+  /** Show libraries it can go in, and the one to offer first (older servers leave them out). */
+  libraries?: { id: number; name: string }[]
+  library?: number
 }
 
 type Season = NonNullable<SeasonsInfo['seasons']>[number]
@@ -403,11 +406,11 @@ function useMissingSeasons(item?: Item) {
   }, [show, showId])
   const missing = (info?.seasons ?? []).filter((s) => s.onServer < s.episodes && s.episodes > 0)
   const open = missing.filter((s) => !s.requested && !sent.includes(s.number))
-  const request = (numbers: number[]) => {
+  const request = (numbers: number[], libraryId?: number) => {
     if (!info || !numbers.length) return Promise.resolve(false)
     const { kind, tmdbId, title, year, poster, overview } = info.title
     setError('')
-    return api.post('/api/requests', { kind, tmdbId, title, year, poster, overview, seasons: numbers }).then(
+    return api.post('/api/requests', { kind, tmdbId, title, year, poster, overview, seasons: numbers, libraryId }).then(
       () => {
         setSent((s) => [...s, ...numbers])
         return true
@@ -442,6 +445,9 @@ function seasonLabel(s: Season) {
 function RequestChoices({ seasons, onDone }: { seasons: ReturnType<typeof useMissingSeasons>; onDone: () => void }) {
   const [picked, setPicked] = useState<number[]>(() => seasons.open.map((s) => s.number))
   const [busy, setBusy] = useState(false)
+  // Which show library it goes in, when there's a choice (it starts on the one the show is in).
+  const libraries = seasons.info?.libraries ?? []
+  const [library, setLibrary] = useState(seasons.info?.library ?? 0)
   const done = seasons.missing.filter((s) => !seasons.open.includes(s))
   const toggle = (n: number) => setPicked((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]))
   const chosen = picked.filter((n) => seasons.open.some((s) => s.number === n))
@@ -461,6 +467,16 @@ function RequestChoices({ seasons, onDone }: { seasons: ReturnType<typeof useMis
           ))}
         </View>
       )}
+      {seasons.open.length > 0 && libraries.length > 1 && (
+        <>
+          <Text style={st.muted}>Add to</Text>
+          <View style={st.buttons}>
+            {libraries.map((l) => (
+              <Button key={l.id} small label={`${l.name}${library === l.id ? ' ✓' : ''}`} onPress={() => setLibrary(l.id)} />
+            ))}
+          </View>
+        </>
+      )}
       <View style={st.buttons}>
         {seasons.open.length > 0 && (
           <Button
@@ -470,7 +486,7 @@ function RequestChoices({ seasons, onDone }: { seasons: ReturnType<typeof useMis
             onPress={() => {
               if (busy || !chosen.length) return
               setBusy(true)
-              seasons.request(chosen).then((ok) => {
+              seasons.request(chosen, library || undefined).then((ok) => {
                 setBusy(false)
                 if (ok) onDone()
               })

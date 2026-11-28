@@ -320,11 +320,15 @@ func (c *Cinemask) Link(kind string, tmdbID int64) string {
 }
 
 // Add starts following a title (just these seasons of a show when given),
-// at a quality profile (0 for the default), searching at once when asked.
-func (c *Cinemask) Add(ctx context.Context, kind string, tmdbID, profileID int64, seasons []int, search bool) (*Monitored, error) {
+// at a quality profile (0 for the default), in root folder rootID ("" for
+// the main one), searching at once when asked.
+func (c *Cinemask) Add(ctx context.Context, kind string, tmdbID, profileID int64, rootID string, seasons []int, search bool) (*Monitored, error) {
 	body := map[string]any{"kind": kind, "tmdbId": tmdbID, "search": search}
 	if profileID > 0 {
 		body["profileId"] = profileID
+	}
+	if rootID != "" {
+		body["rootId"] = rootID
 	}
 	if kind == "show" && len(seasons) > 0 {
 		body["seasons"] = seasons

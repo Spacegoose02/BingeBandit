@@ -1002,6 +1002,9 @@ export interface TitleRequest {
   /** Seasons of a show asked for; none is the whole show. */
   seasons?: number[]
   fourK?: boolean
+  /** The library it should land in (0 or missing: the fetcher's main folder), and its name. */
+  libraryId?: number
+  library?: string
   /** While it's fetched: searching, downloading, importing, or waiting (not out yet). */
   stage?: 'searching' | 'downloading' | 'importing' | 'waiting'
   /** 0-1 */
@@ -1043,6 +1046,10 @@ export interface RequestTitleInfo {
   /** A kid whose requests go to a parent first. */
   kidsWait: boolean
   seasons?: { number: number; name: string; episodes: number; airDate?: string; onServer: number; requested: boolean }[]
+  /** Libraries of its kind the viewer can have it put in, the main one first (older servers leave it out). */
+  libraries?: { id: number; name: string }[]
+  /** The one to offer first. */
+  library?: number
 }
 
 export interface RequestLimit {

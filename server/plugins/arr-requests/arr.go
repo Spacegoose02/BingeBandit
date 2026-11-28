@@ -131,11 +131,32 @@ func (a *arr) profileID(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("%s has no quality profile called %q", a.name(), a.profile)
 }
 
-// rootPath finds the configured root folder, or the first one.
-func (a *arr) rootPath(ctx context.Context) (string, error) {
+// folderKey is a folder or library name to compare: "kids_movies",
+// "Kids-Movies" and "Kids Movies" all match.
+func folderKey(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ' ' || r == '-' || r == '_' || r == '.' {
+			return -1
+		}
+		return r
+	}, strings.ToLower(strings.TrimSpace(name)))
+}
+
+// rootPath finds the root folder named like library (its last path part:
+// /media/Kids Movies for Kids Movies), else the configured one, else the
+// first one.
+func (a *arr) rootPath(ctx context.Context, library string) (string, error) {
 	var list []arrRoot
 	if err := a.do(ctx, "GET", "/rootfolder", nil, &list); err != nil {
 		return "", err
+	}
+	if want := folderKey(library); want != "" {
+		for _, r := range list {
+			p := strings.TrimRight(strings.ReplaceAll(r.Path, `\`, "/"), "/")
+			if folderKey(p[strings.LastIndex(p, "/")+1:]) == want {
+				return r.Path, nil
+			}
+		}
 	}
 	for _, r := range list {
 		if a.root == "" || strings.TrimRight(r.Path, `/\`) == strings.TrimRight(a.root, `/\`) {
@@ -247,14 +268,15 @@ func (a *arr) lookup(ctx context.Context, tmdbID int64, name string, year int) (
 	return nil, fmt.Errorf("Sonarr couldn't find %q", name)
 }
 
-// add has the *arr follow a title and search for it. For a show, only the
-// seasons given are followed (all of them when none are).
-func (a *arr) add(ctx context.Context, t *title, seasons []int) error {
+// add has the *arr follow a title and search for it, in the root folder
+// named like library when there's one. For a show, only the seasons given
+// are followed (all of them when none are).
+func (a *arr) add(ctx context.Context, t *title, seasons []int, library string) error {
 	profile, err := a.profileID(ctx)
 	if err != nil {
 		return err
 	}
-	root, err := a.rootPath(ctx)
+	root, err := a.rootPath(ctx, library)
 	if err != nil {
 		return err
 	}

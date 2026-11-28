@@ -9,11 +9,15 @@ sub init()
     m.grid.observeField("itemSelected", "onSelected")
     m.grid.observeField("itemFocused", "onFocused")
     m.top.observeField("focusedChild", "onFocusChanged")
+    m.menu = m.top.findNode("menu")
+    m.menu.observeField("chosen", "onLibraryChosen")
+    m.menu.observeField("closed", "closeLibraries")
     m.searched = ""
 end sub
 
 sub onFocusChanged()
-    if m.top.hasFocus() then m.keyboard.setFocus(true)
+    if not m.top.hasFocus() then return
+    if m.menu.visible then m.menu.setFocus(true) else m.keyboard.setFocus(true)
 end sub
 
 sub onText()
@@ -87,14 +91,73 @@ sub onSelected()
     if c = invalid then return
     if c.kind = "request"
         if c.subtitle <> "Not here · OK to request" and c.subtitle <> "Others asked · OK for you too" then return
+        if m.asking <> invalid then return
+        m.askingLabel = c.subtitle
         c.subtitle = "Asking…"
-        body = { kind: c.tmdbKind, tmdbId: c.tmdbId, title: c.title, poster: c.posterPath, overview: c.overview }
-        if c.year > 0 then body.year = c.year
         m.asking = c
-        api("POST", "/api/requests", body, "onAsked")
+        ' First, which libraries it could go in (Movies, Kids Movies...).
+        api("GET", "/api/requests/title/" + c.tmdbKind + "/" + c.tmdbId.ToStr(), invalid, "onLibraries")
         return
     end if
     m.top.navigate = openItem(c)
+end sub
+
+' More than one library to pick from (and nobody picked yet): ask which;
+' otherwise ask for it right away. Older servers send no libraries.
+sub onLibraries(event as object)
+    doneTask(event.getRoSGNode())
+    res = event.getData()
+    if m.asking = invalid then return
+    m.libraries = []
+    first = 0
+    if res.ok and type(res.data) = "roAssociativeArray"
+        if type(res.data.libraries) = "roArray" then m.libraries = res.data.libraries
+        first = getOr(res.data, "library", 0)
+        req = invalid
+        if type(res.data.title) = "roAssociativeArray" then req = res.data.title.request
+        if type(req) = "roAssociativeArray" and getOr(req, "status", "") <> "declined" and getOr(req, "libraryId", 0) > 0 then m.libraries = []
+    end if
+    if m.libraries.Count() < 2
+        sendRequest(first)
+        return
+    end if
+    names = []
+    focus = 0
+    for i = 0 to m.libraries.Count() - 1
+        names.Push(getOr(m.libraries[i], "name", ""))
+        if getOr(m.libraries[i], "id", 0) = first then focus = i
+    end for
+    m.menu.title = "Request " + m.asking.title
+    m.menu.message = "Which library should it go in?"
+    m.menu.focus = focus
+    m.menu.options = names
+    m.menu.visible = true
+    m.menu.setFocus(true)
+end sub
+
+sub onLibraryChosen()
+    if m.asking = invalid or not m.menu.visible then return
+    i = m.menu.chosen
+    if i < 0 or i >= m.libraries.Count() then return
+    m.menu.visible = false
+    m.grid.setFocus(true)
+    sendRequest(getOr(m.libraries[i], "id", 0))
+end sub
+
+' Back from the library menu: nothing is asked for.
+sub closeLibraries()
+    m.menu.visible = false
+    if m.asking <> invalid then m.asking.subtitle = m.askingLabel
+    m.asking = invalid
+    m.grid.setFocus(true)
+end sub
+
+sub sendRequest(libraryId as integer)
+    c = m.asking
+    body = { kind: c.tmdbKind, tmdbId: c.tmdbId, title: c.title, poster: c.posterPath, overview: c.overview }
+    if c.year > 0 then body.year = c.year
+    if libraryId > 0 then body.libraryId = libraryId
+    api("POST", "/api/requests", body, "onAsked")
 end sub
 
 sub onAsked(event as object)

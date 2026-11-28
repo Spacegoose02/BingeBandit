@@ -32,6 +32,11 @@ type TitleRequest struct {
 	// Seasons a show request is for; empty is the whole show.
 	Seasons []int `json:"seasons,omitempty"`
 	FourK   bool  `json:"fourK,omitempty"` // the 4K copy is wanted too
+	// The library it should land in (0 for the fetcher's main folder), and
+	// that library's name, which the fetching plugin matches to one of its
+	// own folders (Kids Movies, Christmas).
+	LibraryID int64  `json:"libraryId,omitempty"`
+	Library   string `json:"library,omitempty"`
 	// While it's fetched, what the fetching plugin last said: searching,
 	// downloading, importing or waiting (not out yet), how far along (0-1)
 	// and when it should finish (unix seconds; 0 when unknown).
@@ -60,15 +65,15 @@ const (
 const requestSelect = `SELECT r.id, r.kind, r.tmdb_id, r.title, r.year, r.poster, r.overview, r.user_id,
 	COALESCE(CASE WHEN u.profile_name != '' THEN u.profile_name ELSE u.username END, ''),
 	(SELECT COUNT(*) FROM title_request_people p WHERE p.request_id = r.id),
-	r.note, r.status, r.reason, r.link, r.seasons, r.four_k, r.stage, r.progress, r.eta, r.release_date, r.available_at,
+	r.note, r.status, r.reason, r.link, r.seasons, r.four_k, r.library_id, COALESCE(l.name, ''), r.stage, r.progress, r.eta, r.release_date, r.available_at,
 	r.decided_by, r.created_at, r.updated_at
-	FROM title_requests r LEFT JOIN users u ON u.id = r.user_id`
+	FROM title_requests r LEFT JOIN users u ON u.id = r.user_id LEFT JOIN libraries l ON l.id = r.library_id`
 
 func scanRequest(row interface{ Scan(...any) error }) (*TitleRequest, error) {
 	var t TitleRequest
 	var seasons string
 	err := row.Scan(&t.ID, &t.Kind, &t.TMDBID, &t.Title, &t.Year, &t.Poster, &t.Overview, &t.UserID, &t.RequestedBy,
-		&t.People, &t.Note, &t.Status, &t.Reason, &t.Link, &seasons, &t.FourK, &t.Stage, &t.Progress, &t.ETA, &t.ReleaseDate,
+		&t.People, &t.Note, &t.Status, &t.Reason, &t.Link, &seasons, &t.FourK, &t.LibraryID, &t.Library, &t.Stage, &t.Progress, &t.ETA, &t.ReleaseDate,
 		&t.AvailableAt, &t.DecidedBy, &t.CreatedAt, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -142,7 +147,7 @@ const (
 
 // RequestTitle asks for a title for user uid. t carries the title's kind,
 // TMDB id, title, year, poster reference (tmdb:/…), overview, note, seasons,
-// 4K and release date; source is "" when they asked and "watchlist" when
+// 4K, library and release date; source is "" when they asked and "watchlist" when
 // their watchlist did. When the title was already asked for, uid joins that
 // request, and when they want more of it (seasons, 4K) than it covers it
 // starts over at status, unless status is RequestParent (a kid's ask waits
@@ -162,9 +167,9 @@ func (s *Store) RequestTitle(uid int64, t *TitleRequest, status, source string) 
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		res, err := tx.Exec(`INSERT INTO title_requests (kind, tmdb_id, title, year, poster, overview, user_id, note, status,
-			seasons, four_k, release_date, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.Kind, t.TMDBID, t.Title, t.Year, t.Poster, t.Overview, uid, t.Note, status,
-			want, t.FourK, t.ReleaseDate, now(), now())
+			seasons, four_k, library_id, release_date, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.Kind, t.TMDBID, t.Title, t.Year, t.Poster, t.Overview, uid, t.Note, status,
+			want, t.FourK, t.LibraryID, t.ReleaseDate, now(), now())
 		if err != nil {
 			return nil, "", err
 		}
@@ -191,6 +196,14 @@ func (s *Store) RequestTitle(uid int64, t *TitleRequest, status, source string) 
 				outcome = RequestReopened
 			}
 			if _, err := tx.Exec(q, args...); err != nil {
+				return nil, "", err
+			}
+		}
+		// The first library picked stands, unless it starts over (then the
+		// latest pick does) or none was picked yet and it isn't fetched.
+		if t.LibraryID > 0 {
+			if _, err := tx.Exec(`UPDATE title_requests SET library_id = ? WHERE id = ? AND (? OR (library_id = 0 AND status IN (?, ?, ?, ?, ?)))`,
+				t.LibraryID, id, outcome == RequestReopened, RequestParent, RequestPending, RequestApproved, RequestFailed, RequestDeclined); err != nil {
 				return nil, "", err
 			}
 		}
@@ -315,6 +328,12 @@ func (s *Store) SetRequestStatus(id int64, status, reason, link string, decidedB
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetRequestLibrary changes the library a request should land in.
+func (s *Store) SetRequestLibrary(id, libraryID int64) error {
+	_, err := s.db.Exec(`UPDATE title_requests SET library_id = ?, updated_at = ? WHERE id = ?`, libraryID, now(), id)
+	return err
 }
 
 // WithdrawRequest takes uid off a request, deleting the request when nobody

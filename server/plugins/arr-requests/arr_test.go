@@ -33,7 +33,7 @@ func (f *fakeArr) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/qualityprofile":
 		io.WriteString(w, `[{"id":1,"name":"Any"},{"id":4,"name":"HD-1080p"}]`)
 	case p == "/rootfolder":
-		io.WriteString(w, `[{"id":1,"path":"/data/media"},{"id":2,"path":"/tv"}]`)
+		io.WriteString(w, `[{"id":1,"path":"/data/media"},{"id":2,"path":"/tv"},{"id":3,"path":"/data/kids_tv/"}]`)
 	case p == "/movie" && r.Method == "GET" && r.URL.Query().Get("tmdbId") == "949":
 		io.WriteString(w, `[{"id":7,"title":"Heat","tmdbId":949,"monitored":true}]`)
 	case p == "/movie" && r.Method == "GET":
@@ -148,5 +148,18 @@ func TestSendAndTrack(t *testing.T) {
 	a.refetch(context.Background(), data)
 	if !strings.Contains(reports[9]["reply"].(string), "searching") {
 		t.Errorf("refetch movie: %v", reports[9])
+	}
+}
+
+func TestRootForLibrary(t *testing.T) {
+	sonarr := &fakeArr{kind: "sonarr"}
+	ss := httptest.NewServer(sonarr)
+	defer ss.Close()
+	a, _ := newArr("sonarr", ss.URL, "key", "", "/tv")
+	ctx := context.Background()
+	for library, want := range map[string]string{"Kids TV": "/data/kids_tv/", "TV Shows": "/tv", "": "/tv"} {
+		if got, err := a.rootPath(ctx, library); err != nil || got != want {
+			t.Errorf("%q: %q %v, want %q", library, got, err, want)
+		}
 	}
 }

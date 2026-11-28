@@ -2,7 +2,7 @@
 
 Where BingeBandit stands, written so the next person (or AI session) can pick it up cold. Read **Start here** first; everything under **Log** is the history of each piece of work, newest first, with what was and wasn't tested.
 
-_Last updated: 2026-11-28. Latest release v0.58.2, 61 schema migrations._
+_Last updated: 2026-11-28. Latest release v0.58.2, 62 schema migrations._
 
 
 ## Start here
@@ -69,6 +69,18 @@ Most outside services and all hardware were only tested against fakes. These are
 Add a dated `##` section at the top of the log (right under `# Log`, not above **Start here**) for each piece of work: what changed (with file and function names), the migration number if any, and what was and wasn't tested. Update **Open work** and **Never tried for real** when they change, and the date and release line above.
 
 # Log
+
+## Pick the library a request lands in (2026-11-28, migration 62)
+
+Michael asked for a choice of library when pressing Request: Movies, Kids Movies, Christmas for a movie; TV Shows, Kids TV Shows for a show.
+
+- Migration 62 adds `title_requests.library_id`; `store.TitleRequest` gets `LibraryID` and `Library` (the name, joined from `libraries`). `RequestTitle` stores it; someone joining doesn't move it, unless the request starts over or nobody had picked. `Store.SetRequestLibrary` for admins.
+- API: `POST /api/requests` takes `libraryId` (400 unless it's a library of that kind the asker can see). `GET /api/requests/title/{kind}/{tmdb}` returns `libraries` (biggest first) and `library`, the default: the request's own pick, then `?library=` (what the app was showing), the library holding the show, then the biggest (`api.requestLibraries`, `defaultRequestLibrary`). Approve takes an optional `{libraryId}`. Older apps send none, which keeps today's behaviour (the fetcher's main folder).
+- Cinemask Upgrades: `sendRequest` puts a new title in the Cinemask root folder named like the library (`rootFor`, as collections already did); `Cinemask.Add` takes a root id. No matching folder logs and uses the main one. A title Cinemask already follows isn't moved.
+- Sonarr & Radarr: `arr.rootPath` prefers a root folder whose last path part matches the library name (spaces, `-`, `_` and `.` ignored).
+- Web: `RequestModal` shows **Add to** when there's more than one library (locked once someone picked); `RequestRow` passes the collection's or item's library as the hint; the admin Requests list shows "to Kids Movies".
+- TV app: `requestLibrary.tsx` (`useLibraryPick`) pops a menu of libraries before requesting from Search and a person's filmography; a show's missing-seasons choices get **Add to** buttons. Roku's Search opens an `OptionsMenu` of libraries.
+- Tested: Go tests (`TestRequestLibrary` in api and the cinemask plugin, `TestRootForLibrary` in arr-requests), web and TV typecheck and web build, the Roku brighterscript check. Not tried in a browser, on a TV, on a Roku, or against a real Cinemask.
 
 ## Why the database keeps getting damaged: warn about FUSE appdata, close it cleanly on stop (2026-11-23, no migration)
 

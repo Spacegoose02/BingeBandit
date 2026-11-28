@@ -344,7 +344,7 @@ func (a *app) fixReport(ctx context.Context, cm *Cinemask, p problem) (status, r
 		if p.ItemKind == "episode" {
 			kind = "show"
 		}
-		if _, err = cm.Add(ctx, kind, p.TMDBID, 0, nil, false); err == nil {
+		if _, err = cm.Add(ctx, kind, p.TMDBID, 0, "", nil, false); err == nil {
 			ok, msg, after, err = cm.FixIssue(ctx, id, action)
 		}
 	}
