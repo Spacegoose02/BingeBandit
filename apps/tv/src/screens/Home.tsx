@@ -11,6 +11,7 @@ import { scaled, colors, font, gutter, isPhone, px, quietPress } from '../theme'
 import type { HomeData, Item, Library, RequestableTitle, TitleRequest, User } from '../types'
 import { checkForUpdate, type AppRelease } from '../updates'
 import { requestLabel } from '../requests'
+import { useLibraryPick } from '../requestLibrary'
 import LibraryTab, { forgetSection } from './Library'
 import LiveGuide from './LiveGuide'
 import { fetchHousehold } from './Profiles'
@@ -597,13 +598,16 @@ function Search({ kid }: { kid: boolean }) {
     }, 350)
     return () => clearTimeout(t)
   }, [q, kid])
+  const libraryPick = useLibraryPick()
   const ask = (r: RequestableTitle) => {
     // Anyone can add their name to someone else's request; it moves it up the list.
     if (r.request && (r.request.mine || r.request.status === 'available')) return
     const { kind, tmdbId, title, year, poster, overview } = r
-    api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview }).then(
-      (req) => setRequestable((list) => list.map((x) => (x.kind === kind && x.tmdbId === tmdbId ? { ...x, request: req } : x))),
-      (e) => setError(e.message),
+    libraryPick.ask(r, (libraryId) =>
+      api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview, libraryId }).then(
+        (req) => setRequestable((list) => list.map((x) => (x.kind === kind && x.tmdbId === tmdbId ? { ...x, request: req } : x))),
+        (e) => setError(e.message),
+      ),
     )
   }
   // Like Approved Movies/Shows: the guide spans the whole screen, so Right
@@ -659,6 +663,7 @@ function Search({ kid }: { kid: boolean }) {
           </>
         )}
       </ScrollView>
+      {libraryPick.picker}
     </TVFocusGuideView>
   )
 }

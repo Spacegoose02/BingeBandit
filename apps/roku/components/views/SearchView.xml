@@ -12,6 +12,8 @@
       <Font role="font" uri="pkg:/fonts/Inter-Regular.otf" size="30" />
     </Label>
     <Timer id="debounce" duration="0.6" repeat="false" />
+    <!-- Requesting with more than one library to pick from: which one it goes in. -->
+    <OptionsMenu id="menu" translation="[-400, 0]" visible="false" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/common/util.brs" />
   <script type="text/brightscript" uri="pkg:/components/views/SearchView.brs" />

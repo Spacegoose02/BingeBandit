@@ -14,7 +14,8 @@ import (
 
 // Title requests: when an admin approves a movie or show someone asked for
 // in BingeBandit, Cinemask monitors it (just the seasons asked for, and at
-// the 4K profile when the 4K copy was) and searches for it at once, and
+// the 4K profile when the 4K copy was), in the Cinemask folder named like
+// the library picked for it, and searches for it at once, and
 // BingeBandit is told it was sent (or why it couldn't be). Approved
 // requests are picked up on the request.approved event and every 15
 // minutes, so ones approved while the plugin was off or Cinemask was down
@@ -30,6 +31,9 @@ type request struct {
 	Seasons     []int  `json:"seasons"`
 	FourK       bool   `json:"fourK"`
 	ReleaseDate string `json:"releaseDate"`
+	// Library is the BingeBandit library it should land in (Kids Movies);
+	// it goes in the Cinemask folder of that name, or the main one.
+	Library string `json:"library"`
 }
 
 // progress is how a sent request is getting on.
@@ -166,7 +170,17 @@ func sendRequest(ctx context.Context, cm *Cinemask, r request, profile4K string)
 		return err
 	}
 	if have == nil {
-		_, err = cm.Add(ctx, r.Kind, r.TMDBID, profile, r.Seasons, true)
+		root := ""
+		if r.Library != "" {
+			roots, err := cm.RootFolders(ctx)
+			if err != nil {
+				return err
+			}
+			if root = rootFor(roots, r.Kind, r.Library); root == "" {
+				log.Printf("request %q: Cinemask has no %s folder called %q; using its main one", r.Title, r.Kind, r.Library)
+			}
+		}
+		_, err = cm.Add(ctx, r.Kind, r.TMDBID, profile, root, r.Seasons, true)
 		return err
 	}
 	if profile > 0 && have.ProfileID != profile {
@@ -280,7 +294,7 @@ func refetch(ctx context.Context, cm *Cinemask, p problem) (string, error) {
 		return "", err
 	}
 	if m == nil {
-		if m, err = cm.Add(ctx, kind, p.TMDBID, 0, nil, false); err != nil {
+		if m, err = cm.Add(ctx, kind, p.TMDBID, 0, "", nil, false); err != nil {
 			return "", err
 		}
 	}

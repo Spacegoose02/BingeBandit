@@ -1062,4 +1062,9 @@ CREATE TABLE continue_hidden (
 	PRIMARY KEY (user_id, key)
 );
 `,
+	// 62: the library a request should land in (Kids Movies, Christmas),
+	// picked when asking; 0 is the fetcher's main folder.
+	`
+ALTER TABLE title_requests ADD COLUMN library_id INTEGER NOT NULL DEFAULT 0;
+`,
 }

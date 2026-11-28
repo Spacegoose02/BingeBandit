@@ -55,6 +55,7 @@ type request struct {
 	Seasons     []int  `json:"seasons"`
 	FourK       bool   `json:"fourK"`
 	ReleaseDate string `json:"releaseDate"`
+	Library     string `json:"library"` // the BingeBandit library picked for it
 }
 
 // problem is a problem report an admin sent off to be fixed.
@@ -217,7 +218,7 @@ func (a *app) send(ctx context.Context, r request, fourK bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return c.link(t, r.TMDBID), c.add(ctx, t, r.Seasons)
+	return c.link(t, r.TMDBID), c.add(ctx, t, r.Seasons, r.Library)
 }
 
 // trackRequests passes on the queue's progress for each sent request.

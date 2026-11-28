@@ -88,6 +88,29 @@ func TestRequestSeasonsAnd4K(t *testing.T) {
 	}
 }
 
+func TestRequestLibrary(t *testing.T) {
+	cm := &fakeCinemask{profile: 2}
+	cs := httptest.NewServer(cm)
+	defer cs.Close()
+	c, _ := newCinemask(cs.URL, "cmk_test")
+	ctx := context.Background()
+	// Picked Kids Movies: it goes in Cinemask's Kids Movies folder.
+	if err := sendRequest(ctx, c, request{Kind: "movie", TMDBID: 329865, Title: "Arrival", Library: "kids movies"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	// A library Cinemask has no folder for: its main one.
+	if err := sendRequest(ctx, c, request{Kind: "movie", TMDBID: 11, Title: "Star Wars", Library: "Christmas"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	calls := strings.Join(cm.calls, "\n")
+	if !strings.Contains(calls, `POST /api/monitored {"kind":"movie","rootId":"kids-movies","search":true,"tmdbId":329865}`) {
+		t.Errorf("Kids Movies: %s", calls)
+	}
+	if !strings.Contains(calls, `POST /api/monitored {"kind":"movie","search":true,"tmdbId":11}`) {
+		t.Errorf("no folder: %s", calls)
+	}
+}
+
 func TestProgressOf(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	eta := 600

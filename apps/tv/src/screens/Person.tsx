@@ -4,6 +4,7 @@ import { api, cached, image } from '../api'
 import { Button, Center, Focusable, PosterCard } from '../components'
 import { useNav } from '../nav'
 import { requestLabel } from '../requests'
+import { useLibraryPick } from '../requestLibrary'
 import { scaled, colors, font, gutter, isPhone } from '../theme'
 import type { Filmography, FilmographyCredit, Person, TitleRequest } from '../types'
 
@@ -117,6 +118,7 @@ function FilmographySection({ film, focusFirst }: { film: Filmography; focusFirs
   const [filter, setFilter] = useState<Filter>('all')
   const [all, setAll] = useState(false)
   const [asked, setAsked] = useState<Record<string, TitleRequest>>({})
+  const libraryPick = useLibraryPick()
   const [error, setError] = useState('')
   const count = (f: Filter) =>
     film.credits.filter((t) =>
@@ -130,9 +132,11 @@ function FilmographySection({ film, focusFirst }: { film: Filmography; focusFirs
     if (t.request && (t.request.mine || t.request.status === 'available')) return
     const { kind, tmdbId, title, year, poster, overview } = t
     setError('')
-    api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview }).then(
-      (req) => setAsked((a) => ({ ...a, [`${kind}:${tmdbId}`]: req })),
-      (e: Error) => setError(e.message),
+    libraryPick.ask(t, (libraryId) =>
+      api.post<TitleRequest>('/api/requests', { kind, tmdbId, title, year, poster, overview, libraryId }).then(
+        (req) => setAsked((a) => ({ ...a, [`${kind}:${tmdbId}`]: req })),
+        (e: Error) => setError(e.message),
+      ),
     )
   }
   const list = all ? shown : shown.slice(0, firstPage)
@@ -172,6 +176,7 @@ function FilmographySection({ film, focusFirst }: { film: Filmography; focusFirs
         })}
       </View>
       {!all && shown.length > list.length && <Button label={`Show all ${shown.length}`} onPress={() => setAll(true)} />}
+      {libraryPick.picker}
     </View>
   )
 }

@@ -177,7 +177,7 @@ export default function CollectionPage() {
               ))}
             </Row>
           ))}
-          <RequestRow title="Missing from this collection" path={`/api/requests/collection/${collection.id}`} />
+          <RequestRow title="Missing from this collection" path={`/api/requests/collection/${collection.id}`} libraryId={collection.libraryId} />
         </div>
       </div>
       {editing && (

@@ -320,6 +320,9 @@ export interface TitleRequest {
   status: 'parent' | 'pending' | 'approved' | 'sent' | 'failed' | 'declined' | 'available'
   mine: boolean
   seasons?: number[]
+  /** The library it should land in, and its name; missing leaves it to the fetcher. */
+  libraryId?: number
+  library?: string
   stage?: 'searching' | 'downloading' | 'importing' | 'waiting'
   /** 0-1 */
   progress?: number

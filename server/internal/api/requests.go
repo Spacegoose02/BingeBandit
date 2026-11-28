@@ -272,6 +272,9 @@ type requestInput struct {
 	Seasons     []int  `json:"seasons"`
 	FourK       bool   `json:"fourK"`
 	ReleaseDate string `json:"releaseDate"`
+	// LibraryID is the library it should land in; 0 (older apps) leaves
+	// it to the fetcher.
+	LibraryID int64 `json:"libraryId"`
 }
 
 // requestError is a request that can't be made, with the status to answer.
@@ -327,6 +330,9 @@ func (s *Server) placeRequest(u *store.User, in requestInput, source string) (*s
 	if !releaseDate.MatchString(in.ReleaseDate) {
 		in.ReleaseDate = ""
 	}
+	if in.LibraryID != 0 && !libraryIn(s.requestLibraries(u, in.Kind), in.LibraryID) {
+		return nil, "", &requestError{http.StatusBadRequest, "pick one of your " + libraryKindFor(in.Kind) + " libraries"}
+	}
 	if s.serverCovers(in) {
 		return nil, "", &requestError{http.StatusConflict, "this title is already on the server"}
 	}
@@ -353,7 +359,7 @@ func (s *Server) placeRequest(u *store.User, in requestInput, source string) (*s
 	status := s.statusFor(u)
 	t, outcome, err := s.Store.RequestTitle(u.ID, &store.TitleRequest{Kind: in.Kind, TMDBID: in.TMDBID, Title: in.Title,
 		Year: in.Year, Poster: poster, Overview: in.Overview, Note: in.Note, Seasons: in.Seasons, FourK: in.FourK,
-		ReleaseDate: in.ReleaseDate}, status, source)
+		LibraryID: in.LibraryID, ReleaseDate: in.ReleaseDate}, status, source)
 	if err != nil {
 		return nil, "", err
 	}
@@ -395,6 +401,72 @@ func (s *Server) moveOn(t *store.TitleRequest, status string, by *store.User) {
 	}
 	s.Emit("request.created", t)
 	s.notifyAdminsOfRequest(t, by)
+}
+
+// requestLibrary is a library a request can land in.
+type requestLibrary struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// libraryKindFor is the kind of library a movie or show goes in.
+func libraryKindFor(kind string) string {
+	if kind == "show" {
+		return store.KindShows
+	}
+	return store.KindMovies
+}
+
+// requestLibraries are the libraries u can ask to have a movie or show
+// put in: the ones of its kind they can see, biggest first, so the main
+// one (Movies, TV Shows) leads.
+func (s *Server) requestLibraries(u *store.User, kind string) []requestLibrary {
+	libs, err := s.Store.Libraries()
+	if err != nil {
+		return nil
+	}
+	want := libraryKindFor(kind)
+	var keep []*store.Library
+	for _, l := range libs {
+		if l.Kind == want && s.Store.CanSeeLibrary(u, l.ID) {
+			keep = append(keep, l)
+		}
+	}
+	sort.SliceStable(keep, func(i, j int) bool { return keep[i].ItemCount > keep[j].ItemCount })
+	out := make([]requestLibrary, len(keep))
+	for i, l := range keep {
+		out[i] = requestLibrary{l.ID, l.Name}
+	}
+	return out
+}
+
+func libraryIn(list []requestLibrary, id int64) bool {
+	for _, l := range list {
+		if l.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultRequestLibrary is the library to offer first: the one already
+// picked for the request, the one the app was showing (hint: a collection's
+// or the library being browsed), the one that has some of the show
+// already, or the biggest.
+func (s *Server) defaultRequestLibrary(list []requestLibrary, req *store.TitleRequest, kind string, tmdbID, hint int64) int64 {
+	if len(list) == 0 {
+		return 0
+	}
+	if req != nil && req.Status != store.RequestDeclined && libraryIn(list, req.LibraryID) {
+		return req.LibraryID
+	}
+	if libraryIn(list, hint) {
+		return hint
+	}
+	if found, _ := s.Store.FindItems(0, kind, tmdbID, "", 0); len(found) > 0 && libraryIn(list, found[0].LibraryID) {
+		return found[0].LibraryID
+	}
+	return list[0].ID
 }
 
 // serverCovers tells whether the server already has what in asks for.
@@ -574,6 +646,23 @@ func (s *Server) approveRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := currentUser(r)
+	// An admin can send it to another library while approving it.
+	var in struct {
+		LibraryID int64 `json:"libraryId"`
+	}
+	if r.ContentLength != 0 {
+		readJSON(r, &in) // no body (older apps) keeps the library
+	}
+	if in.LibraryID != 0 {
+		if !libraryIn(s.requestLibraries(u, t.Kind), in.LibraryID) {
+			writeErr(w, http.StatusBadRequest, "that isn't a "+libraryKindFor(t.Kind)+" library")
+			return
+		}
+		if err := s.Store.SetRequestLibrary(t.ID, in.LibraryID); err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+	}
 	was := t.Status
 	if err := s.Store.SetRequestStatus(t.ID, store.RequestApproved, "", "", u.ID); err != nil {
 		writeStoreErr(w, err)
@@ -718,6 +807,14 @@ func (s *Server) titleInfo(w http.ResponseWriter, r *http.Request) {
 	ann := s.annotateRequestable(u, []metadata.Requestable{info.Requestable}, false)[0]
 	out := map[string]any{"title": ann, "backdrop": info.Backdrop, "status": info.Status, "has4K": s.Store.Has4K(kind, id),
 		"fourK": s.fourKOn() || u.IsAdmin, "limit": s.limitState(u, kind), "kidsWait": u.Kid && u.OwnerID != 0}
+	// Where it can go (?library= is the one the app was showing).
+	libs := s.requestLibraries(u, kind)
+	if libs == nil {
+		libs = []requestLibrary{}
+	}
+	hint, _ := strconv.ParseInt(r.URL.Query().Get("library"), 10, 64)
+	out["libraries"] = libs
+	out["library"] = s.defaultRequestLibrary(libs, ann.Request, kind, id, hint)
 	if kind == "show" {
 		have, err := s.Store.ShowSeasons(id)
 		if err != nil {

@@ -131,7 +131,7 @@ export default function RequestsPage() {
             {r.fourK && <span className="pill small-pill">4K</span>}
           </div>
           <div className="muted small">
-            {[r.kind === 'show' ? seasonText(r) : 'Movie', (admin || r.people > 1 || opts.parent) && people, day(r.createdAt)].filter(Boolean).join(' · ')}
+            {[r.kind === 'show' ? seasonText(r) : 'Movie', r.library && `to ${r.library}`, (admin || r.people > 1 || opts.parent) && people, day(r.createdAt)].filter(Boolean).join(' · ')}
           </div>
           {r.note && <div className="small">“{r.note}”</div>}
           {r.reason && <div className={`small ${r.status === 'failed' ? 'form-error' : 'muted'}`}>{r.reason}</div>}

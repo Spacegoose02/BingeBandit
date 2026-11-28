@@ -108,16 +108,25 @@ export function RequestCard({ title: r, onAsk }: { title: RequestableTitle; onAs
 export function RequestModal({
   title,
   season,
+  libraryId,
   onClose,
   onDone,
 }: {
   title: Pick<RequestableTitle, 'kind' | 'tmdbId' | 'title'> & Partial<RequestableTitle>
   /** A season to start with ticked (from a "season 3 is out" notification). */
   season?: number
+  /** The library being browsed (a collection's), offered first when it fits. */
+  libraryId?: number
   onClose: () => void
   onDone: (r: TitleRequest) => void
 }) {
-  const { data: info, error: infoError } = useApi<RequestTitleInfo>(`/api/requests/title/${title.kind}/${title.tmdbId}`)
+  const { data: info, error: infoError } = useApi<RequestTitleInfo>(
+    `/api/requests/title/${title.kind}/${title.tmdbId}${libraryId ? `?library=${libraryId}` : ''}`,
+  )
+  const [library, setLibrary] = useState(0)
+  useEffect(() => {
+    if (info?.library) setLibrary((l) => l || info.library!)
+  }, [info])
   const [note, setNote] = useState('')
   const [picked, setPicked] = useState<Set<number> | null>(null)
   const [fourK, setFourK] = useState(false)
@@ -139,6 +148,9 @@ export function RequestModal({
   const allPicked = picked && offerable.length > 0 && offerable.every((s) => picked.has(s.number))
   const hasAny = seasons.some((s) => s.onServer > 0)
   const limit = info?.limit
+  const libraries = info?.libraries ?? []
+  // Once someone picked (or it's fetched), joining doesn't move it.
+  const libraryFixed = !!req && req.status !== 'declined' && (req.status === 'sent' || req.status === 'available' || !!req.libraryId)
   const overLimit = !!limit && limit.limit > 0 && limit.used >= limit.limit && !req?.mine
 
   const send = async () => {
@@ -148,6 +160,7 @@ export function RequestModal({
       const body: Record<string, unknown> = {
         kind: t.kind, tmdbId: t.tmdbId, title: t.title, year: t.year, poster: t.poster, overview: t.overview, releaseDate: t.releaseDate, note, fourK,
       }
+      if (library) body.libraryId = library
       // Every season and nothing on the server yet: ask for the whole show, so later seasons come too.
       if (t.kind === 'show' && picked && !(allPicked && !hasAny)) body.seasons = [...picked].sort((a, b) => a - b)
       onDone(await api.post<TitleRequest>('/api/requests', body))
@@ -219,6 +232,17 @@ export function RequestModal({
             Also get the 4K copy
           </label>
         )}
+        {libraries.length > 1 && (
+          <label>
+            Add to
+            <select value={library} disabled={libraryFixed} onChange={(e) => setLibrary(Number(e.target.value))}>
+              {libraries.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+            {libraryFixed && <span className="muted small">{req?.library ? `It’s going to ${req.library}.` : 'It’s already on its way.'}</span>}
+          </label>
+        )}
         <label>
           Note (optional)
           <input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Anything the admin should know" />
@@ -249,7 +273,7 @@ export function RequestModal({
  * ones). Nothing shows when requests are off for the viewer or the list is
  * empty.
  */
-export function RequestRow({ title, path }: { title: string; path: string }) {
+export function RequestRow({ title, path, libraryId }: { title: string; path: string; libraryId?: number }) {
   const { data, reload } = useApi<RequestableTitle[]>(path)
   const [asking, setAsking] = useState<RequestableTitle | null>(null)
   const [list, setList] = useState<RequestableTitle[] | null>(null)
@@ -265,6 +289,7 @@ export function RequestRow({ title, path }: { title: string; path: string }) {
       {asking && (
         <RequestModal
           title={asking}
+          libraryId={libraryId}
           onClose={() => setAsking(null)}
           onDone={(req) => {
             setList((l) => l?.map((t) => (t.kind === asking.kind && t.tmdbId === asking.tmdbId ? { ...t, request: req } : t)) ?? null)
