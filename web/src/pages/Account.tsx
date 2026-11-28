@@ -878,6 +878,10 @@ function PlaybackPrefs() {
         <input type="checkbox" checked={p.preRollIntro} onChange={(e) => set('preRollIntro', e.target.checked)} />
         Play the server's intro video before a movie (when your admin has set one)
       </label>
+      <label className="check">
+        <input type="checkbox" checked={p.becauseRows !== false} onChange={(e) => set('becauseRows', e.target.checked)} />
+        Show “Because you watched” and “Because you liked” rows on Home
+      </label>
       <p className="muted small">
         Trailers are of movies here you haven't watched, newest first, never rated above the movie you're starting. They play only when a
         movie starts from the beginning. A trailer file in the movie's folder (“-trailer” or a Trailers folder) is used first; the TV app

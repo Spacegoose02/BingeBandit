@@ -97,6 +97,17 @@ export default function Home() {
   useDocumentTitle('Home')
   const { user } = useAuth()
   const { data, loading, error, reload } = useApi<HomeData>('/api/home')
+  // After "Hide" on a "Because you…" row, a note with Undo where they were.
+  const [hidBecause, setHidBecause] = useState(false)
+  const setBecauseRows = async (on: boolean) => {
+    try {
+      await api.put('/api/me/prefs', { becauseRows: on })
+      setHidBecause(!on)
+      reload()
+    } catch (e) {
+      alert((e as Error).message)
+    }
+  }
   useEffect(() => {
     window.addEventListener(pinsChanged, reload)
     window.addEventListener(favoritesChanged, reload)
@@ -138,6 +149,14 @@ export default function Home() {
       <div className="rows">
         {data.continueWatching.length > 0 && <ContinueRow items={data.continueWatching} />}
         <FriendsRow />
+        {hidBecause && (
+          <div className="home-note muted small">
+            “Because you watched” rows are hidden. Turn them back on any time under <Link to="/account">Account</Link>.{' '}
+            <button className="link-btn" onClick={() => setBecauseRows(true)}>
+              Undo
+            </button>
+          </div>
+        )}
         {data.rows.map((row) =>
           row.id === 'recommended' ? (
             <RecommendedRow key={row.id} title={row.title} items={row.items} by={data.recommendedBy ?? {}} />
@@ -146,6 +165,13 @@ export default function Home() {
               key={row.id}
               title={row.title}
               to={row.collectionId ? `/collection/${row.collectionId}` : row.seeAll ? `/rows?${row.seeAll}` : row.id === 'favorites' ? '/favorites' : row.id === 'watchlist' ? '/watchlist' : undefined}
+              action={
+                row.id.startsWith('because-') ? (
+                  <button className="link-btn muted small" title="Hide your “Because you watched” and “Because you liked” rows" onClick={() => setBecauseRows(false)}>
+                    Hide
+                  </button>
+                ) : undefined
+              }
             >
               {row.items.map((it) => (
                 <PosterCard key={it.id} item={it} />

@@ -135,6 +135,18 @@ func TestRecommendationsFromTheLibrary(t *testing.T) {
 		t.Fatal("no Because you liked row")
 	}
 
+	// Turning them off under Account takes them away for that person only.
+	if c := call("PUT", "/api/me/prefs", `{"becauseRows":false}`, nil); c != http.StatusOK {
+		t.Fatalf("prefs: %d", c)
+	}
+	if got := because(); got != "" {
+		t.Fatalf("rows with the pref off: %q", got)
+	}
+	call("PUT", "/api/me/prefs", `{"becauseRows":true}`, nil)
+	if got := because(); got == "" {
+		t.Fatal("no rows with the pref back on")
+	}
+
 	// The admin's switch takes the rows away.
 	st.SetSettings(map[string]string{store.SettingBecauseRows: "false"})
 	if got := because(); got != "" {

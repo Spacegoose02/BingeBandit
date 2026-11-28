@@ -60,8 +60,13 @@ func (s *Server) ownedLike(uid int64, list []metadata.Requestable, skip int64, d
 
 // becauseRows are Home's "Because you watched …" (the two titles the viewer
 // finished last) and "Because you liked …" (their latest thumbs up) rows.
+// An admin turns them off for everyone in Settings, and each person (or
+// profile) for themselves under Account (pref becauseRows).
 func (s *Server) becauseRows(ctx context.Context, uid int64) []homeRow {
 	if !s.tmdbOn() || s.Store.Setting(store.SettingBecauseRows) == "false" {
+		return nil
+	}
+	if p, err := s.Store.UserPrefs(uid); err == nil && !p.BecauseRows {
 		return nil
 	}
 	type src struct {

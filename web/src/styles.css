@@ -401,6 +401,7 @@ a.ext-score:hover { text-decoration: underline; }
 .home .hero + .rows { margin-top: -10vh; padding-top: 0; }
 .row { margin: 0 0 30px; }
 .row-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--gutter); margin-bottom: 12px; }
+.home-note { padding: 0 var(--gutter); margin-bottom: 16px; }
 .row-body { position: relative; }
 .row-scroller {
   display: grid;

@@ -353,7 +353,7 @@ export default function AdminSettings() {
           </label>
           <p className="muted small">
             Picked from TMDB’s recommendations for what each person finished or gave a thumbs up lately, keeping only what the server has. Titles
-            someone marked “Not interested” stay out of them.
+            someone marked “Not interested” stay out of them. Each person can also hide them just for themselves from Home or under Account.
           </p>
           <label className="check">
             <input type="checkbox" checked={s.requests_enabled !== 'false'} onChange={set('requests_enabled')} />
