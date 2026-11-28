@@ -196,6 +196,11 @@ func (l *Lists) get(ctx context.Context, raw string) (io.ReadCloser, error) {
 
 var mdblistPath = regexp.MustCompile(`^/lists/([^/]+)/([^/]+)`)
 
+// mdblistExternal matches an external list, one MDBList mirrors from Trakt or
+// elsewhere: https://mdblist.com/lists/<user>/external/<id>. Its public JSON
+// lives under that full path and the API reads it by id.
+var mdblistExternal = regexp.MustCompile(`^/lists/([^/]+)/external/(\d+)`)
+
 // mdbItem is one title on an MDBList list. MDBList's "id" is the TMDB id;
 // newer responses also carry ids.tmdb.
 type mdbItem struct {
@@ -226,6 +231,12 @@ func (l *Lists) mdblist(ctx context.Context, u *url.URL) ([]Record, error) {
 	src := l.mdblistSite + "/lists/" + user + "/" + list + "/json"
 	if key != "" {
 		src = l.mdblistBase + "/lists/" + user + "/" + list + "/items?limit=5000&apikey=" + url.QueryEscape(key)
+	}
+	if e := mdblistExternal.FindStringSubmatch(u.Path); e != nil {
+		src = l.mdblistSite + "/lists/" + url.PathEscape(e[1]) + "/external/" + e[2] + "/json"
+		if key != "" {
+			src = l.mdblistBase + "/external/lists/" + e[2] + "/items?limit=5000&apikey=" + url.QueryEscape(key)
+		}
 	}
 	body, err := l.get(ctx, src)
 	if err != nil {
