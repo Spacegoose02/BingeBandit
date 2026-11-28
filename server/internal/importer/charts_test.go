@@ -49,6 +49,9 @@ func chartServer(t *testing.T) *httptest.Server {
 				return
 			}
 			w.Write([]byte(`{"errors":[{"message":"nope"}]}`))
+		case "/imdb/list/ls999/": // AWS WAF's bot challenge
+			w.Header().Set("x-amzn-waf-action", "challenge")
+			w.WriteHeader(http.StatusAccepted)
 		case "/imdb/list/ls000096828/":
 			w.Write([]byte(`<a href="/title/tt0078748/?ref_=1">Alien</a><a href="/title/tt0078748/">again</a><a href="/title/tt0113277/">Heat</a>`))
 		case "/list/halloween":
@@ -142,6 +145,11 @@ func TestChartLists(t *testing.T) {
 	// GraphQL refuses the list, so the page's title links are read instead.
 	if recs, err = fetch("https://www.imdb.com/list/ls000096828/", "movies"); err != nil || labels(recs) != "movie::tt0078748, movie::tt0113277" {
 		t.Fatalf("IMDb list from the page: %v %+v", err, recs)
+	}
+
+	// IMDb's bot wall says so instead of "answered 202 Accepted".
+	if _, err = fetch("https://www.imdb.com/list/ls999/", "movies"); err == nil || !strings.Contains(err.Error(), "blocks automated requests") {
+		t.Fatalf("IMDb bot wall: %v", err)
 	}
 
 	// Yamtrack: a private list signs in first.

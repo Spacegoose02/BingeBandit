@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -358,7 +359,14 @@ func (l *Lists) imdb(ctx context.Context, u *url.URL, libraryKind string) ([]Rec
 		return nil, fmt.Errorf("IMDb links look like https://www.imdb.com/chart/top or https://www.imdb.com/list/ls…")
 	}
 	if err != nil || len(out) == 0 {
+		gqlErr := err
 		if out, err = l.imdbPage(ctx, u, path, libraryKind); err != nil {
+			if errors.Is(err, errIMDbBlocked) || errors.Is(gqlErr, errIMDbBlocked) {
+				return nil, errIMDbBlocked
+			}
+			if gqlErr != nil {
+				return nil, fmt.Errorf("%w (and IMDb's API said: %v)", err, gqlErr)
+			}
 			return nil, err
 		}
 	}
@@ -381,6 +389,9 @@ func (l *Lists) imdbQuery(ctx context.Context, query string, out any) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if imdbBlocked(resp) {
+		return errIMDbBlocked
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("IMDb answered %s", resp.Status)
 	}
@@ -399,14 +410,37 @@ func (l *Lists) imdbQuery(ctx context.Context, query string, out any) error {
 	return json.Unmarshal(res.Data, out)
 }
 
+// errIMDbBlocked is IMDb's bot wall: AWS WAF answers the list page with an
+// empty 202 and an x-amzn-waf-action challenge that only a browser can pass,
+// and CloudFront refuses the GraphQL API outright with a 403.
+var errIMDbBlocked = errors.New("IMDb blocks automated requests to this list (its bot check only lets browsers through). Follow a copy of the list on MDBList, Trakt or Letterboxd instead")
+
+func imdbBlocked(resp *http.Response) bool {
+	if resp.Header.Get("x-amzn-waf-action") != "" {
+		return true
+	}
+	return resp.StatusCode == http.StatusForbidden && strings.Contains(strings.ToLower(resp.Header.Get("Server")), "cloudfront")
+}
+
 // imdbPage reads the title links on a chart or list page, in page order.
 func (l *Lists) imdbPage(ctx context.Context, u *url.URL, path, libraryKind string) ([]Record, error) {
-	body, err := l.get(ctx, l.imdbSite+path+"/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, l.imdbSite+path+"/", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "BingeBandit")
+	resp, err := l.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't read IMDb: %w", err)
 	}
-	defer body.Close()
-	page, err := io.ReadAll(io.LimitReader(body, 16<<20))
+	defer resp.Body.Close()
+	if imdbBlocked(resp) {
+		return nil, errIMDbBlocked
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("couldn't read IMDb: the list site answered %s", resp.Status)
+	}
+	page, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
 		return nil, err
 	}
