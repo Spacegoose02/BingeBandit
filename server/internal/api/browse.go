@@ -465,7 +465,16 @@ func (s *Server) item(w http.ResponseWriter, r *http.Request) {
 		cols, _ := s.Store.ItemCollections(it.ID)
 		for _, c := range cols {
 			// A shelf is a row, so a big collection sends only its first titles.
-			if members, err := s.Store.CollectionPage(u.ID, c.ID, 0, rowSize); err == nil && len(members) > 1 {
+			members, err := s.Store.CollectionPage(u.ID, c.ID, 0, rowSize)
+			if err != nil {
+				continue
+			}
+			// Collections live in one library, but the collection page also
+			// shows same-named ones from the other libraries the viewer may
+			// see ("The Boss Baby Collection" in Christmas, Kids Movies and
+			// Kids TV Shows), so the title's shelf includes them too.
+			members = s.withSameNamedMembers(u, c.ID, members)
+			if len(members) > 1 {
 				shelves = append(shelves, shelf{c, members})
 			}
 		}
