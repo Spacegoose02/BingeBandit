@@ -30,6 +30,14 @@ func TestListCollections(t *testing.T) {
 				return
 			}
 			w.Write([]byte(`{"movies":[{"id":0,"title":"The Thing","release_year":1982,"mediatype":"movie","ids":{"tmdb":1091}}],"shows":[]}`))
+		case "/lists/ann/external/164736/json": // external (Trakt-backed) list, public
+			w.Write([]byte(`[{"id":1091,"title":"The Thing","release_year":1982,"mediatype":"movie"}]`))
+		case "/external/lists/164736/items":
+			if r.URL.Query().Get("apikey") != "k" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Write([]byte(`{"movies":[{"id":348,"title":"Alien","release_year":1979,"mediatype":"movie"}],"shows":[]}`))
 		case "/feed":
 			w.Write([]byte(feed))
 		default:
@@ -89,6 +97,18 @@ func TestListCollections(t *testing.T) {
 	if m := members(col); len(m) != 2 || !m[thing] || !m[hand] {
 		t.Fatalf("API list: members %v", m)
 	}
+	// External lists read /external/lists/<id> through the API...
+	if c := sync(col, "https://mdblist.com/lists/ann/external/164736"); c.ListError != "" || !members(col)[alien] || members(col)[thing] {
+		t.Fatalf("external API list: members %v, error %q", members(col), c.ListError)
+	}
+	// ...and their own public JSON without a key.
+	st.SetSettings(map[string]string{store.SettingMDBListKey: ""})
+	if c := sync(col, "https://mdblist.com/lists/ann/external/164736/"); c.ListError != "" || !members(col)[thing] || members(col)[alien] {
+		t.Fatalf("external public list: members %v, error %q", members(col), c.ListError)
+	}
+	sync(col, "https://mdblist.com/lists/ann/horror")
+	st.SetSettings(map[string]string{store.SettingMDBListKey: "k"})
+	sync(col, "https://mdblist.com/lists/ann/horror")
 	// A bad key keeps the members and says why.
 	st.SetSettings(map[string]string{store.SettingMDBListKey: "bad"})
 	if c := sync(col, "https://mdblist.com/lists/ann/horror"); c.ListError == "" || len(members(col)) != 2 {
