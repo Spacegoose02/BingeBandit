@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -609,6 +610,50 @@ func (s *Server) sameNamedRows(u *store.User, id int64) []otherCollection {
 			continue
 		}
 		out = append(out, otherCollection{Collection: c, Library: lib.Name, Items: items})
+	}
+	return out
+}
+
+// withSameNamedMembers adds the titles of the same-named collections in
+// other libraries u may see to members (collection id's own first titles),
+// for a title's collection shelf. Each library's titles pass through the
+// viewer's visibility rules (kids, ratings) as on the collection page. With
+// titles from elsewhere, the row is ordered by release date and capped at a
+// row's worth.
+func (s *Server) withSameNamedMembers(u *store.User, id int64, members []*store.Item) []*store.Item {
+	others := s.sameNamedRows(u, id)
+	if len(others) == 0 {
+		return members
+	}
+	seen := map[int64]bool{}
+	out := make([]*store.Item, 0, len(members))
+	for _, it := range members {
+		seen[it.ID] = true
+		out = append(out, it)
+	}
+	for _, o := range others {
+		for _, it := range o.Items {
+			if !seen[it.ID] {
+				seen[it.ID] = true
+				out = append(out, it)
+			}
+		}
+	}
+	date := func(it *store.Item) string {
+		if it.ReleaseDate == "" && it.Year > 0 {
+			return strconv.Itoa(it.Year)
+		}
+		return it.ReleaseDate
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := date(out[i]), date(out[j])
+		if a == "" || b == "" {
+			return a != "" && b == "" // undated titles go last
+		}
+		return a < b
+	})
+	if len(out) > rowSize {
+		out = out[:rowSize]
 	}
 	return out
 }
